@@ -461,18 +461,48 @@ print('Cleanup completed');
         except Exception as e:
             print(f"\n⚠️  Failed to cleanup test data: {str(e)}")
 
+    def test_regression_fixes(self):
+        """Test specific fixes from previous iteration"""
+        print("\n🔧 Testing Regression Fixes...")
+        
+        # Fix 1: Auth endpoint should return 401 for invalid tokens
+        invalid_response = self.test_request('GET', 'auth/me', 401, token="invalid_token_123", 
+                                          test_name="Fix 1: Invalid Token Returns 401")
+        
+        # Fix 2: Transaction creation returns 201 status code  
+        transaction_data = {
+            "seller_name": "Regression Test Seller",
+            "seller_email": "regression@example.com", 
+            "item_description": "Regression test item",
+            "item_price": 25.00
+        }
+        created_transaction = self.test_request('POST', 'transactions', 201, 
+                                              data=transaction_data,
+                                              test_name="Fix 2: Transaction Creation Returns 201")
+        
+        # Fix 3: Admin disputes endpoint returns proper array format
+        admin_disputes = self.test_request('GET', 'admin/disputes', 200,
+                                         token=self.admin_session_token, 
+                                         test_name="Fix 3: Admin Disputes Returns Array")
+        
+        if admin_disputes and isinstance(admin_disputes, list):
+            self.log_test_result("Fix 3: Admin Disputes Array Format", True, 
+                               f"Returns proper array with {len(admin_disputes)} disputes")
+        else:
+            self.log_test_result("Fix 3: Admin Disputes Array Format", False, 
+                               "Does not return proper array format")
+
     def run_all_tests(self):
         """Run comprehensive test suite"""
-        print("🚀 Starting TrustTrade API Test Suite...")
+        print("🚀 Starting TrustTrade API Regression Test Suite...")
         print(f"🌐 Backend URL: {self.base_url}")
+        print(f"🔑 Using provided test sessions for regression testing")
         
         start_time = datetime.now()
-        
-        # Create test session
-        if not self.create_test_session_via_mongo():
-            print("❌ Failed to create test session. Exiting.")
-            return 1
 
+        # First test the regression fixes
+        self.test_regression_fixes()
+        
         # Run all test categories
         self.test_auth_endpoints()
         transaction_id = self.test_transaction_endpoints()
@@ -490,9 +520,6 @@ print('Cleanup completed');
         print(f"   Tests Failed: {self.tests_run - self.tests_passed}")
         print(f"   Success Rate: {(self.tests_passed/self.tests_run*100):.1f}%")
         print(f"   Duration: {duration:.2f} seconds")
-        
-        # Cleanup
-        self.cleanup_test_data()
         
         # Return appropriate exit code
         return 0 if self.tests_passed == self.tests_run else 1

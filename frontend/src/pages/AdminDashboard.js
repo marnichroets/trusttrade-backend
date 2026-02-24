@@ -184,11 +184,13 @@ function AdminDashboard() {
                         <td className="py-3">{usr.email}</td>
                         <td className="py-3 capitalize">{usr.role}</td>
                         <td className="py-3">
-                          {usr.is_admin ? (
-                            <Badge className="bg-purple-100 text-purple-800">Admin</Badge>
-                          ) : (
-                            <Badge className="bg-slate-100 text-slate-600">User</Badge>
-                          )}
+                          <span className="inline-block">
+                            {usr.is_admin ? (
+                              <Badge className="bg-purple-100 text-purple-800">Admin</Badge>
+                            ) : (
+                              <Badge className="bg-slate-100 text-slate-600">User</Badge>
+                            )}
+                          </span>
                         </td>
                         <td className="py-3 text-slate-500">{new Date(usr.created_at).toLocaleDateString()}</td>
                       </tr>

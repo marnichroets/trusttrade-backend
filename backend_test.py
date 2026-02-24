@@ -328,12 +328,8 @@ print('Admin User ID: ' + adminUserId);
         """Test admin-only endpoints"""
         print("\n👑 Testing Admin Endpoints...")
         
-        # Create admin session
-        admin_token, admin_user_id = self.create_admin_session_via_mongo()
-        
-        if not admin_token:
-            self.log_test_result("Admin Session Creation", False, "Could not create admin session")
-            return
+        # Use existing admin session token
+        admin_token = self.admin_session_token
 
         # Test admin stats
         admin_stats = self.test_request('GET', 'admin/stats', 200, 

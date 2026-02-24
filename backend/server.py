@@ -244,7 +244,7 @@ async def logout(request: Request, response: Response):
     return {"message": "Logged out successfully"}
 
 # Transaction Endpoints
-@api_router.post("/transactions", response_model=Transaction)
+@api_router.post("/transactions", response_model=Transaction, status_code=201)
 async def create_transaction(request: Request, transaction_data: TransactionCreate):
     """Create a new transaction"""
     user = await get_user_from_token(request)

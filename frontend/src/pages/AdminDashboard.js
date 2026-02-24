@@ -232,9 +232,11 @@ function AdminDashboard() {
                         <td className="py-3 max-w-xs truncate">{txn.item_description}</td>
                         <td className="py-3 font-mono">R {txn.total.toFixed(2)}</td>
                         <td className="py-3">
-                          <Badge className={getStatusBadge(txn.payment_status)}>
-                            {txn.payment_status}
-                          </Badge>
+                          <span className="inline-block">
+                            <Badge className={getStatusBadge(txn.payment_status)}>
+                              {txn.payment_status}
+                            </Badge>
+                          </span>
                         </td>
                         <td className="py-3 text-slate-500">{new Date(txn.created_at).toLocaleDateString()}</td>
                       </tr>

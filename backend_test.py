@@ -9,9 +9,11 @@ import time
 class TrustTradeAPITester:
     def __init__(self):
         self.base_url = "https://trust-trade-pay.preview.emergentagent.com/api"
-        self.session_token = None
-        self.user_id = None
-        self.test_user_email = None
+        # Use provided test sessions for regression testing
+        self.session_token = "test_session_1771949530337"
+        self.admin_session_token = "admin_session_1771949548223"
+        self.user_id = "test-user-1771949530337"
+        self.test_user_email = "testuser@example.com"
         self.tests_run = 0
         self.tests_passed = 0
         self.test_results = []

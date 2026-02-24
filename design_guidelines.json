@@ -1,0 +1,161 @@
+{
+  "project_name": "TrustTrade",
+  "design_philosophy": {
+    "identity": "The Anti-AI Designer (E1)",
+    "core_principles": [
+      "Fusion over Imitation: Mix Swiss typographic precision with Fintech reliability.",
+      "Emotion First: Evoke 'Secure Optimism'.",
+      "Content is King: Data must be legible; whitespace is a feature, not a bug.",
+      "Zoom In: High-fidelity details on transaction cards.",
+      "Negative Space: generous padding (2x standard)."
+    ],
+    "hall_of_shame": [
+      "No generic 'Inter' for headings.",
+      "No default Shadcn card styling (must customize shadows/borders).",
+      "No center-aligned dense text blocks.",
+      "No gradient overload."
+    ]
+  },
+  "theme": {
+    "mode": "light",
+    "background_base": "white",
+    "primary_color": "#1E5EFF",
+    "secondary_color": "#EAF2FF"
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Manrope, sans-serif",
+      "body": "Inter, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "import_url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap",
+    "rules": [
+      "Headings (h1-h3) must use Manrope.",
+      "Body text must use Inter.",
+      "Transaction IDs and monetary figures in tables must use Manrope or JetBrains Mono.",
+      "H1 size: text-4xl md:text-6xl font-bold tracking-tight.",
+      "H2 size: text-3xl font-semibold tracking-tight."
+    ]
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "DEFAULT": "#1E5EFF",
+        "foreground": "#FFFFFF",
+        "hover": "#1649C9",
+        "light": "#EAF2FF"
+      },
+      "secondary": {
+        "DEFAULT": "#F1F5F9",
+        "foreground": "#0F172A"
+      },
+      "accent": {
+        "DEFAULT": "#EAF2FF",
+        "foreground": "#1E5EFF"
+      },
+      "background": "#FFFFFF",
+      "foreground": "#0F172A",
+      "muted": {
+        "DEFAULT": "#F8FAFC",
+        "foreground": "#64748B"
+      },
+      "border": "#E2E8F0",
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "destructive": "#EF4444"
+    },
+    "usage": {
+      "buttons": "Primary Blue (#1E5EFF) for main actions. Ghost or Outline for secondary.",
+      "backgrounds": "Pure white (#FFFFFF) for cards. Subtle Slate (#F8FAFC) for app background.",
+      "text": "Slate-900 (#0F172A) for headings. Slate-600 (#475569) for body. NEVER use pure black."
+    }
+  },
+  "layout_strategies": {
+    "landing_page": {
+      "grid": "Bento Grid (Mode A)",
+      "hero_style": "Split Screen: Left Content, Right 3D/Abstract Visual.",
+      "spacing": "Generous. Section padding py-20 or py-24."
+    },
+    "dashboard": {
+      "grid": "High Density Grid (Mode B)",
+      "structure": "Sidebar Navigation (Fixed) + Scrollable Main Content Area.",
+      "card_style": "Flat White, 1px Border (Slate-200), Shadow-sm. Rounded-xl.",
+      "container_width": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+    }
+  },
+  "components": {
+    "buttons": {
+      "radius": "rounded-lg",
+      "typography": "font-medium text-sm tracking-wide",
+      "animation": "transition-all duration-200 active:scale-95"
+    },
+    "cards": {
+      "style": "bg-white border border-border shadow-sm rounded-xl hover:shadow-md transition-shadow duration-200",
+      "padding": "p-6"
+    },
+    "inputs": {
+      "style": "bg-slate-50 border-slate-200 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200 rounded-lg"
+    },
+    "badges": {
+      "style": "rounded-full px-2.5 py-0.5 text-xs font-semibold"
+    },
+    "tables": {
+      "style": "w-full text-sm text-left",
+      "header": "text-xs uppercase tracking-wider text-muted-foreground bg-muted/50 font-medium",
+      "row": "border-b border-border hover:bg-muted/50 transition-colors"
+    }
+  },
+  "visual_enhancers": {
+    "gradients": "Subtle mesh gradients in hero background (Opacity 30%). No hard linear gradients.",
+    "shadows": "Soft, diffuse shadows: shadow-[0_2px_8px_rgba(0,0,0,0.04)].",
+    "glassmorphism": "Use sparingly on sticky headers: bg-white/80 backdrop-blur-md border-b border-white/20.",
+    "borders": "1px solid #E2E8F0 (Slate 200). Active borders: #1E5EFF (Primary)."
+  },
+  "image_urls": {
+    "hero_main": "https://images.unsplash.com/photo-1758599543129-5269a8f29e68?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAxODF8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBidXNpbmVzcyUyMGhhbmRzaGFrZXxlbnwwfHx8fDE3NzE5NDgyMDl8MA&ixlib=rb-4.1.0&q=85",
+    "trust_proof": "https://images.pexels.com/photos/3727513/pexels-photo-3727513.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "team_collaboration": "https://images.pexels.com/photos/7495196/pexels-photo-7495196.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "feature_abstract": "https://images.unsplash.com/photo-1607609972246-a14762f20d3e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjd8MHwxfHNlYXJjaHwxfHxzZWN1cmUlMjBkaWdpdGFsJTIwcGF5bWVudCUyMGFic3RyYWN0fGVufDB8fHx8MTc3MTk0ODIxMnww&ixlib=rb-4.1.0&q=85",
+    "logo_shield_icon": "use Lucide 'ShieldCheck' icon"
+  },
+  "navigation_structure": {
+    "public": [
+      { "label": "Home", "path": "/" },
+      { "label": "Sign Up", "path": "/signup", "variant": "primary" },
+      { "label": "Log In", "path": "/login", "variant": "ghost" }
+    ],
+    "private_user": [
+      { "label": "Dashboard", "path": "/dashboard" },
+      { "label": "New Transaction", "path": "/transactions/new", "highlight": true },
+      { "label": "My Transactions", "path": "/transactions" },
+      { "label": "Disputes", "path": "/disputes" }
+    ],
+    "private_admin": [
+      { "label": "Admin Dashboard", "path": "/admin" },
+      { "label": "All Users", "path": "/admin/users" },
+      { "label": "All Transactions", "path": "/admin/transactions" },
+      { "label": "All Disputes", "path": "/admin/disputes" }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "1. UPDATE CSS VARIABLES: Modify 'src/index.css' to use the specific colors defined in 'colors.palette'. Ensure --primary is 222 100% 56% (approx for #1E5EFF).",
+    "2. FONT SETUP: Add the Google Fonts import to 'src/index.css' immediately.",
+    "3. SHADCN OVERRIDES: When installing Shadcn components, ensure they use 'slate' as the base gray.",
+    "4. AUTH LAYOUT: Create a distinct 'AuthLayout' for Login/Signup that splits the screen: Left = Form, Right = Testimonial/Image (use 'trust_proof' image).",
+    "5. DASHBOARD LAYOUT: Create a 'DashboardLayout' with a Sidebar. Use 'NavLink' for active states.",
+    "6. TABLES: For the Transactions list, use a clean table component. Highlight 'Status' with colored badges (Green for Paid/Released, Yellow for Pending).",
+    "7. MOBILE: Ensure the Sidebar becomes a Sheet/Drawer on mobile.",
+    "8. MICRO-INTERACTIONS: Add 'hover:scale-[1.02]' to cards and buttons. Add 'active:scale-95' to buttons.",
+    "9. TOASTS: Use 'sonner' for all success/error notifications (e.g., 'Transaction Created')."
+  ],
+  "universal_guidelines": {
+    "testing": "All interactive elements MUST have 'data-testid' attributes.",
+    "accessibility": "Ensure color contrast ratios. Use semantic HTML.",
+    "code_style": "Functional components, Hooks, Tailwind utility classes.",
+    "forbidden": [
+      "No gradients on text.",
+      "No default blue link colors - use primary color.",
+      "No alert() calls - use Toasts."
+    ]
+  }
+}

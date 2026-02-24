@@ -224,10 +224,14 @@ async def exchange_session(request: SessionExchangeRequest, response: Response):
 @api_router.get("/auth/me", response_model=User)
 async def get_current_user(request: Request):
     """Get current authenticated user"""
-    user = await get_user_from_token(request)
-    if not user:
+    try:
+        user = await get_user_from_token(request)
+        if not user:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        return user
+    except Exception as e:
+        logger.error(f"Auth me error: {str(e)}")
         raise HTTPException(status_code=401, detail="Not authenticated")
-    return user
 
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response):

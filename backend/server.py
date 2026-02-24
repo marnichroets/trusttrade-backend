@@ -400,7 +400,7 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
     return Transaction(**updated_transaction)
 
 # Dispute Endpoints
-@api_router.post("/disputes", response_model=Dispute)
+@api_router.post("/disputes", response_model=Dispute, status_code=201)
 async def create_dispute(request: Request, dispute_data: DisputeCreate):
     """Create a new dispute"""
     user = await get_user_from_token(request)

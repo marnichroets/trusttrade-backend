@@ -188,9 +188,11 @@ function Dashboard() {
                       <td className="py-3">{transaction.seller_name}</td>
                       <td className="py-3 font-mono">R {transaction.item_price.toFixed(2)}</td>
                       <td className="py-3">
-                        <Badge className={getStatusBadge(transaction.payment_status)}>
-                          {transaction.payment_status}
-                        </Badge>
+                        <span className="inline-block">
+                          <Badge className={getStatusBadge(transaction.payment_status)}>
+                            {transaction.payment_status}
+                          </Badge>
+                        </span>
                       </td>
                       <td className="py-3 text-slate-500">
                         {new Date(transaction.created_at).toLocaleDateString()}

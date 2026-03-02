@@ -104,7 +104,7 @@ class Dispute(BaseModel):
     dispute_id: str
     transaction_id: str
     raised_by_user_id: str
-    dispute_type: str
+    dispute_type: Optional[str] = "Other"
     description: str
     evidence_photos: List[str] = []
     status: str = "Pending"

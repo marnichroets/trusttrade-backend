@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
@@ -14,11 +14,31 @@ function TermsAndConditions() {
   const [termsContent, setTermsContent] = useState('');
   const [accepted, setAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     fetchTerms();
+    checkAuth();
   }, []);
+
+  const checkAuth = async () => {
+    try {
+      // Try to get user from location state first
+      if (location.state?.user) {
+        setUser(location.state.user);
+        return;
+      }
+      
+      // Otherwise try to fetch from API
+      const response = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      setUser(response.data);
+    } catch (error) {
+      // Not authenticated, that's okay for terms page
+      console.log('User not authenticated yet');
+    }
+  };
 
   const fetchTerms = async () => {
     try {
@@ -32,6 +52,12 @@ function TermsAndConditions() {
   const handleAccept = async () => {
     if (!accepted) {
       toast.error('Please check the box to accept the terms');
+      return;
+    }
+
+    if (!user) {
+      toast.error('Please log in first');
+      navigate('/');
       return;
     }
 

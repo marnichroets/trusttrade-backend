@@ -65,11 +65,6 @@ function NewTransaction() {
     try {
       const response = await axios.get(`${API}/auth/me`, { withCredentials: true });
       setUser(response.data);
-      
-      if (!response.data.terms_accepted) {
-        toast.error('Please accept terms and conditions first');
-        navigate('/terms');
-      }
     } catch (error) {
       console.error('Failed to fetch user:', error);
       navigate('/');

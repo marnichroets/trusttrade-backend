@@ -20,8 +20,14 @@ function ProtectedRoute({ children }) {
 
     // If user data passed from AuthCallback, skip auth check
     if (location.state?.user) {
-      setUser(location.state.user);
+      const userData = location.state.user;
+      setUser(userData);
       setIsAuthenticated(true);
+      
+      // Check terms but don't redirect if on terms page
+      if (!userData.terms_accepted && !location.pathname.includes('/terms')) {
+        navigate('/terms', { replace: true, state: { user: userData } });
+      }
       return;
     }
 
@@ -30,8 +36,14 @@ function ProtectedRoute({ children }) {
         const response = await axios.get(`${API}/auth/me`, {
           withCredentials: true
         });
-        setUser(response.data);
+        const userData = response.data;
+        setUser(userData);
         setIsAuthenticated(true);
+        
+        // Check if user has accepted terms (unless already on terms page)
+        if (!userData.terms_accepted && !location.pathname.includes('/terms')) {
+          navigate('/terms', { replace: true, state: { user: userData } });
+        }
       } catch (error) {
         setIsAuthenticated(false);
         navigate('/', { replace: true });

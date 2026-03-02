@@ -38,8 +38,14 @@ function AuthCallback() {
 
         const user = response.data;
 
-        // Navigate to dashboard with user data
-        navigate('/dashboard', { replace: true, state: { user } });
+        // Check if user has accepted terms
+        if (!user.terms_accepted) {
+          // Redirect to terms page
+          navigate('/terms', { replace: true, state: { user } });
+        } else {
+          // Navigate to dashboard with user data
+          navigate('/dashboard', { replace: true, state: { user } });
+        }
       } catch (error) {
         console.error('Auth callback error:', error);
         toast.error('Authentication failed');

@@ -8,6 +8,7 @@ import TransactionsList from './pages/TransactionsList';
 import TransactionDetail from './pages/TransactionDetail';
 import Disputes from './pages/Disputes';
 import AdminDashboard from './pages/AdminDashboard';
+import TermsAndConditions from './pages/TermsAndConditions';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -23,6 +24,7 @@ function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/terms" element={<TermsAndConditions />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/transactions/new" element={<ProtectedRoute><NewTransaction /></ProtectedRoute>} />
       <Route path="/transactions" element={<ProtectedRoute><TransactionsList /></ProtectedRoute>} />

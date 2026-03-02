@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
+import Timeline from '../components/Timeline';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Checkbox } from '../components/ui/checkbox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ArrowLeft, FileText, User, Mail, Calendar, Package } from 'lucide-react';
+import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -17,6 +18,7 @@ function TransactionDetail() {
   const [transaction, setTransaction] = useState(null);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
+  const [sellerConfirming, setSellerConfirming] = useState(false);
   const navigate = useNavigate();
   const { transactionId } = useParams();
 
@@ -42,8 +44,31 @@ function TransactionDetail() {
     }
   };
 
+  const handleSellerConfirm = async () => {
+    if (!window.confirm('Are you sure you want to confirm these transaction details? This will generate the escrow agreement.')) {
+      return;
+    }
+
+    setSellerConfirming(true);
+    try {
+      await axios.post(
+        `${API}/transactions/${transactionId}/seller-confirm`,
+        { confirmed: true },
+        { withCredentials: true }
+      );
+
+      toast.success('Transaction confirmed! Escrow agreement generated.');
+      fetchData();
+    } catch (error) {
+      console.error('Failed to confirm:', error);
+      toast.error(error.response?.data?.detail || 'Failed to confirm transaction');
+    } finally {
+      setSellerConfirming(false);
+    }
+  };
+
   const handleConfirmDelivery = async () => {
-    if (!confirm('Are you sure you want to confirm delivery and release the funds to the seller?')) {
+    if (!window.confirm('Are you sure you want to confirm delivery and release the funds to the seller?')) {
       return;
     }
 
@@ -56,7 +81,7 @@ function TransactionDetail() {
       );
 
       toast.success('Delivery confirmed and funds released!');
-      fetchData(); // Refresh data
+      fetchData();
     } catch (error) {
       console.error('Failed to confirm delivery:', error);
       toast.error(error.response?.data?.detail || 'Failed to confirm delivery');
@@ -65,9 +90,33 @@ function TransactionDetail() {
     }
   };
 
+  const handleDownloadPDF = async () => {
+    try {
+      const response = await axios.get(
+        `${API}/transactions/${transactionId}/agreement-pdf`,
+        { withCredentials: true, responseType: 'blob' }
+      );
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `TrustTrade_Agreement_${transactionId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      toast.success('Agreement downloaded');
+    } catch (error) {
+      console.error('Failed to download PDF:', error);
+      toast.error('Agreement not available yet');
+    }
+  };
+
   const getStatusBadge = (status) => {
     const variants = {
       'Pending': 'bg-yellow-100 text-yellow-800',
+      'Pending Seller Confirmation': 'bg-orange-100 text-orange-800',
+      'Pending Buyer Confirmation': 'bg-orange-100 text-orange-800',
+      'Ready for Payment': 'bg-blue-100 text-blue-800',
       'Paid': 'bg-green-100 text-green-800',
       'Released': 'bg-green-100 text-green-800'
     };
@@ -95,136 +144,188 @@ function TransactionDetail() {
   }
 
   const isBuyer = user?.user_id === transaction.buyer_user_id || user?.email === transaction.buyer_email;
+  const isSeller = user?.user_id === transaction.seller_user_id || user?.email === transaction.seller_email;
   const canConfirmDelivery = isBuyer && !transaction.delivery_confirmed && transaction.payment_status !== 'Released';
+  const canSellerConfirm = isSeller && !transaction.seller_confirmed;
 
   return (
     <DashboardLayout user={user}>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <Button
-          variant="ghost"
-          onClick={() => navigate('/transactions')}
-          data-testid="back-to-transactions-btn"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Transactions
+      <div className="max-w-6xl mx-auto space-y-6">
+        <Button variant="ghost" onClick={() => navigate('/transactions')} data-testid="back-to-transactions-btn">
+          <ArrowLeft className="w-4 h-4 mr-2" />Back to Transactions
         </Button>
 
         <div>
-          <h1 className="text-3xl font-bold text-slate-900" data-testid="transaction-detail-title">Transaction Details</h1>
+          <h1 className="text-3xl font-bold text-slate-900">Transaction Details</h1>
           <p className="text-slate-600 mt-2 font-mono text-sm">{transaction.transaction_id}</p>
         </div>
 
-        {/* Status Overview */}
         <Card className="p-6">
           <div className="grid md:grid-cols-2 gap-6">
             <div>
               <p className="text-sm text-slate-600 mb-2">Payment Status</p>
-              <Badge className={`${getStatusBadge(transaction.payment_status)} text-base px-3 py-1`} data-testid="payment-status">
+              <Badge className={`${getStatusBadge(transaction.payment_status)} text-base px-3 py-1`}>
                 {transaction.payment_status}
               </Badge>
             </div>
             <div>
               <p className="text-sm text-slate-600 mb-2">Release Status</p>
-              <Badge className={`${getReleaseStatusBadge(transaction.release_status)} text-base px-3 py-1`} data-testid="release-status">
+              <Badge className={`${getReleaseStatusBadge(transaction.release_status)} text-base px-3 py-1`}>
                 {transaction.release_status}
               </Badge>
             </div>
           </div>
         </Card>
 
-        {/* Buyer & Seller Info */}
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
-              Buyer Information
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Name</p>
-                <p className="text-sm font-medium text-slate-900" data-testid="buyer-name">{transaction.buyer_name}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Email</p>
-                <p className="text-sm text-slate-700 flex items-center gap-2">
-                  <Mail className="w-4 h-4 text-slate-400" />
-                  <span data-testid="buyer-email">{transaction.buyer_email}</span>
-                </p>
-              </div>
-            </div>
+        {canSellerConfirm && (
+          <Card className="p-6 bg-orange-50 border-orange-200">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Seller Confirmation Required</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              Please review the transaction details carefully. Confirming will generate the escrow agreement and move the transaction forward.
+            </p>
+            <Button onClick={handleSellerConfirm} disabled={sellerConfirming} data-testid="seller-confirm-btn">
+              {sellerConfirming ? 'Confirming...' : 'Confirm Transaction Details'}
+            </Button>
           </Card>
+        )}
 
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
-              Seller Information
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Name</p>
-                <p className="text-sm font-medium text-slate-900" data-testid="seller-name">{transaction.seller_name}</p>
+        <Tabs defaultValue="overview">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="agreement">Agreement</TabsTrigger>
+            <TabsTrigger value="timeline">Timeline</TabsTrigger>
+            <TabsTrigger value="photos">Photos</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="overview" className="space-y-6 mt-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5 text-primary" />Buyer Information
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Name</p>
+                    <p className="text-sm font-medium text-slate-900">{transaction.buyer_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Email</p>
+                    <p className="text-sm text-slate-700">{transaction.buyer_email}</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                  <User className="w-5 h-5 text-primary" />Seller Information
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Name</p>
+                    <p className="text-sm font-medium text-slate-900">{transaction.seller_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Email</p>
+                    <p className="text-sm text-slate-700">{transaction.seller_email}</p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Item Details</h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">Description</p>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap">{transaction.item_description}</p>
+                </div>
+                {transaction.item_condition && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Condition</p>
+                    <Badge className="bg-slate-100 text-slate-700">{transaction.item_condition}</Badge>
+                  </div>
+                )}
+                {transaction.known_issues && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Known Issues</p>
+                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{transaction.known_issues}</p>
+                  </div>
+                )}
               </div>
-              <div>
-                <p className="text-xs text-slate-500 mb-1">Email</p>
-                <p className="text-sm text-slate-700 flex items-center gap-2">
-                  <Mail className="w-4 h-4 text-slate-400" />
-                  <span data-testid="seller-email">{transaction.seller_email}</span>
-                </p>
+            </Card>
+
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Price Summary</h3>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Item Price:</span>
+                  <span className="font-mono font-medium text-slate-900">R {transaction.item_price.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">TrustTrade Fee (2%):</span>
+                  <span className="font-mono font-medium text-slate-900">R {transaction.trusttrade_fee.toFixed(2)}</span>
+                </div>
+                <div className="border-t border-slate-200 pt-3 flex justify-between">
+                  <span className="font-semibold text-slate-900">Total Secure Payment:</span>
+                  <span className="font-mono font-bold text-primary text-xl">R {transaction.total.toFixed(2)}</span>
+                </div>
               </div>
-            </div>
-          </Card>
-        </div>
+            </Card>
+          </TabsContent>
 
-        {/* Item Details */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <Package className="w-5 h-5 text-primary" />
-            Item Details
-          </h3>
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Description</p>
-              <p className="text-sm text-slate-700 whitespace-pre-wrap" data-testid="item-description">{transaction.item_description}</p>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-slate-600">
-              <Calendar className="w-4 h-4" />
-              <span>Created on {new Date(transaction.created_at).toLocaleString()}</span>
-            </div>
-          </div>
-        </Card>
+          <TabsContent value="agreement" className="mt-6">
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Escrow Agreement</h3>
+              {transaction.seller_confirmed ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-600">The escrow agreement has been generated and is available for download.</p>
+                  <Button onClick={handleDownloadPDF} data-testid="download-agreement-btn">
+                    <Download className="w-4 h-4 mr-2" />Download Agreement (PDF)
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">Agreement will be available once the seller confirms the transaction details.</p>
+              )}
+            </Card>
+          </TabsContent>
 
-        {/* Price Summary */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4">Price Summary</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-600">Item Price:</span>
-              <span className="font-mono font-medium text-slate-900" data-testid="item-price">R {transaction.item_price.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-600">TrustTrade Fee (2%):</span>
-              <span className="font-mono font-medium text-slate-900" data-testid="fee">R {transaction.trusttrade_fee.toFixed(2)}</span>
-            </div>
-            <div className="border-t border-slate-200 pt-3 flex justify-between">
-              <span className="font-semibold text-slate-900">Total:</span>
-              <span className="font-mono font-bold text-primary text-xl" data-testid="total">R {transaction.total.toFixed(2)}</span>
-            </div>
-          </div>
-        </Card>
+          <TabsContent value="timeline" className="mt-6">
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-6">Transaction Progress</h3>
+              <Timeline transaction={transaction} />
+            </Card>
+          </TabsContent>
 
-        {/* Delivery Confirmation */}
+          <TabsContent value="photos" className="mt-6">
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Item Photos</h3>
+              {transaction.item_photos && transaction.item_photos.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {transaction.item_photos.map((photo, index) => (
+                    <div key={index} className="relative">
+                      <div className="w-full h-48 bg-slate-100 rounded-lg flex items-center justify-center">
+                        <ImageIcon className="w-12 h-12 text-slate-400" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                  <p className="text-slate-500">No photos uploaded</p>
+                </div>
+              )}
+            </Card>
+          </TabsContent>
+        </Tabs>
+
         {canConfirmDelivery && (
           <Card className="p-6 bg-blue-50 border-blue-200">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Confirm Delivery</h3>
             <p className="text-sm text-slate-600 mb-4">
               Have you received the item/service and are satisfied? Confirming delivery will release the funds to the seller.
             </p>
-            <Button
-              onClick={handleConfirmDelivery}
-              disabled={confirming}
-              data-testid="confirm-delivery-btn"
-              className="w-full md:w-auto"
-            >
+            <Button onClick={handleConfirmDelivery} disabled={confirming} data-testid="confirm-delivery-btn">
               {confirming ? 'Processing...' : 'Confirm Delivery & Release Funds'}
             </Button>
           </Card>
@@ -233,11 +334,7 @@ function TransactionDetail() {
         {transaction.delivery_confirmed && (
           <Card className="p-6 bg-green-50 border-green-200">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
+              <CheckCircle2 className="w-10 h-10 text-green-600" />
               <div>
                 <p className="font-semibold text-green-900">Delivery Confirmed</p>
                 <p className="text-sm text-green-700">Funds have been released to the seller</p>
@@ -246,17 +343,11 @@ function TransactionDetail() {
           </Card>
         )}
 
-        {/* Raise Dispute */}
-        {!transaction.delivery_confirmed && (
+        {!transaction.delivery_confirmed && transaction.seller_confirmed && (
           <Card className="p-6">
             <p className="text-sm text-slate-600 mb-3">Having issues with this transaction?</p>
-            <Button
-              variant="outline"
-              onClick={() => navigate('/disputes', { state: { transactionId: transaction.transaction_id } })}
-              data-testid="raise-dispute-btn"
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              Raise a Dispute
+            <Button variant="outline" onClick={() => navigate('/disputes', { state: { transactionId: transaction.transaction_id } })}>
+              <FileText className="w-4 h-4 mr-2" />Raise a Dispute
             </Button>
           </Card>
         )}

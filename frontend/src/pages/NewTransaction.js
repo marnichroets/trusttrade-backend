@@ -20,7 +20,7 @@ const API = `${BACKEND_URL}/api`;
 function NewTransaction() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [role, setRole] = useState('buyer'); // 'buyer' or 'seller'
+  const [role, setRole] = useState('buyer');
   const [photos, setPhotos] = useState([]);
   const [formData, setFormData] = useState({
     buyer_name: '',
@@ -44,7 +44,6 @@ function NewTransaction() {
   }, []);
 
   useEffect(() => {
-    // Auto-fill based on role
     if (user) {
       if (role === 'buyer') {
         setFormData(prev => ({
@@ -67,7 +66,6 @@ function NewTransaction() {
       const response = await axios.get(`${API}/auth/me`, { withCredentials: true });
       setUser(response.data);
       
-      // Check if terms accepted
       if (!response.data.terms_accepted) {
         toast.error('Please accept terms and conditions first');
         navigate('/terms');
@@ -94,7 +92,6 @@ function NewTransaction() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Validations
     if (!role) {
       toast.error('Please select your role');
       return;
@@ -135,7 +132,6 @@ function NewTransaction() {
     setLoading(true);
 
     try {
-      // Create transaction
       const transactionResponse = await axios.post(
         `${API}/transactions`,
         {
@@ -157,12 +153,11 @@ function NewTransaction() {
 
       const transactionId = transactionResponse.data.transaction_id;
 
-      // Update transaction with photos
       const photoFilenames = photos.map(p => p.filename);
       await axios.patch(
         `${API}/transactions/${transactionId}/photos`,
         photoFilenames,
-        { withCredentials: true }
+        { withCredentials: true, headers: { 'Content-Type': 'application/json' } }
       );
 
       toast.success('Transaction created successfully!');
@@ -186,14 +181,8 @@ function NewTransaction() {
   return (
     <DashboardLayout user={user}>
       <div className="max-w-4xl mx-auto">
-        <Button
-          variant="ghost"
-          onClick={() => navigate('/dashboard')}
-          data-testid="back-to-dashboard-btn"
-          className="mb-6"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Dashboard
+        <Button variant="ghost" onClick={() => navigate('/dashboard')} data-testid="back-to-dashboard-btn" className="mb-6">
+          <ArrowLeft className="w-4 h-4 mr-2" />Back to Dashboard
         </Button>
 
         <div className="mb-6">
@@ -201,244 +190,135 @@ function NewTransaction() {
           <p className="text-slate-600 mt-2">Create a secure escrow transaction</p>
         </div>
 
-        <form onSubmit={handleSubmit} className=\"space-y-6\">
-          {/* Role Selection */}
-          <Card className=\"p-6\">
-            <h3 className=\"text-lg font-semibold text-slate-900 mb-4\">Your Role in This Transaction</h3>
-            <p className=\"text-sm text-slate-600 mb-4\">Select your role. Your account details will automatically populate.</p>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Your Role in This Transaction</h3>
+            <p className="text-sm text-slate-600 mb-4">Select your role. Your account details will automatically populate.</p>
             <RadioGroup value={role} onValueChange={setRole}>
-              <div className=\"flex items-center space-x-2\">
-                <RadioGroupItem value=\"buyer\" id=\"buyer\" data-testid=\"role-buyer\" />
-                <Label htmlFor=\"buyer\" className=\"cursor-pointer\">I am the Buyer</Label>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="buyer" id="buyer" data-testid="role-buyer" />
+                <Label htmlFor="buyer" className="cursor-pointer">I am the Buyer</Label>
               </div>
-              <div className=\"flex items-center space-x-2\">
-                <RadioGroupItem value=\"seller\" id=\"seller\" data-testid=\"role-seller\" />
-                <Label htmlFor=\"seller\" className=\"cursor-pointer\">I am the Seller</Label>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="seller" id="seller" data-testid="role-seller" />
+                <Label htmlFor="seller" className="cursor-pointer">I am the Seller</Label>
               </div>
             </RadioGroup>
           </Card>
 
-          {/* Your Details */}
-          <Card className=\"p-6\">
-            <h3 className=\"text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2\">
-              <UserCircle className=\"w-5 h-5 text-primary\" />
-              Your Details
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <UserCircle className="w-5 h-5 text-primary" />Your Details
             </h3>
-            <div className=\"grid md:grid-cols-2 gap-4\">
+            <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <Label>Your Name</Label>
-                <Input
-                  value={user.name}
-                  disabled
-                  className=\"bg-slate-50\"
-                  data-testid=\"your-name-input\"
-                />
+                <Input value={user.name} disabled className="bg-slate-50" data-testid="your-name-input" />
               </div>
               <div>
                 <Label>Your Email</Label>
-                <Input
-                  value={user.email}
-                  disabled
-                  className=\"bg-slate-50\"
-                  data-testid=\"your-email-input\"
-                />
+                <Input value={user.email} disabled className="bg-slate-50" data-testid="your-email-input" />
               </div>
             </div>
           </Card>
 
-          {/* Other Party Details */}
-          <Card className=\"p-6\">
-            <h3 className=\"text-lg font-semibold text-slate-900 mb-4\">
-              {role === 'buyer' ? 'Seller' : 'Buyer'} Details
-            </h3>
-            <div className=\"grid md:grid-cols-2 gap-4\">
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">{role === 'buyer' ? 'Seller' : 'Buyer'} Details</h3>
+            <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor=\"other_name\">{role === 'buyer' ? 'Seller' : 'Buyer'} Name *</Label>
-                <Input
-                  id=\"other_name\"
-                  name={role === 'buyer' ? 'seller_name' : 'buyer_name'}
-                  value={role === 'buyer' ? formData.seller_name : formData.buyer_name}
-                  onChange={handleChange}
-                  placeholder=\"Enter name\"
-                  required
-                  data-testid=\"other-name-input\"
-                />
+                <Label htmlFor="other_name">{role === 'buyer' ? 'Seller' : 'Buyer'} Name *</Label>
+                <Input id="other_name" name={role === 'buyer' ? 'seller_name' : 'buyer_name'} value={role === 'buyer' ? formData.seller_name : formData.buyer_name} onChange={handleChange} placeholder="Enter name" required data-testid="other-name-input" />
               </div>
               <div>
-                <Label htmlFor=\"other_email\">{role === 'buyer' ? 'Seller' : 'Buyer'} Email *</Label>
-                <Input
-                  id=\"other_email\"
-                  name={role === 'buyer' ? 'seller_email' : 'buyer_email'}
-                  type=\"email\"
-                  value={role === 'buyer' ? formData.seller_email : formData.buyer_email}
-                  onChange={handleChange}
-                  placeholder=\"email@example.com\"
-                  required
-                  data-testid=\"other-email-input\"
-                />
+                <Label htmlFor="other_email">{role === 'buyer' ? 'Seller' : 'Buyer'} Email *</Label>
+                <Input id="other_email" name={role === 'buyer' ? 'seller_email' : 'buyer_email'} type="email" value={role === 'buyer' ? formData.seller_email : formData.buyer_email} onChange={handleChange} placeholder="email@example.com" required data-testid="other-email-input" />
               </div>
             </div>
           </Card>
 
-          {/* Item Details */}
-          <Card className=\"p-6\">
-            <h3 className=\"text-lg font-semibold text-slate-900 mb-4\">Item Details</h3>
-            <div className=\"space-y-4\">
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Item Details</h3>
+            <div className="space-y-4">
               <div>
-                <Label htmlFor=\"item_description\">Item Description *</Label>
-                <Textarea
-                  id=\"item_description\"
-                  name=\"item_description\"
-                  value={formData.item_description}
-                  onChange={handleChange}
-                  placeholder=\"Describe the item or service...\"
-                  rows={4}
-                  required
-                  data-testid=\"item-description-input\"
-                />
+                <Label htmlFor="item_description">Item Description *</Label>
+                <Textarea id="item_description" name="item_description" value={formData.item_description} onChange={handleChange} placeholder="Describe the item or service..." rows={4} required data-testid="item-description-input" />
               </div>
-
               <div>
-                <Label htmlFor=\"item_condition\">Item Condition *</Label>
-                <Select
-                  value={formData.item_condition}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, item_condition: value }))}
-                >
-                  <SelectTrigger id=\"item_condition\" data-testid=\"item-condition-select\">
-                    <SelectValue placeholder=\"Select condition\" />
+                <Label htmlFor="item_condition">Item Condition *</Label>
+                <Select value={formData.item_condition} onValueChange={(value) => setFormData(prev => ({ ...prev, item_condition: value }))}>
+                  <SelectTrigger id="item_condition" data-testid="item-condition-select">
+                    <SelectValue placeholder="Select condition" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value=\"New\">New</SelectItem>
-                    <SelectItem value=\"Used\">Used</SelectItem>
-                    <SelectItem value=\"Used - Minor Defects\">Used - Minor Defects</SelectItem>
-                    <SelectItem value=\"Used - Major Defects\">Used - Major Defects</SelectItem>
-                    <SelectItem value=\"Sold As-Is\">Sold As-Is</SelectItem>
+                    <SelectItem value="New">New</SelectItem>
+                    <SelectItem value="Used">Used</SelectItem>
+                    <SelectItem value="Used - Minor Defects">Used - Minor Defects</SelectItem>
+                    <SelectItem value="Used - Major Defects">Used - Major Defects</SelectItem>
+                    <SelectItem value="Sold As-Is">Sold As-Is</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-
               <div>
-                <Label htmlFor=\"known_issues\">Known Issues / Defects *</Label>
-                <Textarea
-                  id=\"known_issues\"
-                  name=\"known_issues\"
-                  value={formData.known_issues}
-                  onChange={handleChange}
-                  placeholder=\"Describe scratches, faults, missing parts, or confirm no issues...\"
-                  rows={3}
-                  required
-                  data-testid=\"known-issues-input\"
-                />
+                <Label htmlFor="known_issues">Known Issues / Defects *</Label>
+                <Textarea id="known_issues" name="known_issues" value={formData.known_issues} onChange={handleChange} placeholder="Describe scratches, faults, missing parts, or confirm no issues..." rows={3} required data-testid="known-issues-input" />
               </div>
-
               <div>
-                <Label htmlFor=\"item_price\">Item Price (R) *</Label>
-                <Input
-                  id=\"item_price\"
-                  name=\"item_price\"
-                  type=\"number\"
-                  step=\"0.01\"
-                  min=\"0.01\"
-                  value={formData.item_price}
-                  onChange={handleChange}
-                  placeholder=\"0.00\"
-                  required
-                  data-testid=\"item-price-input\"
-                />
+                <Label htmlFor="item_price">Item Price (R) *</Label>
+                <Input id="item_price" name="item_price" type="number" step="0.01" min="0.01" value={formData.item_price} onChange={handleChange} placeholder="0.00" required data-testid="item-price-input" />
               </div>
             </div>
           </Card>
 
-          {/* Photo Upload */}
-          <Card className=\"p-6\">
-            <h3 className=\"text-lg font-semibold text-slate-900 mb-4\">Upload Item Photos *</h3>
-            <p className=\"text-sm text-slate-600 mb-4\">Minimum 1 photo, Maximum 5 photos</p>
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Upload Item Photos *</h3>
+            <p className="text-sm text-slate-600 mb-4">Minimum 1 photo, Maximum 5 photos</p>
             <PhotoUploader photos={photos} setPhotos={setPhotos} minPhotos={1} maxPhotos={5} required={true} />
           </Card>
 
-          {/* Price Calculator */}
           {itemPrice > 0 && (
-            <Card className=\"p-6 bg-slate-50 border-slate-200\">
-              <div className=\"flex items-center gap-2 mb-4\">
-                <Calculator className=\"w-5 h-5 text-primary\" />
-                <h3 className=\"text-lg font-semibold text-slate-900\">Price Breakdown</h3>
+            <Card className="p-6 bg-slate-50 border-slate-200">
+              <div className="flex items-center gap-2 mb-4">
+                <Calculator className="w-5 h-5 text-primary" />
+                <h3 className="text-lg font-semibold text-slate-900">Price Breakdown</h3>
               </div>
-              <div className=\"space-y-3\">
-                <div className=\"flex justify-between text-sm\">
-                  <span className=\"text-slate-600\">Item Price:</span>
-                  <span className=\"font-mono font-medium text-slate-900\" data-testid=\"calc-item-price\">R {itemPrice.toFixed(2)}</span>
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Item Price:</span>
+                  <span className="font-mono font-medium text-slate-900" data-testid="calc-item-price">R {itemPrice.toFixed(2)}</span>
                 </div>
-                <div className=\"flex justify-between text-sm\">
-                  <span className=\"text-slate-600\">TrustTrade Fee (2%):</span>
-                  <span className=\"font-mono font-medium text-slate-900\" data-testid=\"calc-fee\">R {fee}</span>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">TrustTrade Fee (2%):</span>
+                  <span className="font-mono font-medium text-slate-900" data-testid="calc-fee">R {fee}</span>
                 </div>
-                <div className=\"border-t border-slate-300 pt-3 flex justify-between\">
-                  <span className=\"font-semibold text-slate-900\">Total Secure Payment:</span>
-                  <span className=\"font-mono font-bold text-primary text-lg\" data-testid=\"calc-total\">R {total}</span>
+                <div className="border-t border-slate-300 pt-3 flex justify-between">
+                  <span className="font-semibold text-slate-900">Total Secure Payment:</span>
+                  <span className="font-mono font-bold text-primary text-lg" data-testid="calc-total">R {total}</span>
                 </div>
               </div>
             </Card>
           )}
 
-          {/* Agreement Confirmation */}
-          <Card className=\"p-6 bg-blue-50 border-blue-200\">
-            <h3 className=\"text-lg font-semibold text-slate-900 mb-4\">Agreement Confirmation</h3>
-            <div className=\"space-y-3\">
-              <div className=\"flex items-start gap-3\">
-                <Checkbox
-                  id=\"buyer-details\"
-                  checked={confirmations.buyer_details}
-                  onCheckedChange={(checked) => handleConfirmationChange('buyer_details', checked)}
-                  data-testid=\"confirm-buyer-details\"
-                />
-                <label htmlFor=\"buyer-details\" className=\"text-sm text-slate-700 cursor-pointer\">
-                  I confirm buyer details are accurate
-                </label>
+          <Card className="p-6 bg-blue-50 border-blue-200">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Agreement Confirmation</h3>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <Checkbox id="buyer-details" checked={confirmations.buyer_details} onCheckedChange={(checked) => handleConfirmationChange('buyer_details', checked)} data-testid="confirm-buyer-details" />
+                <label htmlFor="buyer-details" className="text-sm text-slate-700 cursor-pointer">I confirm buyer details are accurate</label>
               </div>
-              <div className=\"flex items-start gap-3\">
-                <Checkbox
-                  id=\"seller-details\"
-                  checked={confirmations.seller_details}
-                  onCheckedChange={(checked) => handleConfirmationChange('seller_details', checked)}
-                  data-testid=\"confirm-seller-details\"
-                />
-                <label htmlFor=\"seller-details\" className=\"text-sm text-slate-700 cursor-pointer\">
-                  I confirm seller details are accurate
-                </label>
+              <div className="flex items-start gap-3">
+                <Checkbox id="seller-details" checked={confirmations.seller_details} onCheckedChange={(checked) => handleConfirmationChange('seller_details', checked)} data-testid="confirm-seller-details" />
+                <label htmlFor="seller-details" className="text-sm text-slate-700 cursor-pointer">I confirm seller details are accurate</label>
               </div>
-              <div className=\"flex items-start gap-3\">
-                <Checkbox
-                  id=\"item-accuracy\"
-                  checked={confirmations.item_accuracy}
-                  onCheckedChange={(checked) => handleConfirmationChange('item_accuracy', checked)}
-                  data-testid=\"confirm-item-accuracy\"
-                />
-                <label htmlFor=\"item-accuracy\" className=\"text-sm text-slate-700 cursor-pointer\">
-                  I confirm all item details are accurate and understand false claims may result in account suspension
-                </label>
+              <div className="flex items-start gap-3">
+                <Checkbox id="item-accuracy" checked={confirmations.item_accuracy} onCheckedChange={(checked) => handleConfirmationChange('item_accuracy', checked)} data-testid="confirm-item-accuracy" />
+                <label htmlFor="item-accuracy" className="text-sm text-slate-700 cursor-pointer">I confirm all item details are accurate and understand false claims may result in account suspension</label>
               </div>
             </div>
           </Card>
 
-          {/* Submit */}
-          <div className=\"flex gap-3 pt-4\">
-            <Button
-              type=\"button\"
-              variant=\"outline\"
-              onClick={() => navigate('/dashboard')}
-              data-testid=\"cancel-btn\"
-              className=\"flex-1\"
-            >
-              Cancel
-            </Button>
-            <Button
-              type=\"submit\"
-              disabled={loading || itemPrice <= 0 || photos.length < 1}
-              data-testid=\"create-transaction-btn\"
-              className=\"flex-1\"
-            >
-              {loading ? 'Creating...' : 'Create Transaction'}
-            </Button>
+          <div className="flex gap-3 pt-4">
+            <Button type="button" variant="outline" onClick={() => navigate('/dashboard')} data-testid="cancel-btn" className="flex-1">Cancel</Button>
+            <Button type="submit" disabled={loading || itemPrice <= 0 || photos.length < 1} data-testid="create-transaction-btn" className="flex-1">{loading ? 'Creating...' : 'Create Transaction'}</Button>
           </div>
         </form>
       </div>

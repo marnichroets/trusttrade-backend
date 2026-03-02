@@ -48,7 +48,8 @@ function AuthCallback() {
         }
       } catch (error) {
         console.error('Auth callback error:', error);
-        toast.error('Authentication failed');
+        console.error('Error details:', error.response?.data);
+        toast.error(`Authentication failed: ${error.response?.data?.detail || error.message}`);
         navigate('/', { replace: true });
       }
     };

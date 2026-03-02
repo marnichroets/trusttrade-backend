@@ -17,7 +17,7 @@ function ProtectedRoute({ children }) {
       return;
     }
 
-    // If user data passed from AuthCallback or Terms page
+    // If user data passed from AuthCallback or Terms page, use it immediately
     if (location.state?.user) {
       setUser(location.state.user);
       setIsAuthenticated(true);
@@ -32,13 +32,14 @@ function ProtectedRoute({ children }) {
         setUser(response.data);
         setIsAuthenticated(true);
       } catch (error) {
+        console.error('Auth check failed:', error);
         setIsAuthenticated(false);
         navigate('/', { replace: true });
       }
     };
 
     checkAuth();
-  }, [navigate, location.state]);
+  }, [navigate, location.pathname, location.state]);
 
   if (isAuthenticated === null) {
     return (

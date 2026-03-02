@@ -185,8 +185,9 @@ async def exchange_session(request: SessionExchangeRequest, response: Response):
         # Call Emergent Auth API
         async with httpx.AsyncClient() as client:
             auth_response = await client.get(
-                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-                headers={"X-Session-ID": request.session_id}
+                "https://auth.emergentagent.com/v1/oauth/session-data",
+                headers={"X-Session-ID": request.session_id},
+                timeout=10.0
             )
             
             if auth_response.status_code != 200:

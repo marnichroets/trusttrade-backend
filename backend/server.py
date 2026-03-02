@@ -400,10 +400,6 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Check if user accepted terms
-    if not user.terms_accepted:
-        raise HTTPException(status_code=403, detail="Must accept terms and conditions first")
-    
     # Check if user is suspended
     if user.suspension_flag:
         raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")

@@ -12,15 +12,8 @@ function ProtectedRoute({ children }) {
   const location = useLocation();
 
   useEffect(() => {
-    // CRITICAL: Skip auth check if returning from OAuth callback
+    // Skip auth check if returning from OAuth callback
     if (window.location.hash?.includes('session_id=')) {
-      return;
-    }
-
-    // If user data passed from AuthCallback or Terms page, use it immediately
-    if (location.state?.user) {
-      setUser(location.state.user);
-      setIsAuthenticated(true);
       return;
     }
 
@@ -32,14 +25,12 @@ function ProtectedRoute({ children }) {
         setUser(response.data);
         setIsAuthenticated(true);
       } catch (error) {
-        console.error('Auth check failed:', error);
         setIsAuthenticated(false);
-        navigate('/', { replace: true });
       }
     };
 
     checkAuth();
-  }, [navigate, location.pathname, location.state]);
+  }, []);
 
   if (isAuthenticated === null) {
     return (
@@ -50,6 +41,7 @@ function ProtectedRoute({ children }) {
   }
 
   if (!isAuthenticated) {
+    navigate('/', { replace: true });
     return null;
   }
 

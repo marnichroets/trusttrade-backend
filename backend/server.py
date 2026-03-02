@@ -53,7 +53,7 @@ class UserSession(BaseModel):
 class Transaction(BaseModel):
     model_config = ConfigDict(extra="ignore")
     transaction_id: str
-    creator_role: str  # "buyer" or "seller"
+    creator_role: Optional[str] = "buyer"
     buyer_user_id: Optional[str] = None
     seller_user_id: Optional[str] = None
     buyer_name: str

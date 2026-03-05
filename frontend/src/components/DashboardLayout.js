@@ -42,7 +42,7 @@ function DashboardLayout({ children, user }) {
               <img 
                 src="https://customer-assets.emergentagent.com/job_trust-trade-pay/artifacts/u0eeoxzq_TrustTrade%20Logo.png" 
                 alt="TrustTrade" 
-                className="h-8"
+                className="h-10"
               />
             </div>
             <div className="flex items-center gap-4">

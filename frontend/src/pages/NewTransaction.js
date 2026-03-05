@@ -30,7 +30,8 @@ function NewTransaction() {
     item_description: '',
     item_condition: '',
     known_issues: '',
-    item_price: ''
+    item_price: '',
+    fee_paid_by: 'buyer'
   });
   const [confirmations, setConfirmations] = useState({
     buyer_details: false,
@@ -82,7 +83,21 @@ function NewTransaction() {
 
   const itemPrice = parseFloat(formData.item_price) || 0;
   const fee = (itemPrice * 0.02).toFixed(2);
-  const total = (itemPrice * 1.02).toFixed(2);
+  const feeAmount = parseFloat(fee);
+  
+  let buyerTotal = itemPrice;
+  let sellerTotal = itemPrice;
+  
+  if (formData.fee_paid_by === 'buyer') {
+    buyerTotal = itemPrice + feeAmount;
+  } else if (formData.fee_paid_by === 'seller') {
+    sellerTotal = itemPrice - feeAmount;
+  } else if (formData.fee_paid_by === 'split') {
+    buyerTotal = itemPrice + (feeAmount / 2);
+    sellerTotal = itemPrice - (feeAmount / 2);
+  }
+  
+  const total = (itemPrice + feeAmount).toFixed(2);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -139,6 +154,7 @@ function NewTransaction() {
           item_condition: formData.item_condition,
           known_issues: formData.known_issues,
           item_price: itemPrice,
+          fee_paid_by: formData.fee_paid_by,
           buyer_details_confirmed: confirmations.buyer_details,
           seller_details_confirmed: confirmations.seller_details,
           item_accuracy_confirmed: confirmations.item_accuracy
@@ -261,6 +277,19 @@ function NewTransaction() {
                 <Label htmlFor="item_price">Item Price (R) *</Label>
                 <Input id="item_price" name="item_price" type="number" step="0.01" min="0.01" value={formData.item_price} onChange={handleChange} placeholder="0.00" required data-testid="item-price-input" />
               </div>
+              <div>
+                <Label htmlFor="fee_paid_by">Who Pays the Transaction Fee? *</Label>
+                <Select value={formData.fee_paid_by} onValueChange={(value) => setFormData(prev => ({ ...prev, fee_paid_by: value }))}>
+                  <SelectTrigger id="fee_paid_by" data-testid="fee-split-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="buyer">Buyer Pays Fee</SelectItem>
+                    <SelectItem value="seller">Seller Pays Fee</SelectItem>
+                    <SelectItem value="split">Split 50/50</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </Card>
 
@@ -285,9 +314,18 @@ function NewTransaction() {
                   <span className="text-slate-600">TrustTrade Fee (2%):</span>
                   <span className="font-mono font-medium text-slate-900" data-testid="calc-fee">R {fee}</span>
                 </div>
-                <div className="border-t border-slate-300 pt-3 flex justify-between">
-                  <span className="font-semibold text-slate-900">Total Secure Payment:</span>
-                  <span className="font-mono font-bold text-primary text-lg" data-testid="calc-total">R {total}</span>
+                <div className="border-t border-slate-300 pt-3 space-y-2">
+                  <div className="flex justify-between">
+                    <span className="font-medium text-slate-700">Buyer Pays:</span>
+                    <span className="font-mono font-bold text-primary">R {buyerTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium text-slate-700">Seller Receives:</span>
+                    <span className="font-mono font-bold text-green-600">R {sellerTotal.toFixed(2)}</span>
+                  </div>
+                  {formData.fee_paid_by === 'split' && (
+                    <p className="text-xs text-slate-500 mt-2">Fee split 50/50: Each pays R {(feeAmount / 2).toFixed(2)}</p>
+                  )}
                 </div>
               </div>
             </Card>

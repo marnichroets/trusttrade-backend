@@ -453,10 +453,11 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "item_description": transaction_data.item_description,
         "item_condition": transaction_data.item_condition,
         "known_issues": transaction_data.known_issues,
-        "item_photos": [],  # Will be updated separately after photos are uploaded
+        "item_photos": [],
         "item_price": item_price,
         "trusttrade_fee": trusttrade_fee,
         "total": total,
+        "fee_paid_by": transaction_data.fee_paid_by,
         "payment_status": "Pending Seller Confirmation" if transaction_data.creator_role == "buyer" else "Pending Buyer Confirmation",
         "seller_confirmed": False,
         "delivery_confirmed": False,
@@ -713,6 +714,98 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
     )
     
     return Transaction(**updated_transaction)
+
+@api_router.post("/transactions/{transaction_id}/rate")
+async def rate_transaction(request: Request, transaction_id: str, rating_data: RatingSubmit):
+    """Submit rating for completed transaction"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Check if transaction is completed
+    if not transaction.get("delivery_confirmed"):
+        raise HTTPException(status_code=400, detail="Cannot rate incomplete transaction")
+    
+    # Determine if user is buyer or seller
+    is_buyer = transaction.get("buyer_user_id") == user.user_id or transaction.get("buyer_email") == user.email
+    is_seller = transaction.get("seller_user_id") == user.user_id or transaction.get("seller_email") == user.email
+    
+    if not is_buyer and not is_seller:
+        raise HTTPException(status_code=403, detail="Not part of this transaction")
+    
+    # Update rating
+    if is_buyer:
+        if transaction.get("buyer_rating"):
+            raise HTTPException(status_code=400, detail="Already rated")
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {"buyer_rating": rating_data.rating, "buyer_review": rating_data.review}}
+        )
+        # Update seller's average rating
+        seller_email = transaction["seller_email"]
+        await update_user_rating(seller_email, rating_data.rating)
+    else:
+        if transaction.get("seller_rating"):
+            raise HTTPException(status_code=400, detail="Already rated")
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {"seller_rating": rating_data.rating, "seller_review": rating_data.review}}
+        )
+        # Update buyer's average rating
+        buyer_email = transaction["buyer_email"]
+        await update_user_rating(buyer_email, rating_data.rating)
+    
+    return {"message": "Rating submitted", "rating": rating_data.rating}
+
+async def update_user_rating(email: str, new_rating: int):
+    """Recalculate user's average rating"""
+    user_doc = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user_doc:
+        return
+    
+    # Count ratings
+    buyer_ratings = await db.transactions.count_documents({"buyer_email": email, "seller_rating": {"$exists": True}})
+    seller_ratings = await db.transactions.count_documents({"seller_email": email, "buyer_rating": {"$exists": True}})
+    
+    # Calculate average
+    buyer_ratings_pipeline = db.transactions.find({"buyer_email": email, "seller_rating": {"$exists": True}}, {"_id": 0, "seller_rating": 1})
+    seller_ratings_pipeline = db.transactions.find({"seller_email": email, "buyer_rating": {"$exists": True}}, {"_id": 0, "buyer_rating": 1})
+    
+    total_rating = 0
+    count = 0
+    async for txn in buyer_ratings_pipeline:
+        total_rating += txn.get("seller_rating", 0)
+        count += 1
+    async for txn in seller_ratings_pipeline:
+        total_rating += txn.get("buyer_rating", 0)
+        count += 1
+    
+    avg_rating = round(total_rating / count, 1) if count > 0 else 0.0
+    
+    # Update user with new stats
+    await db.users.update_one(
+        {"email": email},
+        {"$set": {
+            "average_rating": avg_rating,
+            "total_trades": count,
+            "successful_trades": count
+        }}
+    )
+    
+    # Award badges
+    badges = []
+    if count >= 3:
+        badges.append("Silver")
+    if count >= 10:
+        badges.append("Gold")
+    if user_doc.get("verified"):
+        badges.append("Verified")
+    
+    await db.users.update_one({"email": email}, {"$set": {"badges": badges}})
 
 # Dispute Endpoints
 @api_router.post("/disputes", response_model=Dispute, status_code=201)

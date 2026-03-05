@@ -672,7 +672,7 @@ async def download_agreement_pdf(request: Request, transaction_id: str):
 
 @api_router.patch("/transactions/{transaction_id}/delivery")
 async def confirm_delivery(request: Request, transaction_id: str, update_data: TransactionUpdate):
-    """Confirm delivery and release funds"""
+    """Confirm delivery and release funds - only allowed after payment is confirmed"""
     user = await get_user_from_token(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -689,13 +689,26 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
     if transaction["buyer_user_id"] != user.user_id and transaction["buyer_email"] != user.email:
         raise HTTPException(status_code=403, detail="Only buyer can confirm delivery")
     
+    # Check that payment has been made
+    if transaction.get("payment_status") != "Paid":
+        raise HTTPException(status_code=400, detail="Cannot confirm delivery before payment is received")
+    
     if update_data.delivery_confirmed:
+        # Update timeline
+        timeline = transaction.get("timeline", [])
+        timeline.append({
+            "status": "Delivery Confirmed & Funds Released",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "by": user.name
+        })
+        
         await db.transactions.update_one(
             {"transaction_id": transaction_id},
             {"$set": {
                 "delivery_confirmed": True,
                 "release_status": "Released",
-                "payment_status": "Released"
+                "payment_status": "Released",
+                "timeline": timeline
             }}
         )
         
@@ -720,6 +733,66 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
     )
     
     return Transaction(**updated_transaction)
+
+class PaymentConfirmation(BaseModel):
+    confirmed: bool
+
+@api_router.post("/transactions/{transaction_id}/confirm-payment")
+async def confirm_payment(request: Request, transaction_id: str, payment: PaymentConfirmation):
+    """Mark transaction as paid (admin only for now - would be payment gateway in production)"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Only admin can confirm payment (in production this would be done by payment gateway)
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only admin can confirm payment")
+    
+    transaction = await db.transactions.find_one(
+        {"transaction_id": transaction_id},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    if not transaction.get("seller_confirmed"):
+        raise HTTPException(status_code=400, detail="Seller must confirm transaction first")
+    
+    if payment.confirmed:
+        # Update timeline
+        timeline = transaction.get("timeline", [])
+        timeline.append({
+            "status": "Payment Received in Escrow",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "by": "TrustTrade System"
+        })
+        
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {
+                "payment_status": "Paid",
+                "timeline": timeline
+            }}
+        )
+        
+        # Mock email to buyer that payment received
+        mock_send_email(
+            transaction["buyer_email"],
+            "Payment Received in Escrow",
+            f"Your payment for transaction {transaction_id} has been received and is held in escrow. The seller will now deliver the item."
+        )
+        
+        # Mock email to seller that payment received
+        mock_send_email(
+            transaction["seller_email"],
+            "Payment Received - Please Deliver",
+            f"Payment for transaction {transaction_id} has been received. Please deliver the item to the buyer."
+        )
+        
+        return {"message": "Payment confirmed", "status": "Paid"}
+    
+    return {"message": "Payment not confirmed"}
 
 @api_router.post("/transactions/{transaction_id}/rate")
 async def rate_transaction(request: Request, transaction_id: str, rating_data: RatingSubmit):

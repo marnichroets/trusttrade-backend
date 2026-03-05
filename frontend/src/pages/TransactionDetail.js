@@ -145,8 +145,19 @@ function TransactionDetail() {
 
   const isBuyer = user?.user_id === transaction.buyer_user_id || user?.email === transaction.buyer_email;
   const isSeller = user?.user_id === transaction.seller_user_id || user?.email === transaction.seller_email;
-  const canConfirmDelivery = isBuyer && !transaction.delivery_confirmed && transaction.payment_status !== 'Released';
+  // Buyer can only confirm delivery AFTER payment has been made (status = "Paid")
+  const canConfirmDelivery = isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
   const canSellerConfirm = isSeller && !transaction.seller_confirmed;
+  
+  // Helper to display who pays the fee
+  const getFeePayerLabel = (feePayer) => {
+    switch(feePayer) {
+      case 'buyer': return 'Buyer pays fee';
+      case 'seller': return 'Seller pays fee';
+      case 'split': return 'Fee split 50/50';
+      default: return 'Fee split 50/50';
+    }
+  };
 
   return (
     <DashboardLayout user={user}>
@@ -186,6 +197,37 @@ function TransactionDetail() {
             <Button onClick={handleSellerConfirm} disabled={sellerConfirming} data-testid="seller-confirm-btn">
               {sellerConfirming ? 'Confirming...' : 'Confirm Transaction Details'}
             </Button>
+          </Card>
+        )}
+
+        {/* Status-specific guidance cards */}
+        {transaction.seller_confirmed && transaction.payment_status === 'Ready for Payment' && (
+          <Card className="p-6 bg-blue-50 border-blue-200">
+            <h3 className="text-lg font-semibold text-blue-900 mb-2">Awaiting Payment</h3>
+            {isBuyer ? (
+              <p className="text-sm text-blue-800">
+                The seller has confirmed the transaction. Please make payment to the escrow account. Once payment is received, the seller will deliver the item.
+              </p>
+            ) : (
+              <p className="text-sm text-blue-800">
+                Waiting for the buyer to make payment to escrow. You will be notified when payment is received.
+              </p>
+            )}
+          </Card>
+        )}
+
+        {transaction.payment_status === 'Paid' && !transaction.delivery_confirmed && (
+          <Card className="p-6 bg-amber-50 border-amber-200">
+            <h3 className="text-lg font-semibold text-amber-900 mb-2">Payment Received - Awaiting Delivery</h3>
+            {isSeller ? (
+              <p className="text-sm text-amber-800">
+                Payment has been received and is held in escrow. Please deliver the item to the buyer. Funds will be released once the buyer confirms delivery.
+              </p>
+            ) : (
+              <p className="text-sm text-amber-800">
+                Your payment is held securely in escrow. The seller has been notified to deliver the item. Once you receive it, confirm delivery below to release the funds.
+              </p>
+            )}
           </Card>
         )}
 
@@ -265,6 +307,12 @@ function TransactionDetail() {
                   <span className="text-slate-600">TrustTrade Fee (2%):</span>
                   <span className="font-mono font-medium text-slate-900">R {transaction.trusttrade_fee.toFixed(2)}</span>
                 </div>
+                <div className="flex justify-between text-sm items-center">
+                  <span className="text-slate-600">Fee Paid By:</span>
+                  <Badge className="bg-blue-100 text-blue-800" data-testid="fee-payer-badge">
+                    {getFeePayerLabel(transaction.fee_paid_by)}
+                  </Badge>
+                </div>
                 <div className="border-t border-slate-200 pt-3 flex justify-between">
                   <span className="font-semibold text-slate-900">Total Secure Payment:</span>
                   <span className="font-mono font-bold text-primary text-xl">R {transaction.total.toFixed(2)}</span>
@@ -320,12 +368,15 @@ function TransactionDetail() {
         </Tabs>
 
         {canConfirmDelivery && (
-          <Card className="p-6 bg-blue-50 border-blue-200">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Confirm Delivery</h3>
-            <p className="text-sm text-slate-600 mb-4">
-              Have you received the item/service and are satisfied? Confirming delivery will release the funds to the seller.
+          <Card className="p-6 bg-green-50 border-green-200">
+            <h3 className="text-lg font-semibold text-green-900 mb-4">Final Step: Confirm Delivery</h3>
+            <p className="text-sm text-green-800 mb-2">
+              Payment has been received and is held in escrow.
             </p>
-            <Button onClick={handleConfirmDelivery} disabled={confirming} data-testid="confirm-delivery-btn">
+            <p className="text-sm text-slate-600 mb-4">
+              Have you received the item/service and are satisfied? Confirming delivery will release the funds to the seller. This action cannot be undone.
+            </p>
+            <Button onClick={handleConfirmDelivery} disabled={confirming} data-testid="confirm-delivery-btn" className="bg-green-600 hover:bg-green-700">
               {confirming ? 'Processing...' : 'Confirm Delivery & Release Funds'}
             </Button>
           </Card>

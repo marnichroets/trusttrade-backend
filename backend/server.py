@@ -73,6 +73,7 @@ class Transaction(BaseModel):
     item_price: float
     trusttrade_fee: float
     total: float
+    fee_paid_by: str = "split"  # "buyer", "seller", or "split" (default: 50/50 split)
     payment_status: str = "Pending Seller Confirmation"
     seller_confirmed: bool = False
     seller_confirmed_at: Optional[str] = None
@@ -95,6 +96,7 @@ class TransactionCreate(BaseModel):
     item_condition: str
     known_issues: str
     item_price: float
+    fee_paid_by: str = "split"  # "buyer", "seller", or "split" (default: 50/50 split)
     buyer_details_confirmed: bool
     seller_details_confirmed: bool
     item_accuracy_confirmed: bool

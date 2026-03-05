@@ -31,7 +31,7 @@ function NewTransaction() {
     item_condition: '',
     known_issues: '',
     item_price: '',
-    fee_paid_by: 'buyer'
+    fee_paid_by: 'split'  // Default to 50/50 split
   });
   const [confirmations, setConfirmations] = useState({
     buyer_details: false,
@@ -284,11 +284,14 @@ function NewTransaction() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="split">Split 50/50 (Recommended)</SelectItem>
                     <SelectItem value="buyer">Buyer Pays Fee</SelectItem>
                     <SelectItem value="seller">Seller Pays Fee</SelectItem>
-                    <SelectItem value="split">Split 50/50</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-amber-600 mt-2 font-medium">
+                  ⚠️ Escrow fee option must be agreed by both parties before payment.
+                </p>
               </div>
             </div>
           </Card>

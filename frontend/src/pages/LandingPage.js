@@ -23,7 +23,7 @@ function LandingPage() {
               <img 
                 src="https://customer-assets.emergentagent.com/job_trust-trade-pay/artifacts/u0eeoxzq_TrustTrade%20Logo.png" 
                 alt="TrustTrade" 
-                className="h-12"
+                className="h-14 md:h-16"
               />
             </div>
             <div className="flex items-center gap-3">

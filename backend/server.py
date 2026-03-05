@@ -102,6 +102,10 @@ class TransactionCreate(BaseModel):
 class TransactionUpdate(BaseModel):
     delivery_confirmed: bool
 
+class RatingSubmit(BaseModel):
+    rating: int
+    review: Optional[str] = None
+
 class SellerConfirmation(BaseModel):
     confirmed: bool
 

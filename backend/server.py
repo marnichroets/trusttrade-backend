@@ -41,6 +41,12 @@ class User(BaseModel):
     terms_accepted_at: Optional[str] = None
     suspension_flag: bool = False
     valid_disputes_count: int = 0
+    total_trades: int = 0
+    successful_trades: int = 0
+    average_rating: float = 0.0
+    trust_score: int = 50
+    badges: List[str] = []
+    verified: bool = False
     created_at: str
 
 class UserSession(BaseModel):

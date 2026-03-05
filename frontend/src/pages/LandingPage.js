@@ -20,8 +20,11 @@ function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-8 h-8 text-primary" />
-              <span className="text-xl font-bold text-slate-900">TrustTrade</span>
+              <img 
+                src="https://customer-assets.emergentagent.com/job_trust-trade-pay/artifacts/u0eeoxzq_TrustTrade%20Logo.png" 
+                alt="TrustTrade" 
+                className="h-8"
+              />
             </div>
             <div className="flex items-center gap-3">
               <Button

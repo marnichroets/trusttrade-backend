@@ -12,6 +12,7 @@ import TermsAndConditions from './pages/TermsAndConditions';
 import ShareTransaction from './pages/ShareTransaction';
 import UserProfile from './pages/UserProfile';
 import LiveActivity from './pages/LiveActivity';
+import IdentityVerification from './pages/IdentityVerification';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -38,6 +39,7 @@ function AppRouter() {
       <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/activity" element={<ProtectedRoute><LiveActivity /></ProtectedRoute>} />
+      <Route path="/verify" element={<ProtectedRoute><IdentityVerification /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

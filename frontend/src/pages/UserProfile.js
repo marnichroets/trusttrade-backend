@@ -5,9 +5,10 @@ import ReportUserModal from '../components/ReportUserModal';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ArrowLeft, Star, Shield, ShieldCheck, Award, CheckCircle, AlertTriangle, TrendingUp, Package, User as UserIcon, Flag } from 'lucide-react';
+import { ArrowLeft, Star, Shield, ShieldCheck, Award, CheckCircle, AlertTriangle, TrendingUp, Package, User as UserIcon, Flag, HelpCircle } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -190,6 +191,23 @@ function UserProfile() {
               </Button>
             </div>
           )}
+
+          {/* Get Verified Button - only show for own profile if not verified */}
+          {isSelf && !profileUser.verified && (
+            <div className="mt-4 pt-4 border-t border-slate-200">
+              <Button 
+                onClick={() => navigate('/verify')}
+                className="bg-blue-600 hover:bg-blue-700"
+                data-testid="get-verified-btn"
+              >
+                <ShieldCheck className="w-4 h-4 mr-2" />
+                Get Verified
+              </Button>
+              <p className="text-xs text-slate-500 mt-2">
+                Verify your identity to earn +10 trust points
+              </p>
+            </div>
+          )}
         </Card>
 
         {/* Stats Grid */}
@@ -238,7 +256,19 @@ function UserProfile() {
           <div className="space-y-4">
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-slate-600">Transaction History</span>
+                <span className="text-slate-600 flex items-center gap-1">
+                  Transaction History
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Earn 4 points for each successful trade completed. Maximum 40 points (10 trades).</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </span>
                 <span className="font-medium">{Math.min(40, (profileUser.successful_trades || 0) * 4)}/40</span>
               </div>
               <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -250,7 +280,19 @@ function UserProfile() {
             </div>
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-slate-600">User Ratings</span>
+                <span className="text-slate-600 flex items-center gap-1">
+                  User Ratings
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Based on average star rating from other users. 6 points per star, maximum 30 points.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </span>
                 <span className="font-medium">{Math.round((profileUser.average_rating || 0) * 6)}/30</span>
               </div>
               <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -262,7 +304,19 @@ function UserProfile() {
             </div>
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-slate-600">Dispute Record</span>
+                <span className="text-slate-600 flex items-center gap-1">
+                  Dispute Record
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Tracks disputes ruled against this user. Starts at 20 points, minus 5 for each valid dispute. A clean record means no confirmed complaints.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </span>
                 <span className="font-medium">{Math.max(0, 20 - (profileUser.valid_disputes_count || 0) * 5)}/20</span>
               </div>
               <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -274,7 +328,19 @@ function UserProfile() {
             </div>
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-slate-600">Verification Status</span>
+                <span className="text-slate-600 flex items-center gap-1">
+                  Verification Status
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>10 bonus points for completing identity verification (ID, selfie, phone number).</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </span>
                 <span className="font-medium">{profileUser.verified ? 10 : 0}/10</span>
               </div>
               <div className="h-2 bg-slate-100 rounded-full overflow-hidden">

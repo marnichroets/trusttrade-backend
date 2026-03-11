@@ -90,6 +90,8 @@ class Transaction(BaseModel):
     seller_review: Optional[str] = None
     auto_release_at: Optional[str] = None  # Timestamp for auto-release (48 hours after payment)
     auto_released: bool = False  # Flag indicating auto-release occurred
+    risk_level: Optional[str] = None  # "low", "medium", "high"
+    risk_flags: List[str] = []
     timeline: List[dict] = []
     created_at: str
 
@@ -180,6 +182,149 @@ def mock_send_email(to_email: str, subject: str, body: str):
     logger.info(f"SUBJECT: {subject}")
     logger.info(f"BODY: {body}")
     logger.info("---")
+
+# Scam Detection System
+class RiskAssessment(BaseModel):
+    risk_level: str  # "low", "medium", "high"
+    risk_score: int  # 0-100
+    flags: List[str]
+    warnings: List[str]
+
+async def assess_transaction_risk(user: User, item_price: float) -> RiskAssessment:
+    """Assess risk level for a transaction"""
+    risk_score = 0
+    flags = []
+    warnings = []
+    
+    # Get user's account age
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    created_at = user_doc.get("created_at")
+    if created_at:
+        account_age_days = (datetime.now(timezone.utc) - datetime.fromisoformat(created_at.replace('Z', '+00:00'))).days
+    else:
+        account_age_days = 0
+    
+    # Flag 1: New account with high-value transaction
+    if account_age_days < 7 and item_price > 5000:
+        risk_score += 30
+        flags.append("new_account_high_value")
+        warnings.append("New account attempting high-value transaction (R5,000+)")
+    
+    # Flag 2: Account with multiple valid disputes
+    valid_disputes = user_doc.get("valid_disputes_count", 0)
+    if valid_disputes >= 2:
+        risk_score += 25
+        flags.append("multiple_disputes")
+        warnings.append(f"User has {valid_disputes} valid disputes against them")
+    
+    # Flag 3: Unverified account with high-value transaction
+    if not user_doc.get("verified", False) and item_price > 10000:
+        risk_score += 20
+        flags.append("unverified_high_value")
+        warnings.append("Unverified account with very high-value transaction (R10,000+)")
+    
+    # Flag 4: Very low trust score
+    trust_score = user_doc.get("trust_score", 50)
+    if trust_score < 30:
+        risk_score += 25
+        flags.append("low_trust_score")
+        warnings.append(f"User has a low trust score ({trust_score}/100)")
+    
+    # Flag 5: Account is suspended or flagged
+    if user_doc.get("suspension_flag", False):
+        risk_score += 50
+        flags.append("suspended_account")
+        warnings.append("User account has been flagged for suspension")
+    
+    # Flag 6: Unusually low price (potential scam)
+    if item_price < 50:
+        risk_score += 10
+        flags.append("very_low_price")
+        warnings.append("Transaction amount is unusually low")
+    
+    # Determine risk level
+    if risk_score >= 60:
+        risk_level = "high"
+    elif risk_score >= 30:
+        risk_level = "medium"
+    else:
+        risk_level = "low"
+    
+    return RiskAssessment(
+        risk_level=risk_level,
+        risk_score=risk_score,
+        flags=flags,
+        warnings=warnings
+    )
+
+async def assess_user_risk(user_id: str) -> RiskAssessment:
+    """Assess risk level for a user account"""
+    risk_score = 0
+    flags = []
+    warnings = []
+    
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user_doc:
+        return RiskAssessment(risk_level="low", risk_score=0, flags=[], warnings=[])
+    
+    # Check account age
+    created_at = user_doc.get("created_at")
+    if created_at:
+        account_age_days = (datetime.now(timezone.utc) - datetime.fromisoformat(created_at.replace('Z', '+00:00'))).days
+    else:
+        account_age_days = 0
+    
+    if account_age_days < 3:
+        risk_score += 15
+        flags.append("very_new_account")
+        warnings.append("Account is less than 3 days old")
+    
+    # Check disputes
+    valid_disputes = user_doc.get("valid_disputes_count", 0)
+    if valid_disputes >= 3:
+        risk_score += 40
+        flags.append("many_disputes")
+        warnings.append(f"User has {valid_disputes} valid disputes - account may need review")
+    elif valid_disputes >= 1:
+        risk_score += 15
+        flags.append("has_disputes")
+    
+    # Check reports against user
+    reports_count = await db.reports.count_documents({"reported_user_id": user_id, "status": {"$ne": "Dismissed"}})
+    if reports_count >= 3:
+        risk_score += 35
+        flags.append("multiple_reports")
+        warnings.append(f"User has {reports_count} reports against them")
+    elif reports_count >= 1:
+        risk_score += 10
+        flags.append("has_reports")
+    
+    # Check verification status
+    if not user_doc.get("verified", False):
+        risk_score += 10
+        flags.append("unverified")
+    
+    # Check trust score
+    trust_score = user_doc.get("trust_score", 50)
+    if trust_score < 20:
+        risk_score += 30
+        flags.append("very_low_trust")
+        warnings.append(f"Very low trust score: {trust_score}/100")
+    
+    # Determine risk level
+    if risk_score >= 60:
+        risk_level = "high"
+    elif risk_score >= 30:
+        risk_level = "medium"
+    else:
+        risk_level = "low"
+    
+    return RiskAssessment(
+        risk_level=risk_level,
+        risk_score=risk_score,
+        flags=flags,
+        warnings=warnings
+    )
 
 # Helper to get user from session token
 async def get_user_from_token(request: Request) -> Optional[User]:
@@ -487,6 +632,18 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     while await db.transactions.find_one({"share_code": share_code}):
         share_code = generate_share_code()
     
+    # Assess transaction risk
+    risk_assessment = await assess_transaction_risk(user, item_price)
+    
+    # Add risk warning to timeline if medium/high risk
+    if risk_assessment.risk_level in ["medium", "high"]:
+        timeline.append({
+            "status": f"Risk Assessment: {risk_assessment.risk_level.upper()}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "by": "TrustTrade System",
+            "details": risk_assessment.warnings
+        })
+    
     transaction = {
         "transaction_id": transaction_id,
         "share_code": share_code,
@@ -512,6 +669,8 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "buyer_details_confirmed": transaction_data.buyer_details_confirmed,
         "seller_details_confirmed": transaction_data.seller_details_confirmed,
         "item_accuracy_confirmed": transaction_data.item_accuracy_confirmed,
+        "risk_level": risk_assessment.risk_level,
+        "risk_flags": risk_assessment.flags,
         "timeline": timeline,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -1341,6 +1500,274 @@ async def update_report(request: Request, report_id: str, status: str, admin_not
         raise HTTPException(status_code=404, detail="Report not found")
     
     return {"message": "Report updated"}
+
+# Identity Verification Endpoints
+class VerificationStatus(BaseModel):
+    id_verified: bool = False
+    id_document_path: Optional[str] = None
+    selfie_verified: bool = False
+    selfie_path: Optional[str] = None
+    phone_verified: bool = False
+    phone_number: Optional[str] = None
+    fully_verified: bool = False
+
+class PhoneOtpRequest(BaseModel):
+    phone_number: str
+
+class PhoneOtpVerify(BaseModel):
+    phone_number: str
+    otp: str
+
+# Store OTPs temporarily (in production use Redis)
+otp_store = {}
+
+# Risk Assessment Endpoints
+@api_router.get("/risk/user/{user_id}")
+async def get_user_risk_assessment(request: Request, user_id: str):
+    """Get risk assessment for a user (admin or self only)"""
+    current_user = await get_user_from_token(request)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Only admin or the user themselves can see risk assessment
+    if not current_user.is_admin and current_user.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    assessment = await assess_user_risk(user_id)
+    return assessment
+
+@api_router.get("/admin/flagged-users")
+async def get_flagged_users(request: Request):
+    """Get users with high risk scores (admin only)"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    # Find users with issues
+    flagged = []
+    
+    # Users with multiple valid disputes
+    dispute_users = await db.users.find(
+        {"valid_disputes_count": {"$gte": 2}},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "valid_disputes_count": 1, "trust_score": 1}
+    ).to_list(100)
+    
+    for u in dispute_users:
+        assessment = await assess_user_risk(u["user_id"])
+        flagged.append({
+            **u,
+            "risk_level": assessment.risk_level,
+            "risk_score": assessment.risk_score,
+            "flags": assessment.flags,
+            "warnings": assessment.warnings
+        })
+    
+    # Users with multiple reports
+    reported_users = await db.reports.aggregate([
+        {"$match": {"status": {"$ne": "Dismissed"}}},
+        {"$group": {"_id": "$reported_user_id", "count": {"$sum": 1}}},
+        {"$match": {"count": {"$gte": 2}}}
+    ]).to_list(100)
+    
+    for r in reported_users:
+        if not any(f["user_id"] == r["_id"] for f in flagged):
+            user_doc = await db.users.find_one({"user_id": r["_id"]}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "trust_score": 1})
+            if user_doc:
+                assessment = await assess_user_risk(r["_id"])
+                flagged.append({
+                    **user_doc,
+                    "reports_count": r["count"],
+                    "risk_level": assessment.risk_level,
+                    "risk_score": assessment.risk_score,
+                    "flags": assessment.flags,
+                    "warnings": assessment.warnings
+                })
+    
+    return sorted(flagged, key=lambda x: x.get("risk_score", 0), reverse=True)
+
+@api_router.get("/admin/flagged-transactions")
+async def get_flagged_transactions(request: Request):
+    """Get transactions with risk flags (admin only)"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    # Find transactions with medium or high risk
+    flagged = await db.transactions.find(
+        {"risk_level": {"$in": ["medium", "high"]}},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return [Transaction(**t) for t in flagged]
+
+@api_router.get("/verification/status", response_model=VerificationStatus)
+async def get_verification_status(request: Request):
+    """Get user's verification status"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    verification = user_doc.get("verification", {})
+    
+    return VerificationStatus(
+        id_verified=verification.get("id_verified", False),
+        id_document_path=verification.get("id_document_path"),
+        selfie_verified=verification.get("selfie_verified", False),
+        selfie_path=verification.get("selfie_path"),
+        phone_verified=verification.get("phone_verified", False),
+        phone_number=verification.get("phone_number"),
+        fully_verified=user_doc.get("verified", False)
+    )
+
+@api_router.post("/verification/id")
+async def upload_id_document(request: Request, file: UploadFile = File(...)):
+    """Upload ID document for verification"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Validate file type
+    allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Only image files are allowed")
+    
+    # Save file
+    upload_dir = Path("/app/uploads/verification")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+    file_path = upload_dir / f"id_{user.user_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Update user verification status
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {
+            "verification.id_verified": True,
+            "verification.id_document_path": str(file_path),
+            "verification.id_uploaded_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"message": "ID document uploaded successfully", "status": "pending_review"}
+
+@api_router.post("/verification/selfie")
+async def upload_selfie(request: Request, file: UploadFile = File(...)):
+    """Upload selfie for verification"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Validate file type
+    allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Only image files are allowed")
+    
+    # Save file
+    upload_dir = Path("/app/uploads/verification")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_ext = file.filename.split('.')[-1] if '.' in file.filename else 'jpg'
+    file_path = upload_dir / f"selfie_{user.user_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Update user verification status
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {
+            "verification.selfie_verified": True,
+            "verification.selfie_path": str(file_path),
+            "verification.selfie_uploaded_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"message": "Selfie uploaded successfully", "status": "pending_review"}
+
+@api_router.post("/verification/phone/send-otp")
+async def send_phone_otp(request: Request, data: PhoneOtpRequest):
+    """Send OTP to phone number"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    phone = data.phone_number.replace(" ", "").replace("-", "")
+    if len(phone) < 9:
+        raise HTTPException(status_code=400, detail="Invalid phone number")
+    
+    # Generate OTP (in production, send via SMS service like Twilio)
+    otp = ''.join(random.choices(string.digits, k=6))
+    
+    # Store OTP (expires in 10 minutes)
+    otp_store[f"{user.user_id}_{phone}"] = {
+        "otp": otp,
+        "expires": datetime.now(timezone.utc) + timedelta(minutes=10)
+    }
+    
+    # Mock SMS sending
+    logger.info(f"MOCK SMS TO +27{phone}: Your TrustTrade verification code is {otp}")
+    
+    return {"message": "OTP sent successfully", "phone": f"+27{phone[:2]}****{phone[-2:]}"}
+
+@api_router.post("/verification/phone/verify-otp")
+async def verify_phone_otp(request: Request, data: PhoneOtpVerify):
+    """Verify phone OTP"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    phone = data.phone_number.replace(" ", "").replace("-", "")
+    key = f"{user.user_id}_{phone}"
+    
+    stored = otp_store.get(key)
+    if not stored:
+        raise HTTPException(status_code=400, detail="No OTP found. Please request a new code.")
+    
+    if datetime.now(timezone.utc) > stored["expires"]:
+        del otp_store[key]
+        raise HTTPException(status_code=400, detail="OTP expired. Please request a new code.")
+    
+    if stored["otp"] != data.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP")
+    
+    # OTP verified - update user
+    del otp_store[key]
+    
+    # Check if all verification steps are complete
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    verification = user_doc.get("verification", {})
+    
+    all_verified = (
+        verification.get("id_verified", False) and 
+        verification.get("selfie_verified", False)
+    )
+    
+    # Update user with phone verification and full verified status
+    update_data = {
+        "verification.phone_verified": True,
+        "verification.phone_number": f"+27{phone}",
+        "verification.phone_verified_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    if all_verified:
+        update_data["verified"] = True
+        # Add Verified badge if not already present
+        badges = user_doc.get("badges", [])
+        if "Verified" not in badges:
+            badges.append("Verified")
+            update_data["badges"] = badges
+    
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": update_data}
+    )
+    
+    return {"message": "Phone verified successfully", "fully_verified": all_verified}
 
 # Admin Endpoints
 @api_router.get("/admin/users", response_model=List[User])

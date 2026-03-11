@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Textarea } from '../components/ui/textarea';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check } from 'lucide-react';
+import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -276,6 +276,23 @@ function TransactionDetail() {
             </Card>
           )}
         </div>
+
+        {/* Risk Warning - Show if medium or high risk */}
+        {transaction.risk_level && transaction.risk_level !== 'low' && (
+          <Card className={`p-4 ${transaction.risk_level === 'high' ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-300'}`}>
+            <div className="flex items-start gap-3">
+              <AlertTriangle className={`w-5 h-5 ${transaction.risk_level === 'high' ? 'text-red-600' : 'text-amber-600'}`} />
+              <div>
+                <p className={`font-medium ${transaction.risk_level === 'high' ? 'text-red-900' : 'text-amber-900'}`}>
+                  {transaction.risk_level === 'high' ? 'High Risk Transaction' : 'Proceed with Caution'}
+                </p>
+                <p className={`text-sm mt-1 ${transaction.risk_level === 'high' ? 'text-red-700' : 'text-amber-700'}`}>
+                  Our system has flagged potential risks with this transaction. Please verify the other party's identity before proceeding.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
 
         <Card className="p-6">
           <div className="grid md:grid-cols-2 gap-6">

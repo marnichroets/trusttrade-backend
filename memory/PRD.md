@@ -23,7 +23,7 @@ Build a professional, full-stack escrow application called "TrustTrade" with a c
 - Role Selection: User selects if they are "Buyer" or "Seller" when creating transaction
 - Account Suspension: Flag users after 3 valid disputes
 
-### Phase 3: Trust & Ratings System (MOSTLY COMPLETE)
+### Phase 3: Trust & Ratings System (COMPLETE)
 - [x] Fee Split: Option for buyer, seller, or 50/50 (default) to pay escrow fee
 - [x] Fee Agreement Message: Warning displayed during transaction creation
 - [x] User Ratings/Reviews: 5-star rating system after completed transactions
@@ -34,8 +34,8 @@ Build a professional, full-stack escrow application called "TrustTrade" with a c
 - [x] Live Activity Board: Dashboard showing platform-wide stats
 - [x] Report User: Feature to report suspicious or abusive users
 - [x] Auto-Release Timer: 48-hour automatic fund release if buyer doesn't respond
-- [ ] Identity Verification: Flow for users to verify identity (ID, selfie, phone OTP)
-- [ ] Scam Detection: Automatic flagging of suspicious accounts
+- [x] Identity Verification: 3-step flow (ID upload, selfie, phone OTP)
+- [x] Scam Detection: Risk assessment on transactions, flagged users/transactions for admin
 
 ## Technical Architecture
 
@@ -201,7 +201,21 @@ Build a professional, full-stack escrow application called "TrustTrade" with a c
    - Displays countdown on transaction detail page
    - Admin endpoints to process and view pending auto-releases
 
-9. **Share Page Protection Message** - "This transaction is protected by TrustTrade escrow"
+10. **Identity Verification** - 3-step verification flow
+    - Step 1: Upload government ID document
+    - Step 2: Upload selfie photo
+    - Step 3: Phone OTP verification (MOCKED - logged to console)
+    - Users earn "Verified" badge and +10 trust score points
+
+11. **Scam Detection System** - Automatic risk assessment
+    - Risk levels: low, medium, high
+    - Flags: new_account_high_value, multiple_disputes, unverified_high_value, low_trust_score
+    - Risk warning displayed on transaction detail for medium/high risk
+    - Admin endpoints: /api/admin/flagged-users, /api/admin/flagged-transactions
+
+12. **Trust Score Tooltips** - Info icons on each metric in profile
+    - Explains how each metric contributes to trust score
+    - Helps users understand how to improve their score
 
 ### Transaction Flow (Updated)
 1. Buyer/Seller creates transaction → Generates shareable link (TT-XXXXXX)

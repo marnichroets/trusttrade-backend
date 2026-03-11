@@ -26,11 +26,13 @@ Build a professional, full-stack escrow application called "TrustTrade" with a c
 ### Phase 3: Trust & Ratings System (IN PROGRESS)
 - [x] Fee Split: Option for buyer, seller, or 50/50 (default) to pay escrow fee
 - [x] Fee Agreement Message: Warning displayed during transaction creation
-- [ ] User Ratings/Reviews: 5-star rating system after completed transactions
-- [ ] Trust Badges: Silver/Gold/Verified badges based on transaction history
-- [ ] User Profiles: Public profiles displaying ratings, badges, trust score
+- [x] User Ratings/Reviews: 5-star rating system after completed transactions
+- [x] Trust Score System: Score out of 100 based on trades, ratings, disputes, verification
+- [x] User Profiles: Public profiles displaying ratings, badges, trust score
+- [x] Trust Badges: Silver/Gold/Verified badges based on transaction history
+- [x] Transaction Share Links: Shareable TT-XXXXXX codes for easy sharing
+- [x] Live Activity Board: Dashboard showing platform-wide stats
 - [ ] Identity Verification: Flow for users to verify identity (ID, selfie, phone)
-- [ ] Live Activity Board: Dashboard showing platform-wide stats
 - [ ] Scam Detection: Automatic flagging of suspicious accounts
 - [ ] In-App Chat: Messaging system within transactions
 - [ ] Auto-Release Timer: Auto-release funds after timeout
@@ -160,21 +162,49 @@ Build a professional, full-stack escrow application called "TrustTrade" with a c
 
 ### Fixed Issues
 1. **Transaction Creation Bug (P0)** - Added `fee_paid_by` field to both `TransactionCreate` and `Transaction` Pydantic models
-2. **Logo Size** - Made logo 4x bigger (h-20 md:h-24 = 96px)
+2. **Logo Size** - Made logo 4x bigger (h-28 md:h-32 = 128px)
 3. **Transaction Flow Fix** - Confirm Delivery now only appears AFTER payment is marked as "Paid"
 
-### New Features
-1. **Fee Split Options** - Default changed to 50/50 split
-2. **Fee Agreement Warning** - Added message: "Escrow fee option must be agreed by both parties before payment"
-3. **Fee Payer Badge** - Both buyer and seller can see who pays the fee on transaction details
-4. **Payment Confirmation Endpoint** - Admin can mark transaction as "Paid" via `/api/transactions/{id}/confirm-payment`
-5. **Status Guidance Cards** - Contextual messages for each transaction state (Awaiting Payment, Payment Received)
+### New Features Implemented
+1. **Transaction Share Links** - Every transaction gets a unique TT-XXXXXX share code
+   - Route: `/t/{shareCode}` for viewing transaction preview
+   - One-click copy link button on transaction detail page
+   - Sign-in required to join transaction
+   
+2. **User Profile Page** - `/profile` and `/profile/:userId`
+   - Trust score display (out of 100)
+   - Trust badges (Silver, Gold, Verified)
+   - Stats: Total trades, successful trades, avg rating, disputes
+   - Trust score breakdown with progress bars
+
+3. **Trust Score System** - Calculated dynamically:
+   - Transaction History: 4pts per successful trade (max 40)
+   - User Ratings: 6pts per star (max 30)
+   - Dispute Record: 20pts minus 5 per valid dispute (min 0)
+   - Verification: 10pts if verified
+
+4. **Live Activity Board** - `/activity`
+   - Real-time platform statistics
+   - Completed trades today, total secured, fraud cases
+   - Auto-refresh every 30 seconds
+
+5. **Rating System** - 5-star rating after transaction completion
+   - Buyers rate sellers, sellers rate buyers
+   - Optional text review
+   - Ratings displayed on profiles
+
+6. **Fee Split Options** - Default changed to 50/50 split
+   - Warning message about fee agreement
+   - Fee payer badge visible to both parties
 
 ### Transaction Flow (Updated)
-1. Buyer/Seller creates transaction
-2. Seller confirms transaction details → Status: "Ready for Payment"
-3. Admin marks payment received → Status: "Paid" (in production: payment gateway)
-4. Buyer confirms delivery → Status: "Released" (funds released to seller)
+1. Buyer/Seller creates transaction → Generates shareable link (TT-XXXXXX)
+2. Creator shares link via WhatsApp/SMS/Email
+3. Other party opens link, signs in, joins transaction
+4. Seller confirms transaction details → Status: "Ready for Payment"
+5. Admin marks payment received → Status: "Paid" (in production: payment gateway)
+6. Buyer confirms delivery → Status: "Released" (funds released to seller)
+7. Both parties rate each other
 
 ## Known Issues
 1. **React hydration errors** in dashboard table components (LOW severity, doesn't affect functionality)

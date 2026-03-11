@@ -327,12 +327,24 @@ function TransactionDetail() {
             <h3 className="text-lg font-semibold text-amber-900 mb-2">Payment Received - Awaiting Delivery</h3>
             {isSeller ? (
               <p className="text-sm text-amber-800">
-                Payment has been received and is held in escrow. Please deliver the item to the buyer. Funds will be released once the buyer confirms delivery.
+                Payment has been received and is held in escrow. Please deliver the item to the buyer. Funds will be released once the buyer confirms delivery or automatically after 48 hours.
               </p>
             ) : (
               <p className="text-sm text-amber-800">
                 Your payment is held securely in escrow. The seller has been notified to deliver the item. Once you receive it, confirm delivery below to release the funds.
               </p>
+            )}
+            
+            {/* Auto-Release Timer */}
+            {transaction.auto_release_at && (
+              <div className="mt-4 p-3 bg-white/50 rounded-lg">
+                <p className="text-sm text-amber-900 font-medium">
+                  Auto-Release Timer Active
+                </p>
+                <p className="text-xs text-amber-700 mt-1">
+                  Funds will be automatically released to the seller at: {new Date(transaction.auto_release_at).toLocaleString('en-ZA')}
+                </p>
+              </div>
             )}
           </Card>
         )}

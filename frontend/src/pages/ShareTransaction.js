@@ -152,9 +152,9 @@ function ShareTransaction() {
       {/* Main Content */}
       <div className="max-w-2xl mx-auto px-4 py-12">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium mb-4">
+          <div className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-4 py-2 rounded-full text-sm font-medium mb-4">
             <ShieldCheck className="w-4 h-4" />
-            Secure Escrow Transaction
+            This transaction is protected by TrustTrade escrow.
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">You've Been Invited to a Transaction</h1>
           <p className="text-slate-600">Review the details below and join to participate</p>

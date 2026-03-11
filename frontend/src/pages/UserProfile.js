@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
+import ReportUserModal from '../components/ReportUserModal';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ArrowLeft, Star, Shield, ShieldCheck, Award, CheckCircle, AlertTriangle, TrendingUp, Package, User as UserIcon } from 'lucide-react';
+import { ArrowLeft, Star, Shield, ShieldCheck, Award, CheckCircle, AlertTriangle, TrendingUp, Package, User as UserIcon, Flag } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -15,6 +16,7 @@ function UserProfile() {
   const [user, setUser] = useState(null);
   const [profileUser, setProfileUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showReportModal, setShowReportModal] = useState(false);
   const navigate = useNavigate();
   const { userId } = useParams();
 
@@ -172,6 +174,22 @@ function UserProfile() {
               <p className="text-xs text-slate-500">out of 100</p>
             </div>
           </div>
+
+          {/* Report Button - only show for other users */}
+          {!isSelf && (
+            <div className="mt-4 pt-4 border-t border-slate-200">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowReportModal(true)}
+                className="text-red-600 border-red-200 hover:bg-red-50"
+                data-testid="report-user-btn"
+              >
+                <Flag className="w-4 h-4 mr-2" />
+                Report User
+              </Button>
+            </div>
+          )}
         </Card>
 
         {/* Stats Grid */}
@@ -280,6 +298,14 @@ function UserProfile() {
           </p>
         </Card>
       </div>
+
+      {/* Report User Modal */}
+      <ReportUserModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        reportedUserId={profileUser.user_id}
+        reportedUserName={profileUser.name}
+      />
     </DashboardLayout>
   );
 }

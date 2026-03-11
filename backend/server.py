@@ -88,6 +88,8 @@ class Transaction(BaseModel):
     buyer_review: Optional[str] = None
     seller_rating: Optional[int] = None
     seller_review: Optional[str] = None
+    auto_release_at: Optional[str] = None  # Timestamp for auto-release (48 hours after payment)
+    auto_released: bool = False  # Flag indicating auto-release occurred
     timeline: List[dict] = []
     created_at: str
 
@@ -138,6 +140,24 @@ class DisputeUpdate(BaseModel):
     status: str
     admin_decision: Optional[str] = None
     is_valid_dispute: Optional[bool] = None
+
+class UserReport(BaseModel):
+    """User report model"""
+    report_id: str
+    reporter_user_id: str
+    reported_user_id: str
+    reason: str
+    description: str
+    transaction_id: Optional[str] = None
+    status: str = "Pending"  # Pending, Reviewed, Resolved, Dismissed
+    admin_notes: Optional[str] = None
+    created_at: str
+
+class UserReportCreate(BaseModel):
+    reported_user_id: str
+    reason: str
+    description: str
+    transaction_id: Optional[str] = None
 
 class SessionExchangeRequest(BaseModel):
     session_id: str
@@ -878,10 +898,18 @@ async def confirm_payment(request: Request, transaction_id: str, payment: Paymen
         raise HTTPException(status_code=400, detail="Seller must confirm transaction first")
     
     if payment.confirmed:
+        # Calculate auto-release time (48 hours from now)
+        auto_release_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
+        
         # Update timeline
         timeline = transaction.get("timeline", [])
         timeline.append({
             "status": "Payment Received in Escrow",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "by": "TrustTrade System"
+        })
+        timeline.append({
+            "status": "Auto-Release Timer Started (48 hours)",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "by": "TrustTrade System"
         })
@@ -890,6 +918,7 @@ async def confirm_payment(request: Request, transaction_id: str, payment: Paymen
             {"transaction_id": transaction_id},
             {"$set": {
                 "payment_status": "Paid",
+                "auto_release_at": auto_release_at,
                 "timeline": timeline
             }}
         )
@@ -898,17 +927,17 @@ async def confirm_payment(request: Request, transaction_id: str, payment: Paymen
         mock_send_email(
             transaction["buyer_email"],
             "Payment Received in Escrow",
-            f"Your payment for transaction {transaction_id} has been received and is held in escrow. The seller will now deliver the item."
+            f"Your payment for transaction {transaction_id} has been received and is held in escrow. The seller will now deliver the item. You have 48 hours to confirm delivery after receiving the item."
         )
         
         # Mock email to seller that payment received
         mock_send_email(
             transaction["seller_email"],
             "Payment Received - Please Deliver",
-            f"Payment for transaction {transaction_id} has been received. Please deliver the item to the buyer."
+            f"Payment for transaction {transaction_id} has been received. Please deliver the item to the buyer. Funds will be automatically released in 48 hours if the buyer doesn't respond."
         )
         
-        return {"message": "Payment confirmed", "status": "Paid"}
+        return {"message": "Payment confirmed", "status": "Paid", "auto_release_at": auto_release_at}
     
     return {"message": "Payment not confirmed"}
 
@@ -1239,6 +1268,80 @@ async def get_user_profile(request: Request, user_id: str):
         created_at=user_doc.get("created_at", datetime.now(timezone.utc).isoformat())
     )
 
+# Report User Endpoints
+@api_router.post("/reports", response_model=UserReport)
+async def create_report(request: Request, report_data: UserReportCreate):
+    """Create a user report"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Cannot report yourself
+    if report_data.reported_user_id == user.user_id:
+        raise HTTPException(status_code=400, detail="Cannot report yourself")
+    
+    # Check if reported user exists
+    reported_user = await db.users.find_one({"user_id": report_data.reported_user_id})
+    if not reported_user:
+        raise HTTPException(status_code=404, detail="Reported user not found")
+    
+    # Create report
+    report_id = f"report_{uuid.uuid4().hex[:12]}"
+    report = {
+        "report_id": report_id,
+        "reporter_user_id": user.user_id,
+        "reported_user_id": report_data.reported_user_id,
+        "reason": report_data.reason,
+        "description": report_data.description,
+        "transaction_id": report_data.transaction_id,
+        "status": "Pending",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.reports.insert_one(report)
+    
+    # Notify admin (mock email)
+    admin = await db.users.find_one({"is_admin": True})
+    if admin:
+        mock_send_email(
+            admin.get("email", "admin@trusttrade.co.za"),
+            "New User Report",
+            f"User {user.name} reported {reported_user.get('name', 'Unknown')} for: {report_data.reason}"
+        )
+    
+    return UserReport(**report)
+
+@api_router.get("/reports", response_model=List[UserReport])
+async def list_reports(request: Request):
+    """List reports (admin only)"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    reports = await db.reports.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return [UserReport(**r) for r in reports]
+
+@api_router.patch("/reports/{report_id}")
+async def update_report(request: Request, report_id: str, status: str, admin_notes: Optional[str] = None):
+    """Update report status (admin only)"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    update_data = {"status": status}
+    if admin_notes:
+        update_data["admin_notes"] = admin_notes
+    
+    result = await db.reports.update_one(
+        {"report_id": report_id},
+        {"$set": update_data}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    return {"message": "Report updated"}
+
 # Admin Endpoints
 @api_router.get("/admin/users", response_model=List[User])
 async def list_all_users(request: Request):
@@ -1371,6 +1474,100 @@ async def get_platform_stats(request: Request):
         "verified_users": verified_users,
         "fraud_cases_today": fraud_cases_today
     }
+
+# Auto-Release Endpoint (called by cron job or manually by admin)
+@api_router.post("/admin/process-auto-releases")
+async def process_auto_releases(request: Request):
+    """Process all transactions due for auto-release (admin only)"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Find transactions that are:
+    # - Paid status
+    # - Not yet released
+    # - Auto-release time has passed
+    # - Not already auto-released
+    due_transactions = await db.transactions.find({
+        "payment_status": "Paid",
+        "release_status": "Not Released",
+        "auto_release_at": {"$lte": now},
+        "auto_released": {"$ne": True}
+    }, {"_id": 0}).to_list(100)
+    
+    released_count = 0
+    
+    for txn in due_transactions:
+        # Auto-release the transaction
+        timeline = txn.get("timeline", [])
+        timeline.append({
+            "status": "Funds Auto-Released (48-hour timer expired)",
+            "timestamp": now,
+            "by": "TrustTrade System"
+        })
+        
+        await db.transactions.update_one(
+            {"transaction_id": txn["transaction_id"]},
+            {"$set": {
+                "delivery_confirmed": True,
+                "release_status": "Released",
+                "payment_status": "Released",
+                "auto_released": True,
+                "timeline": timeline
+            }}
+        )
+        
+        # Send notifications
+        mock_send_email(
+            txn["buyer_email"],
+            "Funds Auto-Released",
+            f"Transaction {txn['transaction_id']} funds have been automatically released to the seller after 48 hours without confirmation."
+        )
+        mock_send_email(
+            txn["seller_email"],
+            "Funds Released to You",
+            f"Transaction {txn['transaction_id']} funds have been automatically released to you after the 48-hour waiting period."
+        )
+        
+        released_count += 1
+    
+    return {"message": f"Processed {released_count} auto-releases", "released_count": released_count}
+
+# Get transactions pending auto-release
+@api_router.get("/admin/pending-auto-releases")
+async def get_pending_auto_releases(request: Request):
+    """Get list of transactions pending auto-release (admin only)"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    now = datetime.now(timezone.utc)
+    
+    pending = await db.transactions.find({
+        "payment_status": "Paid",
+        "release_status": "Not Released",
+        "auto_release_at": {"$exists": True},
+        "auto_released": {"$ne": True}
+    }, {"_id": 0, "transaction_id": 1, "auto_release_at": 1, "buyer_email": 1, "seller_email": 1, "total": 1}).to_list(100)
+    
+    result = []
+    for txn in pending:
+        auto_release_time = datetime.fromisoformat(txn["auto_release_at"].replace('Z', '+00:00'))
+        time_remaining = auto_release_time - now
+        hours_remaining = max(0, time_remaining.total_seconds() / 3600)
+        
+        result.append({
+            "transaction_id": txn["transaction_id"],
+            "auto_release_at": txn["auto_release_at"],
+            "hours_remaining": round(hours_remaining, 1),
+            "buyer_email": txn["buyer_email"],
+            "seller_email": txn["seller_email"],
+            "total": txn["total"]
+        })
+    
+    return result
 
 # Include the router in the main app
 app.include_router(api_router)

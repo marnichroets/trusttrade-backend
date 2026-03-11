@@ -9,6 +9,7 @@ import TransactionDetail from './pages/TransactionDetail';
 import Disputes from './pages/Disputes';
 import AdminDashboard from './pages/AdminDashboard';
 import TermsAndConditions from './pages/TermsAndConditions';
+import ShareTransaction from './pages/ShareTransaction';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -25,6 +26,7 @@ function AppRouter() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/terms" element={<TermsAndConditions />} />
+      <Route path="/t/:shareCode" element={<ShareTransaction />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/transactions/new" element={<ProtectedRoute><NewTransaction /></ProtectedRoute>} />
       <Route path="/transactions" element={<ProtectedRoute><TransactionsList /></ProtectedRoute>} />

@@ -38,8 +38,15 @@ function AuthCallback() {
 
         const user = response.data;
 
-        // Navigate directly to dashboard
-        navigate('/dashboard', { replace: true, state: { user } });
+        // Check if there's a pending share code to redirect to
+        const pendingShareCode = sessionStorage.getItem('pendingShareCode');
+        if (pendingShareCode) {
+          sessionStorage.removeItem('pendingShareCode');
+          navigate(`/t/${pendingShareCode}`, { replace: true });
+        } else {
+          // Navigate directly to dashboard
+          navigate('/dashboard', { replace: true, state: { user } });
+        }
       } catch (error) {
         console.error('Auth callback error:', error);
         console.error('Error details:', error.response?.data);

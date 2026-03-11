@@ -160,11 +160,21 @@ Build a professional, full-stack escrow application called "TrustTrade" with a c
 
 ### Fixed Issues
 1. **Transaction Creation Bug (P0)** - Added `fee_paid_by` field to both `TransactionCreate` and `Transaction` Pydantic models
-2. **Logo Size** - Increased logo size in navbar (h-12 sm:h-14 md:h-16)
+2. **Logo Size** - Made logo 4x bigger (h-20 md:h-24 = 96px)
+3. **Transaction Flow Fix** - Confirm Delivery now only appears AFTER payment is marked as "Paid"
 
 ### New Features
 1. **Fee Split Options** - Default changed to 50/50 split
 2. **Fee Agreement Warning** - Added message: "Escrow fee option must be agreed by both parties before payment"
+3. **Fee Payer Badge** - Both buyer and seller can see who pays the fee on transaction details
+4. **Payment Confirmation Endpoint** - Admin can mark transaction as "Paid" via `/api/transactions/{id}/confirm-payment`
+5. **Status Guidance Cards** - Contextual messages for each transaction state (Awaiting Payment, Payment Received)
+
+### Transaction Flow (Updated)
+1. Buyer/Seller creates transaction
+2. Seller confirms transaction details → Status: "Ready for Payment"
+3. Admin marks payment received → Status: "Paid" (in production: payment gateway)
+4. Buyer confirms delivery → Status: "Released" (funds released to seller)
 
 ## Known Issues
 1. **React hydration errors** in dashboard table components (LOW severity, doesn't affect functionality)

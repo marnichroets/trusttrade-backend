@@ -6,9 +6,10 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Textarea } from '../components/ui/textarea';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -19,6 +20,11 @@ function TransactionDetail() {
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
   const [sellerConfirming, setSellerConfirming] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [review, setReview] = useState('');
+  const [submittingRating, setSubmittingRating] = useState(false);
+  const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
   const { transactionId } = useParams();
 
@@ -111,6 +117,57 @@ function TransactionDetail() {
     }
   };
 
+  const handleSubmitRating = async () => {
+    if (rating === 0) {
+      toast.error('Please select a rating');
+      return;
+    }
+
+    setSubmittingRating(true);
+    try {
+      await axios.post(
+        `${API}/transactions/${transactionId}/rate`,
+        { rating, review: review.trim() || null },
+        { withCredentials: true }
+      );
+
+      toast.success('Rating submitted successfully!');
+      fetchData();
+    } catch (error) {
+      console.error('Failed to submit rating:', error);
+      toast.error(error.response?.data?.detail || 'Failed to submit rating');
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
+
+  const StarRating = ({ value, onSelect, onHover, readOnly = false, size = 'w-8 h-8' }) => {
+    return (
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            disabled={readOnly}
+            onClick={() => !readOnly && onSelect && onSelect(star)}
+            onMouseEnter={() => !readOnly && onHover && onHover(star)}
+            onMouseLeave={() => !readOnly && onHover && onHover(0)}
+            className={`${readOnly ? 'cursor-default' : 'cursor-pointer hover:scale-110'} transition-transform`}
+            data-testid={`star-${star}`}
+          >
+            <Star
+              className={`${size} ${
+                star <= (readOnly ? value : (onHover ? hoverRating || value : value))
+                  ? 'fill-yellow-400 text-yellow-400'
+                  : 'text-slate-300'
+              }`}
+            />
+          </button>
+        ))}
+      </div>
+    );
+  };
+
   const getStatusBadge = (status) => {
     const variants = {
       'Pending': 'bg-yellow-100 text-yellow-800',
@@ -159,6 +216,21 @@ function TransactionDetail() {
     }
   };
 
+  // Generate share link
+  const shareLink = transaction.share_code ? `${window.location.origin}/t/${transaction.share_code}` : null;
+
+  const handleCopyLink = async () => {
+    if (!shareLink) return;
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setCopied(true);
+      toast.success('Link copied to clipboard!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast.error('Failed to copy link');
+    }
+  };
+
   return (
     <DashboardLayout user={user}>
       <div className="max-w-6xl mx-auto space-y-6">
@@ -166,9 +238,43 @@ function TransactionDetail() {
           <ArrowLeft className="w-4 h-4 mr-2" />Back to Transactions
         </Button>
 
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">Transaction Details</h1>
-          <p className="text-slate-600 mt-2 font-mono text-sm">{transaction.transaction_id}</p>
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Transaction Details</h1>
+            <p className="text-slate-600 mt-2 font-mono text-sm">{transaction.transaction_id}</p>
+          </div>
+          
+          {/* Share Link Card */}
+          {shareLink && (
+            <Card className="p-4 bg-primary/5 border-primary/20">
+              <div className="flex items-center gap-3">
+                <Share2 className="w-5 h-5 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-slate-500 mb-1">Share this transaction</p>
+                  <p className="text-sm font-mono text-primary truncate">{transaction.share_code}</p>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant={copied ? "default" : "outline"}
+                  onClick={handleCopyLink}
+                  data-testid="copy-share-link-btn"
+                  className="shrink-0"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-4 h-4 mr-1" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-1" />
+                      Copy Link
+                    </>
+                  )}
+                </Button>
+              </div>
+            </Card>
+          )}
         </div>
 
         <Card className="p-6">
@@ -391,6 +497,84 @@ function TransactionDetail() {
                 <p className="text-sm text-green-700">Funds have been released to the seller</p>
               </div>
             </div>
+          </Card>
+        )}
+
+        {/* Rating Section - Only show after delivery is confirmed */}
+        {transaction.delivery_confirmed && (
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <Star className="w-5 h-5 text-yellow-500" />Rate This Transaction
+            </h3>
+            
+            {/* Check if user has already rated */}
+            {isBuyer && transaction.buyer_rating ? (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600">Your rating for the seller:</p>
+                <StarRating value={transaction.buyer_rating} readOnly size="w-6 h-6" />
+                {transaction.buyer_review && (
+                  <p className="text-sm text-slate-700 italic">"{transaction.buyer_review}"</p>
+                )}
+              </div>
+            ) : isSeller && transaction.seller_rating ? (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-600">Your rating for the buyer:</p>
+                <StarRating value={transaction.seller_rating} readOnly size="w-6 h-6" />
+                {transaction.seller_review && (
+                  <p className="text-sm text-slate-700 italic">"{transaction.seller_review}"</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-sm text-slate-600">
+                  {isBuyer 
+                    ? 'Rate your experience with the seller:' 
+                    : 'Rate your experience with the buyer:'}
+                </p>
+                <StarRating 
+                  value={rating} 
+                  onSelect={setRating} 
+                  onHover={setHoverRating}
+                />
+                <div>
+                  <label className="text-sm text-slate-600 mb-2 block">Review (optional)</label>
+                  <Textarea
+                    placeholder="Share your experience..."
+                    value={review}
+                    onChange={(e) => setReview(e.target.value)}
+                    rows={3}
+                    data-testid="review-textarea"
+                  />
+                </div>
+                <Button 
+                  onClick={handleSubmitRating} 
+                  disabled={submittingRating || rating === 0}
+                  data-testid="submit-rating-btn"
+                >
+                  {submittingRating ? 'Submitting...' : 'Submit Rating'}
+                </Button>
+              </div>
+            )}
+
+            {/* Show other party's rating if available */}
+            {isBuyer && transaction.seller_rating && (
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <p className="text-sm text-slate-600 mb-2">Seller's rating for you:</p>
+                <StarRating value={transaction.seller_rating} readOnly size="w-5 h-5" />
+                {transaction.seller_review && (
+                  <p className="text-sm text-slate-700 italic mt-2">"{transaction.seller_review}"</p>
+                )}
+              </div>
+            )}
+            {isSeller && transaction.buyer_rating && (
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <p className="text-sm text-slate-600 mb-2">Buyer's rating for you:</p>
+                <StarRating value={transaction.buyer_rating} readOnly size="w-5 h-5" />
+                {transaction.buyer_review && (
+                  <p className="text-sm text-slate-700 italic mt-2">"{transaction.buyer_review}"</p>
+                )}
+              </div>
+            )}
           </Card>
         )}
 

@@ -59,6 +59,7 @@ class UserSession(BaseModel):
 class Transaction(BaseModel):
     model_config = ConfigDict(extra="ignore")
     transaction_id: str
+    share_code: Optional[str] = None  # Short shareable code like TT-483920
     creator_role: Optional[str] = "buyer"
     buyer_user_id: Optional[str] = None
     seller_user_id: Optional[str] = None
@@ -83,6 +84,10 @@ class Transaction(BaseModel):
     buyer_details_confirmed: bool = False
     seller_details_confirmed: bool = False
     item_accuracy_confirmed: bool = False
+    buyer_rating: Optional[int] = None
+    buyer_review: Optional[str] = None
+    seller_rating: Optional[int] = None
+    seller_review: Optional[str] = None
     timeline: List[dict] = []
     created_at: str
 
@@ -139,6 +144,15 @@ class SessionExchangeRequest(BaseModel):
 
 class TermsAcceptance(BaseModel):
     accepted: bool
+
+# Helper to generate short share code
+import random
+import string
+
+def generate_share_code() -> str:
+    """Generate a short, user-friendly share code like TT-483920"""
+    numbers = ''.join(random.choices(string.digits, k=6))
+    return f"TT-{numbers}"
 
 # Mock email function
 def mock_send_email(to_email: str, subject: str, body: str):
@@ -447,8 +461,15 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "by": user.name
     }]
     
+    # Generate unique share code
+    share_code = generate_share_code()
+    # Ensure uniqueness
+    while await db.transactions.find_one({"share_code": share_code}):
+        share_code = generate_share_code()
+    
     transaction = {
         "transaction_id": transaction_id,
+        "share_code": share_code,
         "creator_role": transaction_data.creator_role,
         "buyer_user_id": buyer_user_id,
         "seller_user_id": seller_user_id,
@@ -545,7 +566,104 @@ async def get_transaction(request: Request, transaction_id: str):
             transaction.get("seller_email") != user.email):
             raise HTTPException(status_code=403, detail="Access denied")
     
+    # Generate share_code for old transactions that don't have one
+    if not transaction.get("share_code"):
+        share_code = generate_share_code()
+        while await db.transactions.find_one({"share_code": share_code}):
+            share_code = generate_share_code()
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {"share_code": share_code}}
+        )
+        transaction["share_code"] = share_code
+    
     return Transaction(**transaction)
+
+class TransactionPreview(BaseModel):
+    """Limited transaction info for share link preview"""
+    share_code: str
+    transaction_id: str
+    item_description: str
+    item_price: float
+    trusttrade_fee: float
+    total: float
+    fee_paid_by: str
+    payment_status: str
+    buyer_name: str
+    seller_name: str
+    item_condition: Optional[str] = None
+    created_at: str
+
+@api_router.get("/share/{share_code}", response_model=TransactionPreview)
+async def get_transaction_by_share_code(share_code: str):
+    """Get transaction preview by share code - requires auth to view full details"""
+    transaction = await db.transactions.find_one(
+        {"share_code": share_code},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    return TransactionPreview(
+        share_code=transaction["share_code"],
+        transaction_id=transaction["transaction_id"],
+        item_description=transaction["item_description"],
+        item_price=transaction["item_price"],
+        trusttrade_fee=transaction["trusttrade_fee"],
+        total=transaction["total"],
+        fee_paid_by=transaction.get("fee_paid_by", "split"),
+        payment_status=transaction["payment_status"],
+        buyer_name=transaction["buyer_name"],
+        seller_name=transaction["seller_name"],
+        item_condition=transaction.get("item_condition"),
+        created_at=transaction["created_at"]
+    )
+
+@api_router.post("/share/{share_code}/join")
+async def join_transaction_by_share_code(request: Request, share_code: str):
+    """Join a transaction via share code - links user to transaction"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    transaction = await db.transactions.find_one(
+        {"share_code": share_code},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Check if user's email matches buyer or seller
+    is_buyer = transaction.get("buyer_email") == user.email
+    is_seller = transaction.get("seller_email") == user.email
+    
+    if not is_buyer and not is_seller:
+        raise HTTPException(status_code=403, detail="Your email doesn't match this transaction")
+    
+    # Link user to transaction
+    update_field = "buyer_user_id" if is_buyer else "seller_user_id"
+    
+    # Check if already linked
+    if transaction.get(update_field):
+        # Already linked, just return success
+        return {"message": "Already joined", "transaction_id": transaction["transaction_id"], "role": "buyer" if is_buyer else "seller"}
+    
+    # Update timeline
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": f"{'Buyer' if is_buyer else 'Seller'} Joined via Share Link",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "by": user.name
+    })
+    
+    await db.transactions.update_one(
+        {"share_code": share_code},
+        {"$set": {update_field: user.user_id, "timeline": timeline}}
+    )
+    
+    return {"message": "Successfully joined transaction", "transaction_id": transaction["transaction_id"], "role": "buyer" if is_buyer else "seller"}
 
 @api_router.patch("/transactions/{transaction_id}/photos")
 async def update_transaction_photos(request: Request, transaction_id: str, photo_filenames: List[str]):

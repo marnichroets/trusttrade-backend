@@ -10,6 +10,8 @@ import Disputes from './pages/Disputes';
 import AdminDashboard from './pages/AdminDashboard';
 import TermsAndConditions from './pages/TermsAndConditions';
 import ShareTransaction from './pages/ShareTransaction';
+import UserProfile from './pages/UserProfile';
+import LiveActivity from './pages/LiveActivity';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -33,6 +35,9 @@ function AppRouter() {
       <Route path="/transactions/:transactionId" element={<ProtectedRoute><TransactionDetail /></ProtectedRoute>} />
       <Route path="/disputes" element={<ProtectedRoute><Disputes /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
+      <Route path="/profile/:userId" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
+      <Route path="/activity" element={<ProtectedRoute><LiveActivity /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { ShieldCheck, LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings } from 'lucide-react';
+import { ShieldCheck, LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings, User, Activity } from 'lucide-react';
 import { Button } from './ui/button';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -26,6 +26,8 @@ function DashboardLayout({ children, user }) {
     { icon: Plus, label: 'New Transaction', path: '/transactions/new', highlight: true },
     { icon: FileText, label: 'My Transactions', path: '/transactions' },
     { icon: AlertCircle, label: 'Disputes', path: '/disputes' },
+    { icon: Activity, label: 'Live Activity', path: '/activity' },
+    { icon: User, label: 'My Profile', path: '/profile' },
   ];
 
   if (user?.is_admin) {
@@ -46,7 +48,7 @@ function DashboardLayout({ children, user }) {
               />
             </div>
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-3">
+              <NavLink to="/profile" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                 {user?.picture && (
                   <img
                     src={user.picture}
@@ -58,7 +60,7 @@ function DashboardLayout({ children, user }) {
                   <p className="text-sm font-medium text-slate-900" data-testid="user-name">{user?.name}</p>
                   <p className="text-xs text-slate-500">{user?.email}</p>
                 </div>
-              </div>
+              </NavLink>
               <Button
                 variant="ghost"
                 size="sm"

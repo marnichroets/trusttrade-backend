@@ -1164,6 +1164,81 @@ async def update_dispute(request: Request, dispute_id: str, update_data: Dispute
     
     return Dispute(**updated_dispute)
 
+# User Profile Endpoint
+class UserProfile(BaseModel):
+    """Public user profile info"""
+    user_id: str
+    name: str
+    email: str
+    picture: Optional[str] = None
+    trust_score: int = 50
+    total_trades: int = 0
+    successful_trades: int = 0
+    average_rating: float = 0.0
+    valid_disputes_count: int = 0
+    badges: List[str] = []
+    verified: bool = False
+    suspended: bool = False
+    created_at: str
+
+@api_router.get("/users/{user_id}/profile", response_model=UserProfile)
+async def get_user_profile(request: Request, user_id: str):
+    """Get public user profile"""
+    current_user = await get_user_from_token(request)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Calculate trust score if not set
+    trust_score = user_doc.get("trust_score", 50)
+    
+    # Recalculate trust score dynamically
+    successful_trades = user_doc.get("successful_trades", 0)
+    average_rating = user_doc.get("average_rating", 0.0)
+    valid_disputes = user_doc.get("valid_disputes_count", 0)
+    is_verified = user_doc.get("verified", False)
+    
+    # Trust score formula: max 100
+    # - Transaction history: up to 40 points (4 points per successful trade, max 10 trades)
+    # - User ratings: up to 30 points (6 points per star)
+    # - Dispute record: up to 20 points (starts at 20, -5 per valid dispute)
+    # - Verification: 10 points
+    
+    trade_score = min(40, successful_trades * 4)
+    rating_score = int(average_rating * 6)
+    dispute_score = max(0, 20 - valid_disputes * 5)
+    verification_score = 10 if is_verified else 0
+    
+    calculated_trust_score = trade_score + rating_score + dispute_score + verification_score
+    
+    # Update trust score in database if changed
+    if calculated_trust_score != trust_score:
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"trust_score": calculated_trust_score}}
+        )
+        trust_score = calculated_trust_score
+    
+    return UserProfile(
+        user_id=user_doc["user_id"],
+        name=user_doc.get("name", ""),
+        email=user_doc.get("email", ""),
+        picture=user_doc.get("picture"),
+        trust_score=trust_score,
+        total_trades=user_doc.get("total_trades", 0),
+        successful_trades=user_doc.get("successful_trades", 0),
+        average_rating=user_doc.get("average_rating", 0.0),
+        valid_disputes_count=user_doc.get("valid_disputes_count", 0),
+        badges=user_doc.get("badges", []),
+        verified=user_doc.get("verified", False),
+        suspended=user_doc.get("suspension_flag", False),
+        created_at=user_doc.get("created_at", datetime.now(timezone.utc).isoformat())
+    )
+
 # Admin Endpoints
 @api_router.get("/admin/users", response_model=List[User])
 async def list_all_users(request: Request):
@@ -1212,6 +1287,89 @@ async def get_admin_stats(request: Request):
         "total_transactions": total_transactions,
         "pending_transactions": pending_transactions,
         "pending_disputes": pending_disputes
+    }
+
+# Platform Stats (Public - for Live Activity Board)
+@api_router.get("/platform/stats")
+async def get_platform_stats(request: Request):
+    """Get platform-wide statistics for live activity board"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Get today's date range
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_iso = today_start.isoformat()
+    
+    # Total counts
+    total_users = await db.users.count_documents({})
+    total_transactions = await db.transactions.count_documents({})
+    
+    # Completed transactions
+    completed_transactions = await db.transactions.count_documents({"release_status": "Released"})
+    
+    # Calculate success rate
+    success_rate = round((completed_transactions / total_transactions * 100) if total_transactions > 0 else 0, 1)
+    
+    # Today's completed trades (simplified - check if released and created today or timeline has today's release)
+    completed_today = await db.transactions.count_documents({
+        "release_status": "Released",
+        "created_at": {"$gte": today_iso}
+    })
+    
+    # Total secured value (all transactions)
+    pipeline = [
+        {"$match": {"release_status": "Released"}},
+        {"$group": {"_id": None, "total": {"$sum": "$total"}}}
+    ]
+    secured_result = await db.transactions.aggregate(pipeline).to_list(1)
+    total_secured = secured_result[0]["total"] if secured_result else 0
+    
+    # Total escrow value (all time)
+    all_pipeline = [
+        {"$group": {"_id": None, "total": {"$sum": "$total"}}}
+    ]
+    all_result = await db.transactions.aggregate(all_pipeline).to_list(1)
+    total_escrow_value = all_result[0]["total"] if all_result else 0
+    
+    # Active transactions (not released)
+    active_transactions = await db.transactions.count_documents({
+        "release_status": {"$ne": "Released"}
+    })
+    
+    # Pending confirmations
+    pending_confirmations = await db.transactions.count_documents({
+        "$or": [
+            {"seller_confirmed": False},
+            {"payment_status": "Ready for Payment"}
+        ]
+    })
+    
+    # Pending disputes
+    pending_disputes = await db.disputes.count_documents({"status": "Pending"})
+    
+    # Verified users
+    verified_users = await db.users.count_documents({"verified": True})
+    
+    # Fraud cases (valid disputes today - simplified)
+    fraud_cases_today = await db.disputes.count_documents({
+        "is_valid_dispute": True,
+        "created_at": {"$gte": today_iso}
+    })
+    
+    return {
+        "total_users": total_users,
+        "total_transactions": total_transactions,
+        "completed_transactions": completed_transactions,
+        "success_rate": success_rate,
+        "completed_today": completed_today,
+        "total_secured": total_secured,
+        "total_escrow_value": total_escrow_value,
+        "active_transactions": active_transactions,
+        "pending_confirmations": pending_confirmations,
+        "pending_disputes": pending_disputes,
+        "verified_users": verified_users,
+        "fraud_cases_today": fraud_cases_today
     }
 
 # Include the router in the main app

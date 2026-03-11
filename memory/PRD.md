@@ -23,7 +23,7 @@ Build a professional, full-stack escrow application called "TrustTrade" with a c
 - Role Selection: User selects if they are "Buyer" or "Seller" when creating transaction
 - Account Suspension: Flag users after 3 valid disputes
 
-### Phase 3: Trust & Ratings System (IN PROGRESS)
+### Phase 3: Trust & Ratings System (MOSTLY COMPLETE)
 - [x] Fee Split: Option for buyer, seller, or 50/50 (default) to pay escrow fee
 - [x] Fee Agreement Message: Warning displayed during transaction creation
 - [x] User Ratings/Reviews: 5-star rating system after completed transactions
@@ -32,11 +32,10 @@ Build a professional, full-stack escrow application called "TrustTrade" with a c
 - [x] Trust Badges: Silver/Gold/Verified badges based on transaction history
 - [x] Transaction Share Links: Shareable TT-XXXXXX codes for easy sharing
 - [x] Live Activity Board: Dashboard showing platform-wide stats
-- [ ] Identity Verification: Flow for users to verify identity (ID, selfie, phone)
+- [x] Report User: Feature to report suspicious or abusive users
+- [x] Auto-Release Timer: 48-hour automatic fund release if buyer doesn't respond
+- [ ] Identity Verification: Flow for users to verify identity (ID, selfie, phone OTP)
 - [ ] Scam Detection: Automatic flagging of suspicious accounts
-- [ ] In-App Chat: Messaging system within transactions
-- [ ] Auto-Release Timer: Auto-release funds after timeout
-- [ ] Report User: Feature to report suspicious users
 
 ## Technical Architecture
 
@@ -193,9 +192,16 @@ Build a professional, full-stack escrow application called "TrustTrade" with a c
    - Optional text review
    - Ratings displayed on profiles
 
-6. **Fee Split Options** - Default changed to 50/50 split
-   - Warning message about fee agreement
-   - Fee payer badge visible to both parties
+7. **Report User System** - Users can report suspicious behavior
+   - Report reasons: Scam attempt, Abuse, Suspicious behavior, Fake account, etc.
+   - Admin review queue
+   
+8. **Auto-Release Timer** - 48-hour automatic fund release
+   - Timer starts when payment is marked as "Paid"
+   - Displays countdown on transaction detail page
+   - Admin endpoints to process and view pending auto-releases
+
+9. **Share Page Protection Message** - "This transaction is protected by TrustTrade escrow"
 
 ### Transaction Flow (Updated)
 1. Buyer/Seller creates transaction → Generates shareable link (TT-XXXXXX)

@@ -1996,6 +1996,335 @@ async def get_pending_auto_releases(request: Request):
     
     return result
 
+# =============================================
+# TradeSafe Integration Endpoints
+# =============================================
+
+# TradeSafe Configuration
+TRADESAFE_CLIENT_ID = os.environ.get("TRADESAFE_CLIENT_ID", "")
+TRADESAFE_CLIENT_SECRET = os.environ.get("TRADESAFE_CLIENT_SECRET", "")
+TRADESAFE_API_URL = os.environ.get("TRADESAFE_API_URL", "https://api-developer.tradesafe.dev/graphql")  # Use production URL when live
+TRADESAFE_AUTH_URL = "https://auth.tradesafe.co.za/oauth/token"
+
+# Store TradeSafe access token (in production use Redis)
+tradesafe_token_cache = {"token": None, "expires_at": None}
+
+async def get_tradesafe_token():
+    """Get or refresh TradeSafe OAuth token"""
+    now = datetime.now(timezone.utc)
+    
+    # Return cached token if still valid
+    if tradesafe_token_cache["token"] and tradesafe_token_cache["expires_at"]:
+        if tradesafe_token_cache["expires_at"] > now:
+            return tradesafe_token_cache["token"]
+    
+    # Get new token
+    if not TRADESAFE_CLIENT_ID or not TRADESAFE_CLIENT_SECRET:
+        logger.warning("TradeSafe credentials not configured")
+        return None
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            TRADESAFE_AUTH_URL,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": TRADESAFE_CLIENT_ID,
+                "client_secret": TRADESAFE_CLIENT_SECRET
+            }
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            tradesafe_token_cache["token"] = data["access_token"]
+            # Token valid for 60 minutes, refresh at 55 minutes
+            tradesafe_token_cache["expires_at"] = now + timedelta(minutes=55)
+            return data["access_token"]
+        else:
+            logger.error(f"Failed to get TradeSafe token: {response.text}")
+            return None
+
+class TradeSafeWebhookPayload(BaseModel):
+    """TradeSafe webhook payload structure"""
+    event: Optional[str] = None
+    transaction_id: Optional[str] = None
+    reference: Optional[str] = None
+    status: Optional[str] = None
+    amount: Optional[float] = None
+    data: Optional[dict] = None
+
+@api_router.post("/tradesafe-webhook")
+async def tradesafe_webhook(request: Request):
+    """Handle TradeSafe webhook notifications"""
+    try:
+        payload = await request.json()
+        logger.info(f"TradeSafe Webhook received: {payload}")
+        
+        # Extract relevant data
+        event_type = payload.get("event") or payload.get("type")
+        reference = payload.get("reference") or payload.get("transaction_id")
+        status = payload.get("status")
+        
+        if not reference:
+            logger.warning("TradeSafe webhook missing reference")
+            return {"status": "ignored", "reason": "no reference"}
+        
+        # Find transaction by TradeSafe reference
+        transaction = await db.transactions.find_one(
+            {"$or": [
+                {"tradesafe_reference": reference},
+                {"transaction_id": reference}
+            ]},
+            {"_id": 0}
+        )
+        
+        if not transaction:
+            logger.warning(f"Transaction not found for TradeSafe reference: {reference}")
+            return {"status": "ignored", "reason": "transaction not found"}
+        
+        # Handle different webhook events
+        update_data = {}
+        timeline_entry = None
+        
+        if event_type in ["DEPOSIT_RECEIVED", "payment.success", "escrow.funded"]:
+            # Payment received - funds in escrow
+            update_data["payment_status"] = "Paid"
+            update_data["auto_release_at"] = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
+            timeline_entry = {
+                "status": "Payment Received via TradeSafe",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "by": "TradeSafe"
+            }
+            
+            # Send notifications
+            mock_send_email(
+                transaction["buyer_email"],
+                "Payment Received",
+                f"Your payment for transaction {transaction['transaction_id']} has been received and is held in escrow."
+            )
+            mock_send_email(
+                transaction["seller_email"],
+                "Payment Received - Please Deliver",
+                f"Payment for transaction {transaction['transaction_id']} has been received. Please deliver the item."
+            )
+            
+        elif event_type in ["FUNDS_RELEASED", "escrow.released"]:
+            # Funds released to seller
+            update_data["release_status"] = "Released"
+            update_data["payment_status"] = "Released"
+            timeline_entry = {
+                "status": "Funds Released via TradeSafe",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "by": "TradeSafe"
+            }
+            
+        elif event_type in ["REFUND_PROCESSED", "escrow.refunded"]:
+            # Refund processed
+            update_data["release_status"] = "Refunded"
+            update_data["payment_status"] = "Refunded"
+            timeline_entry = {
+                "status": "Funds Refunded via TradeSafe",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "by": "TradeSafe"
+            }
+            
+        elif event_type in ["TRANSACTION_CANCELLED", "escrow.cancelled"]:
+            # Transaction cancelled
+            update_data["payment_status"] = "Cancelled"
+            timeline_entry = {
+                "status": "Transaction Cancelled",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "by": "TradeSafe"
+            }
+        
+        # Update transaction if we have changes
+        if update_data:
+            if timeline_entry:
+                timeline = transaction.get("timeline", [])
+                timeline.append(timeline_entry)
+                update_data["timeline"] = timeline
+            
+            await db.transactions.update_one(
+                {"transaction_id": transaction["transaction_id"]},
+                {"$set": update_data}
+            )
+            
+            logger.info(f"Transaction {transaction['transaction_id']} updated: {update_data}")
+        
+        return {"status": "success", "processed": bool(update_data)}
+        
+    except Exception as e:
+        logger.error(f"TradeSafe webhook error: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+@api_router.get("/oauth/callback")
+async def tradesafe_oauth_callback(request: Request, code: str = None, state: str = None):
+    """Handle TradeSafe OAuth callback"""
+    logger.info(f"TradeSafe OAuth callback - code: {code}, state: {state}")
+    
+    if not code:
+        raise HTTPException(status_code=400, detail="Authorization code missing")
+    
+    # Exchange code for token (if using authorization code flow)
+    # For client credentials flow, this endpoint may not be needed
+    # but we keep it for flexibility
+    
+    return {
+        "status": "success",
+        "message": "OAuth callback received",
+        "code": code[:10] + "..." if code else None
+    }
+
+class TradeSafeTransactionCreate(BaseModel):
+    """Create TradeSafe escrow transaction"""
+    transaction_id: str
+    title: str
+    description: str
+    amount: float
+    buyer_email: str
+    seller_email: str
+
+@api_router.post("/tradesafe/create-transaction")
+async def create_tradesafe_transaction(request: Request, data: TradeSafeTransactionCreate):
+    """Create a transaction on TradeSafe (when API is live)"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Get our local transaction
+    transaction = await db.transactions.find_one(
+        {"transaction_id": data.transaction_id},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Check if TradeSafe is configured
+    token = await get_tradesafe_token()
+    if not token:
+        # TradeSafe not configured - save locally and return mock response
+        logger.info("TradeSafe not configured - saving transaction locally only")
+        
+        # Update local transaction with TradeSafe-ready flag
+        await db.transactions.update_one(
+            {"transaction_id": data.transaction_id},
+            {"$set": {
+                "tradesafe_ready": True,
+                "tradesafe_pending": True
+            }}
+        )
+        
+        return {
+            "status": "pending",
+            "message": "Transaction saved locally. Will be synced when TradeSafe API is configured.",
+            "transaction_id": data.transaction_id,
+            "payment_url": None
+        }
+    
+    # TradeSafe is configured - create transaction via GraphQL API
+    mutation = """
+    mutation CreateTransaction($input: TransactionCreateInput!) {
+        transactionCreate(input: $input) {
+            id
+            reference
+            state
+            paymentUrl
+        }
+    }
+    """
+    
+    variables = {
+        "input": {
+            "title": data.title,
+            "description": data.description,
+            "industry": "GENERAL_GOODS_SERVICES",
+            "feeAllocation": "SELLER",  # or based on fee_paid_by
+            "reference": data.transaction_id,
+            "value": int(data.amount * 100),  # Convert to cents
+            "parties": [
+                {
+                    "role": "BUYER",
+                    "email": data.buyer_email
+                },
+                {
+                    "role": "SELLER", 
+                    "email": data.seller_email
+                }
+            ]
+        }
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            TRADESAFE_API_URL,
+            json={"query": mutation, "variables": variables},
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            
+            if "errors" in result:
+                logger.error(f"TradeSafe GraphQL errors: {result['errors']}")
+                raise HTTPException(status_code=400, detail=result["errors"][0]["message"])
+            
+            ts_data = result.get("data", {}).get("transactionCreate", {})
+            
+            # Update local transaction with TradeSafe reference
+            await db.transactions.update_one(
+                {"transaction_id": data.transaction_id},
+                {"$set": {
+                    "tradesafe_id": ts_data.get("id"),
+                    "tradesafe_reference": ts_data.get("reference"),
+                    "tradesafe_payment_url": ts_data.get("paymentUrl"),
+                    "tradesafe_state": ts_data.get("state")
+                }}
+            )
+            
+            return {
+                "status": "success",
+                "tradesafe_id": ts_data.get("id"),
+                "reference": ts_data.get("reference"),
+                "payment_url": ts_data.get("paymentUrl")
+            }
+        else:
+            logger.error(f"TradeSafe API error: {response.text}")
+            raise HTTPException(status_code=500, detail="Failed to create TradeSafe transaction")
+
+@api_router.get("/tradesafe/payment-url/{transaction_id}")
+async def get_tradesafe_payment_url(request: Request, transaction_id: str):
+    """Get TradeSafe payment URL for a transaction"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    transaction = await db.transactions.find_one(
+        {"transaction_id": transaction_id},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    payment_url = transaction.get("tradesafe_payment_url")
+    
+    if not payment_url:
+        # TradeSafe not set up yet - return placeholder
+        return {
+            "status": "pending",
+            "message": "TradeSafe payment not yet configured for this transaction",
+            "payment_url": None
+        }
+    
+    return {
+        "status": "success",
+        "payment_url": payment_url,
+        "tradesafe_reference": transaction.get("tradesafe_reference")
+    }
+
 # Include the router in the main app
 app.include_router(api_router)
 

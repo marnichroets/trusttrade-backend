@@ -13,6 +13,8 @@ import ShareTransaction from './pages/ShareTransaction';
 import UserProfile from './pages/UserProfile';
 import LiveActivity from './pages/LiveActivity';
 import IdentityVerification from './pages/IdentityVerification';
+import PaymentSuccess from './pages/PaymentSuccess';
+import PaymentCancelled from './pages/PaymentCancelled';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -30,6 +32,8 @@ function AppRouter() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/terms" element={<TermsAndConditions />} />
       <Route path="/t/:shareCode" element={<ShareTransaction />} />
+      <Route path="/payment-success" element={<PaymentSuccess />} />
+      <Route path="/payment-cancelled" element={<PaymentCancelled />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/transactions/new" element={<ProtectedRoute><NewTransaction /></ProtectedRoute>} />
       <Route path="/transactions" element={<ProtectedRoute><TransactionsList /></ProtectedRoute>} />

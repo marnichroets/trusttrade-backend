@@ -202,7 +202,7 @@ function Dashboard() {
               <div className="bg-white rounded-lg p-4">
                 <p className="text-sm text-slate-500 mb-1">Total Escrow Value (All Time)</p>
                 <p className="text-xl font-bold text-slate-900">
-                  {formatSecureAmount(platformStats?.total_escrow_value || 0, false)}
+                  {formatSecureAmount(platformStats?.total_escrow_value || 0, showExactValues)}
                 </p>
               </div>
               <div className="bg-white rounded-lg p-4">

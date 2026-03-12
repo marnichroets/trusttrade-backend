@@ -1819,6 +1819,97 @@ async def get_admin_stats(request: Request):
         "pending_disputes": pending_disputes
     }
 
+@api_router.get("/admin/escrow-details")
+async def get_escrow_details(request: Request):
+    """Get detailed escrow information per user and transaction (admin only)"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    # Get all transactions with funds in escrow (Paid but not Released)
+    escrow_transactions = await db.transactions.find(
+        {"payment_status": "Paid", "release_status": "Not Released"},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    # Calculate per-user escrow balances
+    user_balances = {}
+    
+    for txn in escrow_transactions:
+        buyer_email = txn.get("buyer_email")
+        seller_email = txn.get("seller_email")
+        
+        # Calculate payable to seller based on fee_paid_by
+        fee = txn.get("trusttrade_fee", 0)
+        item_price = txn.get("item_price", 0)
+        fee_paid_by = txn.get("fee_paid_by", "split")
+        
+        if fee_paid_by == "seller":
+            payable_to_seller = item_price - fee
+        elif fee_paid_by == "split":
+            payable_to_seller = item_price - (fee / 2)
+        else:  # buyer pays
+            payable_to_seller = item_price
+        
+        # Track buyer's funds in escrow
+        if buyer_email not in user_balances:
+            user_balances[buyer_email] = {"as_buyer": 0, "as_seller": 0, "transactions": []}
+        user_balances[buyer_email]["as_buyer"] += txn.get("total", 0)
+        user_balances[buyer_email]["transactions"].append({
+            "transaction_id": txn.get("transaction_id"),
+            "share_code": txn.get("share_code"),
+            "role": "buyer",
+            "amount": txn.get("total", 0)
+        })
+        
+        # Track seller's pending payable
+        if seller_email not in user_balances:
+            user_balances[seller_email] = {"as_buyer": 0, "as_seller": 0, "transactions": []}
+        user_balances[seller_email]["as_seller"] += payable_to_seller
+        user_balances[seller_email]["transactions"].append({
+            "transaction_id": txn.get("transaction_id"),
+            "share_code": txn.get("share_code"),
+            "role": "seller",
+            "payable": payable_to_seller
+        })
+    
+    # Calculate totals
+    total_in_escrow = sum(txn.get("total", 0) for txn in escrow_transactions)
+    total_payable = sum(
+        txn.get("item_price", 0) - (
+            txn.get("trusttrade_fee", 0) if txn.get("fee_paid_by") == "seller"
+            else txn.get("trusttrade_fee", 0) / 2 if txn.get("fee_paid_by") == "split"
+            else 0
+        )
+        for txn in escrow_transactions
+    )
+    
+    return {
+        "total_in_escrow": total_in_escrow,
+        "total_payable_to_sellers": total_payable,
+        "platform_fees_earned": total_in_escrow - total_payable,
+        "transactions_count": len(escrow_transactions),
+        "user_balances": user_balances,
+        "transactions": [
+            {
+                "transaction_id": t.get("transaction_id"),
+                "share_code": t.get("share_code"),
+                "buyer": t.get("buyer_name"),
+                "seller": t.get("seller_name"),
+                "total_in_escrow": t.get("total"),
+                "item_price": t.get("item_price"),
+                "fee": t.get("trusttrade_fee"),
+                "fee_paid_by": t.get("fee_paid_by"),
+                "payable_to_seller": t.get("item_price", 0) - (
+                    t.get("trusttrade_fee", 0) if t.get("fee_paid_by") == "seller"
+                    else t.get("trusttrade_fee", 0) / 2 if t.get("fee_paid_by") == "split"
+                    else 0
+                )
+            }
+            for t in escrow_transactions
+        ]
+    }
+
 # Platform Stats (Public - for Live Activity Board)
 @api_router.get("/platform/stats")
 async def get_platform_stats(request: Request):

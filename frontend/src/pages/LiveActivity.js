@@ -164,7 +164,14 @@ function LiveActivity() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-600">Total Escrow Value (All Time)</span>
-              <span className="font-medium text-primary">R {((stats?.total_escrow_value || 0)).toLocaleString()}</span>
+              <span className="font-medium text-primary">
+                {(() => {
+                  const amount = stats?.total_escrow_value || 0;
+                  if (amount >= 1000000) return `R ${(amount / 1000000).toFixed(1)}M+`;
+                  if (amount >= 1000) return `R ${Math.floor(amount / 1000)}k+`;
+                  return `R ${Math.floor(amount / 100) * 100}+`;
+                })()}
+              </span>
             </div>
           </div>
         </Card>

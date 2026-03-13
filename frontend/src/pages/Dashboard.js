@@ -139,7 +139,7 @@ function Dashboard() {
         </div>
 
         {/* Protection Guaranteed Banner */}
-        <Card className="p-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-0">
+        <Card className="p-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
@@ -147,7 +147,7 @@ function Dashboard() {
               </div>
               <div>
                 <h3 className="font-semibold text-lg">Protection Guaranteed</h3>
-                <p className="text-emerald-100 text-sm">Every transaction is secured by TradeSafe escrow</p>
+                <p className="text-blue-100 text-sm">Every transaction is secured by TrustTrade escrow</p>
               </div>
             </div>
             <div className="flex items-center gap-2 bg-white/10 rounded-lg px-4 py-2">
@@ -326,7 +326,7 @@ function Dashboard() {
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">My Wallet</h2>
-                  <p className="text-xs text-slate-500">TradeSafe secured funds</p>
+                  <p className="text-xs text-slate-500">TrustTrade secured funds</p>
                 </div>
               </div>
               <Button 

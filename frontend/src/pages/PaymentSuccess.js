@@ -64,7 +64,7 @@ function PaymentSuccess() {
         </div>
 
         <p className="text-xs text-slate-400 mt-6">
-          Powered by TradeSafe Escrow
+          Powered by TrustTrade Escrow
         </p>
       </Card>
     </div>

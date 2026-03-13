@@ -141,7 +141,7 @@ function BankingSettings() {
           <div className="flex gap-3">
             <ShieldCheck className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-blue-800">
-              <p className="font-medium mb-1">Secure Payouts via TradeSafe</p>
+              <p className="font-medium mb-1">Secure Payouts via TrustTrade</p>
               <p>Your banking details are securely stored and used only for releasing funds from completed transactions. Payouts are processed automatically when your wallet balance reaches R500.</p>
             </div>
           </div>

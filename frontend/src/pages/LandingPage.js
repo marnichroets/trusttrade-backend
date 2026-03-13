@@ -18,12 +18,12 @@ function LandingPage() {
       {/* Navigation */}
       <nav className="border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-32 md:h-36">
+          <div className="flex justify-between items-center h-36 md:h-40">
             <div className="flex items-center gap-2">
               <img 
                 src="https://customer-assets.emergentagent.com/job_trust-trade-pay/artifacts/u0eeoxzq_TrustTrade%20Logo.png" 
                 alt="TrustTrade" 
-                className="h-28 md:h-32"
+                className="h-32 md:h-36"
               />
             </div>
             <div className="flex items-center gap-3">
@@ -168,8 +168,11 @@ function LandingPage() {
       <footer className="border-t border-slate-200 py-8 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
-            <ShieldCheck className="w-6 h-6 text-primary" />
-            <span className="text-lg font-semibold text-slate-900">TrustTrade</span>
+            <img 
+              src="https://customer-assets.emergentagent.com/job_trust-trade-pay/artifacts/u0eeoxzq_TrustTrade%20Logo.png" 
+              alt="TrustTrade" 
+              className="h-16"
+            />
           </div>
           <p className="text-sm text-slate-500">&copy; 2026 TrustTrade. All rights reserved.</p>
         </div>

@@ -13,6 +13,13 @@ from datetime import datetime, timezone, timedelta
 import httpx
 import shutil
 from pdf_generator import generate_escrow_agreement_pdf
+from email_service import (
+    send_transaction_created_email,
+    send_payment_received_email,
+    send_funds_released_email,
+    send_delivery_confirmed_email,
+    send_dispute_opened_email
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -723,26 +730,30 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     
     await db.transactions.insert_one(transaction)
     
-    # Mock emails
-    mock_send_email(
-        buyer_email,
-        "Transaction Created",
-        f"Your transaction {transaction_id} has been created for R{item_price:.2f}."
-    )
-    mock_send_email(
-        seller_email,
-        "New Transaction",
-        f"You have a new transaction {transaction_id} from {buyer_name}."
-    )
+    # Get base URL for email links
+    base_url = os.environ.get('FRONTEND_URL', 'https://trusttradesa.co.za')
     
-    # Email admin if exists
-    admin = await db.users.find_one({"is_admin": True}, {"_id": 0})
-    if admin:
-        mock_send_email(
-            admin["email"],
-            "New Transaction Created",
-            f"Transaction {transaction_id} created by {user.name}."
-        )
+    # Send transaction created emails via Brevo
+    await send_transaction_created_email(
+        to_email=buyer_email,
+        to_name=buyer_name,
+        share_code=share_code,
+        item_description=transaction_data.item_description,
+        amount=item_price,
+        other_party_name=seller_name,
+        role="Buyer",
+        base_url=base_url
+    )
+    await send_transaction_created_email(
+        to_email=seller_email,
+        to_name=seller_name,
+        share_code=share_code,
+        item_description=transaction_data.item_description,
+        amount=item_price,
+        other_party_name=buyer_name,
+        role="Seller",
+        base_url=base_url
+    )
     
     return Transaction(**transaction)
 
@@ -1055,20 +1066,27 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
             }}
         )
         
-        # Mock emails
-        mock_send_email(
-            transaction["seller_email"],
-            "Funds Released",
-            f"Transaction {transaction_id} funds have been released."
+        # Calculate net amount after fee
+        net_amount = transaction["item_price"] - (transaction["item_price"] * 0.02)
+        
+        # Send funds released email via Brevo
+        await send_funds_released_email(
+            to_email=transaction["seller_email"],
+            to_name=transaction["seller_name"],
+            share_code=transaction.get("share_code", transaction_id),
+            item_description=transaction["item_description"],
+            amount=transaction["item_price"],
+            net_amount=net_amount
         )
         
-        admin = await db.users.find_one({"is_admin": True}, {"_id": 0})
-        if admin:
-            mock_send_email(
-                admin["email"],
-                "Transaction Completed",
-                f"Transaction {transaction_id} has been completed."
-            )
+        # Send delivery confirmed email to buyer
+        await send_delivery_confirmed_email(
+            to_email=transaction["buyer_email"],
+            to_name=transaction["buyer_name"],
+            share_code=transaction.get("share_code", transaction_id),
+            item_description=transaction["item_description"],
+            role="buyer"
+        )
     
     updated_transaction = await db.transactions.find_one(
         {"transaction_id": transaction_id},
@@ -1128,18 +1146,23 @@ async def confirm_payment(request: Request, transaction_id: str, payment: Paymen
             }}
         )
         
-        # Mock email to buyer that payment received
-        mock_send_email(
-            transaction["buyer_email"],
-            "Payment Received in Escrow",
-            f"Your payment for transaction {transaction_id} has been received and is held in escrow. The seller will now deliver the item. You have 48 hours to confirm delivery after receiving the item."
+        # Send payment received emails via Brevo
+        await send_payment_received_email(
+            to_email=transaction["buyer_email"],
+            to_name=transaction["buyer_name"],
+            share_code=transaction.get("share_code", transaction_id),
+            item_description=transaction["item_description"],
+            amount=transaction["item_price"],
+            role="buyer"
         )
         
-        # Mock email to seller that payment received
-        mock_send_email(
-            transaction["seller_email"],
-            "Payment Received - Please Deliver",
-            f"Payment for transaction {transaction_id} has been received. Please deliver the item to the buyer. Funds will be automatically released in 48 hours if the buyer doesn't respond."
+        await send_payment_received_email(
+            to_email=transaction["seller_email"],
+            to_name=transaction["seller_name"],
+            share_code=transaction.get("share_code", transaction_id),
+            item_description=transaction["item_description"],
+            amount=transaction["item_price"],
+            role="seller"
         )
         
         return {"message": "Payment confirmed", "status": "Paid", "auto_release_at": auto_release_at}
@@ -1276,13 +1299,27 @@ async def create_dispute(request: Request, dispute_data: DisputeCreate):
     
     await db.disputes.insert_one(dispute)
     
-    # Email admin
-    admin = await db.users.find_one({"is_admin": True}, {"_id": 0})
-    if admin:
-        mock_send_email(
-            admin["email"],
-            "New Dispute Raised",
-            f"Dispute {dispute_id} raised for transaction {dispute_data.transaction_id} by {user.name}. Type: {dispute_data.dispute_type}"
+    # Send dispute opened email to both parties via Brevo
+    # Determine the other party
+    is_buyer = transaction.get("buyer_user_id") == user.user_id or transaction.get("buyer_email") == user.email
+    
+    if is_buyer:
+        # Notify seller
+        await send_dispute_opened_email(
+            to_email=transaction["seller_email"],
+            to_name=transaction["seller_name"],
+            share_code=transaction.get("share_code", dispute_data.transaction_id),
+            dispute_type=dispute_data.dispute_type,
+            description=dispute_data.description
+        )
+    else:
+        # Notify buyer
+        await send_dispute_opened_email(
+            to_email=transaction["buyer_email"],
+            to_name=transaction["buyer_name"],
+            share_code=transaction.get("share_code", dispute_data.transaction_id),
+            dispute_type=dispute_data.dispute_type,
+            description=dispute_data.description
         )
     
     return Dispute(**dispute)

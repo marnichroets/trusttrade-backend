@@ -5,7 +5,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import axios from 'axios';
-import { Plus, FileText, AlertCircle, TrendingUp, ShieldCheck, Wallet, Users, Lock, Eye, EyeOff } from 'lucide-react';
+import { Plus, FileText, AlertCircle, TrendingUp, ShieldCheck, Wallet, Users, Lock, Eye, EyeOff, CreditCard, ArrowRight } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -32,6 +32,7 @@ function Dashboard() {
   const [disputes, setDisputes] = useState([]);
   const [platformStats, setPlatformStats] = useState(null);
   const [adminData, setAdminData] = useState(null);
+  const [walletData, setWalletData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showExactValues, setShowExactValues] = useState(false);
   const navigate = useNavigate();
@@ -42,17 +43,19 @@ function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const [userRes, transactionsRes, disputesRes, statsRes] = await Promise.all([
+      const [userRes, transactionsRes, disputesRes, statsRes, walletRes] = await Promise.all([
         axios.get(`${API}/auth/me`, { withCredentials: true }),
         axios.get(`${API}/transactions`, { withCredentials: true }),
         axios.get(`${API}/disputes`, { withCredentials: true }),
-        axios.get(`${API}/platform/stats`, { withCredentials: true })
+        axios.get(`${API}/platform/stats`, { withCredentials: true }),
+        axios.get(`${API}/wallet`, { withCredentials: true }).catch(() => ({ data: null }))
       ]);
 
       setUser(userRes.data);
       setTransactions(transactionsRes.data);
       setDisputes(disputesRes.data);
       setPlatformStats(statsRes.data);
+      if (walletRes.data) setWalletData(walletRes.data);
 
       // Fetch admin-only data if user is admin
       if (userRes.data.is_admin) {
@@ -290,6 +293,83 @@ function Dashboard() {
               <Button variant="outline" size="sm" onClick={() => navigate('/activity')}>
                 Live Activity Board
               </Button>
+            </div>
+          </Card>
+        )}
+
+        {/* Wallet Card - For Sellers */}
+        {walletData && (
+          <Card className="p-6 bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                  <Wallet className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">My Wallet</h2>
+                  <p className="text-xs text-slate-500">TradeSafe secured funds</p>
+                </div>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => navigate('/settings/banking')}
+                className="flex items-center gap-1"
+              >
+                <CreditCard className="w-4 h-4" />
+                Banking Details
+              </Button>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-4 mb-4">
+              <div className="bg-white rounded-lg p-4">
+                <p className="text-sm text-slate-500 mb-1">Available Balance</p>
+                <p className="text-2xl font-bold text-emerald-600">
+                  R {walletData.balance.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4">
+                <p className="text-sm text-slate-500 mb-1">Pending (In Escrow)</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  R {walletData.pending_balance.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-4">
+                <p className="text-sm text-slate-500 mb-1">Total Earned</p>
+                <p className="text-2xl font-bold text-slate-700">
+                  R {walletData.total_earned.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
+                </p>
+              </div>
+            </div>
+
+            {/* Payout Progress */}
+            <div className="bg-white rounded-lg p-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-slate-600">Payout Progress</span>
+                <span className="text-sm font-medium text-emerald-600">
+                  R {walletData.balance.toFixed(0)} / R {walletData.payout_threshold}
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 rounded-full h-2 mb-2">
+                <div 
+                  className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(walletData.progress_percent, 100)}%` }}
+                />
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-slate-500">
+                  {walletData.can_payout 
+                    ? "Ready for payout!" 
+                    : `R ${walletData.remaining_to_payout.toFixed(0)} more to reach payout threshold`
+                  }
+                </span>
+                {!walletData.banking_details_set && (
+                  <span className="text-xs text-orange-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    Add banking details to receive payouts
+                  </span>
+                )}
+              </div>
             </div>
           </Card>
         )}

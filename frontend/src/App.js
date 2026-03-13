@@ -15,6 +15,7 @@ import LiveActivity from './pages/LiveActivity';
 import IdentityVerification from './pages/IdentityVerification';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentCancelled from './pages/PaymentCancelled';
+import BankingSettings from './pages/BankingSettings';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -44,6 +45,7 @@ function AppRouter() {
       <Route path="/profile/:userId" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/activity" element={<ProtectedRoute><LiveActivity /></ProtectedRoute>} />
       <Route path="/verify" element={<ProtectedRoute><IdentityVerification /></ProtectedRoute>} />
+      <Route path="/settings/banking" element={<ProtectedRoute><BankingSettings /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

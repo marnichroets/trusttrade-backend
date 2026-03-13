@@ -28,7 +28,21 @@ app = FastAPI()
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# Platform Constants
+MINIMUM_TRANSACTION_AMOUNT = 150.0  # R150 minimum
+PAYOUT_THRESHOLD = 500.0  # R500 payout threshold
+PLATFORM_FEE_PERCENT = 2.0  # 2% platform fee
+
 # Pydantic Models
+class BankingDetails(BaseModel):
+    """User banking details for payouts"""
+    bank_name: str = ""
+    account_holder: str = ""
+    account_number: str = ""
+    branch_code: str = ""
+    account_type: str = "savings"  # savings, checking
+    verified: bool = False
+
 class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
     user_id: str
@@ -47,6 +61,12 @@ class User(BaseModel):
     trust_score: int = 50
     badges: List[str] = []
     verified: bool = False
+    # Wallet & Banking
+    wallet_balance: float = 0.0
+    pending_balance: float = 0.0  # Funds in escrow awaiting release
+    total_earned: float = 0.0
+    banking_details: Optional[BankingDetails] = None
+    banking_details_verified: bool = False
     created_at: str
 
 class UserSession(BaseModel):
@@ -166,6 +186,25 @@ class SessionExchangeRequest(BaseModel):
 
 class TermsAcceptance(BaseModel):
     accepted: bool
+
+class BankingDetailsUpdate(BaseModel):
+    """Update banking details for a user"""
+    bank_name: str
+    account_holder: str
+    account_number: str
+    branch_code: str
+    account_type: str = "savings"
+
+class WalletResponse(BaseModel):
+    """Wallet information response"""
+    balance: float
+    pending_balance: float
+    total_earned: float
+    payout_threshold: float = PAYOUT_THRESHOLD
+    progress_percent: float
+    remaining_to_payout: float
+    can_payout: bool
+    banking_details_set: bool
 
 # Helper to generate short share code
 import random
@@ -596,9 +635,16 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     if user.suspension_flag:
         raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")
     
-    # Calculate fees
+    # Validate minimum transaction amount (R150)
+    if transaction_data.item_price < MINIMUM_TRANSACTION_AMOUNT:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Minimum transaction amount is R{MINIMUM_TRANSACTION_AMOUNT:.0f}"
+        )
+    
+    # Calculate fees (2% platform fee)
     item_price = transaction_data.item_price
-    trusttrade_fee = round(item_price * 0.02, 2)
+    trusttrade_fee = round(item_price * (PLATFORM_FEE_PERCENT / 100), 2)
     total = round(item_price + trusttrade_fee, 2)
     
     transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
@@ -2415,6 +2461,105 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
         "payment_url": payment_url,
         "tradesafe_reference": transaction.get("tradesafe_reference")
     }
+
+
+# ============ WALLET & BANKING ENDPOINTS ============
+
+@api_router.get("/wallet")
+async def get_wallet(request: Request):
+    """Get user's wallet information"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Get fresh user data from DB
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    wallet_balance = user_doc.get("wallet_balance", 0.0)
+    pending_balance = user_doc.get("pending_balance", 0.0)
+    total_earned = user_doc.get("total_earned", 0.0)
+    banking_details = user_doc.get("banking_details")
+    
+    # Calculate payout progress
+    progress_percent = min((wallet_balance / PAYOUT_THRESHOLD) * 100, 100)
+    remaining = max(PAYOUT_THRESHOLD - wallet_balance, 0)
+    
+    return {
+        "balance": wallet_balance,
+        "pending_balance": pending_balance,
+        "total_earned": total_earned,
+        "payout_threshold": PAYOUT_THRESHOLD,
+        "progress_percent": round(progress_percent, 1),
+        "remaining_to_payout": remaining,
+        "can_payout": wallet_balance >= PAYOUT_THRESHOLD,
+        "banking_details_set": banking_details is not None and bool(banking_details.get("account_number"))
+    }
+
+
+@api_router.get("/banking-details")
+async def get_banking_details(request: Request):
+    """Get user's banking details"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    banking = user_doc.get("banking_details", {})
+    
+    # Mask account number for security (show last 4 digits only)
+    if banking and banking.get("account_number"):
+        account_num = banking["account_number"]
+        banking["account_number_masked"] = f"****{account_num[-4:]}" if len(account_num) >= 4 else "****"
+    
+    return banking or {}
+
+
+@api_router.post("/banking-details")
+async def update_banking_details(request: Request, details: BankingDetailsUpdate):
+    """Update user's banking details"""
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Validate bank details
+    if not details.bank_name or not details.account_number or not details.branch_code:
+        raise HTTPException(status_code=400, detail="All banking fields are required")
+    
+    # Update user's banking details
+    banking_data = {
+        "bank_name": details.bank_name,
+        "account_holder": details.account_holder,
+        "account_number": details.account_number,
+        "branch_code": details.branch_code,
+        "account_type": details.account_type,
+        "verified": False,  # Requires manual verification
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"banking_details": banking_data, "banking_details_verified": False}}
+    )
+    
+    return {"message": "Banking details updated successfully", "verified": False}
+
+
+@api_router.get("/platform/settings")
+async def get_platform_settings():
+    """Get platform settings (public endpoint)"""
+    return {
+        "minimum_transaction": MINIMUM_TRANSACTION_AMOUNT,
+        "payout_threshold": PAYOUT_THRESHOLD,
+        "platform_fee_percent": PLATFORM_FEE_PERCENT,
+        "currency": "ZAR",
+        "currency_symbol": "R"
+    }
+
 
 # Include the router in the main app
 app.include_router(api_router)

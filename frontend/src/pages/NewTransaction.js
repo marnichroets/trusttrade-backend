@@ -129,6 +129,12 @@ function NewTransaction() {
       return;
     }
 
+    // Minimum transaction amount R150
+    if (itemPrice < 150) {
+      toast.error('Minimum transaction amount is R150');
+      return;
+    }
+
     if (photos.length < 1) {
       toast.error('Please upload at least 1 photo');
       return;
@@ -275,7 +281,8 @@ function NewTransaction() {
               </div>
               <div>
                 <Label htmlFor="item_price">Item Price (R) *</Label>
-                <Input id="item_price" name="item_price" type="number" step="0.01" min="0.01" value={formData.item_price} onChange={handleChange} placeholder="0.00" required data-testid="item-price-input" />
+                <Input id="item_price" name="item_price" type="number" step="0.01" min="150" value={formData.item_price} onChange={handleChange} placeholder="150.00" required data-testid="item-price-input" />
+                <p className="text-xs text-slate-500 mt-1">Minimum transaction amount: R150</p>
               </div>
               <div>
                 <Label htmlFor="fee_paid_by">Who Pays the Transaction Fee? *</Label>

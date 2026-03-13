@@ -309,6 +309,14 @@ function TransactionDetail() {
               </Badge>
             </div>
           </div>
+          
+          {/* Release Schedule Info */}
+          {(transaction.payment_status === 'Paid' || transaction.release_status === 'Pending Release') && (
+            <div className="mt-4 pt-4 border-t border-slate-200 flex items-center gap-2 text-sm text-slate-500">
+              <div className="w-4 h-4 flex items-center justify-center">⏰</div>
+              <span>Funds are released in two batches daily: <strong className="text-slate-700">10:00</strong> and <strong className="text-slate-700">15:00</strong></span>
+            </div>
+          )}
         </Card>
 
         {canSellerConfirm && (

@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ShieldCheck, Package, User, ArrowRight, Copy, CheckCircle, Loader2 } from 'lucide-react';
+import { ShieldCheck, Package, User, ArrowRight, Copy, CheckCircle, Loader2, Clock } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -158,6 +158,10 @@ function ShareTransaction() {
           </div>
           <h1 className="text-3xl font-bold text-slate-900 mb-2">You've Been Invited to a Transaction</h1>
           <p className="text-slate-600">Review the details below and join to participate</p>
+          <div className="mt-3 inline-flex items-center gap-2 text-slate-500 text-sm">
+            <Clock className="w-4 h-4" />
+            Funds released daily at 10:00 & 15:00
+          </div>
         </div>
 
         <Card className="p-6 mb-6">

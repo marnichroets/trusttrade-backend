@@ -5,7 +5,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import axios from 'axios';
-import { Plus, FileText, AlertCircle, TrendingUp, ShieldCheck, Wallet, Users, Lock, Eye, EyeOff, CreditCard, ArrowRight } from 'lucide-react';
+import { Plus, FileText, AlertCircle, TrendingUp, ShieldCheck, Wallet, Users, Lock, Eye, EyeOff, CreditCard, ArrowRight, Clock, Shield } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -137,6 +137,25 @@ function Dashboard() {
             </Button>
           )}
         </div>
+
+        {/* Protection Guaranteed Banner */}
+        <Card className="p-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-0">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                <Shield className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">Protection Guaranteed</h3>
+                <p className="text-emerald-100 text-sm">Every transaction is secured by TradeSafe escrow</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-white/10 rounded-lg px-4 py-2">
+              <Clock className="w-4 h-4" />
+              <span className="text-sm">Funds released daily at <strong>10:00</strong> and <strong>15:00</strong></span>
+            </div>
+          </div>
+        </Card>
 
         {/* Platform Stats - User View */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -371,6 +390,74 @@ function Dashboard() {
                 )}
               </div>
             </div>
+          </Card>
+        )}
+
+        {/* Real-Time Escrow Status */}
+        {activeTransactions.length > 0 && (
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <Lock className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Real-Time Escrow Status</h2>
+                  <p className="text-xs text-slate-500">Your active transactions in escrow</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-emerald-600">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                Live
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {activeTransactions.slice(0, 5).map((t) => {
+                const isUserBuyer = t.buyer_user_id === user?.user_id;
+                const role = isUserBuyer ? 'Buyer' : 'Seller';
+                const otherParty = isUserBuyer ? t.seller_name : t.buyer_name;
+                
+                return (
+                  <div 
+                    key={t.transaction_id}
+                    onClick={() => navigate(`/transactions/${t.transaction_id}`)}
+                    className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${
+                        t.payment_status === 'Paid' ? 'bg-emerald-500' : 
+                        t.payment_status === 'Ready for Payment' ? 'bg-blue-500' : 'bg-yellow-500'
+                      }`}></div>
+                      <div>
+                        <p className="font-medium text-slate-900 text-sm">{t.item_description.slice(0, 40)}{t.item_description.length > 40 ? '...' : ''}</p>
+                        <p className="text-xs text-slate-500">
+                          {role} • with {otherParty} • {t.share_code}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono font-semibold text-slate-900">R {t.item_price.toFixed(2)}</p>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusBadge(t.payment_status)}`}>
+                        {t.payment_status}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {activeTransactions.length > 5 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/transactions')}
+                className="w-full mt-3"
+              >
+                View all {activeTransactions.length} active transactions
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            )}
           </Card>
         )}
 

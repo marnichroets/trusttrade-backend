@@ -482,6 +482,7 @@ function IdentityVerification() {
                           onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
                           className="rounded-l-none"
                           data-testid="phone-input"
+                          maxLength={10}
                         />
                       </div>
                     </div>

@@ -1727,10 +1727,16 @@ async def upload_id_document(request: Request, file: UploadFile = File(...)):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Validate file type
-    allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
+    # Validate file type (images and PDF allowed for ID)
+    allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'image/gif', 'application/pdf']
     if file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="Only image files are allowed")
+        raise HTTPException(status_code=400, detail="Please upload a valid photo (JPG, PNG) or PDF file")
+    
+    # Validate file size (max 5MB)
+    max_size = 5 * 1024 * 1024  # 5MB
+    contents = await file.read()
+    if len(contents) > max_size:
+        raise HTTPException(status_code=400, detail="File size must be less than 5MB")
     
     # Save file
     upload_dir = Path("/app/uploads/verification")
@@ -1740,7 +1746,7 @@ async def upload_id_document(request: Request, file: UploadFile = File(...)):
     file_path = upload_dir / f"id_{user.user_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
     
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        buffer.write(contents)
     
     # Update user verification status
     await db.users.update_one(
@@ -1761,10 +1767,16 @@ async def upload_selfie(request: Request, file: UploadFile = File(...)):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Validate file type
-    allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp']
+    # Validate file type (only images for selfie)
+    allowed_types = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp', 'image/gif']
     if file.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="Only image files are allowed")
+        raise HTTPException(status_code=400, detail="Please upload a photo for your selfie")
+    
+    # Validate file size (max 5MB)
+    max_size = 5 * 1024 * 1024  # 5MB
+    contents = await file.read()
+    if len(contents) > max_size:
+        raise HTTPException(status_code=400, detail="File size must be less than 5MB")
     
     # Save file
     upload_dir = Path("/app/uploads/verification")
@@ -1774,7 +1786,7 @@ async def upload_selfie(request: Request, file: UploadFile = File(...)):
     file_path = upload_dir / f"selfie_{user.user_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
     
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        buffer.write(contents)
     
     # Update user verification status
     await db.users.update_one(

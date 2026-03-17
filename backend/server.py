@@ -2269,6 +2269,105 @@ async def admin_update_dispute(request: Request, dispute_id: str, status_data: D
     return {"message": f"Dispute status updated to {status_data.status}", "dispute_id": dispute_id}
 
 
+class AdminStatusOverride(BaseModel):
+    status: str
+
+@api_router.post("/admin/transactions/{transaction_id}/status")
+async def admin_override_status(request: Request, transaction_id: str, status_data: AdminStatusOverride):
+    """Admin: Override transaction payment status"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    valid_statuses = [
+        "Pending Seller Confirmation", "Pending Buyer Confirmation",
+        "Ready for Payment", "Paid", "Released", "Refunded"
+    ]
+    
+    if status_data.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+    
+    # Update status
+    update_data = {
+        "payment_status": status_data.status,
+        "status_overridden_at": datetime.now(timezone.utc).isoformat(),
+        "status_overridden_by": user.user_id
+    }
+    
+    # If setting to Released, also update release_status
+    if status_data.status == "Released":
+        update_data["release_status"] = "Released"
+        update_data["delivery_confirmed"] = True
+    
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": update_data}
+    )
+    
+    return {"message": f"Status overridden to {status_data.status}", "transaction_id": transaction_id}
+
+
+class AdminSendEmail(BaseModel):
+    to_email: str
+    to_name: str
+    subject: str
+    body: str
+
+@api_router.post("/admin/send-email")
+async def admin_send_email(request: Request, email_data: AdminSendEmail):
+    """Admin: Send custom email to a user"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    from email_service import send_email
+    
+    # Build simple HTML email
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
+            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>TrustTrade</h1>
+            </div>
+            <div class="content">
+                <p>{email_data.body.replace(chr(10), '<br>')}</p>
+            </div>
+            <div class="footer">
+                <p>© TrustTrade South Africa</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    result = await send_email(
+        to_email=email_data.to_email,
+        to_name=email_data.to_name,
+        subject=email_data.subject,
+        html_content=html_content
+    )
+    
+    if result:
+        return {"message": "Email sent successfully"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to send email")
+
+
 # Platform Stats (Public - for Live Activity Board)
 @api_router.get("/platform/stats")
 async def get_platform_stats(request: Request):

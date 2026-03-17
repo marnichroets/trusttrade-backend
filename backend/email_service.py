@@ -1,13 +1,15 @@
 """
-Brevo Email Service for TrustTrade
+Postmark Email Service for TrustTrade
 Handles transactional emails for escrow transactions
 """
 
 import os
 import logging
-from typing import Optional, List
+from typing import Optional
 from pathlib import Path
 from dotenv import load_dotenv
+import re
+from html import unescape
 
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
@@ -15,37 +17,36 @@ load_dotenv(ROOT_DIR / '.env')
 
 logger = logging.getLogger(__name__)
 
-# Brevo Configuration
-BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
-SENDER_EMAIL = "noreply@trusttradesa.co.za"
+# Postmark Configuration
+POSTMARK_API_KEY = os.environ.get('POSTMARK_API_KEY', '')
+SENDER_EMAIL = os.environ.get('POSTMARK_SENDER_EMAIL', 'noreply@trusttradesa.co.za')
 SENDER_NAME = "TrustTrade"
 
-# Initialize Brevo client
-_brevo_client = None
+# Initialize Postmark client
+_postmark_client = None
 
-def get_brevo_client():
-    """Get or create Brevo API client"""
-    global _brevo_client, BREVO_API_KEY
+def get_postmark_client():
+    """Get or create Postmark API client"""
+    global _postmark_client, POSTMARK_API_KEY
     
     # Re-check env var in case it was loaded later
-    if not BREVO_API_KEY:
-        BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
+    if not POSTMARK_API_KEY:
+        POSTMARK_API_KEY = os.environ.get('POSTMARK_API_KEY', '')
     
-    if not BREVO_API_KEY:
-        logger.warning("Brevo API key not configured")
+    if not POSTMARK_API_KEY:
+        logger.warning("Postmark API key not configured")
         return None
     
-    if _brevo_client is None:
+    if _postmark_client is None:
         try:
-            import sib_api_v3_sdk
-            configuration = sib_api_v3_sdk.Configuration()
-            configuration.api_key['api-key'] = BREVO_API_KEY
-            _brevo_client = sib_api_v3_sdk.ApiClient(configuration)
+            from postmarker.core import PostmarkClient
+            _postmark_client = PostmarkClient(server_token=POSTMARK_API_KEY)
+            logger.info("Postmark client initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize Brevo client: {e}")
+            logger.error(f"Failed to initialize Postmark client: {e}")
             return None
     
-    return _brevo_client
+    return _postmark_client
 
 
 async def send_email(
@@ -56,7 +57,7 @@ async def send_email(
     text_content: Optional[str] = None
 ) -> bool:
     """
-    Send a transactional email via Brevo.
+    Send a transactional email via Postmark.
     
     Args:
         to_email: Recipient email address
@@ -68,36 +69,29 @@ async def send_email(
     Returns:
         True if email sent successfully, False otherwise
     """
-    client = get_brevo_client()
+    client = get_postmark_client()
     
     if not client:
-        logger.warning(f"Brevo not configured. Would send email to {to_email}: {subject}")
+        logger.warning(f"Postmark not configured. Would send email to {to_email}: {subject}")
         return False
     
     try:
-        import sib_api_v3_sdk
-        from html import unescape
-        import re
-        
-        api_instance = sib_api_v3_sdk.TransactionalEmailsApi(client)
-        
         # Generate plain text from HTML if not provided
         if not text_content:
-            # Strip HTML tags and decode entities
             text_content = re.sub('<[^<]+?>', '', html_content)
             text_content = unescape(text_content)
             text_content = re.sub(r'\s+', ' ', text_content).strip()
         
-        send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
-            to=[{"email": to_email, "name": to_name}],
-            sender={"email": SENDER_EMAIL, "name": SENDER_NAME},
-            subject=subject,
-            html_content=html_content,
-            text_content=text_content
+        response = client.emails.send(
+            From=f"{SENDER_NAME} <{SENDER_EMAIL}>",
+            To=f"{to_name} <{to_email}>",
+            Subject=subject,
+            HtmlBody=html_content,
+            TextBody=text_content,
+            MessageStream="outbound"
         )
         
-        response = api_instance.send_transac_email(send_smtp_email)
-        logger.info(f"Email sent successfully to {to_email}: {subject} (ID: {response.message_id})")
+        logger.info(f"Email sent successfully to {to_email}: {subject} (ID: {response.get('MessageID', 'unknown')})")
         return True
         
     except Exception as e:
@@ -127,10 +121,10 @@ def get_transaction_created_email(
         <style>
             body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
             .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: linear-gradient(135deg, #10b981, #14b8a6); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+            .header {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
             .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
-            .highlight {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981; }}
-            .amount {{ font-size: 28px; font-weight: bold; color: #10b981; }}
+            .highlight {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6; }}
+            .amount {{ font-size: 28px; font-weight: bold; color: #3b82f6; }}
             .btn {{ display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 20px; }}
             .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
         </style>
@@ -138,7 +132,7 @@ def get_transaction_created_email(
     <body>
         <div class="container">
             <div class="header">
-                <h1>🛡️ TrustTrade</h1>
+                <h1>TrustTrade</h1>
                 <p>Your transaction is protected by escrow</p>
             </div>
             <div class="content">
@@ -164,7 +158,7 @@ def get_transaction_created_email(
                 </p>
             </div>
             <div class="footer">
-                <p>This transaction is secured by TradeSafe escrow.</p>
+                <p>This transaction is secured by TrustTrade escrow.</p>
                 <p>© TrustTrade South Africa</p>
             </div>
         </div>
@@ -198,17 +192,17 @@ def get_payment_received_email(
         <style>
             body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
             .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: linear-gradient(135deg, #10b981, #14b8a6); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+            .header {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
             .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
-            .success-box {{ background: #d1fae5; border: 1px solid #10b981; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }}
-            .amount {{ font-size: 32px; font-weight: bold; color: #059669; }}
+            .success-box {{ background: #dbeafe; border: 1px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }}
+            .amount {{ font-size: 32px; font-weight: bold; color: #2563eb; }}
             .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
         </style>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1>💰 Payment Received!</h1>
+                <h1>Payment Received!</h1>
             </div>
             <div class="content">
                 <h2>Hi {recipient_name},</h2>
@@ -228,7 +222,7 @@ def get_payment_received_email(
                 <p><em>Funds are released in two batches daily: 10:00 and 15:00</em></p>
             </div>
             <div class="footer">
-                <p>© TrustTrade South Africa | Protected by TradeSafe</p>
+                <p>© TrustTrade South Africa | Secure Escrow Platform</p>
             </div>
         </div>
     </body>
@@ -266,7 +260,7 @@ def get_funds_released_email(
     <body>
         <div class="container">
             <div class="header">
-                <h1>🎉 Funds Released!</h1>
+                <h1>Funds Released!</h1>
                 <p>Transaction Complete</p>
             </div>
             <div class="content">
@@ -289,7 +283,7 @@ def get_funds_released_email(
                 </p>
             </div>
             <div class="footer">
-                <p>© TrustTrade South Africa | Protected by TradeSafe</p>
+                <p>© TrustTrade South Africa</p>
             </div>
         </div>
     </body>
@@ -330,7 +324,7 @@ def get_delivery_confirmed_email(
     <body>
         <div class="container">
             <div class="header">
-                <h1>📦 Delivery Confirmed!</h1>
+                <h1>Delivery Confirmed!</h1>
             </div>
             <div class="content">
                 <h2>Hi {recipient_name},</h2>
@@ -381,7 +375,7 @@ def get_dispute_opened_email(
     <body>
         <div class="container">
             <div class="header">
-                <h1>⚠️ Dispute Opened</h1>
+                <h1>Dispute Opened</h1>
             </div>
             <div class="content">
                 <h2>Hi {recipient_name},</h2>

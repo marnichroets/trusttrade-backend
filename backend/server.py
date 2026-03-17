@@ -1881,7 +1881,7 @@ async def verify_phone_otp(request: Request, data: PhoneOtpVerify):
     return {"message": "Phone verified successfully", "fully_verified": all_verified}
 
 # Admin Endpoints
-@api_router.get("/admin/users", response_model=List[User])
+@api_router.get("/admin/users")
 async def list_all_users(request: Request):
     """List all users (admin only)"""
     user = await get_user_from_token(request)
@@ -1889,9 +1889,10 @@ async def list_all_users(request: Request):
         raise HTTPException(status_code=403, detail="Admin only")
     
     users = await db.users.find({}, {"_id": 0}).to_list(1000)
-    return [User(**u) for u in users]
+    # Return raw data, not validated User objects to avoid validation errors
+    return users
 
-@api_router.get("/admin/transactions", response_model=List[Transaction])
+@api_router.get("/admin/transactions")
 async def list_all_transactions_admin(request: Request):
     """List all transactions (admin only)"""
     user = await get_user_from_token(request)
@@ -1899,9 +1900,10 @@ async def list_all_transactions_admin(request: Request):
         raise HTTPException(status_code=403, detail="Admin only")
     
     transactions = await db.transactions.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    return [Transaction(**t) for t in transactions]
+    # Return raw data to avoid validation errors with old transactions
+    return transactions
 
-@api_router.get("/admin/disputes", response_model=List[Dispute])
+@api_router.get("/admin/disputes")
 async def list_all_disputes_admin(request: Request):
     """List all disputes (admin only)"""
     user = await get_user_from_token(request)
@@ -1909,7 +1911,8 @@ async def list_all_disputes_admin(request: Request):
         raise HTTPException(status_code=403, detail="Admin only")
     
     disputes = await db.disputes.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    return [Dispute(**d) for d in disputes]
+    # Return raw data to avoid validation errors
+    return disputes
 
 @api_router.get("/admin/stats")
 async def get_admin_stats(request: Request):

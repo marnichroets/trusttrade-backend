@@ -18,7 +18,10 @@ from email_service import (
     send_payment_received_email,
     send_funds_released_email,
     send_delivery_confirmed_email,
-    send_dispute_opened_email
+    send_dispute_opened_email,
+    send_verification_status_email,
+    send_dispute_resolved_email,
+    send_refund_email
 )
 
 ROOT_DIR = Path(__file__).parent
@@ -2023,6 +2026,248 @@ async def get_escrow_details(request: Request):
             for t in escrow_transactions
         ]
     }
+
+
+# ============ ADMIN ACTION ENDPOINTS ============
+
+class AdminRefundRequest(BaseModel):
+    reason: str = ""
+
+@api_router.post("/admin/transactions/{transaction_id}/refund")
+async def admin_refund_transaction(request: Request, transaction_id: str, refund_data: AdminRefundRequest):
+    """Admin: Refund a transaction"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    if transaction.get("payment_status") not in ["Paid", "Ready for Payment"]:
+        raise HTTPException(status_code=400, detail="Transaction cannot be refunded in current state")
+    
+    # Update transaction status
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "payment_status": "Refunded",
+            "release_status": "Refunded",
+            "refund_reason": refund_data.reason,
+            "refunded_at": datetime.now(timezone.utc).isoformat(),
+            "refunded_by": user.user_id
+        }}
+    )
+    
+    # Send refund email to buyer
+    await send_refund_email(
+        to_email=transaction["buyer_email"],
+        to_name=transaction["buyer_name"],
+        share_code=transaction.get("share_code", transaction_id),
+        amount=transaction["total"],
+        reason=refund_data.reason
+    )
+    
+    return {"message": "Transaction refunded successfully", "transaction_id": transaction_id}
+
+
+class AdminReleaseRequest(BaseModel):
+    notes: str = ""
+
+@api_router.post("/admin/transactions/{transaction_id}/release")
+async def admin_release_funds(request: Request, transaction_id: str, release_data: AdminReleaseRequest):
+    """Admin: Manually release funds to seller"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    if transaction.get("release_status") == "Released":
+        raise HTTPException(status_code=400, detail="Funds already released")
+    
+    # Calculate net amount
+    fee = transaction.get("trusttrade_fee", 0)
+    item_price = transaction.get("item_price", 0)
+    fee_paid_by = transaction.get("fee_paid_by", "split")
+    
+    if fee_paid_by == "seller":
+        net_amount = item_price - fee
+    elif fee_paid_by == "split":
+        net_amount = item_price - (fee / 2)
+    else:
+        net_amount = item_price
+    
+    # Update transaction status
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "payment_status": "Released",
+            "release_status": "Released",
+            "delivery_confirmed": True,
+            "released_at": datetime.now(timezone.utc).isoformat(),
+            "released_by": user.user_id,
+            "admin_release_notes": release_data.notes
+        }}
+    )
+    
+    # Send funds released email to seller
+    await send_funds_released_email(
+        to_email=transaction["seller_email"],
+        to_name=transaction["seller_name"],
+        share_code=transaction.get("share_code", transaction_id),
+        item_description=transaction["item_description"],
+        amount=item_price,
+        net_amount=net_amount
+    )
+    
+    return {"message": "Funds released successfully", "transaction_id": transaction_id, "net_amount": net_amount}
+
+
+class AdminNotesRequest(BaseModel):
+    notes: str
+
+@api_router.post("/admin/transactions/{transaction_id}/notes")
+async def admin_add_notes(request: Request, transaction_id: str, notes_data: AdminNotesRequest):
+    """Admin: Add notes to a transaction"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Append to existing notes
+    existing_notes = transaction.get("admin_notes", [])
+    new_note = {
+        "note": notes_data.notes,
+        "added_by": user.email,
+        "added_at": datetime.now(timezone.utc).isoformat()
+    }
+    existing_notes.append(new_note)
+    
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {"admin_notes": existing_notes}}
+    )
+    
+    return {"message": "Notes added successfully", "notes": existing_notes}
+
+
+class VerificationStatusUpdate(BaseModel):
+    status: str  # "pending", "verified", "rejected"
+    notes: str = ""
+
+@api_router.post("/admin/users/{user_id}/verification")
+async def admin_update_verification(request: Request, user_id: str, status_data: VerificationStatusUpdate):
+    """Admin: Update user's ID verification status"""
+    admin = await get_user_from_token(request)
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    valid_statuses = ["pending", "verified", "rejected"]
+    if status_data.status.lower() not in valid_statuses:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    
+    # Update user verification status
+    update_data = {
+        "verified": status_data.status.lower() == "verified",
+        "verification_status": status_data.status.lower(),
+        "verification_notes": status_data.notes,
+        "verification_updated_at": datetime.now(timezone.utc).isoformat(),
+        "verification_updated_by": admin.user_id
+    }
+    
+    # Add verified badge if verified
+    if status_data.status.lower() == "verified":
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$addToSet": {"badges": "verified"}}
+        )
+    
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": update_data}
+    )
+    
+    # Send email notification
+    await send_verification_status_email(
+        to_email=target_user["email"],
+        to_name=target_user["name"],
+        status=status_data.status
+    )
+    
+    return {"message": f"Verification status updated to {status_data.status}", "user_id": user_id}
+
+
+class DisputeStatusUpdate(BaseModel):
+    status: str  # "open", "under_review", "escalated", "resolved"
+    resolution: str = ""
+    admin_notes: str = ""
+
+@api_router.patch("/admin/disputes/{dispute_id}")
+async def admin_update_dispute(request: Request, dispute_id: str, status_data: DisputeStatusUpdate):
+    """Admin: Update dispute status"""
+    admin = await get_user_from_token(request)
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    dispute = await db.disputes.find_one({"dispute_id": dispute_id}, {"_id": 0})
+    if not dispute:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+    
+    # Get linked transaction
+    transaction = await db.transactions.find_one(
+        {"transaction_id": dispute["transaction_id"]},
+        {"_id": 0}
+    )
+    
+    # Update dispute
+    update_data = {
+        "status": status_data.status.title().replace("_", " "),
+        "admin_notes": status_data.admin_notes,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": admin.user_id
+    }
+    
+    if status_data.status.lower() == "resolved":
+        update_data["resolution"] = status_data.resolution
+        update_data["resolved_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.disputes.update_one(
+        {"dispute_id": dispute_id},
+        {"$set": update_data}
+    )
+    
+    # Send emails to both parties if resolved
+    if status_data.status.lower() == "resolved" and transaction:
+        share_code = transaction.get("share_code", dispute["transaction_id"])
+        
+        await send_dispute_resolved_email(
+            to_email=transaction["buyer_email"],
+            to_name=transaction["buyer_name"],
+            share_code=share_code,
+            resolution=status_data.resolution,
+            admin_notes=status_data.admin_notes
+        )
+        
+        await send_dispute_resolved_email(
+            to_email=transaction["seller_email"],
+            to_name=transaction["seller_name"],
+            share_code=share_code,
+            resolution=status_data.resolution,
+            admin_notes=status_data.admin_notes
+        )
+    
+    return {"message": f"Dispute status updated to {status_data.status}", "dispute_id": dispute_id}
+
 
 # Platform Stats (Public - for Live Activity Board)
 @api_router.get("/platform/stats")

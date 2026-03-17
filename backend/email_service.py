@@ -471,3 +471,206 @@ async def send_dispute_opened_email(
     """Send dispute opened notification"""
     subject, html = get_dispute_opened_email(to_name, share_code, dispute_type, description)
     return await send_email(to_email, to_name, subject, html)
+
+
+
+# ============ ID VERIFICATION EMAIL ============
+
+def get_verification_status_email(
+    recipient_name: str,
+    status: str
+) -> tuple[str, str]:
+    """Generate ID verification status update email"""
+    
+    subject = "ID Verification Update - TrustTrade"
+    
+    status_messages = {
+        "verified": ("Your ID has been verified! ✅", "You now have full access to TrustTrade features.", "#10b981"),
+        "rejected": ("Your ID verification was not successful", "Please re-upload a clear photo of your ID document.", "#ef4444"),
+        "pending": ("Your ID is under review", "We'll notify you once the verification is complete.", "#f59e0b")
+    }
+    
+    message, instruction, color = status_messages.get(status.lower(), status_messages["pending"])
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
+            .status-box {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid {color}; }}
+            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>TrustTrade</h1>
+                <p>ID Verification Update</p>
+            </div>
+            <div class="content">
+                <h2>Hello {recipient_name},</h2>
+                
+                <div class="status-box">
+                    <p style="font-size: 18px; font-weight: bold; color: {color};">{message}</p>
+                    <p>{instruction}</p>
+                </div>
+                
+                <p>Your ID verification status is now: <strong>{status.upper()}</strong></p>
+                
+                <p>If you have any questions, please contact our support team.</p>
+            </div>
+            <div class="footer">
+                <p>© TrustTrade South Africa</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return subject, html_content
+
+
+def get_dispute_resolved_email(
+    recipient_name: str,
+    share_code: str,
+    resolution: str,
+    admin_notes: str
+) -> tuple[str, str]:
+    """Generate dispute resolved email"""
+    
+    subject = f"Dispute Resolved - {share_code}"
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: #10b981; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
+            .resolution-box {{ background: #d1fae5; border: 1px solid #10b981; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Dispute Resolved</h1>
+            </div>
+            <div class="content">
+                <h2>Hi {recipient_name},</h2>
+                
+                <p>The dispute for transaction <strong>{share_code}</strong> has been resolved.</p>
+                
+                <div class="resolution-box">
+                    <p><strong>Resolution:</strong> {resolution}</p>
+                    {f'<p><strong>Notes:</strong> {admin_notes}</p>' if admin_notes else ''}
+                </div>
+                
+                <p>Thank you for your patience during the review process.</p>
+            </div>
+            <div class="footer">
+                <p>© TrustTrade South Africa</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return subject, html_content
+
+
+def get_refund_email(
+    recipient_name: str,
+    share_code: str,
+    amount: float,
+    reason: str
+) -> tuple[str, str]:
+    """Generate refund notification email"""
+    
+    subject = f"Refund Processed - {share_code}"
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+            .header {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
+            .refund-box {{ background: #dbeafe; border: 1px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }}
+            .amount {{ font-size: 32px; font-weight: bold; color: #2563eb; }}
+            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Refund Processed</h1>
+            </div>
+            <div class="content">
+                <h2>Hi {recipient_name},</h2>
+                
+                <p>A refund has been processed for your transaction.</p>
+                
+                <div class="refund-box">
+                    <p>Transaction: <strong>{share_code}</strong></p>
+                    <p class="amount">R {amount:.2f}</p>
+                    <p>has been refunded to your account</p>
+                </div>
+                
+                {f'<p><strong>Reason:</strong> {reason}</p>' if reason else ''}
+                
+                <p>The refund will be processed within 3-5 business days.</p>
+            </div>
+            <div class="footer">
+                <p>© TrustTrade South Africa</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    return subject, html_content
+
+
+# ============ ADDITIONAL CONVENIENCE FUNCTIONS ============
+
+async def send_verification_status_email(
+    to_email: str,
+    to_name: str,
+    status: str
+) -> bool:
+    """Send ID verification status update"""
+    subject, html = get_verification_status_email(to_name, status)
+    return await send_email(to_email, to_name, subject, html)
+
+
+async def send_dispute_resolved_email(
+    to_email: str,
+    to_name: str,
+    share_code: str,
+    resolution: str,
+    admin_notes: str = ""
+) -> bool:
+    """Send dispute resolved notification"""
+    subject, html = get_dispute_resolved_email(to_name, share_code, resolution, admin_notes)
+    return await send_email(to_email, to_name, subject, html)
+
+
+async def send_refund_email(
+    to_email: str,
+    to_name: str,
+    share_code: str,
+    amount: float,
+    reason: str = ""
+) -> bool:
+    """Send refund notification"""
+    subject, html = get_refund_email(to_name, share_code, amount, reason)
+    return await send_email(to_email, to_name, subject, html)

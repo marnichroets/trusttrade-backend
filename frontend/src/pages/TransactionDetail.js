@@ -436,6 +436,21 @@ function TransactionDetail() {
                     <p className="text-sm text-slate-700 whitespace-pre-wrap">{transaction.known_issues}</p>
                   </div>
                 )}
+                {transaction.delivery_method && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Delivery Method</p>
+                    <Badge className="bg-blue-100 text-blue-800">
+                      {transaction.delivery_method === 'courier' && 'Courier / Physical Delivery'}
+                      {transaction.delivery_method === 'bank_deposit' && 'Bank Deposit / Cash Collection'}
+                      {transaction.delivery_method === 'digital' && 'Digital Delivery / Link'}
+                    </Badge>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {transaction.delivery_method === 'courier' && '3-day auto-release after delivery confirmation'}
+                      {transaction.delivery_method === 'bank_deposit' && '2-day auto-release after payment confirmation'}
+                      {transaction.delivery_method === 'digital' && 'Immediate release after confirmation'}
+                    </p>
+                  </div>
+                )}
               </div>
             </Card>
 

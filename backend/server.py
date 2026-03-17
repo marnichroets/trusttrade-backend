@@ -102,6 +102,8 @@ class Transaction(BaseModel):
     trusttrade_fee: float
     total: float
     fee_paid_by: str = "split"  # "buyer", "seller", or "split" (default: 50/50 split)
+    delivery_method: str = "courier"  # "courier", "bank_deposit", "digital"
+    auto_release_days: int = 3  # Days until auto-release based on delivery method
     payment_status: str = "Pending Seller Confirmation"
     seller_confirmed: bool = False
     seller_confirmed_at: Optional[str] = None
@@ -115,7 +117,7 @@ class Transaction(BaseModel):
     buyer_review: Optional[str] = None
     seller_rating: Optional[int] = None
     seller_review: Optional[str] = None
-    auto_release_at: Optional[str] = None  # Timestamp for auto-release (48 hours after payment)
+    auto_release_at: Optional[str] = None  # Timestamp for auto-release
     auto_released: bool = False  # Flag indicating auto-release occurred
     risk_level: Optional[str] = None  # "low", "medium", "high"
     risk_flags: List[str] = []
@@ -133,6 +135,7 @@ class TransactionCreate(BaseModel):
     known_issues: str
     item_price: float
     fee_paid_by: str = "split"  # "buyer", "seller", or "split" (default: 50/50 split)
+    delivery_method: str = "courier"  # "courier", "bank_deposit", "digital"
     buyer_details_confirmed: bool
     seller_details_confirmed: bool
     item_accuracy_confirmed: bool
@@ -697,6 +700,17 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
             "details": risk_assessment.warnings
         })
     
+    # Determine auto-release days based on delivery method
+    delivery_method = transaction_data.delivery_method
+    if delivery_method == "courier":
+        auto_release_days = 3  # 3 days after delivery confirmation
+    elif delivery_method == "bank_deposit":
+        auto_release_days = 2  # 2 days after payment confirmation
+    elif delivery_method == "digital":
+        auto_release_days = 0  # Immediate release after confirmation
+    else:
+        auto_release_days = 3  # Default to courier
+    
     transaction = {
         "transaction_id": transaction_id,
         "share_code": share_code,
@@ -715,6 +729,8 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "trusttrade_fee": trusttrade_fee,
         "total": total,
         "fee_paid_by": transaction_data.fee_paid_by,
+        "delivery_method": delivery_method,
+        "auto_release_days": auto_release_days,
         "payment_status": "Pending Seller Confirmation" if transaction_data.creator_role == "buyer" else "Pending Buyer Confirmation",
         "seller_confirmed": False,
         "delivery_confirmed": False,

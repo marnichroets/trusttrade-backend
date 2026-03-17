@@ -31,7 +31,8 @@ function NewTransaction() {
     item_condition: '',
     known_issues: '',
     item_price: '',
-    fee_paid_by: 'split'  // Default to 50/50 split
+    fee_paid_by: 'split',  // Default to 50/50 split
+    delivery_method: 'courier'  // Default delivery method
   });
   const [confirmations, setConfirmations] = useState({
     buyer_details: false,
@@ -161,6 +162,7 @@ function NewTransaction() {
           known_issues: formData.known_issues,
           item_price: itemPrice,
           fee_paid_by: formData.fee_paid_by,
+          delivery_method: formData.delivery_method,
           buyer_details_confirmed: confirmations.buyer_details,
           seller_details_confirmed: confirmations.seller_details,
           item_accuracy_confirmed: confirmations.item_accuracy
@@ -240,7 +242,10 @@ function NewTransaction() {
           </Card>
 
           <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">{role === 'buyer' ? 'Seller' : 'Buyer'} Details</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Recipient Info</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              Enter the recipient's email or phone number. They will receive a secure link to claim payment. No signup required for first-time users.
+            </p>
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="other_name">{role === 'buyer' ? 'Seller' : 'Buyer'} Name *</Label>
@@ -250,6 +255,56 @@ function NewTransaction() {
                 <Label htmlFor="other_email">{role === 'buyer' ? 'Seller' : 'Buyer'} Email *</Label>
                 <Input id="other_email" name={role === 'buyer' ? 'seller_email' : 'buyer_email'} type="email" value={role === 'buyer' ? formData.seller_email : formData.buyer_email} onChange={handleChange} placeholder="email@example.com" required data-testid="other-email-input" />
               </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Payment / Delivery Method</h3>
+            <div className="space-y-3">
+              <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${formData.delivery_method === 'courier' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                <input
+                  type="radio"
+                  name="delivery_method"
+                  value="courier"
+                  checked={formData.delivery_method === 'courier'}
+                  onChange={(e) => setFormData(prev => ({ ...prev, delivery_method: e.target.value }))}
+                  className="mt-1"
+                />
+                <div>
+                  <p className="font-medium text-slate-900">Courier / Physical Delivery</p>
+                  <p className="text-sm text-slate-500">3-day auto-release after delivery confirmation</p>
+                </div>
+              </label>
+              
+              <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${formData.delivery_method === 'bank_deposit' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                <input
+                  type="radio"
+                  name="delivery_method"
+                  value="bank_deposit"
+                  checked={formData.delivery_method === 'bank_deposit'}
+                  onChange={(e) => setFormData(prev => ({ ...prev, delivery_method: e.target.value }))}
+                  className="mt-1"
+                />
+                <div>
+                  <p className="font-medium text-slate-900">Bank Deposit / Cash Collection</p>
+                  <p className="text-sm text-slate-500">2-day auto-release after payment confirmation</p>
+                </div>
+              </label>
+              
+              <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${formData.delivery_method === 'digital' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                <input
+                  type="radio"
+                  name="delivery_method"
+                  value="digital"
+                  checked={formData.delivery_method === 'digital'}
+                  onChange={(e) => setFormData(prev => ({ ...prev, delivery_method: e.target.value }))}
+                  className="mt-1"
+                />
+                <div>
+                  <p className="font-medium text-slate-900">Digital Delivery / Link</p>
+                  <p className="text-sm text-slate-500">Immediate auto-release after confirmation</p>
+                </div>
+              </label>
             </div>
           </Card>
 

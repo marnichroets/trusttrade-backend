@@ -252,8 +252,8 @@ function NewTransaction() {
                 <Input id="other_name" name={role === 'buyer' ? 'seller_name' : 'buyer_name'} value={role === 'buyer' ? formData.seller_name : formData.buyer_name} onChange={handleChange} placeholder="Enter name" required data-testid="other-name-input" />
               </div>
               <div>
-                <Label htmlFor="other_email">{role === 'buyer' ? 'Seller' : 'Buyer'} Email *</Label>
-                <Input id="other_email" name={role === 'buyer' ? 'seller_email' : 'buyer_email'} type="email" value={role === 'buyer' ? formData.seller_email : formData.buyer_email} onChange={handleChange} placeholder="email@example.com" required data-testid="other-email-input" />
+                <Label htmlFor="other_email">{role === 'buyer' ? 'Seller' : 'Buyer'} Email or Phone Number *</Label>
+                <Input id="other_email" name={role === 'buyer' ? 'seller_email' : 'buyer_email'} type="text" value={role === 'buyer' ? formData.seller_email : formData.buyer_email} onChange={handleChange} placeholder="email@example.com or +27..." required data-testid="other-email-input" />
               </div>
             </div>
           </Card>

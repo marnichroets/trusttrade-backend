@@ -18,12 +18,12 @@ function LandingPage() {
       {/* Navigation */}
       <nav className="border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-36 md:h-40">
+          <div className="flex justify-between items-center h-40 md:h-48">
             <div className="flex items-center gap-2">
               <img 
                 src="https://customer-assets.emergentagent.com/job_trust-trade-pay/artifacts/u0eeoxzq_TrustTrade%20Logo.png" 
                 alt="TrustTrade" 
-                className="h-32 md:h-36"
+                className="h-36 md:h-44"
               />
             </div>
             <div className="flex items-center gap-3">

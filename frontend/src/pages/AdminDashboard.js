@@ -4,11 +4,14 @@ import DashboardLayout from '../components/DashboardLayout';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import { Input } from '../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import { Textarea } from '../components/ui/textarea';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { Users, FileText, AlertCircle, TrendingUp } from 'lucide-react';
+import { Users, FileText, AlertCircle, TrendingUp, RefreshCw, DollarSign, MessageSquare, ShieldCheck, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -20,6 +23,15 @@ function AdminDashboard() {
   const [transactions, setTransactions] = useState([]);
   const [disputes, setDisputes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  
+  // Modal states
+  const [refundModal, setRefundModal] = useState({ open: false, transaction: null });
+  const [releaseModal, setReleaseModal] = useState({ open: false, transaction: null });
+  const [notesModal, setNotesModal] = useState({ open: false, transaction: null, notes: '' });
+  const [verifyModal, setVerifyModal] = useState({ open: false, user: null, status: 'verified', notes: '' });
+  const [disputeModal, setDisputeModal] = useState({ open: false, dispute: null, status: '', resolution: '', notes: '' });
+  
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -59,19 +71,104 @@ function AdminDashboard() {
     }
   };
 
-  const handleUpdateDisputeStatus = async (disputeId, newStatus) => {
+  // ============ ADMIN ACTIONS ============
+
+  const handleRefund = async () => {
+    if (!refundModal.transaction) return;
+    setActionLoading(true);
     try {
-      await axios.patch(
-        `${API}/disputes/${disputeId}`,
-        { status: newStatus },
+      await axios.post(
+        `${API}/admin/transactions/${refundModal.transaction.transaction_id}/refund`,
+        { reason: refundModal.reason || 'Admin refund' },
         { withCredentials: true }
       );
-
-      toast.success('Dispute status updated');
-      fetchData(); // Refresh data
+      toast.success('Transaction refunded and buyer notified via email');
+      setRefundModal({ open: false, transaction: null, reason: '' });
+      fetchData();
     } catch (error) {
-      console.error('Failed to update dispute:', error);
-      toast.error('Failed to update dispute status');
+      toast.error(error.response?.data?.detail || 'Failed to refund transaction');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReleaseFunds = async () => {
+    if (!releaseModal.transaction) return;
+    setActionLoading(true);
+    try {
+      await axios.post(
+        `${API}/admin/transactions/${releaseModal.transaction.transaction_id}/release`,
+        { notes: releaseModal.notes || '' },
+        { withCredentials: true }
+      );
+      toast.success('Funds released and seller notified via email');
+      setReleaseModal({ open: false, transaction: null, notes: '' });
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to release funds');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleAddNotes = async () => {
+    if (!notesModal.transaction || !notesModal.notes.trim()) return;
+    setActionLoading(true);
+    try {
+      await axios.post(
+        `${API}/admin/transactions/${notesModal.transaction.transaction_id}/notes`,
+        { notes: notesModal.notes },
+        { withCredentials: true }
+      );
+      toast.success('Note added to transaction successfully');
+      setNotesModal({ open: false, transaction: null, notes: '' });
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to add notes');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleVerifyUser = async () => {
+    if (!verifyModal.user) return;
+    setActionLoading(true);
+    try {
+      await axios.post(
+        `${API}/admin/users/${verifyModal.user.user_id}/verification`,
+        { status: verifyModal.status, notes: verifyModal.notes },
+        { withCredentials: true }
+      );
+      toast.success(`User verification status updated to ${verifyModal.status} and user notified`);
+      setVerifyModal({ open: false, user: null, status: 'verified', notes: '' });
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update verification');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleUpdateDispute = async () => {
+    if (!disputeModal.dispute || !disputeModal.status) return;
+    setActionLoading(true);
+    try {
+      await axios.patch(
+        `${API}/admin/disputes/${disputeModal.dispute.dispute_id}`,
+        { 
+          status: disputeModal.status, 
+          resolution: disputeModal.resolution,
+          admin_notes: disputeModal.notes 
+        },
+        { withCredentials: true }
+      );
+      toast.success('Dispute status updated and both parties notified');
+      setDisputeModal({ open: false, dispute: null, status: '', resolution: '', notes: '' });
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to update dispute');
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -80,7 +177,11 @@ function AdminDashboard() {
       'Pending': 'bg-yellow-100 text-yellow-800',
       'Paid': 'bg-green-100 text-green-800',
       'Released': 'bg-green-100 text-green-800',
-      'Resolved': 'bg-green-100 text-green-800'
+      'Refunded': 'bg-red-100 text-red-800',
+      'Resolved': 'bg-green-100 text-green-800',
+      'Open': 'bg-yellow-100 text-yellow-800',
+      'Under Review': 'bg-blue-100 text-blue-800',
+      'Escalated': 'bg-red-100 text-red-800'
     };
     return variants[status] || 'bg-slate-100 text-slate-600';
   };
@@ -96,9 +197,15 @@ function AdminDashboard() {
   return (
     <DashboardLayout user={user}>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900" data-testid="admin-dashboard-title">Admin Dashboard</h1>
-          <p className="text-slate-600 mt-2">System overview and management</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900" data-testid="admin-dashboard-title">Admin Dashboard</h1>
+            <p className="text-slate-600 mt-2">System overview and management</p>
+          </div>
+          <Button onClick={fetchData} variant="outline" size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
         </div>
 
         {/* Stats Cards */}
@@ -120,10 +227,10 @@ function AdminDashboard() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm text-slate-600 mb-1">Total Transactions</p>
-                  <p className="text-3xl font-bold text-slate-900" data-testid="admin-total-transactions">{stats.total_transactions}</p>
+                  <p className="text-3xl font-bold text-slate-900">{stats.total_transactions}</p>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-blue-600" />
+                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                  <FileText className="w-6 h-6 text-green-600" />
                 </div>
               </div>
             </Card>
@@ -132,7 +239,7 @@ function AdminDashboard() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm text-slate-600 mb-1">Pending Transactions</p>
-                  <p className="text-3xl font-bold text-yellow-600" data-testid="admin-pending-transactions">{stats.pending_transactions}</p>
+                  <p className="text-3xl font-bold text-yellow-600">{stats.pending_transactions}</p>
                 </div>
                 <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
                   <TrendingUp className="w-6 h-6 text-yellow-600" />
@@ -143,8 +250,8 @@ function AdminDashboard() {
             <Card className="p-6 hover:shadow-md transition-shadow duration-200">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm text-slate-600 mb-1">Pending Disputes</p>
-                  <p className="text-3xl font-bold text-red-600" data-testid="admin-pending-disputes">{stats.pending_disputes}</p>
+                  <p className="text-sm text-slate-600 mb-1">Open Disputes</p>
+                  <p className="text-3xl font-bold text-red-600">{stats.pending_disputes}</p>
                 </div>
                 <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
                   <AlertCircle className="w-6 h-6 text-red-600" />
@@ -155,44 +262,86 @@ function AdminDashboard() {
         )}
 
         {/* Tabs */}
-        <Tabs defaultValue="users" className="w-full">
+        <Tabs defaultValue="transactions" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
-            <TabsTrigger value="transactions" data-testid="tab-transactions">Transactions</TabsTrigger>
-            <TabsTrigger value="disputes" data-testid="tab-disputes">Disputes</TabsTrigger>
+            <TabsTrigger value="transactions">Transactions</TabsTrigger>
+            <TabsTrigger value="users">Users</TabsTrigger>
+            <TabsTrigger value="disputes">Disputes</TabsTrigger>
           </TabsList>
 
-          {/* Users Tab */}
-          <TabsContent value="users">
-            <Card className="p-6">
-              <h2 className="text-xl font-semibold text-slate-900 mb-4">All Users</h2>
+          {/* Transactions Tab */}
+          <TabsContent value="transactions" className="mt-6">
+            <Card className="overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left border-b border-slate-200">
-                      <th className="pb-3 font-medium text-slate-600">Name</th>
-                      <th className="pb-3 font-medium text-slate-600">Email</th>
-                      <th className="pb-3 font-medium text-slate-600">Role</th>
-                      <th className="pb-3 font-medium text-slate-600">Admin</th>
-                      <th className="pb-3 font-medium text-slate-600">Created</th>
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">ID / Code</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Buyer</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Seller</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Amount</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Delivery</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Status</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map((usr) => (
-                      <tr key={usr.user_id} className="border-b border-slate-100" data-testid={`user-row-${usr.user_id}`}>
-                        <td className="py-3">{usr.name}</td>
-                        <td className="py-3">{usr.email}</td>
-                        <td className="py-3 capitalize">{usr.role}</td>
-                        <td className="py-3">
-                          <span className="inline-block">
-                            {usr.is_admin ? (
-                              <Badge className="bg-purple-100 text-purple-800">Admin</Badge>
-                            ) : (
-                              <Badge className="bg-slate-100 text-slate-600">User</Badge>
-                            )}
-                          </span>
+                    {transactions.slice(0, 20).map((t) => (
+                      <tr key={t.transaction_id} className="border-b hover:bg-slate-50">
+                        <td className="p-4">
+                          <p className="font-mono text-sm font-medium">{t.share_code || t.transaction_id?.slice(0, 8)}</p>
                         </td>
-                        <td className="py-3 text-slate-500">{new Date(usr.created_at).toLocaleDateString()}</td>
+                        <td className="p-4">
+                          <p className="text-sm">{t.buyer_name}</p>
+                          <p className="text-xs text-slate-500">{t.buyer_email}</p>
+                        </td>
+                        <td className="p-4">
+                          <p className="text-sm">{t.seller_name}</p>
+                          <p className="text-xs text-slate-500">{t.seller_email}</p>
+                        </td>
+                        <td className="p-4 font-mono">R {t.item_price?.toFixed(2)}</td>
+                        <td className="p-4">
+                          <Badge variant="outline" className="text-xs">
+                            {t.delivery_method || 'N/A'}
+                          </Badge>
+                        </td>
+                        <td className="p-4">
+                          <Badge className={getStatusBadge(t.payment_status)}>{t.payment_status}</Badge>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex gap-1 flex-wrap">
+                            {t.payment_status === 'Paid' && (
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                className="text-green-600 border-green-200 hover:bg-green-50"
+                                onClick={() => setReleaseModal({ open: true, transaction: t, notes: '' })}
+                              >
+                                <DollarSign className="w-3 h-3 mr-1" />
+                                Release
+                              </Button>
+                            )}
+                            {['Paid', 'Ready for Payment'].includes(t.payment_status) && (
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                className="text-red-600 border-red-200 hover:bg-red-50"
+                                onClick={() => setRefundModal({ open: true, transaction: t, reason: '' })}
+                              >
+                                <RefreshCw className="w-3 h-3 mr-1" />
+                                Refund
+                              </Button>
+                            )}
+                            <Button 
+                              size="sm" 
+                              variant="ghost"
+                              onClick={() => setNotesModal({ open: true, transaction: t, notes: '' })}
+                            >
+                              <MessageSquare className="w-3 h-3 mr-1" />
+                              Note
+                            </Button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -201,44 +350,61 @@ function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Transactions Tab */}
-          <TabsContent value="transactions">
-            <Card className="p-6">
-              <h2 className="text-xl font-semibold text-slate-900 mb-4">All Transactions</h2>
+          {/* Users Tab */}
+          <TabsContent value="users" className="mt-6">
+            <Card className="overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left border-b border-slate-200">
-                      <th className="pb-3 font-medium text-slate-600">ID</th>
-                      <th className="pb-3 font-medium text-slate-600">Buyer</th>
-                      <th className="pb-3 font-medium text-slate-600">Seller</th>
-                      <th className="pb-3 font-medium text-slate-600">Item</th>
-                      <th className="pb-3 font-medium text-slate-600">Amount (R)</th>
-                      <th className="pb-3 font-medium text-slate-600">Status</th>
-                      <th className="pb-3 font-medium text-slate-600">Date</th>
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Name</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Email</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Trades</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Trust Score</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Verified</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {transactions.map((txn) => (
-                      <tr
-                        key={txn.transaction_id}
-                        onClick={() => navigate(`/transactions/${txn.transaction_id}`)}
-                        className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
-                        data-testid={`admin-transaction-row-${txn.transaction_id}`}
-                      >
-                        <td className="py-3 font-mono text-xs">{txn.transaction_id.substring(0, 12)}...</td>
-                        <td className="py-3">{txn.buyer_name}</td>
-                        <td className="py-3">{txn.seller_name}</td>
-                        <td className="py-3 max-w-xs truncate">{txn.item_description}</td>
-                        <td className="py-3 font-mono">R {txn.total.toFixed(2)}</td>
-                        <td className="py-3">
-                          <span className="inline-block">
-                            <Badge className={getStatusBadge(txn.payment_status)}>
-                              {txn.payment_status}
-                            </Badge>
-                          </span>
+                    {users.slice(0, 20).map((u) => (
+                      <tr key={u.user_id} className="border-b hover:bg-slate-50">
+                        <td className="p-4">
+                          <p className="font-medium">{u.name}</p>
+                          {u.is_admin && <Badge className="bg-purple-100 text-purple-800 text-xs mt-1">Admin</Badge>}
                         </td>
-                        <td className="py-3 text-slate-500">{new Date(txn.created_at).toLocaleDateString()}</td>
+                        <td className="p-4 text-sm">{u.email}</td>
+                        <td className="p-4 text-sm">{u.total_trades || 0}</td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 bg-slate-200 rounded-full h-2">
+                              <div 
+                                className="bg-primary h-2 rounded-full" 
+                                style={{ width: `${u.trust_score || 50}%` }}
+                              />
+                            </div>
+                            <span className="text-sm">{u.trust_score || 50}</span>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          {u.verified ? (
+                            <Badge className="bg-green-100 text-green-800">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Verified
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-yellow-100 text-yellow-800">Pending</Badge>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => setVerifyModal({ open: true, user: u, status: u.verified ? 'verified' : 'pending', notes: '' })}
+                          >
+                            <ShieldCheck className="w-3 h-3 mr-1" />
+                            Verify ID
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -248,62 +414,263 @@ function AdminDashboard() {
           </TabsContent>
 
           {/* Disputes Tab */}
-          <TabsContent value="disputes">
-            <Card className="p-6">
-              <h2 className="text-xl font-semibold text-slate-900 mb-4">All Disputes</h2>
-              {disputes.length === 0 ? (
-                <div className="text-center py-12">
-                  <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">No disputes yet</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {disputes.map((dispute) => (
-                    <Card key={dispute.dispute_id} className="p-5 bg-slate-50 border-slate-200" data-testid={`admin-dispute-${dispute.dispute_id}`}>
-                      <div className="grid md:grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <p className="text-xs text-slate-500 mb-1">Dispute ID</p>
-                          <p className="font-mono text-sm text-slate-700">{dispute.dispute_id}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-500 mb-1">Transaction ID</p>
-                          <p className="font-mono text-sm text-slate-700">{dispute.transaction_id}</p>
-                        </div>
-                      </div>
-                      <div className="mb-4">
-                        <p className="text-xs text-slate-500 mb-1">Description</p>
-                        <p className="text-sm text-slate-700 whitespace-pre-wrap">{dispute.description}</p>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div className="text-xs text-slate-500">
-                          Created on {new Date(dispute.created_at).toLocaleString()}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <Badge className={getStatusBadge(dispute.status)}>
-                            {dispute.status}
-                          </Badge>
-                          {dispute.status === 'Pending' && (
-                            <Select
-                              onValueChange={(value) => handleUpdateDisputeStatus(dispute.dispute_id, value)}
-                            >
-                              <SelectTrigger className="w-40" data-testid={`update-dispute-status-${dispute.dispute_id}`}>
-                                <SelectValue placeholder="Update Status" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="Resolved">Mark as Resolved</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
+          <TabsContent value="disputes" className="mt-6">
+            <Card className="overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50 border-b">
+                    <tr>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Dispute ID</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Transaction</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Type</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Raised By</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Status</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-600">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {disputes.map((d) => (
+                      <tr key={d.dispute_id} className="border-b hover:bg-slate-50">
+                        <td className="p-4 font-mono text-sm">{d.dispute_id?.slice(0, 8)}</td>
+                        <td className="p-4 font-mono text-sm">{d.transaction_id?.slice(0, 8)}</td>
+                        <td className="p-4 text-sm">{d.dispute_type}</td>
+                        <td className="p-4 text-sm">{d.raised_by_name || 'Unknown'}</td>
+                        <td className="p-4">
+                          <Badge className={getStatusBadge(d.status)}>{d.status}</Badge>
+                        </td>
+                        <td className="p-4">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => setDisputeModal({ 
+                              open: true, 
+                              dispute: d, 
+                              status: d.status?.toLowerCase().replace(' ', '_') || 'open',
+                              resolution: '',
+                              notes: d.admin_notes || ''
+                            })}
+                          >
+                            <AlertCircle className="w-3 h-3 mr-1" />
+                            Update
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                    {disputes.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-slate-500">No disputes found</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* ============ MODALS ============ */}
+
+      {/* Refund Modal */}
+      <Dialog open={refundModal.open} onOpenChange={(open) => setRefundModal({ ...refundModal, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Refund Transaction</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-slate-600">
+              Refund transaction <strong>{refundModal.transaction?.share_code}</strong> for{' '}
+              <strong>R {refundModal.transaction?.total?.toFixed(2)}</strong>?
+            </p>
+            <div>
+              <label className="text-sm font-medium">Reason (optional)</label>
+              <Textarea
+                value={refundModal.reason || ''}
+                onChange={(e) => setRefundModal({ ...refundModal, reason: e.target.value })}
+                placeholder="Enter refund reason..."
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              The buyer ({refundModal.transaction?.buyer_email}) will be notified via email.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRefundModal({ open: false, transaction: null })}>
+              Cancel
+            </Button>
+            <Button onClick={handleRefund} disabled={actionLoading} className="bg-red-600 hover:bg-red-700">
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm Refund'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Release Funds Modal */}
+      <Dialog open={releaseModal.open} onOpenChange={(open) => setReleaseModal({ ...releaseModal, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Release Funds</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-slate-600">
+              Release funds for transaction <strong>{releaseModal.transaction?.share_code}</strong>?
+            </p>
+            <div className="p-4 bg-green-50 rounded-lg">
+              <p className="text-sm text-green-800">
+                <strong>R {releaseModal.transaction?.item_price?.toFixed(2)}</strong> will be released to{' '}
+                <strong>{releaseModal.transaction?.seller_name}</strong>
+              </p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Admin Notes (optional)</label>
+              <Textarea
+                value={releaseModal.notes || ''}
+                onChange={(e) => setReleaseModal({ ...releaseModal, notes: e.target.value })}
+                placeholder="Add notes..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReleaseModal({ open: false, transaction: null })}>
+              Cancel
+            </Button>
+            <Button onClick={handleReleaseFunds} disabled={actionLoading} className="bg-green-600 hover:bg-green-700">
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Release Funds'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Notes Modal */}
+      <Dialog open={notesModal.open} onOpenChange={(open) => setNotesModal({ ...notesModal, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Admin Note</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-slate-600">
+              Add a note to transaction <strong>{notesModal.transaction?.share_code}</strong>
+            </p>
+            <Textarea
+              value={notesModal.notes}
+              onChange={(e) => setNotesModal({ ...notesModal, notes: e.target.value })}
+              placeholder="Enter your note..."
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNotesModal({ open: false, transaction: null, notes: '' })}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddNotes} disabled={actionLoading || !notesModal.notes.trim()}>
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Note'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Verify User Modal */}
+      <Dialog open={verifyModal.open} onOpenChange={(open) => setVerifyModal({ ...verifyModal, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update ID Verification</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-slate-600">
+              Update verification for <strong>{verifyModal.user?.name}</strong> ({verifyModal.user?.email})
+            </p>
+            <div>
+              <label className="text-sm font-medium">Verification Status</label>
+              <Select value={verifyModal.status} onValueChange={(val) => setVerifyModal({ ...verifyModal, status: val })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="verified">Verified</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Notes (optional)</label>
+              <Textarea
+                value={verifyModal.notes}
+                onChange={(e) => setVerifyModal({ ...verifyModal, notes: e.target.value })}
+                placeholder="Add verification notes..."
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              The user will be notified via email about this status change.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVerifyModal({ open: false, user: null, status: 'verified', notes: '' })}>
+              Cancel
+            </Button>
+            <Button onClick={handleVerifyUser} disabled={actionLoading}>
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Status'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update Dispute Modal */}
+      <Dialog open={disputeModal.open} onOpenChange={(open) => setDisputeModal({ ...disputeModal, open })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Dispute Status</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-slate-600">
+              Update dispute <strong>{disputeModal.dispute?.dispute_id?.slice(0, 8)}</strong>
+            </p>
+            <div>
+              <label className="text-sm font-medium">Dispute Status</label>
+              <Select value={disputeModal.status} onValueChange={(val) => setDisputeModal({ ...disputeModal, status: val })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">Open</SelectItem>
+                  <SelectItem value="under_review">Under Review</SelectItem>
+                  <SelectItem value="escalated">Escalated</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {disputeModal.status === 'resolved' && (
+              <div>
+                <label className="text-sm font-medium">Resolution</label>
+                <Textarea
+                  value={disputeModal.resolution}
+                  onChange={(e) => setDisputeModal({ ...disputeModal, resolution: e.target.value })}
+                  placeholder="Describe the resolution..."
+                />
+              </div>
+            )}
+            <div>
+              <label className="text-sm font-medium">Admin Notes</label>
+              <Textarea
+                value={disputeModal.notes}
+                onChange={(e) => setDisputeModal({ ...disputeModal, notes: e.target.value })}
+                placeholder="Add notes..."
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              Both buyer and seller will be notified via email.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDisputeModal({ open: false, dispute: null, status: '', resolution: '', notes: '' })}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateDispute} disabled={actionLoading || !disputeModal.status}>
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Dispute'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

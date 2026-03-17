@@ -72,9 +72,9 @@ class User(BaseModel):
     wallet_balance: float = 0.0
     pending_balance: float = 0.0  # Funds in escrow awaiting release
     total_earned: float = 0.0
-    banking_details: Optional[BankingDetails] = None
+    banking_details: Optional[dict] = None  # Changed from BankingDetails to dict for flexibility
     banking_details_verified: bool = False
-    created_at: str
+    created_at: Optional[str] = None  # Made optional for existing users
 
 class UserSession(BaseModel):
     model_config = ConfigDict(extra="ignore")

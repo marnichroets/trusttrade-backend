@@ -35,6 +35,10 @@ function AppRouter() {
       <Route path="/t/:shareCode" element={<ShareTransaction />} />
       <Route path="/payment-success" element={<PaymentSuccess />} />
       <Route path="/payment-cancelled" element={<PaymentCancelled />} />
+      {/* TradeSafe redirect URLs */}
+      <Route path="/transaction/success" element={<PaymentSuccess />} />
+      <Route path="/transaction/failed" element={<PaymentCancelled />} />
+      <Route path="/transaction/cancelled" element={<PaymentCancelled />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/transactions/new" element={<ProtectedRoute><NewTransaction /></ProtectedRoute>} />
       <Route path="/transactions" element={<ProtectedRoute><TransactionsList /></ProtectedRoute>} />

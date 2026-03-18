@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { Textarea } from '../components/ui/textarea';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, ExternalLink, Shield, Loader2 } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -25,6 +25,12 @@ function TransactionDetail() {
   const [review, setReview] = useState('');
   const [submittingRating, setSubmittingRating] = useState(false);
   const [copied, setCopied] = useState(false);
+  // TradeSafe states
+  const [creatingEscrow, setCreatingEscrow] = useState(false);
+  const [loadingPaymentLink, setLoadingPaymentLink] = useState(false);
+  const [paymentInfo, setPaymentInfo] = useState(null);
+  const [startingDelivery, setStartingDelivery] = useState(false);
+  const [acceptingDelivery, setAcceptingDelivery] = useState(false);
   const navigate = useNavigate();
   const { transactionId } = useParams();
 
@@ -117,6 +123,107 @@ function TransactionDetail() {
     }
   };
 
+  // TradeSafe: Create escrow transaction
+  const handleCreateTradeSafeEscrow = async () => {
+    if (!window.confirm('This will create a secure escrow transaction with TradeSafe. The buyer will then need to make payment. Proceed?')) {
+      return;
+    }
+
+    setCreatingEscrow(true);
+    try {
+      const response = await axios.post(
+        `${API}/tradesafe/create-transaction`,
+        { 
+          transaction_id: transactionId,
+          fee_allocation: transaction.fee_paid_by || 'split'
+        },
+        { withCredentials: true }
+      );
+
+      toast.success('TradeSafe escrow created! Buyer can now make payment.');
+      fetchData();
+    } catch (error) {
+      console.error('Failed to create TradeSafe escrow:', error);
+      toast.error(error.response?.data?.detail || 'Failed to create escrow');
+    } finally {
+      setCreatingEscrow(false);
+    }
+  };
+
+  // TradeSafe: Get payment link for buyer
+  const handleGetPaymentLink = async () => {
+    setLoadingPaymentLink(true);
+    try {
+      const response = await axios.get(
+        `${API}/tradesafe/payment-url/${transactionId}`,
+        { withCredentials: true }
+      );
+
+      setPaymentInfo(response.data);
+      
+      if (response.data.payment_link) {
+        // Open payment link in new tab
+        window.open(response.data.payment_link, '_blank');
+        toast.success('Payment page opened. Complete payment via EFT, Card, or Ozow.');
+      } else {
+        toast.error('Payment link not available yet');
+      }
+    } catch (error) {
+      console.error('Failed to get payment link:', error);
+      toast.error(error.response?.data?.detail || 'Failed to get payment link');
+    } finally {
+      setLoadingPaymentLink(false);
+    }
+  };
+
+  // TradeSafe: Seller starts delivery
+  const handleStartDelivery = async () => {
+    if (!window.confirm('Mark this item as dispatched/delivered? The buyer will be notified.')) {
+      return;
+    }
+
+    setStartingDelivery(true);
+    try {
+      await axios.post(
+        `${API}/tradesafe/start-delivery/${transactionId}`,
+        {},
+        { withCredentials: true }
+      );
+
+      toast.success('Delivery started! Buyer has been notified.');
+      fetchData();
+    } catch (error) {
+      console.error('Failed to start delivery:', error);
+      toast.error(error.response?.data?.detail || 'Failed to start delivery');
+    } finally {
+      setStartingDelivery(false);
+    }
+  };
+
+  // TradeSafe: Buyer accepts delivery
+  const handleAcceptDelivery = async () => {
+    if (!window.confirm('Confirm you have received the item? This will release funds to the seller. This action cannot be undone.')) {
+      return;
+    }
+
+    setAcceptingDelivery(true);
+    try {
+      const response = await axios.post(
+        `${API}/tradesafe/accept-delivery/${transactionId}`,
+        {},
+        { withCredentials: true }
+      );
+
+      toast.success(`Delivery confirmed! R${response.data.net_amount?.toFixed(2) || ''} released to seller.`);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to accept delivery:', error);
+      toast.error(error.response?.data?.detail || 'Failed to accept delivery');
+    } finally {
+      setAcceptingDelivery(false);
+    }
+  };
+
   const handleSubmitRating = async () => {
     if (rating === 0) {
       toast.error('Please select a rating');
@@ -174,10 +281,29 @@ function TransactionDetail() {
       'Pending Seller Confirmation': 'bg-orange-100 text-orange-800',
       'Pending Buyer Confirmation': 'bg-orange-100 text-orange-800',
       'Ready for Payment': 'bg-blue-100 text-blue-800',
+      'Awaiting Payment': 'bg-blue-100 text-blue-800',
+      'Funds Secured': 'bg-emerald-100 text-emerald-800',
+      'Delivery in Progress': 'bg-purple-100 text-purple-800',
+      'Awaiting Buyer Confirmation': 'bg-amber-100 text-amber-800',
       'Paid': 'bg-green-100 text-green-800',
       'Released': 'bg-green-100 text-green-800'
     };
     return variants[status] || 'bg-slate-100 text-slate-600';
+  };
+
+  const getTradeSafeStateBadge = (state) => {
+    const variants = {
+      'CREATED': { bg: 'bg-slate-100', text: 'text-slate-700', label: 'Created' },
+      'PENDING': { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Pending' },
+      'FUNDS_RECEIVED': { bg: 'bg-emerald-100', text: 'text-emerald-800', label: 'Funds Secured' },
+      'INITIATED': { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Delivery Started' },
+      'SENT': { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Item Sent' },
+      'DELIVERED': { bg: 'bg-amber-100', text: 'text-amber-800', label: 'Awaiting Confirmation' },
+      'FUNDS_RELEASED': { bg: 'bg-green-100', text: 'text-green-800', label: 'Funds Released' },
+      'DISPUTED': { bg: 'bg-red-100', text: 'text-red-800', label: 'Disputed' },
+      'CANCELLED': { bg: 'bg-red-100', text: 'text-red-800', label: 'Cancelled' }
+    };
+    return variants[state] || { bg: 'bg-slate-100', text: 'text-slate-600', label: state };
   };
 
   const getReleaseStatusBadge = (status) => {
@@ -202,8 +328,25 @@ function TransactionDetail() {
 
   const isBuyer = user?.user_id === transaction.buyer_user_id || user?.email === transaction.buyer_email;
   const isSeller = user?.user_id === transaction.seller_user_id || user?.email === transaction.seller_email;
-  // Buyer can only confirm delivery AFTER payment has been made (status = "Paid")
-  const canConfirmDelivery = isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
+  
+  // TradeSafe flow conditions
+  const hasTradeSafe = !!transaction.tradesafe_id;
+  const tradesafeState = transaction.tradesafe_state;
+  
+  // Can create TradeSafe escrow: seller confirmed, no existing TradeSafe link
+  const canCreateEscrow = transaction.seller_confirmed && !hasTradeSafe && transaction.item_price >= 500;
+  
+  // Can make payment: TradeSafe created, awaiting payment
+  const canMakePayment = hasTradeSafe && isBuyer && ['CREATED', 'PENDING'].includes(tradesafeState);
+  
+  // Can start delivery: funds received, seller
+  const canStartDelivery = hasTradeSafe && isSeller && tradesafeState === 'FUNDS_RECEIVED';
+  
+  // Can accept delivery: delivery started, buyer
+  const canAcceptDeliveryTS = hasTradeSafe && isBuyer && ['INITIATED', 'SENT', 'DELIVERED'].includes(tradesafeState);
+  
+  // Legacy flow (without TradeSafe)
+  const canConfirmDelivery = !hasTradeSafe && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
   const canSellerConfirm = isSeller && !transaction.seller_confirmed;
   
   // Helper to display who pays the fee
@@ -310,8 +453,24 @@ function TransactionDetail() {
             </div>
           </div>
           
+          {/* TradeSafe Status */}
+          {hasTradeSafe && (
+            <div className="mt-4 pt-4 border-t border-slate-200">
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="w-4 h-4 text-emerald-600" />
+                <span className="text-sm font-medium text-slate-700">TradeSafe Escrow</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <Badge className={`${getTradeSafeStateBadge(tradesafeState).bg} ${getTradeSafeStateBadge(tradesafeState).text}`}>
+                  {getTradeSafeStateBadge(tradesafeState).label}
+                </Badge>
+                <span className="text-xs text-slate-500">ID: {transaction.tradesafe_id?.slice(0, 8)}...</span>
+              </div>
+            </div>
+          )}
+          
           {/* Release Schedule Info */}
-          {(transaction.payment_status === 'Paid' || transaction.release_status === 'Pending Release') && (
+          {(transaction.payment_status === 'Paid' || transaction.release_status === 'Pending Release' || tradesafeState === 'FUNDS_RELEASED') && (
             <div className="mt-4 pt-4 border-t border-slate-200 flex items-center gap-2 text-sm text-slate-500">
               <div className="w-4 h-4 flex items-center justify-center">⏰</div>
               <span>Funds are released in two batches daily: <strong className="text-slate-700">10:00</strong> and <strong className="text-slate-700">15:00</strong></span>
@@ -331,8 +490,156 @@ function TransactionDetail() {
           </Card>
         )}
 
-        {/* Status-specific guidance cards */}
-        {transaction.seller_confirmed && transaction.payment_status === 'Ready for Payment' && (
+        {/* TradeSafe: Create Escrow Card */}
+        {canCreateEscrow && (
+          <Card className="p-6 bg-emerald-50 border-emerald-200">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-emerald-100 rounded-full">
+                <Shield className="w-6 h-6 text-emerald-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-emerald-900 mb-2">Create Secure Escrow</h3>
+                <p className="text-sm text-emerald-800 mb-4">
+                  Both parties have confirmed. Create a TradeSafe escrow to secure this transaction. The buyer will then be able to make payment via EFT, Card, or Ozow.
+                </p>
+                <Button 
+                  onClick={handleCreateTradeSafeEscrow} 
+                  disabled={creatingEscrow}
+                  className="bg-emerald-600 hover:bg-emerald-700"
+                  data-testid="create-escrow-btn"
+                >
+                  {creatingEscrow ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating Escrow...
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-4 h-4 mr-2" />
+                      Create TradeSafe Escrow
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* TradeSafe: Make Payment Card (Buyer) */}
+        {canMakePayment && (
+          <Card className="p-6 bg-blue-50 border-blue-200">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-blue-100 rounded-full">
+                <CreditCard className="w-6 h-6 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-blue-900 mb-2">Make Payment</h3>
+                <p className="text-sm text-blue-800 mb-4">
+                  Escrow is ready. Click below to pay securely via TradeSafe. Choose from EFT, Card, or Ozow.
+                </p>
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Badge className="bg-white border border-blue-200">EFT</Badge>
+                  <Badge className="bg-white border border-blue-200">Card</Badge>
+                  <Badge className="bg-white border border-blue-200">Ozow</Badge>
+                </div>
+                <Button 
+                  onClick={handleGetPaymentLink} 
+                  disabled={loadingPaymentLink}
+                  className="bg-blue-600 hover:bg-blue-700"
+                  data-testid="make-payment-btn"
+                >
+                  {loadingPaymentLink ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      Pay Now (R {transaction.total?.toFixed(2)})
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* TradeSafe: Funds Received - Seller Start Delivery */}
+        {canStartDelivery && (
+          <Card className="p-6 bg-purple-50 border-purple-200">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-purple-100 rounded-full">
+                <Truck className="w-6 h-6 text-purple-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-purple-900 mb-2">Funds Secured - Deliver Item</h3>
+                <p className="text-sm text-purple-800 mb-4">
+                  Payment has been received and is held securely in escrow. Please deliver the item to the buyer and mark it as dispatched.
+                </p>
+                <Button 
+                  onClick={handleStartDelivery} 
+                  disabled={startingDelivery}
+                  className="bg-purple-600 hover:bg-purple-700"
+                  data-testid="start-delivery-btn"
+                >
+                  {startingDelivery ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Truck className="w-4 h-4 mr-2" />
+                      Mark as Dispatched
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* TradeSafe: Buyer Accept Delivery */}
+        {canAcceptDeliveryTS && (
+          <Card className="p-6 bg-green-50 border-green-200">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-green-100 rounded-full">
+                <CheckCircle2 className="w-6 h-6 text-green-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-green-900 mb-2">Confirm Receipt</h3>
+                <p className="text-sm text-green-800 mb-4">
+                  The seller has dispatched the item. Once you receive it, confirm delivery to release funds to the seller.
+                </p>
+                <p className="text-xs text-green-700 mb-4 p-2 bg-green-100 rounded">
+                  <strong>Important:</strong> Only confirm if you have received the item and are satisfied. This action cannot be undone.
+                </p>
+                <Button 
+                  onClick={handleAcceptDelivery} 
+                  disabled={acceptingDelivery}
+                  className="bg-green-600 hover:bg-green-700"
+                  data-testid="accept-delivery-btn"
+                >
+                  {acceptingDelivery ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Confirm Receipt & Release Funds
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Legacy: Status-specific guidance cards (without TradeSafe) */}
+        {!hasTradeSafe && transaction.seller_confirmed && transaction.payment_status === 'Ready for Payment' && (
           <Card className="p-6 bg-blue-50 border-blue-200">
             <h3 className="text-lg font-semibold text-blue-900 mb-2">Awaiting Payment</h3>
             {isBuyer ? (
@@ -347,7 +654,7 @@ function TransactionDetail() {
           </Card>
         )}
 
-        {transaction.payment_status === 'Paid' && !transaction.delivery_confirmed && (
+        {!hasTradeSafe && transaction.payment_status === 'Paid' && !transaction.delivery_confirmed && (
           <Card className="p-6 bg-amber-50 border-amber-200">
             <h3 className="text-lg font-semibold text-amber-900 mb-2">Payment Received - Awaiting Delivery</h3>
             {isSeller ? (

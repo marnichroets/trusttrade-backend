@@ -23,6 +23,21 @@ from email_service import (
     send_dispute_resolved_email,
     send_refund_email
 )
+from tradesafe_service import (
+    get_tradesafe_token,
+    create_tradesafe_transaction,
+    get_tradesafe_transaction,
+    get_payment_link,
+    start_delivery,
+    accept_delivery,
+    get_transaction_by_reference,
+    validate_minimum_transaction,
+    calculate_fees,
+    map_tradesafe_state_to_status,
+    TransactionState,
+    MINIMUM_TRANSACTION_AMOUNT as TRADESAFE_MINIMUM,
+    ALLOWED_PAYMENT_METHODS
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -38,8 +53,8 @@ app = FastAPI()
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-# Platform Constants
-MINIMUM_TRANSACTION_AMOUNT = 150.0  # R150 minimum
+# Platform Constants - Updated to R500 minimum for TradeSafe
+MINIMUM_TRANSACTION_AMOUNT = 500.0  # R500 minimum for TradeSafe
 PAYOUT_THRESHOLD = 500.0  # R500 payout threshold
 PLATFORM_FEE_PERCENT = 2.0  # 2% platform fee
 
@@ -125,6 +140,14 @@ class Transaction(BaseModel):
     risk_level: Optional[str] = None  # "low", "medium", "high"
     risk_flags: List[str] = []
     timeline: List[dict] = []
+    # TradeSafe Integration Fields
+    tradesafe_id: Optional[str] = None  # TradeSafe transaction ID
+    tradesafe_allocation_id: Optional[str] = None  # TradeSafe allocation ID
+    tradesafe_state: Optional[str] = None  # Current TradeSafe state
+    funds_received_at: Optional[str] = None  # When funds were secured
+    delivery_started_at: Optional[str] = None  # When seller started delivery
+    delivery_confirmed_at: Optional[str] = None  # When buyer confirmed delivery
+    released_at: Optional[str] = None  # When funds were released
     created_at: str
 
 class TransactionCreate(BaseModel):
@@ -2969,8 +2992,529 @@ async def get_platform_settings():
         "payout_threshold": PAYOUT_THRESHOLD,
         "platform_fee_percent": PLATFORM_FEE_PERCENT,
         "currency": "ZAR",
-        "currency_symbol": "R"
+        "currency_symbol": "R",
+        "payment_methods": ALLOWED_PAYMENT_METHODS
     }
+
+
+# ============ TRADESAFE PAYMENT GATEWAY ENDPOINTS ============
+
+class TradeSafeTransactionCreate(BaseModel):
+    """Request model for creating TradeSafe transaction"""
+    transaction_id: str  # TrustTrade internal transaction ID
+    fee_allocation: str = "split"  # buyer, seller, or split
+
+
+class TradeSafeDeliveryAction(BaseModel):
+    """Request model for delivery actions"""
+    transaction_id: str
+
+
+@api_router.post("/tradesafe/create-transaction")
+async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCreate):
+    """
+    Create TradeSafe escrow transaction after both parties confirm.
+    This links the TrustTrade transaction to TradeSafe payment system.
+    """
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Get the TrustTrade transaction
+    transaction = await db.transactions.find_one(
+        {"transaction_id": data.transaction_id},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Verify user is part of this transaction
+    is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
+    is_seller = transaction.get("seller_email") == user.email or transaction.get("seller_user_id") == user.user_id
+    
+    if not is_buyer and not is_seller and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Check if already linked to TradeSafe
+    if transaction.get("tradesafe_id"):
+        # Return existing TradeSafe info
+        return {
+            "tradesafe_id": transaction["tradesafe_id"],
+            "status": "already_created",
+            "message": "Transaction already linked to TradeSafe"
+        }
+    
+    # Validate minimum amount (R500)
+    if transaction["item_price"] < MINIMUM_TRANSACTION_AMOUNT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Minimum transaction amount is R{MINIMUM_TRANSACTION_AMOUNT:.0f}"
+        )
+    
+    # Create TradeSafe transaction
+    result = await create_tradesafe_transaction(
+        internal_reference=data.transaction_id,
+        title=f"TrustTrade - {transaction['item_description'][:50]}",
+        description=transaction.get("item_description", "Item/Service"),
+        amount=transaction["item_price"],
+        buyer_name=transaction["buyer_name"],
+        buyer_email=transaction["buyer_email"],
+        seller_name=transaction["seller_name"],
+        seller_email=transaction["seller_email"],
+        fee_allocation=data.fee_allocation
+    )
+    
+    if not result or "error" in result:
+        error_msg = result.get("error", "Failed to create TradeSafe transaction") if result else "Failed to create TradeSafe transaction"
+        raise HTTPException(status_code=500, detail=error_msg)
+    
+    # Store TradeSafe ID and allocation ID in our transaction
+    tradesafe_id = result.get("id")
+    allocation_id = result.get("allocations", [{}])[0].get("id") if result.get("allocations") else None
+    
+    # Update timeline
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": "TradeSafe Escrow Created",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "by": "TrustTrade System",
+        "details": f"TradeSafe ID: {tradesafe_id}"
+    })
+    
+    await db.transactions.update_one(
+        {"transaction_id": data.transaction_id},
+        {"$set": {
+            "tradesafe_id": tradesafe_id,
+            "tradesafe_allocation_id": allocation_id,
+            "tradesafe_state": result.get("state", "CREATED"),
+            "payment_status": "Awaiting Payment",
+            "timeline": timeline
+        }}
+    )
+    
+    return {
+        "tradesafe_id": tradesafe_id,
+        "allocation_id": allocation_id,
+        "state": result.get("state"),
+        "status": "created",
+        "message": "TradeSafe escrow created successfully"
+    }
+
+
+@api_router.get("/tradesafe/payment-url/{transaction_id}")
+async def get_tradesafe_payment_url(request: Request, transaction_id: str):
+    """
+    Get TradeSafe payment URL for a transaction.
+    Buyer uses this to make payment via EFT, Card, or Ozow.
+    """
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Get transaction
+    transaction = await db.transactions.find_one(
+        {"transaction_id": transaction_id},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    tradesafe_id = transaction.get("tradesafe_id")
+    if not tradesafe_id:
+        raise HTTPException(status_code=400, detail="Transaction not linked to TradeSafe. Create TradeSafe transaction first.")
+    
+    # Get payment link from TradeSafe
+    payment_info = await get_payment_link(tradesafe_id)
+    
+    if not payment_info:
+        raise HTTPException(status_code=500, detail="Failed to get payment link from TradeSafe")
+    
+    # Calculate fee breakdown for display
+    fee_breakdown = calculate_fees(
+        transaction["item_price"],
+        transaction.get("fee_paid_by", "split")
+    )
+    
+    return {
+        "transaction_id": transaction_id,
+        "tradesafe_id": tradesafe_id,
+        "payment_link": payment_info.get("payment_link"),
+        "payment_methods": payment_info.get("payment_methods", ALLOWED_PAYMENT_METHODS),
+        "bank_details": payment_info.get("bank_details"),
+        "state": payment_info.get("state"),
+        "fee_breakdown": fee_breakdown
+    }
+
+
+@api_router.get("/tradesafe/fee-breakdown")
+async def get_fee_breakdown(amount: float, fee_allocation: str = "split"):
+    """
+    Calculate and return fee breakdown for a transaction amount.
+    Public endpoint for displaying fees before transaction creation.
+    """
+    # Validate minimum amount
+    is_valid, error_msg = validate_minimum_transaction(amount)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
+    
+    return calculate_fees(amount, fee_allocation)
+
+
+@api_router.post("/tradesafe/start-delivery/{transaction_id}")
+async def start_tradesafe_delivery(request: Request, transaction_id: str):
+    """
+    Seller marks item as dispatched/delivered.
+    This initiates the delivery phase in TradeSafe.
+    """
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Get transaction
+    transaction = await db.transactions.find_one(
+        {"transaction_id": transaction_id},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Only seller can start delivery
+    is_seller = transaction.get("seller_email") == user.email or transaction.get("seller_user_id") == user.user_id
+    if not is_seller and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only seller can mark item as delivered")
+    
+    # Check TradeSafe state - must be FUNDS_RECEIVED
+    if transaction.get("tradesafe_state") != "FUNDS_RECEIVED":
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot start delivery - payment not yet received or already in progress"
+        )
+    
+    allocation_id = transaction.get("tradesafe_allocation_id")
+    if not allocation_id:
+        raise HTTPException(status_code=400, detail="Transaction not properly linked to TradeSafe")
+    
+    # Call TradeSafe to start delivery
+    result = await start_delivery(allocation_id)
+    
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to start delivery on TradeSafe")
+    
+    # Update timeline
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": "Delivery Started",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "by": user.name,
+        "details": "Seller marked item as dispatched"
+    })
+    
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "tradesafe_state": "INITIATED",
+            "payment_status": "Delivery in Progress",
+            "delivery_started_at": datetime.now(timezone.utc).isoformat(),
+            "timeline": timeline
+        }}
+    )
+    
+    # Send email to buyer
+    base_url = os.environ.get('FRONTEND_URL', 'https://trusttradesa.co.za')
+    await send_delivery_confirmed_email(
+        to_email=transaction["buyer_email"],
+        to_name=transaction["buyer_name"],
+        share_code=transaction.get("share_code", transaction_id),
+        item_description=transaction["item_description"],
+        role="buyer"
+    )
+    
+    return {
+        "status": "delivery_started",
+        "message": "Delivery marked as started. Buyer has been notified.",
+        "state": "INITIATED"
+    }
+
+
+@api_router.post("/tradesafe/accept-delivery/{transaction_id}")
+async def accept_tradesafe_delivery(request: Request, transaction_id: str):
+    """
+    Buyer confirms receipt of item/service.
+    This triggers fund release to seller.
+    """
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Get transaction
+    transaction = await db.transactions.find_one(
+        {"transaction_id": transaction_id},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Only buyer can accept delivery
+    is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
+    if not is_buyer and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only buyer can confirm delivery")
+    
+    # Check TradeSafe state - must be INITIATED
+    if transaction.get("tradesafe_state") not in ["INITIATED", "SENT", "DELIVERED"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot accept delivery - delivery not yet started or already completed"
+        )
+    
+    allocation_id = transaction.get("tradesafe_allocation_id")
+    if not allocation_id:
+        raise HTTPException(status_code=400, detail="Transaction not properly linked to TradeSafe")
+    
+    # Call TradeSafe to accept delivery
+    result = await accept_delivery(allocation_id)
+    
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to accept delivery on TradeSafe")
+    
+    # Calculate net amount after fees
+    net_amount = transaction["item_price"] * (1 - PLATFORM_FEE_PERCENT / 100)
+    
+    # Update timeline
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": "Delivery Accepted - Funds Released",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "by": user.name,
+        "details": f"Funds of R{net_amount:.2f} released to seller"
+    })
+    
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "tradesafe_state": "FUNDS_RELEASED",
+            "payment_status": "Released",
+            "release_status": "Released",
+            "delivery_confirmed": True,
+            "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "timeline": timeline
+        }}
+    )
+    
+    # Send email to seller
+    await send_funds_released_email(
+        to_email=transaction["seller_email"],
+        to_name=transaction["seller_name"],
+        share_code=transaction.get("share_code", transaction_id),
+        item_description=transaction["item_description"],
+        amount=transaction["item_price"],
+        net_amount=net_amount
+    )
+    
+    return {
+        "status": "funds_released",
+        "message": "Delivery confirmed. Funds have been released to seller.",
+        "state": "FUNDS_RELEASED",
+        "net_amount": net_amount
+    }
+
+
+@api_router.get("/tradesafe/transaction-status/{transaction_id}")
+async def get_tradesafe_status(request: Request, transaction_id: str):
+    """
+    Get current TradeSafe status for a transaction.
+    """
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Get transaction
+    transaction = await db.transactions.find_one(
+        {"transaction_id": transaction_id},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    tradesafe_id = transaction.get("tradesafe_id")
+    if not tradesafe_id:
+        return {
+            "linked": False,
+            "message": "Transaction not linked to TradeSafe"
+        }
+    
+    # Get latest status from TradeSafe
+    ts_transaction = await get_tradesafe_transaction(tradesafe_id)
+    
+    if ts_transaction:
+        current_state = ts_transaction.get("state")
+        
+        # Update local state if changed
+        if current_state != transaction.get("tradesafe_state"):
+            await db.transactions.update_one(
+                {"transaction_id": transaction_id},
+                {"$set": {
+                    "tradesafe_state": current_state,
+                    "payment_status": map_tradesafe_state_to_status(current_state)
+                }}
+            )
+        
+        return {
+            "linked": True,
+            "tradesafe_id": tradesafe_id,
+            "state": current_state,
+            "status": map_tradesafe_state_to_status(current_state),
+            "allocations": ts_transaction.get("allocations", [])
+        }
+    
+    return {
+        "linked": True,
+        "tradesafe_id": tradesafe_id,
+        "state": transaction.get("tradesafe_state"),
+        "status": transaction.get("payment_status"),
+        "error": "Could not fetch latest status from TradeSafe"
+    }
+
+
+@api_router.post("/tradesafe-webhook")
+async def handle_tradesafe_webhook(request: Request):
+    """
+    Webhook handler for TradeSafe transaction state changes.
+    TradeSafe sends callbacks when transaction state changes.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+    
+    logger.info(f"TradeSafe webhook received: {payload}")
+    
+    # Extract transaction info from webhook
+    tradesafe_id = payload.get("id") or payload.get("transaction", {}).get("id")
+    new_state = payload.get("state") or payload.get("transaction", {}).get("state")
+    reference = payload.get("reference") or payload.get("transaction", {}).get("reference")
+    
+    if not tradesafe_id and not reference:
+        logger.warning("Webhook missing transaction identifier")
+        return {"status": "ignored", "reason": "missing identifier"}
+    
+    # Find our transaction
+    query = {}
+    if tradesafe_id:
+        query["tradesafe_id"] = tradesafe_id
+    elif reference:
+        query["transaction_id"] = reference
+    
+    transaction = await db.transactions.find_one(query, {"_id": 0})
+    
+    if not transaction:
+        logger.warning(f"Webhook for unknown transaction: {tradesafe_id or reference}")
+        return {"status": "ignored", "reason": "transaction not found"}
+    
+    # Get previous state
+    prev_state = transaction.get("tradesafe_state")
+    
+    # Update transaction state
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": f"TradeSafe: {new_state}",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "by": "TradeSafe Webhook"
+    })
+    
+    update_data = {
+        "tradesafe_state": new_state,
+        "payment_status": map_tradesafe_state_to_status(new_state),
+        "timeline": timeline
+    }
+    
+    # Handle specific state changes
+    base_url = os.environ.get('FRONTEND_URL', 'https://trusttradesa.co.za')
+    
+    if new_state == TransactionState.FUNDS_RECEIVED:
+        # Funds secured - notify seller to deliver
+        update_data["funds_received_at"] = datetime.now(timezone.utc).isoformat()
+        
+        # Email seller
+        await send_payment_received_email(
+            to_email=transaction["seller_email"],
+            to_name=transaction["seller_name"],
+            share_code=transaction.get("share_code", transaction["transaction_id"]),
+            item_description=transaction["item_description"],
+            amount=transaction["item_price"],
+            role="seller"
+        )
+        
+        # Email buyer confirmation
+        await send_payment_received_email(
+            to_email=transaction["buyer_email"],
+            to_name=transaction["buyer_name"],
+            share_code=transaction.get("share_code", transaction["transaction_id"]),
+            item_description=transaction["item_description"],
+            amount=transaction["item_price"],
+            role="buyer"
+        )
+    
+    elif new_state == TransactionState.INITIATED:
+        # Delivery started - notify buyer
+        update_data["delivery_started_at"] = datetime.now(timezone.utc).isoformat()
+        
+        await send_delivery_confirmed_email(
+            to_email=transaction["buyer_email"],
+            to_name=transaction["buyer_name"],
+            share_code=transaction.get("share_code", transaction["transaction_id"]),
+            item_description=transaction["item_description"],
+            role="buyer"
+        )
+    
+    elif new_state == TransactionState.FUNDS_RELEASED:
+        # Funds released - notify seller
+        update_data["delivery_confirmed"] = True
+        update_data["release_status"] = "Released"
+        update_data["released_at"] = datetime.now(timezone.utc).isoformat()
+        
+        net_amount = transaction["item_price"] * (1 - PLATFORM_FEE_PERCENT / 100)
+        
+        await send_funds_released_email(
+            to_email=transaction["seller_email"],
+            to_name=transaction["seller_name"],
+            share_code=transaction.get("share_code", transaction["transaction_id"]),
+            item_description=transaction["item_description"],
+            amount=transaction["item_price"],
+            net_amount=net_amount
+        )
+    
+    elif new_state == TransactionState.DISPUTED:
+        # Dispute opened - notify both parties
+        await send_dispute_opened_email(
+            to_email=transaction["buyer_email"],
+            to_name=transaction["buyer_name"],
+            share_code=transaction.get("share_code", transaction["transaction_id"]),
+            dispute_type="TradeSafe Dispute",
+            description="A dispute has been opened on TradeSafe"
+        )
+        
+        await send_dispute_opened_email(
+            to_email=transaction["seller_email"],
+            to_name=transaction["seller_name"],
+            share_code=transaction.get("share_code", transaction["transaction_id"]),
+            dispute_type="TradeSafe Dispute",
+            description="A dispute has been opened on TradeSafe"
+        )
+    
+    # Update database
+    await db.transactions.update_one(
+        {"transaction_id": transaction["transaction_id"]},
+        {"$set": update_data}
+    )
+    
+    logger.info(f"Processed webhook: {transaction['transaction_id']} state {prev_state} -> {new_state}")
+    
+    return {"status": "processed", "transaction_id": transaction["transaction_id"], "new_state": new_state}
 
 
 # Include the router in the main app

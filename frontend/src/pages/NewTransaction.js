@@ -130,9 +130,9 @@ function NewTransaction() {
       return;
     }
 
-    // Minimum transaction amount R150
-    if (itemPrice < 150) {
-      toast.error('Minimum transaction amount is R150');
+    // Minimum transaction amount R500 for TradeSafe
+    if (itemPrice < 500) {
+      toast.error('Minimum transaction amount is R500');
       return;
     }
 
@@ -336,8 +336,8 @@ function NewTransaction() {
               </div>
               <div>
                 <Label htmlFor="item_price">Item Price (R) *</Label>
-                <Input id="item_price" name="item_price" type="number" step="0.01" min="150" value={formData.item_price} onChange={handleChange} placeholder="150.00" required data-testid="item-price-input" />
-                <p className="text-xs text-slate-500 mt-1">Minimum transaction amount: R150</p>
+                <Input id="item_price" name="item_price" type="number" step="0.01" min="500" value={formData.item_price} onChange={handleChange} placeholder="500.00" required data-testid="item-price-input" />
+                <p className="text-xs text-slate-500 mt-1">Minimum transaction amount: R500</p>
               </div>
               <div>
                 <Label htmlFor="fee_paid_by">Who Pays the Transaction Fee? *</Label>

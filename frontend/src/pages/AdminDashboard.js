@@ -634,7 +634,11 @@ function AdminDashboard() {
                         <td className="p-3">
                           <Badge className={`${getStatusBadge(d.status)} text-xs`}>{d.status}</Badge>
                         </td>
-                        <td className="p-3 text-xs max-w-[150px] truncate">{d.admin_notes || '-'}</td>
+                        <td className="p-3 text-xs max-w-[150px] truncate">
+                          {Array.isArray(d.admin_notes) 
+                            ? d.admin_notes.map(n => n.note || n).join(', ').slice(0, 50) 
+                            : (typeof d.admin_notes === 'object' ? JSON.stringify(d.admin_notes) : d.admin_notes) || '-'}
+                        </td>
                         <td className="p-3">
                           <div className="flex gap-1">
                             <Button 
@@ -711,10 +715,41 @@ function AdminDashboard() {
               {detailModal.type === 'dispute' && `Dispute Details - ${detailModal.data?.dispute_id?.slice(0,8)}`}
             </DialogTitle>
           </DialogHeader>
-          <div className="py-4">
-            <pre className="bg-slate-50 p-4 rounded-lg text-xs overflow-x-auto">
-              {JSON.stringify(detailModal.data, null, 2)}
-            </pre>
+          <div className="py-4 space-y-4">
+            {detailModal.data && Object.entries(detailModal.data).map(([key, value]) => (
+              <div key={key} className="border-b pb-2">
+                <p className="text-xs text-slate-500 font-medium">{key}</p>
+                <div className="text-sm">
+                  {value === null || value === undefined ? (
+                    <span className="text-slate-400">-</span>
+                  ) : Array.isArray(value) ? (
+                    value.length === 0 ? (
+                      <span className="text-slate-400">Empty</span>
+                    ) : (
+                      <div className="space-y-1">
+                        {value.map((item, i) => (
+                          <div key={i} className="bg-slate-50 p-2 rounded text-xs">
+                            {typeof item === 'object' ? (
+                              <pre className="whitespace-pre-wrap">{JSON.stringify(item, null, 2)}</pre>
+                            ) : (
+                              String(item)
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : typeof value === 'object' ? (
+                    <pre className="bg-slate-50 p-2 rounded text-xs whitespace-pre-wrap">{JSON.stringify(value, null, 2)}</pre>
+                  ) : typeof value === 'boolean' ? (
+                    <Badge className={value ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                      {value ? 'Yes' : 'No'}
+                    </Badge>
+                  ) : (
+                    String(value)
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </DialogContent>
       </Dialog>

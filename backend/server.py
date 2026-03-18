@@ -2862,8 +2862,7 @@ class TradeSafeDeliveryAction(BaseModel):
 @api_router.post("/tradesafe/create-transaction")
 async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCreate):
     """
-    Create TradeSafe escrow transaction after both parties confirm.
-    This links the TrustTrade transaction to TradeSafe payment system.
+    Create TrustTrade escrow transaction after both parties confirm.
     """
     user = await get_user_from_token(request)
     if not user:
@@ -2887,7 +2886,6 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     
     # Check if already linked to escrow
     if transaction.get("tradesafe_id"):
-        # Return existing escrow info
         return {
             "tradesafe_id": transaction["tradesafe_id"],
             "status": "already_created",
@@ -2901,7 +2899,34 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
             detail=f"Minimum transaction amount is R{MINIMUM_TRANSACTION_AMOUNT:.0f}"
         )
     
-    # Create escrow transaction
+    # Pre-flight checks - get user profiles for mobile numbers
+    buyer_user = await db.users.find_one({"email": transaction["buyer_email"]}, {"_id": 0})
+    seller_user = await db.users.find_one({"email": transaction["seller_email"]}, {"_id": 0})
+    
+    # Get mobile numbers from user profiles or transaction
+    buyer_mobile = None
+    seller_mobile = None
+    
+    if buyer_user:
+        buyer_mobile = buyer_user.get("phone") or buyer_user.get("mobile")
+    if seller_user:
+        seller_mobile = seller_user.get("phone") or seller_user.get("mobile")
+    
+    # Also check transaction recipient_info for phone
+    recipient_info = transaction.get("recipient_info", "")
+    if recipient_info and recipient_info.startswith("+27"):
+        # Recipient info is a phone number
+        if is_buyer:
+            seller_mobile = seller_mobile or recipient_info
+        else:
+            buyer_mobile = buyer_mobile or recipient_info
+    
+    logger.info(f"=== ESCROW CREATION PRE-FLIGHT ===")
+    logger.info(f"Transaction ID: {data.transaction_id}")
+    logger.info(f"Buyer: {transaction['buyer_name']} ({transaction['buyer_email']}) Mobile: {buyer_mobile}")
+    logger.info(f"Seller: {transaction['seller_name']} ({transaction['seller_email']}) Mobile: {seller_mobile}")
+    
+    # Create escrow transaction with all available info
     result = await create_tradesafe_transaction(
         internal_reference=data.transaction_id,
         title=f"TrustTrade - {transaction['item_description'][:50]}",
@@ -2911,11 +2936,15 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
         buyer_email=transaction["buyer_email"],
         seller_name=transaction["seller_name"],
         seller_email=transaction["seller_email"],
+        buyer_mobile=buyer_mobile,
+        seller_mobile=seller_mobile,
         fee_allocation=data.fee_allocation
     )
     
     if not result or "error" in result:
         error_msg = result.get("error", "Failed to create escrow. Please try again.") if result else "Failed to create escrow. Please try again."
+        logger.error(f"=== ESCROW CREATION FAILED ===")
+        logger.error(f"Error: {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
     
     # Store escrow ID and allocation ID in our transaction
@@ -2941,6 +2970,9 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
             "timeline": timeline
         }}
     )
+    
+    logger.info(f"=== ESCROW CREATED SUCCESSFULLY ===")
+    logger.info(f"TradeSafe ID: {tradesafe_id}")
     
     return {
         "tradesafe_id": tradesafe_id,

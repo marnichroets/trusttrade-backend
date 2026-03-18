@@ -142,36 +142,51 @@ async def create_user_token(
     email: str,
     mobile: str,
     id_number: str = "8501015009087",  # Valid SA ID format for sandbox
-    reference: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """
     Create a TrustTrade user token for a buyer or seller.
     Tokens are required before creating transactions.
     
     Required fields per API introspection: givenName, familyName, email, mobile, idNumber inside user object
+    Note: 'reference' field is NOT supported in TokenInput
     """
-    mutation = """
-    mutation tokenCreate($input: TokenInput!) {
-        tokenCreate(input: $input) {
-            id
-            name
-            reference
-        }
-    }
-    """
+    # Pre-flight validation with detailed logging
+    logger.info(f"=== TOKEN CREATION REQUEST ===")
+    logger.info(f"Given Name: {given_name}")
+    logger.info(f"Family Name: {family_name}")
+    logger.info(f"Email: {email}")
+    logger.info(f"Mobile (raw): {mobile}")
+    logger.info(f"ID Number: {id_number}")
     
-    # Ensure mobile is in +27 format
+    # Validate and format mobile number
+    original_mobile = mobile
     if mobile and not mobile.startswith('+'):
         if mobile.startswith('0'):
             mobile = '+27' + mobile[1:]
         else:
             mobile = '+27' + mobile
     
-    # Default mobile if not provided
+    # Default mobile if not provided or invalid
     if not mobile or len(mobile) < 10:
         mobile = "+27000000000"
+        logger.warning(f"Mobile number missing or invalid, using default: {mobile}")
     
-    # API requires user data nested under "user" field
+    logger.info(f"Mobile (formatted): {mobile} (original: {original_mobile})")
+    
+    # Validate ID number format (13 digits for SA)
+    if id_number and len(id_number) != 13:
+        logger.warning(f"ID number is not 13 digits: {id_number} (length: {len(id_number)})")
+    
+    mutation = """
+    mutation tokenCreate($input: TokenInput!) {
+        tokenCreate(input: $input) {
+            id
+            name
+        }
+    }
+    """
+    
+    # Build the request payload - NO reference field (not supported)
     variables = {
         "input": {
             "user": {
@@ -186,22 +201,31 @@ async def create_user_token(
         }
     }
     
-    if reference:
-        variables["input"]["reference"] = reference
+    logger.info(f"=== EXACT REQUEST PAYLOAD ===")
+    logger.info(f"Variables: {variables}")
     
-    logger.info(f"Creating user token for {email} with fields: givenName={given_name}, familyName={family_name}, mobile={mobile}")
-    
+    # Execute the GraphQL mutation
     result = await execute_graphql(mutation, variables)
+    
+    logger.info(f"=== EXACT API RESPONSE ===")
+    logger.info(f"Result: {result}")
     
     if result and 'errors' in result:
         error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
-        logger.error(f"Token creation failed for {email}: {error_msg}")
+        debug_msg = result['errors'][0].get('extensions', {}).get('debugMessage', '') if result['errors'] else ''
+        logger.error(f"=== TOKEN CREATION FAILED ===")
+        logger.error(f"Error message: {error_msg}")
+        logger.error(f"Debug message: {debug_msg}")
+        logger.error(f"Full errors: {result['errors']}")
         return None
     
     if result and 'tokenCreate' in result:
-        logger.info(f"Created user token for {email}: {result['tokenCreate'].get('id')}")
+        logger.info(f"=== TOKEN CREATION SUCCESS ===")
+        logger.info(f"Token ID: {result['tokenCreate'].get('id')}")
+        logger.info(f"Token Name: {result['tokenCreate'].get('name')}")
         return result['tokenCreate']
     
+    logger.error(f"=== UNEXPECTED RESPONSE ===")
     logger.error(f"Token creation returned unexpected result for {email}: {result}")
     return None
 
@@ -215,11 +239,19 @@ async def get_or_create_user_token(
     """
     Get existing or create new user token.
     Returns the token ID.
+    
+    Note: We always create new tokens because the tokens query doesn't support
+    filtering by email. Each transaction gets fresh tokens.
     """
+    logger.info(f"=== GET OR CREATE TOKEN ===")
+    logger.info(f"Name: {name}, Email: {email}, Mobile: {mobile}")
+    
     # Split name into given/family name
     name_parts = name.strip().split(' ', 1)
     given_name = name_parts[0] if name_parts else "User"
     family_name = name_parts[1] if len(name_parts) > 1 else "User"
+    
+    logger.info(f"Split name: given={given_name}, family={family_name}")
     
     # Ensure mobile is in +27 format
     if mobile and not mobile.startswith('+'):
@@ -228,43 +260,21 @@ async def get_or_create_user_token(
         else:
             mobile = '+27' + mobile
     
-    # First try to find existing token by email
-    query = """
-    query tokens($email: String) {
-        tokens(first: 1, email: $email) {
-            data {
-                id
-                name
-                email
-            }
-        }
-    }
-    """
+    # Note: We skip the lookup query as the API doesn't support email filtering
+    # Always create a new token for each party
     
-    logger.info(f"Looking for existing token for {email}")
-    result = await execute_graphql(query, {"email": email})
-    
-    if result and 'errors' in result:
-        logger.warning(f"Error checking existing tokens for {email}: {result['errors']}")
-    elif result and result.get('tokens', {}).get('data'):
-        existing = result['tokens']['data'][0]
-        logger.info(f"Found existing token for {email}: {existing['id']}")
-        return existing['id']
-    
-    # Create new token
-    logger.info(f"No existing token found, creating new token for {email}")
+    logger.info(f"Creating new token for {email}")
     token_data = await create_user_token(
         given_name=given_name,
         family_name=family_name,
         email=email,
-        mobile=mobile,
-        reference=reference
+        mobile=mobile
     )
     
     if token_data:
         return token_data['id']
     
-    logger.error(f"Failed to create token for {email}")
+    logger.error(f"=== FAILED TO CREATE TOKEN FOR {email} ===")
     return None
 
 
@@ -277,11 +287,13 @@ async def create_tradesafe_transaction(
     buyer_email: str,
     seller_name: str,
     seller_email: str,
+    buyer_mobile: str = None,
+    seller_mobile: str = None,
     fee_allocation: str = "SELLER",
     agent_fee_allocation: str = "SELLER"
 ) -> Optional[Dict[str, Any]]:
     """
-    Create a new escrow transaction in TradeSafe.
+    Create a new escrow transaction.
     
     Args:
         internal_reference: TrustTrade internal transaction ID
@@ -292,41 +304,85 @@ async def create_tradesafe_transaction(
         buyer_email: Buyer's email
         seller_name: Seller's name
         seller_email: Seller's email
-        fee_allocation: Who pays TradeSafe fee - BUYER, SELLER, or 50_50
+        buyer_mobile: Buyer's mobile number
+        seller_mobile: Seller's mobile number
+        fee_allocation: Who pays fee - BUYER, SELLER, or 50_50
         agent_fee_allocation: Who pays TrustTrade 2% fee - BUYER, SELLER, or 50_50
     
     Returns:
-        TradeSafe transaction details or None on failure
+        Transaction details or error dict on failure
     """
+    logger.info(f"=== CREATE TRANSACTION REQUEST ===")
+    logger.info(f"Reference: {internal_reference}")
+    logger.info(f"Amount: R{amount}")
+    logger.info(f"Buyer: {buyer_name} ({buyer_email}) Mobile: {buyer_mobile}")
+    logger.info(f"Seller: {seller_name} ({seller_email}) Mobile: {seller_mobile}")
+    
     # Validate minimum amount
     is_valid, error_msg = validate_minimum_transaction(amount)
     if not is_valid:
         logger.error(f"Transaction validation failed: {error_msg}")
         return {"error": error_msg}
     
+    # Pre-flight checks
+    validation_errors = []
+    
+    if not buyer_name or buyer_name.strip() == "":
+        validation_errors.append("Buyer name is missing")
+    if not buyer_email or "@" not in buyer_email:
+        validation_errors.append("Buyer email is invalid")
+    if not seller_name or seller_name.strip() == "":
+        validation_errors.append("Seller name is missing")
+    if not seller_email or "@" not in seller_email:
+        validation_errors.append("Seller email is invalid")
+    
+    if validation_errors:
+        error_msg = "Missing information: " + ", ".join(validation_errors)
+        logger.error(f"Pre-flight validation failed: {error_msg}")
+        return {"error": error_msg}
+    
     # Get or create tokens for buyer and seller
-    buyer_token = await get_or_create_user_token(buyer_name, buyer_email, reference=f"buyer_{internal_reference}")
-    seller_token = await get_or_create_user_token(seller_name, seller_email, reference=f"seller_{internal_reference}")
+    logger.info(f"Creating buyer token...")
+    buyer_token = await get_or_create_user_token(
+        buyer_name, 
+        buyer_email, 
+        mobile=buyer_mobile or "+27000000000",
+        reference=f"buyer_{internal_reference}"
+    )
     
-    if not buyer_token or not seller_token:
-        logger.error(f"Failed to create user tokens - buyer: {buyer_token}, seller: {seller_token}")
-        return {"error": "Verification failed. Please try again."}
+    logger.info(f"Creating seller token...")
+    seller_token = await get_or_create_user_token(
+        seller_name, 
+        seller_email, 
+        mobile=seller_mobile or "+27000000000",
+        reference=f"seller_{internal_reference}"
+    )
     
-    # Convert amount to cents for TradeSafe API
+    if not buyer_token:
+        logger.error(f"=== BUYER TOKEN CREATION FAILED ===")
+        return {"error": "Could not verify buyer details. Please check buyer information and try again."}
+    
+    if not seller_token:
+        logger.error(f"=== SELLER TOKEN CREATION FAILED ===")
+        return {"error": "Could not verify seller details. Please check seller information and try again."}
+    
+    logger.info(f"Tokens created - Buyer: {buyer_token}, Seller: {seller_token}")
+    
+    # Convert amount to cents for API
     amount_cents = int(amount * 100)
     
-    # Map fee allocation to TradeSafe enum
+    # Map fee allocation - using correct enum values
     fee_map = {
         "buyer": "BUYER",
         "seller": "SELLER", 
-        "split": "50_50",
-        "50_50": "50_50"
+        "split": "BUYER_SELLER",
+        "50_50": "BUYER_SELLER"
     }
-    tradesafe_fee_allocation = fee_map.get(fee_allocation.lower(), "SELLER")
+    mapped_fee_allocation = fee_map.get(fee_allocation.lower(), "SELLER")
     
-    # GraphQL mutation for creating a transaction with parties and allocations
+    # GraphQL mutation for creating a transaction - using correct type names
     mutation = """
-    mutation transactionCreate($input: TransactionCreateInput!) {
+    mutation transactionCreate($input: CreateTransactionInput!) {
         transactionCreate(input: $input) {
             id
             uuid
@@ -345,56 +401,72 @@ async def create_tradesafe_transaction(
             parties {
                 id
                 role
-                token
             }
             createdAt
         }
     }
     """
     
+    # Build variables with correct nested structure for relations
+    # Note: privacy uses "NONE" (not "PRIVATE")
     variables = {
         "input": {
             "title": title,
             "description": description,
             "industry": "GENERAL_GOODS_SERVICES",
             "currency": "ZAR",
-            "feeAllocation": tradesafe_fee_allocation,
+            "feeAllocation": mapped_fee_allocation,
             "reference": internal_reference,
-            "privacy": "PRIVATE",
-            "parties": [
-                {
-                    "role": "BUYER",
-                    "token": buyer_token
-                },
-                {
-                    "role": "SELLER",
-                    "token": seller_token
-                }
-            ],
-            "allocations": [
-                {
-                    "title": "Payment for item/service",
-                    "description": description,
-                    "value": amount_cents,
-                    "daysToDeliver": 7,
-                    "daysToInspect": 2
-                }
-            ]
+            "parties": {
+                "create": [
+                    {
+                        "role": "BUYER",
+                        "token": buyer_token
+                    },
+                    {
+                        "role": "SELLER",
+                        "token": seller_token
+                    }
+                ]
+            },
+            "allocations": {
+                "create": [
+                    {
+                        "title": "Payment for item/service",
+                        "description": description,
+                        "value": amount_cents,
+                        "daysToDeliver": 7,
+                        "daysToInspect": 2
+                    }
+                ]
+            }
         }
     }
     
+    logger.info(f"=== TRANSACTION CREATE REQUEST ===")
+    logger.info(f"Variables: {variables}")
+    
     result = await execute_graphql(mutation, variables)
+    
+    logger.info(f"=== TRANSACTION CREATE RESPONSE ===")
+    logger.info(f"Result: {result}")
     
     if result and 'errors' in result:
         error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
-        logger.error(f"TradeSafe transaction creation failed: {error_msg}")
-        return {"error": error_msg}
+        debug_msg = result['errors'][0].get('extensions', {}).get('debugMessage', '') if result['errors'] else ''
+        logger.error(f"=== TRANSACTION CREATION FAILED ===")
+        logger.error(f"Error: {error_msg}")
+        logger.error(f"Debug: {debug_msg}")
+        return {"error": f"Payment processing error: {error_msg}"}
     
     if result and 'transactionCreate' in result:
         tx = result['transactionCreate']
-        logger.info(f"Created TradeSafe transaction: {tx['id']} for {internal_reference}")
+        logger.info(f"=== TRANSACTION CREATED SUCCESSFULLY ===")
+        logger.info(f"Transaction ID: {tx['id']}")
+        logger.info(f"State: {tx['state']}")
         return tx
     
+    logger.error(f"=== UNEXPECTED TRANSACTION RESPONSE ===")
     return {"error": "Failed to create transaction. Please try again."}
 
 

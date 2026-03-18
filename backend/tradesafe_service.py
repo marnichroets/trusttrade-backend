@@ -1,6 +1,6 @@
 """
-TradeSafe Payment Gateway Integration Service
-Handles OAuth authentication and API calls to TradeSafe escrow system
+TrustTrade Payment Gateway Integration Service
+Handles OAuth authentication and API calls for secure escrow transactions
 South Africa-based escrow for peer-to-peer transactions
 """
 
@@ -137,15 +137,18 @@ async def execute_graphql(query: str, variables: Dict[str, Any] = None) -> Optio
 
 
 async def create_user_token(
-    name: str,
+    given_name: str,
+    family_name: str,
     email: str,
     mobile: str,
-    id_number: Optional[str] = None,
+    id_number: str = "8501015009087",  # Valid SA ID format for sandbox
     reference: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """
-    Create a TradeSafe user token for a buyer or seller.
+    Create a TrustTrade user token for a buyer or seller.
     Tokens are required before creating transactions.
+    
+    Required fields per API introspection: givenName, familyName, email, mobile, idNumber inside user object
     """
     mutation = """
     mutation tokenCreate($input: TokenInput!) {
@@ -157,25 +160,49 @@ async def create_user_token(
     }
     """
     
+    # Ensure mobile is in +27 format
+    if mobile and not mobile.startswith('+'):
+        if mobile.startswith('0'):
+            mobile = '+27' + mobile[1:]
+        else:
+            mobile = '+27' + mobile
+    
+    # Default mobile if not provided
+    if not mobile or len(mobile) < 10:
+        mobile = "+27000000000"
+    
+    # API requires user data nested under "user" field
     variables = {
         "input": {
-            "name": name,
-            "email": email,
-            "mobile": mobile
+            "user": {
+                "givenName": given_name,
+                "familyName": family_name,
+                "email": email,
+                "mobile": mobile,
+                "idNumber": id_number,
+                "idType": "NATIONAL",
+                "idCountry": "ZAF"
+            }
         }
     }
     
-    if id_number:
-        variables["input"]["idNumber"] = id_number
     if reference:
         variables["input"]["reference"] = reference
     
+    logger.info(f"Creating user token for {email} with fields: givenName={given_name}, familyName={family_name}, mobile={mobile}")
+    
     result = await execute_graphql(mutation, variables)
     
+    if result and 'errors' in result:
+        error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
+        logger.error(f"Token creation failed for {email}: {error_msg}")
+        return None
+    
     if result and 'tokenCreate' in result:
-        logger.info(f"Created TradeSafe token for {email}")
+        logger.info(f"Created user token for {email}: {result['tokenCreate'].get('id')}")
         return result['tokenCreate']
     
+    logger.error(f"Token creation returned unexpected result for {email}: {result}")
     return None
 
 
@@ -186,9 +213,21 @@ async def get_or_create_user_token(
     reference: Optional[str] = None
 ) -> Optional[str]:
     """
-    Get existing or create new TradeSafe user token.
+    Get existing or create new user token.
     Returns the token ID.
     """
+    # Split name into given/family name
+    name_parts = name.strip().split(' ', 1)
+    given_name = name_parts[0] if name_parts else "User"
+    family_name = name_parts[1] if len(name_parts) > 1 else "User"
+    
+    # Ensure mobile is in +27 format
+    if mobile and not mobile.startswith('+'):
+        if mobile.startswith('0'):
+            mobile = '+27' + mobile[1:]
+        else:
+            mobile = '+27' + mobile
+    
     # First try to find existing token by email
     query = """
     query tokens($email: String) {
@@ -202,18 +241,30 @@ async def get_or_create_user_token(
     }
     """
     
+    logger.info(f"Looking for existing token for {email}")
     result = await execute_graphql(query, {"email": email})
     
-    if result and result.get('tokens', {}).get('data'):
+    if result and 'errors' in result:
+        logger.warning(f"Error checking existing tokens for {email}: {result['errors']}")
+    elif result and result.get('tokens', {}).get('data'):
         existing = result['tokens']['data'][0]
-        logger.info(f"Found existing TradeSafe token for {email}: {existing['id']}")
+        logger.info(f"Found existing token for {email}: {existing['id']}")
         return existing['id']
     
     # Create new token
-    token_data = await create_user_token(name, email, mobile, reference=reference)
+    logger.info(f"No existing token found, creating new token for {email}")
+    token_data = await create_user_token(
+        given_name=given_name,
+        family_name=family_name,
+        email=email,
+        mobile=mobile,
+        reference=reference
+    )
+    
     if token_data:
         return token_data['id']
     
+    logger.error(f"Failed to create token for {email}")
     return None
 
 
@@ -258,8 +309,8 @@ async def create_tradesafe_transaction(
     seller_token = await get_or_create_user_token(seller_name, seller_email, reference=f"seller_{internal_reference}")
     
     if not buyer_token or not seller_token:
-        logger.error("Failed to create/get user tokens for transaction")
-        return {"error": "Failed to create user tokens. Please try again."}
+        logger.error(f"Failed to create user tokens - buyer: {buyer_token}, seller: {seller_token}")
+        return {"error": "Verification failed. Please try again."}
     
     # Convert amount to cents for TradeSafe API
     amount_cents = int(amount * 100)

@@ -130,7 +130,7 @@ function NewTransaction() {
       return;
     }
 
-    // Minimum transaction amount R500 for TradeSafe
+    // Minimum transaction amount R500
     if (itemPrice < 500) {
       toast.error('Minimum transaction amount is R500');
       return;

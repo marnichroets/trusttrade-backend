@@ -53,8 +53,8 @@ app = FastAPI()
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-# Platform Constants - Updated to R500 minimum for TradeSafe
-MINIMUM_TRANSACTION_AMOUNT = 500.0  # R500 minimum for TradeSafe
+# Platform Constants - Updated to R500 minimum
+MINIMUM_TRANSACTION_AMOUNT = 500.0  # R500 minimum
 PAYOUT_THRESHOLD = 500.0  # R500 payout threshold
 PLATFORM_FEE_PERCENT = 2.0  # 2% platform fee
 
@@ -2662,9 +2662,9 @@ async def tradesafe_webhook(request: Request):
             update_data["payment_status"] = "Paid"
             update_data["auto_release_at"] = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
             timeline_entry = {
-                "status": "Payment Received via TradeSafe",
+                "status": "Payment Received - Funds Secured",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "by": "TradeSafe"
+                "by": "TrustTrade"
             }
             
             # Send notifications
@@ -2684,9 +2684,9 @@ async def tradesafe_webhook(request: Request):
             update_data["release_status"] = "Released"
             update_data["payment_status"] = "Released"
             timeline_entry = {
-                "status": "Funds Released via TradeSafe",
+                "status": "Funds Released to Seller",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "by": "TradeSafe"
+                "by": "TrustTrade"
             }
             
         elif event_type in ["REFUND_PROCESSED", "escrow.refunded"]:
@@ -2694,9 +2694,9 @@ async def tradesafe_webhook(request: Request):
             update_data["release_status"] = "Refunded"
             update_data["payment_status"] = "Refunded"
             timeline_entry = {
-                "status": "Funds Refunded via TradeSafe",
+                "status": "Funds Refunded to Buyer",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "by": "TradeSafe"
+                "by": "TrustTrade"
             }
             
         elif event_type in ["TRANSACTION_CANCELLED", "escrow.cancelled"]:
@@ -2705,7 +2705,7 @@ async def tradesafe_webhook(request: Request):
             timeline_entry = {
                 "status": "Transaction Cancelled",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "by": "TradeSafe"
+                "by": "TrustTrade"
             }
         
         # Update transaction if we have changes
@@ -2725,13 +2725,13 @@ async def tradesafe_webhook(request: Request):
         return {"status": "success", "processed": bool(update_data)}
         
     except Exception as e:
-        logger.error(f"TradeSafe webhook error: {str(e)}")
+        logger.error(f"Payment webhook error: {str(e)}")
         return {"status": "error", "message": str(e)}
 
 @api_router.get("/oauth/callback")
-async def tradesafe_oauth_callback(request: Request, code: str = None, state: str = None):
-    """Handle TradeSafe OAuth callback"""
-    logger.info(f"TradeSafe OAuth callback - code: {code}, state: {state}")
+async def oauth_callback(request: Request, code: str = None, state: str = None):
+    """Handle OAuth callback"""
+    logger.info(f"OAuth callback - code: {code}, state: {state}")
     
     if not code:
         raise HTTPException(status_code=400, detail="Authorization code missing")
@@ -2885,13 +2885,13 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     if not is_buyer and not is_seller and not user.is_admin:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Check if already linked to TradeSafe
+    # Check if already linked to escrow
     if transaction.get("tradesafe_id"):
-        # Return existing TradeSafe info
+        # Return existing escrow info
         return {
             "tradesafe_id": transaction["tradesafe_id"],
             "status": "already_created",
-            "message": "Transaction already linked to TradeSafe"
+            "message": "Escrow already created for this transaction"
         }
     
     # Validate minimum amount (R500)
@@ -2901,7 +2901,7 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
             detail=f"Minimum transaction amount is R{MINIMUM_TRANSACTION_AMOUNT:.0f}"
         )
     
-    # Create TradeSafe transaction
+    # Create escrow transaction
     result = await create_tradesafe_transaction(
         internal_reference=data.transaction_id,
         title=f"TrustTrade - {transaction['item_description'][:50]}",
@@ -2915,20 +2915,20 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     )
     
     if not result or "error" in result:
-        error_msg = result.get("error", "Failed to create TradeSafe transaction") if result else "Failed to create TradeSafe transaction"
+        error_msg = result.get("error", "Failed to create escrow. Please try again.") if result else "Failed to create escrow. Please try again."
         raise HTTPException(status_code=500, detail=error_msg)
     
-    # Store TradeSafe ID and allocation ID in our transaction
+    # Store escrow ID and allocation ID in our transaction
     tradesafe_id = result.get("id")
     allocation_id = result.get("allocations", [{}])[0].get("id") if result.get("allocations") else None
     
     # Update timeline
     timeline = transaction.get("timeline", [])
     timeline.append({
-        "status": "TradeSafe Escrow Created",
+        "status": "TrustTrade Escrow Created",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "by": "TrustTrade System",
-        "details": f"TradeSafe ID: {tradesafe_id}"
+        "details": f"Escrow ID: {tradesafe_id}"
     })
     
     await db.transactions.update_one(
@@ -2947,7 +2947,7 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
         "allocation_id": allocation_id,
         "state": result.get("state"),
         "status": "created",
-        "message": "TradeSafe escrow created successfully"
+        "message": "TrustTrade escrow created successfully"
     }
 
 
@@ -2972,13 +2972,13 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
     
     tradesafe_id = transaction.get("tradesafe_id")
     if not tradesafe_id:
-        raise HTTPException(status_code=400, detail="Transaction not linked to TradeSafe. Create TradeSafe transaction first.")
+        raise HTTPException(status_code=400, detail="Please create an escrow first before making payment.")
     
     # Get payment link from TradeSafe
     payment_info = await get_payment_link(tradesafe_id)
     
     if not payment_info:
-        raise HTTPException(status_code=500, detail="Failed to get payment link from TradeSafe")
+        raise HTTPException(status_code=500, detail="Payment processing error. Please try again.")
     
     # Calculate fee breakdown for display
     fee_breakdown = calculate_fees(

@@ -35,7 +35,7 @@ function AppRouter() {
       <Route path="/t/:shareCode" element={<ShareTransaction />} />
       <Route path="/payment-success" element={<PaymentSuccess />} />
       <Route path="/payment-cancelled" element={<PaymentCancelled />} />
-      {/* TradeSafe redirect URLs */}
+      {/* Payment redirect URLs */}
       <Route path="/transaction/success" element={<PaymentSuccess />} />
       <Route path="/transaction/failed" element={<PaymentCancelled />} />
       <Route path="/transaction/cancelled" element={<PaymentCancelled />} />

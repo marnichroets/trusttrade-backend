@@ -1,6 +1,7 @@
 """
 Postmark Email Service for TrustTrade
 Handles transactional emails for escrow transactions
+Professional email templates with consistent branding
 """
 
 import os
@@ -21,6 +22,13 @@ logger = logging.getLogger(__name__)
 POSTMARK_API_KEY = os.environ.get('POSTMARK_API_KEY', '')
 SENDER_EMAIL = os.environ.get('POSTMARK_SENDER_EMAIL', 'noreply@trusttradesa.co.za')
 SENDER_NAME = "TrustTrade"
+
+# Brand Colors
+BRAND_NAVY = "#1a2942"
+BRAND_BLUE = "#2563eb"
+LIGHT_GREY = "#f8f9fa"
+LABEL_GREY = "#6c757d"
+TEXT_DARK = "#212529"
 
 # Initialize Postmark client
 _postmark_client = None
@@ -58,16 +66,6 @@ async def send_email(
 ) -> bool:
     """
     Send a transactional email via Postmark.
-    
-    Args:
-        to_email: Recipient email address
-        to_name: Recipient name
-        subject: Email subject
-        html_content: HTML body content
-        text_content: Plain text body (optional)
-    
-    Returns:
-        True if email sent successfully, False otherwise
     """
     client = get_postmark_client()
     
@@ -99,6 +97,177 @@ async def send_email(
         return False
 
 
+# ============ BASE EMAIL TEMPLATE ============
+
+def get_base_email_template(
+    heading: str,
+    greeting_name: str,
+    intro_text: str,
+    details: dict,
+    cta_text: str = None,
+    cta_link: str = None,
+    show_how_it_works: bool = True,
+    status_badge: str = None,
+    status_color: str = None
+) -> str:
+    """
+    Generate a professional email using the base template.
+    
+    Args:
+        heading: Main heading text (e.g., "New Transaction Created")
+        greeting_name: Name for greeting (e.g., "Marnich")
+        intro_text: Introduction paragraph
+        details: Dict of label-value pairs for transaction details
+        cta_text: Call-to-action button text
+        cta_link: Call-to-action button URL
+        show_how_it_works: Whether to show the "How It Works" section
+        status_badge: Optional status text to show as a badge
+        status_color: Color for status badge (#hex)
+    """
+    
+    # Build details rows
+    details_html = ""
+    for label, value in details.items():
+        details_html += f"""
+        <tr>
+            <td style="padding: 8px 0; font-size: 12px; text-transform: uppercase; color: {LABEL_GREY}; letter-spacing: 0.5px; width: 120px; vertical-align: top;">{label}</td>
+            <td style="padding: 8px 0; font-size: 14px; color: {TEXT_DARK}; font-weight: 500;">{value}</td>
+        </tr>
+        """
+    
+    # CTA Button
+    cta_html = ""
+    if cta_text and cta_link:
+        cta_html = f"""
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{cta_link}" style="display: inline-block; background-color: {BRAND_NAVY}; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600; max-width: 200px;">
+                {cta_text}
+            </a>
+        </div>
+        """
+    
+    # Status Badge
+    badge_html = ""
+    if status_badge:
+        badge_color = status_color or BRAND_BLUE
+        badge_html = f"""
+        <div style="text-align: center; margin-bottom: 20px;">
+            <span style="display: inline-block; background-color: {badge_color}; color: white; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                {status_badge}
+            </span>
+        </div>
+        """
+    
+    # How It Works Section
+    how_it_works_html = ""
+    if show_how_it_works:
+        how_it_works_html = f"""
+        <div style="background-color: {LIGHT_GREY}; padding: 20px; border-radius: 8px; margin-top: 30px;">
+            <p style="font-size: 12px; text-transform: uppercase; color: {LABEL_GREY}; letter-spacing: 0.5px; margin: 0 0 12px 0; font-weight: 600;">How TrustTrade Works</p>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 6px 0; font-size: 14px; color: {TEXT_DARK};">
+                        <span style="display: inline-block; width: 20px; height: 20px; background-color: {BRAND_NAVY}; color: white; border-radius: 50%; text-align: center; line-height: 20px; font-size: 11px; margin-right: 10px;">1</span>
+                        Buyer pays into escrow
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; font-size: 14px; color: {TEXT_DARK};">
+                        <span style="display: inline-block; width: 20px; height: 20px; background-color: {BRAND_NAVY}; color: white; border-radius: 50%; text-align: center; line-height: 20px; font-size: 11px; margin-right: 10px;">2</span>
+                        Seller delivers item
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; font-size: 14px; color: {TEXT_DARK};">
+                        <span style="display: inline-block; width: 20px; height: 20px; background-color: {BRAND_NAVY}; color: white; border-radius: 50%; text-align: center; line-height: 20px; font-size: 11px; margin-right: 10px;">3</span>
+                        Buyer confirms delivery
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; font-size: 14px; color: {TEXT_DARK};">
+                        <span style="display: inline-block; width: 20px; height: 20px; background-color: {BRAND_NAVY}; color: white; border-radius: 50%; text-align: center; line-height: 20px; font-size: 11px; margin-right: 10px;">4</span>
+                        Funds released to seller (10:00 or 15:00 daily)
+                    </td>
+                </tr>
+            </table>
+        </div>
+        """
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{heading}</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+        <table role="presentation" style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="padding: 20px 16px;">
+                    <table role="presentation" style="max-width: 600px; margin: 0 auto; border-collapse: collapse; width: 100%;">
+                        
+                        <!-- Header -->
+                        <tr>
+                            <td style="background-color: {BRAND_NAVY}; padding: 30px 24px; text-align: center; border-radius: 8px 8px 0 0;">
+                                <h1 style="margin: 0 0 8px 0; font-size: 24px; font-weight: 700; color: white; letter-spacing: -0.5px;">TrustTrade</h1>
+                                <p style="margin: 0; font-size: 13px; color: rgba(255,255,255,0.8); font-weight: 400;">Secure Escrow Protection</p>
+                            </td>
+                        </tr>
+                        
+                        <!-- Body -->
+                        <tr>
+                            <td style="background-color: white; padding: 32px 24px;">
+                                
+                                {badge_html}
+                                
+                                <!-- Greeting -->
+                                <p style="font-size: 16px; color: {TEXT_DARK}; margin: 0 0 16px 0;">Hi {greeting_name},</p>
+                                
+                                <!-- Intro Text -->
+                                <p style="font-size: 14px; color: {TEXT_DARK}; margin: 0 0 24px 0; line-height: 1.6;">{intro_text}</p>
+                                
+                                <!-- Transaction Details Box -->
+                                <div style="background-color: {LIGHT_GREY}; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+                                    <p style="font-size: 12px; text-transform: uppercase; color: {LABEL_GREY}; letter-spacing: 0.5px; margin: 0 0 16px 0; font-weight: 600;">Transaction Details</p>
+                                    <table style="width: 100%; border-collapse: collapse;">
+                                        {details_html}
+                                    </table>
+                                </div>
+                                
+                                {cta_html}
+                                
+                                {how_it_works_html}
+                                
+                            </td>
+                        </tr>
+                        
+                        <!-- Footer -->
+                        <tr>
+                            <td style="background-color: {LIGHT_GREY}; padding: 24px; text-align: center; border-radius: 0 0 8px 8px;">
+                                <p style="margin: 0 0 8px 0; font-size: 12px; color: {LABEL_GREY};">
+                                    &copy; 2026 TrustTrade South Africa
+                                </p>
+                                <p style="margin: 0 0 8px 0; font-size: 12px; color: {LABEL_GREY};">
+                                    <a href="https://trusttradesa.co.za" style="color: {BRAND_NAVY}; text-decoration: none;">trusttradesa.co.za</a>
+                                </p>
+                                <p style="margin: 0; font-size: 11px; color: {LABEL_GREY};">
+                                    Secured by TrustTrade Escrow
+                                </p>
+                            </td>
+                        </tr>
+                        
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>
+    """
+    
+    return html_content
+
+
 # ============ EMAIL TEMPLATES ============
 
 def get_transaction_created_email(
@@ -112,59 +281,29 @@ def get_transaction_created_email(
 ) -> tuple[str, str]:
     """Generate transaction created email content"""
     
-    subject = f"New Transaction Created - {share_code}"
+    subject = f"{share_code} - New escrow transaction created"
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
-            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
-            .highlight {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6; }}
-            .amount {{ font-size: 28px; font-weight: bold; color: #3b82f6; }}
-            .btn {{ display: inline-block; background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin-top: 20px; }}
-            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>TrustTrade</h1>
-                <p>Your transaction is protected by escrow</p>
-            </div>
-            <div class="content">
-                <h2>Hi {recipient_name},</h2>
-                <p>A new escrow transaction has been created where you are the <strong>{role}</strong>.</p>
-                
-                <div class="highlight">
-                    <p><strong>Transaction Reference:</strong> {share_code}</p>
-                    <p><strong>Item:</strong> {item_description}</p>
-                    <p><strong>Amount:</strong> <span class="amount">R {amount:.2f}</span></p>
-                    <p><strong>Other Party:</strong> {other_party_name}</p>
-                </div>
-                
-                <p>Click the button below to view the transaction details:</p>
-                <a href="{share_link}" class="btn">View Transaction</a>
-                
-                <p style="margin-top: 30px;">
-                    <strong>How TrustTrade Escrow Works:</strong><br>
-                    1. Buyer pays into escrow<br>
-                    2. Seller delivers the item<br>
-                    3. Buyer confirms delivery<br>
-                    4. Funds released to seller (10:00 or 15:00 daily)
-                </p>
-            </div>
-            <div class="footer">
-                <p>This transaction is secured by TrustTrade escrow.</p>
-                <p>© TrustTrade South Africa</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+    intro_text = f"A new escrow transaction has been created. You are the <strong>{role}</strong> in this transaction."
+    
+    details = {
+        "Reference": share_code,
+        "Item": item_description,
+        "Amount": f"R {amount:,.2f}",
+        "Other Party": other_party_name,
+        "Status": "Awaiting Payment" if role.lower() == "buyer" else "Awaiting Confirmation"
+    }
+    
+    html_content = get_base_email_template(
+        heading="New Transaction Created",
+        greeting_name=recipient_name,
+        intro_text=intro_text,
+        details=details,
+        cta_text="View Transaction",
+        cta_link=share_link,
+        show_how_it_works=True,
+        status_badge="New Transaction",
+        status_color=BRAND_BLUE
+    )
     
     return subject, html_content
 
@@ -178,56 +317,103 @@ def get_payment_received_email(
 ) -> tuple[str, str]:
     """Generate payment received email content"""
     
-    subject = f"Payment Received - {share_code}"
+    subject = f"{share_code} - Payment secured in escrow"
     
-    if role == "seller":
-        action_text = "Please deliver the item to the buyer. Once they confirm delivery, the funds will be released to your account."
+    if role.lower() == "seller":
+        intro_text = "Great news! Payment has been received and is now secured in escrow. Please deliver the item to the buyer. Once they confirm delivery, the funds will be released to your account."
     else:
-        action_text = "Your payment is now held securely in escrow. The seller has been notified to deliver your item."
+        intro_text = "Your payment has been received and is now held securely in escrow. The seller has been notified to deliver your item."
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
-            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
-            .success-box {{ background: #dbeafe; border: 1px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }}
-            .amount {{ font-size: 32px; font-weight: bold; color: #2563eb; }}
-            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Payment Received!</h1>
-            </div>
-            <div class="content">
-                <h2>Hi {recipient_name},</h2>
-                
-                <div class="success-box">
-                    <p>✅ Payment has been received and secured in escrow</p>
-                    <p class="amount">R {amount:.2f}</p>
-                    <p><strong>{share_code}</strong></p>
-                </div>
-                
-                <p><strong>Item:</strong> {item_description}</p>
-                
-                <p style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                    <strong>Next Step:</strong> {action_text}
-                </p>
-                
-                <p><em>Funds are released in two batches daily: 10:00 and 15:00</em></p>
-            </div>
-            <div class="footer">
-                <p>© TrustTrade South Africa | Secure Escrow Platform</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+    details = {
+        "Reference": share_code,
+        "Item": item_description,
+        "Amount": f"R {amount:,.2f}",
+        "Status": "Funds Secured in Escrow"
+    }
+    
+    html_content = get_base_email_template(
+        heading="Payment Received",
+        greeting_name=recipient_name,
+        intro_text=intro_text,
+        details=details,
+        cta_text="View Transaction",
+        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        show_how_it_works=False,
+        status_badge="Payment Secured",
+        status_color="#10b981"
+    )
+    
+    return subject, html_content
+
+
+def get_delivery_started_email(
+    recipient_name: str,
+    share_code: str,
+    item_description: str,
+    seller_name: str
+) -> tuple[str, str]:
+    """Generate delivery started email for buyer"""
+    
+    subject = f"{share_code} - Your item is on its way"
+    
+    intro_text = f"Good news! {seller_name} has dispatched your item. Please confirm delivery once you receive it to release the funds to the seller."
+    
+    details = {
+        "Reference": share_code,
+        "Item": item_description,
+        "Seller": seller_name,
+        "Status": "Item Dispatched"
+    }
+    
+    html_content = get_base_email_template(
+        heading="Item Dispatched",
+        greeting_name=recipient_name,
+        intro_text=intro_text,
+        details=details,
+        cta_text="Confirm Delivery",
+        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        show_how_it_works=False,
+        status_badge="On Its Way",
+        status_color="#f59e0b"
+    )
+    
+    return subject, html_content
+
+
+def get_delivery_confirmed_email(
+    recipient_name: str,
+    share_code: str,
+    item_description: str,
+    role: str
+) -> tuple[str, str]:
+    """Generate delivery confirmed email content"""
+    
+    subject = f"{share_code} - Delivery confirmed - funds releasing"
+    
+    if role.lower() == "seller":
+        intro_text = "The buyer has confirmed receiving the item. Your funds will be released during the next payout window (10:00 or 15:00 daily)."
+        status_text = "Funds Releasing"
+    else:
+        intro_text = "Thank you for confirming delivery. The seller's funds will now be released. We hope you enjoy your purchase!"
+        status_text = "Complete"
+    
+    details = {
+        "Reference": share_code,
+        "Item": item_description,
+        "Status": "Delivery Confirmed"
+    }
+    
+    html_content = get_base_email_template(
+        heading="Delivery Confirmed",
+        greeting_name=recipient_name,
+        intro_text=intro_text,
+        details=details,
+        cta_text="View Transaction",
+        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        show_how_it_works=False,
+        status_badge=status_text,
+        status_color="#10b981"
+    )
     
     return subject, html_content
 
@@ -241,110 +427,29 @@ def get_funds_released_email(
 ) -> tuple[str, str]:
     """Generate funds released email content"""
     
-    subject = f"Funds Released! - {share_code}"
+    subject = f"{share_code} - Your funds have been released"
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: linear-gradient(135deg, #059669, #10b981); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
-            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
-            .success-box {{ background: #d1fae5; border: 2px solid #10b981; padding: 30px; border-radius: 8px; margin: 20px 0; text-align: center; }}
-            .amount {{ font-size: 36px; font-weight: bold; color: #059669; }}
-            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Funds Released!</h1>
-                <p>Transaction Complete</p>
-            </div>
-            <div class="content">
-                <h2>Congratulations {recipient_name}!</h2>
-                
-                <div class="success-box">
-                    <p>✅ Your funds have been released</p>
-                    <p class="amount">R {net_amount:.2f}</p>
-                    <p>will be deposited to your bank account</p>
-                </div>
-                
-                <p><strong>Transaction:</strong> {share_code}</p>
-                <p><strong>Item:</strong> {item_description}</p>
-                <p><strong>Total Amount:</strong> R {amount:.2f}</p>
-                <p><strong>After TrustTrade Fee (2%):</strong> R {net_amount:.2f}</p>
-                
-                <p style="margin-top: 20px;">
-                    Funds will be deposited during the next payout window (10:00 or 15:00).
-                    Thank you for using TrustTrade!
-                </p>
-            </div>
-            <div class="footer">
-                <p>© TrustTrade South Africa</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+    intro_text = "Congratulations! Your funds have been released and will be deposited to your bank account during the next payout window (10:00 or 15:00 daily)."
     
-    return subject, html_content
-
-
-def get_delivery_confirmed_email(
-    recipient_name: str,
-    share_code: str,
-    item_description: str,
-    role: str
-) -> tuple[str, str]:
-    """Generate delivery confirmed email content"""
+    details = {
+        "Reference": share_code,
+        "Item": item_description,
+        "Total Amount": f"R {amount:,.2f}",
+        "TrustTrade Fee (2%)": f"R {(amount - net_amount):,.2f}",
+        "Amount Released": f"R {net_amount:,.2f}"
+    }
     
-    subject = f"Delivery Confirmed - {share_code}"
-    
-    if role == "seller":
-        message = "The buyer has confirmed receiving the item. Your funds will be released shortly!"
-    else:
-        message = "Thank you for confirming delivery. The seller's funds will now be released."
-    
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: #3b82f6; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
-            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
-            .info-box {{ background: #dbeafe; border: 1px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 20px 0; }}
-            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Delivery Confirmed!</h1>
-            </div>
-            <div class="content">
-                <h2>Hi {recipient_name},</h2>
-                
-                <div class="info-box">
-                    <p>✅ {message}</p>
-                </div>
-                
-                <p><strong>Transaction:</strong> {share_code}</p>
-                <p><strong>Item:</strong> {item_description}</p>
-                
-                <p>Thank you for using TrustTrade for a safe transaction!</p>
-            </div>
-            <div class="footer">
-                <p>© TrustTrade South Africa</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+    html_content = get_base_email_template(
+        heading="Funds Released",
+        greeting_name=recipient_name,
+        intro_text=intro_text,
+        details=details,
+        cta_text="View Transaction",
+        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        show_how_it_works=False,
+        status_badge="Funds Released",
+        status_color="#10b981"
+    )
     
     return subject, html_content
 
@@ -357,48 +462,148 @@ def get_dispute_opened_email(
 ) -> tuple[str, str]:
     """Generate dispute opened email content"""
     
-    subject = f"Dispute Opened - {share_code}"
+    subject = f"{share_code} - Dispute opened - action required"
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: #ef4444; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
-            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
-            .warning-box {{ background: #fef2f2; border: 1px solid #ef4444; padding: 20px; border-radius: 8px; margin: 20px 0; }}
-            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Dispute Opened</h1>
-            </div>
-            <div class="content">
-                <h2>Hi {recipient_name},</h2>
-                
-                <p>A dispute has been opened for your transaction.</p>
-                
-                <div class="warning-box">
-                    <p><strong>Transaction:</strong> {share_code}</p>
-                    <p><strong>Type:</strong> {dispute_type}</p>
-                    <p><strong>Description:</strong> {description}</p>
-                </div>
-                
-                <p>Our team will review the dispute and contact both parties. Funds will remain in escrow until the dispute is resolved.</p>
-                
-                <p>Please respond to any requests for additional information promptly.</p>
-            </div>
-            <div class="footer">
-                <p>© TrustTrade South Africa</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+    intro_text = "A dispute has been opened for this transaction. Our team will review the case and contact both parties. Funds will remain securely in escrow until the dispute is resolved. Please respond to any requests for additional information promptly."
+    
+    details = {
+        "Reference": share_code,
+        "Dispute Type": dispute_type,
+        "Description": description[:100] + "..." if len(description) > 100 else description,
+        "Status": "Under Review"
+    }
+    
+    html_content = get_base_email_template(
+        heading="Dispute Opened",
+        greeting_name=recipient_name,
+        intro_text=intro_text,
+        details=details,
+        cta_text="View Dispute",
+        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        show_how_it_works=False,
+        status_badge="Action Required",
+        status_color="#ef4444"
+    )
+    
+    return subject, html_content
+
+
+def get_dispute_resolved_email(
+    recipient_name: str,
+    share_code: str,
+    resolution: str,
+    admin_notes: str
+) -> tuple[str, str]:
+    """Generate dispute resolved email"""
+    
+    subject = f"{share_code} - Dispute resolved"
+    
+    intro_text = "The dispute for this transaction has been resolved. Thank you for your patience during the review process."
+    
+    details = {
+        "Reference": share_code,
+        "Resolution": resolution,
+        "Status": "Resolved"
+    }
+    
+    if admin_notes:
+        details["Notes"] = admin_notes[:100] + "..." if len(admin_notes) > 100 else admin_notes
+    
+    html_content = get_base_email_template(
+        heading="Dispute Resolved",
+        greeting_name=recipient_name,
+        intro_text=intro_text,
+        details=details,
+        cta_text="View Transaction",
+        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        show_how_it_works=False,
+        status_badge="Resolved",
+        status_color="#10b981"
+    )
+    
+    return subject, html_content
+
+
+def get_refund_email(
+    recipient_name: str,
+    share_code: str,
+    amount: float,
+    reason: str
+) -> tuple[str, str]:
+    """Generate refund notification email"""
+    
+    subject = f"{share_code} - Refund processed"
+    
+    intro_text = "A refund has been processed for your transaction. The funds will be returned to your original payment method within 3-5 business days."
+    
+    details = {
+        "Reference": share_code,
+        "Refund Amount": f"R {amount:,.2f}",
+        "Status": "Refund Processed"
+    }
+    
+    if reason:
+        details["Reason"] = reason
+    
+    html_content = get_base_email_template(
+        heading="Refund Processed",
+        greeting_name=recipient_name,
+        intro_text=intro_text,
+        details=details,
+        cta_text="View Transaction",
+        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        show_how_it_works=False,
+        status_badge="Refunded",
+        status_color=BRAND_BLUE
+    )
+    
+    return subject, html_content
+
+
+def get_verification_status_email(
+    recipient_name: str,
+    status: str
+) -> tuple[str, str]:
+    """Generate ID verification status update email"""
+    
+    subject = f"TrustTrade - ID verification {status.lower()}"
+    
+    status_config = {
+        "verified": {
+            "intro": "Great news! Your ID has been verified successfully. You now have full access to all TrustTrade features.",
+            "badge": "Verified",
+            "color": "#10b981"
+        },
+        "rejected": {
+            "intro": "Unfortunately, your ID verification was not successful. Please log in and upload a clear photo of your ID document to try again.",
+            "badge": "Action Required",
+            "color": "#ef4444"
+        },
+        "pending": {
+            "intro": "Your ID document is currently under review. We'll notify you once the verification is complete. This usually takes 1-2 business days.",
+            "badge": "Under Review",
+            "color": "#f59e0b"
+        }
+    }
+    
+    config = status_config.get(status.lower(), status_config["pending"])
+    
+    details = {
+        "Status": status.upper(),
+        "Account": "TrustTrade Escrow"
+    }
+    
+    html_content = get_base_email_template(
+        heading="ID Verification Update",
+        greeting_name=recipient_name,
+        intro_text=config["intro"],
+        details=details,
+        cta_text="View Account",
+        cta_link="https://trusttradesa.co.za/profile",
+        show_how_it_works=False,
+        status_badge=config["badge"],
+        status_color=config["color"]
+    )
     
     return subject, html_content
 
@@ -436,16 +641,15 @@ async def send_payment_received_email(
     return await send_email(to_email, to_name, subject, html)
 
 
-async def send_funds_released_email(
+async def send_delivery_started_email(
     to_email: str,
     to_name: str,
     share_code: str,
     item_description: str,
-    amount: float,
-    net_amount: float
+    seller_name: str
 ) -> bool:
-    """Send funds released notification"""
-    subject, html = get_funds_released_email(to_name, share_code, item_description, amount, net_amount)
+    """Send delivery started notification to buyer"""
+    subject, html = get_delivery_started_email(to_name, share_code, item_description, seller_name)
     return await send_email(to_email, to_name, subject, html)
 
 
@@ -461,6 +665,19 @@ async def send_delivery_confirmed_email(
     return await send_email(to_email, to_name, subject, html)
 
 
+async def send_funds_released_email(
+    to_email: str,
+    to_name: str,
+    share_code: str,
+    item_description: str,
+    amount: float,
+    net_amount: float
+) -> bool:
+    """Send funds released notification"""
+    subject, html = get_funds_released_email(to_name, share_code, item_description, amount, net_amount)
+    return await send_email(to_email, to_name, subject, html)
+
+
 async def send_dispute_opened_email(
     to_email: str,
     to_name: str,
@@ -470,185 +687,6 @@ async def send_dispute_opened_email(
 ) -> bool:
     """Send dispute opened notification"""
     subject, html = get_dispute_opened_email(to_name, share_code, dispute_type, description)
-    return await send_email(to_email, to_name, subject, html)
-
-
-
-# ============ ID VERIFICATION EMAIL ============
-
-def get_verification_status_email(
-    recipient_name: str,
-    status: str
-) -> tuple[str, str]:
-    """Generate ID verification status update email"""
-    
-    subject = "ID Verification Update - TrustTrade"
-    
-    status_messages = {
-        "verified": ("Your ID has been verified! ✅", "You now have full access to TrustTrade features.", "#10b981"),
-        "rejected": ("Your ID verification was not successful", "Please re-upload a clear photo of your ID document.", "#ef4444"),
-        "pending": ("Your ID is under review", "We'll notify you once the verification is complete.", "#f59e0b")
-    }
-    
-    message, instruction, color = status_messages.get(status.lower(), status_messages["pending"])
-    
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
-            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
-            .status-box {{ background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid {color}; }}
-            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>TrustTrade</h1>
-                <p>ID Verification Update</p>
-            </div>
-            <div class="content">
-                <h2>Hello {recipient_name},</h2>
-                
-                <div class="status-box">
-                    <p style="font-size: 18px; font-weight: bold; color: {color};">{message}</p>
-                    <p>{instruction}</p>
-                </div>
-                
-                <p>Your ID verification status is now: <strong>{status.upper()}</strong></p>
-                
-                <p>If you have any questions, please contact our support team.</p>
-            </div>
-            <div class="footer">
-                <p>© TrustTrade South Africa</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-    
-    return subject, html_content
-
-
-def get_dispute_resolved_email(
-    recipient_name: str,
-    share_code: str,
-    resolution: str,
-    admin_notes: str
-) -> tuple[str, str]:
-    """Generate dispute resolved email"""
-    
-    subject = f"Dispute Resolved - {share_code}"
-    
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: #10b981; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
-            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
-            .resolution-box {{ background: #d1fae5; border: 1px solid #10b981; padding: 20px; border-radius: 8px; margin: 20px 0; }}
-            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Dispute Resolved</h1>
-            </div>
-            <div class="content">
-                <h2>Hi {recipient_name},</h2>
-                
-                <p>The dispute for transaction <strong>{share_code}</strong> has been resolved.</p>
-                
-                <div class="resolution-box">
-                    <p><strong>Resolution:</strong> {resolution}</p>
-                    {f'<p><strong>Notes:</strong> {admin_notes}</p>' if admin_notes else ''}
-                </div>
-                
-                <p>Thank you for your patience during the review process.</p>
-            </div>
-            <div class="footer">
-                <p>© TrustTrade South Africa</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-    
-    return subject, html_content
-
-
-def get_refund_email(
-    recipient_name: str,
-    share_code: str,
-    amount: float,
-    reason: str
-) -> tuple[str, str]:
-    """Generate refund notification email"""
-    
-    subject = f"Refund Processed - {share_code}"
-    
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-            .header {{ background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
-            .content {{ background: #f8fafc; padding: 30px; border-radius: 0 0 8px 8px; }}
-            .refund-box {{ background: #dbeafe; border: 1px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; }}
-            .amount {{ font-size: 32px; font-weight: bold; color: #2563eb; }}
-            .footer {{ text-align: center; padding: 20px; color: #64748b; font-size: 12px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Refund Processed</h1>
-            </div>
-            <div class="content">
-                <h2>Hi {recipient_name},</h2>
-                
-                <p>A refund has been processed for your transaction.</p>
-                
-                <div class="refund-box">
-                    <p>Transaction: <strong>{share_code}</strong></p>
-                    <p class="amount">R {amount:.2f}</p>
-                    <p>has been refunded to your account</p>
-                </div>
-                
-                {f'<p><strong>Reason:</strong> {reason}</p>' if reason else ''}
-                
-                <p>The refund will be processed within 3-5 business days.</p>
-            </div>
-            <div class="footer">
-                <p>© TrustTrade South Africa</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-    
-    return subject, html_content
-
-
-# ============ ADDITIONAL CONVENIENCE FUNCTIONS ============
-
-async def send_verification_status_email(
-    to_email: str,
-    to_name: str,
-    status: str
-) -> bool:
-    """Send ID verification status update"""
-    subject, html = get_verification_status_email(to_name, status)
     return await send_email(to_email, to_name, subject, html)
 
 
@@ -673,4 +711,14 @@ async def send_refund_email(
 ) -> bool:
     """Send refund notification"""
     subject, html = get_refund_email(to_name, share_code, amount, reason)
+    return await send_email(to_email, to_name, subject, html)
+
+
+async def send_verification_status_email(
+    to_email: str,
+    to_name: str,
+    status: str
+) -> bool:
+    """Send ID verification status update"""
+    subject, html = get_verification_status_email(to_name, status)
     return await send_email(to_email, to_name, subject, html)

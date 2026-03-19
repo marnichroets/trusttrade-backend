@@ -18,6 +18,7 @@ from email_service import (
     send_payment_received_email,
     send_funds_released_email,
     send_delivery_confirmed_email,
+    send_delivery_started_email,
     send_dispute_opened_email,
     send_verification_status_email,
     send_dispute_resolved_email,
@@ -3487,15 +3488,16 @@ async def start_tradesafe_delivery(request: Request, transaction_id: str):
         }}
     )
     
-    # Send email to buyer
-    base_url = os.environ.get('FRONTEND_URL', 'https://trusttradesa.co.za')
-    await send_delivery_confirmed_email(
-        to_email=transaction["buyer_email"],
-        to_name=transaction["buyer_name"],
-        share_code=transaction.get("share_code", transaction_id),
-        item_description=transaction["item_description"],
-        role="buyer"
-    )
+    # Send email to buyer about delivery started
+    buyer_email = transaction.get("buyer_email")
+    if buyer_email:
+        await send_delivery_started_email(
+            to_email=buyer_email,
+            to_name=transaction.get("buyer_name", "Buyer"),
+            share_code=transaction.get("share_code", transaction_id),
+            item_description=transaction["item_description"],
+            seller_name=transaction.get("seller_name", "Seller")
+        )
     
     return {
         "status": "delivery_started",

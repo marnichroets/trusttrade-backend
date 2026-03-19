@@ -136,6 +136,12 @@ function NewTransaction() {
       return;
     }
 
+    // Maximum transaction amount R500,000
+    if (itemPrice > 500000) {
+      toast.error('Maximum transaction amount is R500,000. Contact support for larger transactions.');
+      return;
+    }
+
     if (photos.length < 1) {
       toast.error('Please upload at least 1 photo');
       return;

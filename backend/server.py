@@ -897,11 +897,19 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     if user.suspension_flag:
         raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")
     
-    # Validate minimum transaction amount (R150)
+    # Validate minimum transaction amount (R500)
     if transaction_data.item_price < MINIMUM_TRANSACTION_AMOUNT:
         raise HTTPException(
             status_code=400, 
             detail=f"Minimum transaction amount is R{MINIMUM_TRANSACTION_AMOUNT:.0f}"
+        )
+    
+    # Validate maximum transaction amount (R500,000)
+    MAXIMUM_TRANSACTION_AMOUNT = 500000
+    if transaction_data.item_price > MAXIMUM_TRANSACTION_AMOUNT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum transaction amount is R{MAXIMUM_TRANSACTION_AMOUNT:,.0f}. Please contact support for larger transactions."
         )
     
     # Calculate fees (2% platform fee)

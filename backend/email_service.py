@@ -317,12 +317,15 @@ def get_payment_received_email(
 ) -> tuple[str, str]:
     """Generate payment received email content"""
     
-    subject = f"{share_code} - Payment secured in escrow"
+    subject = f"{share_code} - Payment secured by TrustTrade"
     
     if role.lower() == "seller":
         intro_text = "Great news! Payment has been received and is now secured in escrow. Please deliver the item to the buyer. Once they confirm delivery, the funds will be released to your account."
     else:
         intro_text = "Your payment has been received and is now held securely in escrow. The seller has been notified to deliver your item."
+    
+    # Add note about payment processor emails
+    processor_note = "<p style='font-size: 12px; color: #6c757d; margin-top: 16px; padding: 12px; background-color: #f8f9fa; border-radius: 6px;'><strong>Note:</strong> You may also receive a payment confirmation from our secure payment processor — this is normal and expected. Your transaction is protected by TrustTrade.</p>"
     
     details = {
         "Reference": share_code,
@@ -332,9 +335,9 @@ def get_payment_received_email(
     }
     
     html_content = get_base_email_template(
-        heading="Payment Received",
+        heading="Payment Secured",
         greeting_name=recipient_name,
-        intro_text=intro_text,
+        intro_text=intro_text + processor_note,
         details=details,
         cta_text="View Transaction",
         cta_link=f"https://trusttradesa.co.za/t/{share_code}",

@@ -12,10 +12,21 @@ import { Checkbox } from '../components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ArrowLeft, Calculator, UserCircle } from 'lucide-react';
+import { ArrowLeft, Calculator, UserCircle, Camera, AlertCircle } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+
+// Item categories for scam detection and reporting
+const ITEM_CATEGORIES = [
+  { value: 'electronics', label: 'Electronics' },
+  { value: 'vehicles', label: 'Vehicles' },
+  { value: 'furniture', label: 'Furniture' },
+  { value: 'clothing', label: 'Clothing and Accessories' },
+  { value: 'sports', label: 'Sports and Outdoor' },
+  { value: 'services', label: 'Services' },
+  { value: 'other', label: 'Other' }
+];
 
 function NewTransaction() {
   const [user, setUser] = useState(null);
@@ -28,17 +39,19 @@ function NewTransaction() {
     seller_name: '',
     seller_email: '',
     item_description: '',
+    item_category: '',
     item_condition: '',
     known_issues: '',
     item_price: '',
-    fee_paid_by: 'split',  // Default to 50/50 split
-    delivery_method: 'courier'  // Default delivery method
+    fee_paid_by: 'split',
+    delivery_method: 'courier'
   });
   const [confirmations, setConfirmations] = useState({
     buyer_details: false,
     seller_details: false,
     item_accuracy: false
   });
+  const [showConfirmationError, setShowConfirmationError] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -80,6 +93,9 @@ function NewTransaction() {
 
   const handleConfirmationChange = (field, value) => {
     setConfirmations(prev => ({ ...prev, [field]: value }));
+    if (value) {
+      setShowConfirmationError(false);
+    }
   };
 
   const itemPrice = parseFloat(formData.item_price) || 0;
@@ -97,8 +113,6 @@ function NewTransaction() {
     buyerTotal = itemPrice + (feeAmount / 2);
     sellerTotal = itemPrice - (feeAmount / 2);
   }
-  
-  const total = (itemPrice + feeAmount).toFixed(2);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -120,8 +134,13 @@ function NewTransaction() {
       }
     }
 
-    if (!formData.item_description || !formData.item_condition || !formData.known_issues || !formData.item_price) {
+    if (!formData.item_description || !formData.item_condition || !formData.item_price) {
       toast.error('Please fill in all item details');
+      return;
+    }
+
+    if (!formData.item_category) {
+      toast.error('Please select an item category');
       return;
     }
 
@@ -130,13 +149,11 @@ function NewTransaction() {
       return;
     }
 
-    // Minimum transaction amount R500
     if (itemPrice < 500) {
       toast.error('Minimum transaction amount is R500');
       return;
     }
 
-    // Maximum transaction amount R500,000
     if (itemPrice > 500000) {
       toast.error('Maximum transaction amount is R500,000. Contact support for larger transactions.');
       return;
@@ -148,7 +165,8 @@ function NewTransaction() {
     }
 
     if (!confirmations.buyer_details || !confirmations.seller_details || !confirmations.item_accuracy) {
-      toast.error('Please confirm all checkboxes');
+      setShowConfirmationError(true);
+      toast.error('Please tick all confirmation checkboxes');
       return;
     }
 
@@ -164,8 +182,9 @@ function NewTransaction() {
           seller_name: role === 'seller' ? user.name : formData.seller_name,
           seller_email: role === 'seller' ? user.email : formData.seller_email,
           item_description: formData.item_description,
+          item_category: formData.item_category,
           item_condition: formData.item_condition,
-          known_issues: formData.known_issues,
+          known_issues: formData.known_issues || 'None',
           item_price: itemPrice,
           fee_paid_by: formData.fee_paid_by,
           delivery_method: formData.delivery_method,
@@ -321,6 +340,22 @@ function NewTransaction() {
                 <Label htmlFor="item_description">Item Description *</Label>
                 <Textarea id="item_description" name="item_description" value={formData.item_description} onChange={handleChange} placeholder="Describe the item or service..." rows={4} required data-testid="item-description-input" />
               </div>
+
+              {/* Item Category - NEW */}
+              <div>
+                <Label htmlFor="item_category">Item Category *</Label>
+                <Select value={formData.item_category} onValueChange={(value) => setFormData(prev => ({ ...prev, item_category: value }))}>
+                  <SelectTrigger id="item_category" data-testid="item-category-select">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ITEM_CATEGORIES.map(cat => (
+                      <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div>
                 <Label htmlFor="item_condition">Item Condition *</Label>
                 <Select value={formData.item_condition} onValueChange={(value) => setFormData(prev => ({ ...prev, item_condition: value }))}>
@@ -336,15 +371,29 @@ function NewTransaction() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Known Issues - Now Optional */}
               <div>
-                <Label htmlFor="known_issues">Known Issues / Defects *</Label>
-                <Textarea id="known_issues" name="known_issues" value={formData.known_issues} onChange={handleChange} placeholder="Describe scratches, faults, missing parts, or confirm no issues..." rows={3} required data-testid="known-issues-input" />
+                <Label htmlFor="known_issues">Known Issues / Defects (Optional)</Label>
+                <Textarea 
+                  id="known_issues" 
+                  name="known_issues" 
+                  value={formData.known_issues} 
+                  onChange={handleChange} 
+                  placeholder="None — leave blank if no known issues" 
+                  rows={2} 
+                  data-testid="known-issues-input" 
+                />
+                <p className="text-xs text-slate-500 mt-1">Leave blank if the item has no known issues or defects</p>
               </div>
+
               <div>
                 <Label htmlFor="item_price">Item Price (R) *</Label>
                 <Input id="item_price" name="item_price" type="number" step="0.01" min="500" value={formData.item_price} onChange={handleChange} placeholder="500.00" required data-testid="item-price-input" />
-                <p className="text-xs text-slate-500 mt-1">Minimum transaction amount: R500</p>
+                <p className="text-xs text-slate-500 mt-1">Minimum: R500 | Maximum: R500,000</p>
               </div>
+
+              {/* Fee Allocation - Reordered */}
               <div>
                 <Label htmlFor="fee_paid_by">Who Pays the Transaction Fee? *</Label>
                 <Select value={formData.fee_paid_by} onValueChange={(value) => setFormData(prev => ({ ...prev, fee_paid_by: value }))}>
@@ -352,7 +401,7 @@ function NewTransaction() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="split">Split 50/50 (Recommended)</SelectItem>
+                    <SelectItem value="split">Split 50/50 — Recommended</SelectItem>
                     <SelectItem value="buyer">Buyer Pays Fee</SelectItem>
                     <SelectItem value="seller">Seller Pays Fee</SelectItem>
                   </SelectContent>
@@ -364,9 +413,13 @@ function NewTransaction() {
             </div>
           </Card>
 
+          {/* Photo Upload - Improved */}
           <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Upload Item Photos *</h3>
-            <p className="text-sm text-slate-600 mb-4">Minimum 1 photo, Maximum 5 photos</p>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2 flex items-center gap-2">
+              <Camera className="w-5 h-5 text-primary" />
+              Upload Item Photos *
+            </h3>
+            <p className="text-sm text-slate-600 mb-4">Upload 1-5 clear photos of the item. Good photos build trust and prevent disputes.</p>
             <PhotoUploader photos={photos} setPhotos={setPhotos} minPhotos={1} maxPhotos={5} required={true} />
           </Card>
 
@@ -402,27 +455,70 @@ function NewTransaction() {
             </Card>
           )}
 
-          <Card className="p-6 bg-blue-50 border-blue-200">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Agreement Confirmation</h3>
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <Checkbox id="buyer-details" checked={confirmations.buyer_details} onCheckedChange={(checked) => handleConfirmationChange('buyer_details', checked)} data-testid="confirm-buyer-details" />
-                <label htmlFor="buyer-details" className="text-sm text-slate-700 cursor-pointer">I confirm buyer details are accurate</label>
-              </div>
-              <div className="flex items-start gap-3">
-                <Checkbox id="seller-details" checked={confirmations.seller_details} onCheckedChange={(checked) => handleConfirmationChange('seller_details', checked)} data-testid="confirm-seller-details" />
-                <label htmlFor="seller-details" className="text-sm text-slate-700 cursor-pointer">I confirm seller details are accurate</label>
-              </div>
-              <div className="flex items-start gap-3">
-                <Checkbox id="item-accuracy" checked={confirmations.item_accuracy} onCheckedChange={(checked) => handleConfirmationChange('item_accuracy', checked)} data-testid="confirm-item-accuracy" />
-                <label htmlFor="item-accuracy" className="text-sm text-slate-700 cursor-pointer">I confirm all item details are accurate and understand false claims may result in account suspension</label>
-              </div>
+          {/* Agreement Confirmation - Improved with error highlighting */}
+          <Card className={`p-6 border-2 transition-colors ${showConfirmationError && (!confirmations.buyer_details || !confirmations.seller_details || !confirmations.item_accuracy) ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-200'}`}>
+            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              {showConfirmationError && (!confirmations.buyer_details || !confirmations.seller_details || !confirmations.item_accuracy) && (
+                <AlertCircle className="w-5 h-5 text-red-500" />
+              )}
+              Agreement Confirmation *
+            </h3>
+            {showConfirmationError && (!confirmations.buyer_details || !confirmations.seller_details || !confirmations.item_accuracy) && (
+              <p className="text-sm text-red-600 mb-4 font-medium">Please tick all checkboxes to continue</p>
+            )}
+            <div className="space-y-4">
+              <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${!confirmations.buyer_details && showConfirmationError ? 'bg-red-100' : 'hover:bg-blue-100'}`}>
+                <Checkbox 
+                  id="buyer-details" 
+                  checked={confirmations.buyer_details} 
+                  onCheckedChange={(checked) => handleConfirmationChange('buyer_details', checked)} 
+                  data-testid="confirm-buyer-details"
+                  className="mt-0.5"
+                />
+                <span className="text-sm text-slate-700">I confirm buyer details are accurate</span>
+              </label>
+              <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${!confirmations.seller_details && showConfirmationError ? 'bg-red-100' : 'hover:bg-blue-100'}`}>
+                <Checkbox 
+                  id="seller-details" 
+                  checked={confirmations.seller_details} 
+                  onCheckedChange={(checked) => handleConfirmationChange('seller_details', checked)} 
+                  data-testid="confirm-seller-details"
+                  className="mt-0.5"
+                />
+                <span className="text-sm text-slate-700">I confirm seller details are accurate</span>
+              </label>
+              <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${!confirmations.item_accuracy && showConfirmationError ? 'bg-red-100' : 'hover:bg-blue-100'}`}>
+                <Checkbox 
+                  id="item-accuracy" 
+                  checked={confirmations.item_accuracy} 
+                  onCheckedChange={(checked) => handleConfirmationChange('item_accuracy', checked)} 
+                  data-testid="confirm-item-accuracy"
+                  className="mt-0.5"
+                />
+                <span className="text-sm text-slate-700">I confirm all item details are accurate and understand false claims may result in account suspension</span>
+              </label>
             </div>
           </Card>
 
+          {/* Buttons - Improved styling */}
           <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={() => navigate('/dashboard')} data-testid="cancel-btn" className="flex-1">Cancel</Button>
-            <Button type="submit" disabled={loading || itemPrice <= 0 || photos.length < 1} data-testid="create-transaction-btn" className="flex-1">{loading ? 'Creating...' : 'Create Transaction'}</Button>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => navigate('/dashboard')} 
+              data-testid="cancel-btn" 
+              className="flex-1 border-slate-300 text-slate-600 hover:bg-slate-100"
+            >
+              Cancel
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={loading || itemPrice <= 0 || photos.length < 1} 
+              data-testid="create-transaction-btn" 
+              className="flex-1 bg-[#1a2942] hover:bg-[#243751] text-white font-semibold py-6"
+            >
+              {loading ? 'Creating...' : 'Create Transaction'}
+            </Button>
           </div>
         </form>
       </div>

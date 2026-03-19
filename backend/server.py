@@ -200,8 +200,9 @@ class TransactionCreate(BaseModel):
     seller_name: Optional[str] = None
     seller_email: Optional[str] = None
     item_description: str
+    item_category: str = "other"  # electronics, vehicles, furniture, clothing, sports, services, other
     item_condition: str
-    known_issues: str
+    known_issues: Optional[str] = "None"  # Made optional with default
     item_price: float
     fee_paid_by: str = "split"  # "buyer", "seller", or "split" (default: 50/50 split)
     delivery_method: str = "courier"  # "courier", "bank_deposit", "digital"
@@ -1004,8 +1005,9 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "recipient_info": recipient_info,
         "recipient_type": recipient_type,
         "item_description": transaction_data.item_description,
+        "item_category": transaction_data.item_category,
         "item_condition": transaction_data.item_condition,
-        "known_issues": transaction_data.known_issues,
+        "known_issues": transaction_data.known_issues or "None",
         "item_photos": [],
         "item_price": item_price,
         "trusttrade_fee": trusttrade_fee,

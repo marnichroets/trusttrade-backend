@@ -1,13 +1,13 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useEffect } from 'react';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { CheckCircle, ArrowRight } from 'lucide-react';
+import { CheckCircle, ArrowRight, Shield } from 'lucide-react';
 
 function PaymentSuccess() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const transactionId = searchParams.get('transaction_id');
+  // Support both 'tx' (from TradeSafe redirect) and 'transaction_id'
+  const transactionId = searchParams.get('tx') || searchParams.get('transaction_id');
   const reference = searchParams.get('reference');
 
   return (
@@ -28,6 +28,16 @@ function PaymentSuccess() {
             <p className="font-mono font-medium text-slate-900">{reference}</p>
           </div>
         )}
+
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-center gap-2 text-emerald-700 mb-2">
+            <Shield className="w-5 h-5" />
+            <span className="font-semibold">Funds Secured</span>
+          </div>
+          <p className="text-sm text-emerald-600">
+            Your payment is protected by TrustTrade Escrow. The seller will be notified to deliver your item.
+          </p>
+        </div>
 
         <div className="space-y-3">
           <p className="text-sm text-slate-600">
@@ -64,7 +74,7 @@ function PaymentSuccess() {
         </div>
 
         <p className="text-xs text-slate-400 mt-6">
-          Powered by TrustTrade Escrow
+          Powered by TrustTrade Escrow Protection
         </p>
       </Card>
     </div>

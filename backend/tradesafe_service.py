@@ -507,45 +507,130 @@ async def get_tradesafe_transaction(tradesafe_id: str) -> Optional[Dict[str, Any
     return None
 
 
-async def get_payment_link(tradesafe_id: str) -> Optional[Dict[str, Any]]:
+async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = None) -> Optional[Dict[str, Any]]:
     """
-    Get payment link and deposit details for a TradeSafe transaction.
-    Returns the link that redirects buyer to payment page.
+    Generate payment link for a TradeSafe transaction using transactionDeposit mutation.
+    This creates a deposit request and returns the payment link.
+    
+    Args:
+        tradesafe_id: The TradeSafe transaction ID
+        redirect_urls: Optional dict with success, failure, cancel URLs
     """
+    # Default redirect URLs
+    if not redirect_urls:
+        redirect_urls = {
+            "success": "https://trusttradesa.co.za/transaction/success",
+            "failure": "https://trusttradesa.co.za/transaction/failed",
+            "cancel": "https://trusttradesa.co.za/transaction/cancelled"
+        }
+    
+    # First, get the transaction to check state and existing deposits
     query = """
     query transaction($id: ID!) {
         transaction(id: $id) {
             id
             state
-            deposit {
-                paymentMethods
+            deposits {
+                id
                 paymentLink
-                bankAccount {
-                    bank
-                    accountNumber
-                    branchCode
-                    accountType
-                    reference
-                }
-                manualPaymentProcessing
+                method
             }
         }
     }
     """
     
     result = await execute_graphql(query, {"id": tradesafe_id})
+    logger.info(f"=== GET TRANSACTION FOR PAYMENT ===")
+    logger.info(f"Result: {result}")
     
-    if result and 'transaction' in result:
-        tx = result['transaction']
-        deposit = tx.get('deposit', {})
+    if not result or 'transaction' not in result:
+        if result and 'errors' in result:
+            logger.error(f"Transaction query error: {result['errors']}")
+        logger.error(f"Could not fetch transaction {tradesafe_id}")
+        return None
+    
+    tx = result['transaction']
+    
+    # Check if there's already a deposit with payment link
+    deposits = tx.get('deposits', [])
+    for deposit in deposits:
+        if deposit.get('paymentLink'):
+            logger.info(f"Found existing payment link: {deposit['paymentLink']}")
+            return {
+                "tradesafe_id": tx['id'],
+                "state": tx['state'],
+                "payment_link": deposit['paymentLink'],
+                "payment_methods": ALLOWED_PAYMENT_METHODS
+            }
+    
+    # Generate new payment link using transactionDeposit mutation
+    # Note: transactionDeposit returns a Deposit object directly
+    # For sandbox, EFT (manual) will work. For production, OZOW/CARD provide payment links.
+    mutation = """
+    mutation transactionDeposit($id: ID!, $method: DepositMethod!, $redirects: TransactionDepositRedirects) {
+        transactionDeposit(id: $id, method: $method, redirects: $redirects) {
+            id
+            paymentLink
+            method
+            value
+            processingFee
+        }
+    }
+    """
+    
+    # Try EFT first (works in sandbox), then try interactive methods
+    methods_to_try = ["EFT", "OZOW", "CARD"]
+    last_deposit = None
+    
+    for method in methods_to_try:
+        variables = {
+            "id": tradesafe_id,
+            "method": method,
+            "redirects": redirect_urls
+        }
         
+        logger.info(f"=== TRYING PAYMENT METHOD: {method} ===")
+        result = await execute_graphql(mutation, variables)
+        
+        if result and 'errors' in result:
+            error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
+            logger.warning(f"Method {method} failed: {error_msg}")
+            continue
+        
+        if result and 'transactionDeposit' in result:
+            deposit = result['transactionDeposit']
+            last_deposit = deposit
+            payment_link = deposit.get('paymentLink')
+            
+            logger.info(f"Deposit created with {method}: link={payment_link}, value={deposit.get('value')}")
+            
+            if payment_link:
+                # Got a payment link - return it
+                return {
+                    "tradesafe_id": tradesafe_id,
+                    "state": "PENDING_PAYMENT",
+                    "payment_link": payment_link,
+                    "payment_methods": ALLOWED_PAYMENT_METHODS,
+                    "deposit_id": deposit.get('id'),
+                    "processing_fee": deposit.get('processingFee'),
+                    "total_value": deposit.get('value'),
+                    "method": method
+                }
+    
+    # If we got a deposit but no payment link (EFT case), return deposit info
+    # The frontend will show bank details or instruct user
+    if last_deposit:
+        logger.info(f"Returning EFT deposit info without payment link")
         return {
-            "tradesafe_id": tx['id'],
-            "state": tx['state'],
-            "payment_link": deposit.get('paymentLink'),
-            "payment_methods": deposit.get('paymentMethods', ALLOWED_PAYMENT_METHODS),
-            "bank_details": deposit.get('bankAccount'),
-            "manual_processing": deposit.get('manualPaymentProcessing', False)
+            "tradesafe_id": tradesafe_id,
+            "state": "PENDING_PAYMENT",
+            "payment_link": None,
+            "payment_methods": ALLOWED_PAYMENT_METHODS,
+            "deposit_id": last_deposit.get('id'),
+            "processing_fee": last_deposit.get('processingFee'),
+            "total_value": last_deposit.get('value'),
+            "method": "EFT",
+            "message": "Please use bank details for EFT payment. See transaction for bank account details."
         }
     
     return None

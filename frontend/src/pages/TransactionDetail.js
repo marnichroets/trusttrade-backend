@@ -166,7 +166,9 @@ function TransactionDetail() {
         window.open(response.data.payment_link, '_blank');
         toast.success('Secure payment page opened. Complete payment via EFT, Card, or Ozow.');
       } else {
-        toast.error('Payment link not available yet. Please try again.');
+        // No payment link - show EFT bank details message
+        setPaymentInfo(response.data);
+        toast.info('Payment deposit created. For sandbox testing, bank details will be shown for EFT payment. In production, you will be redirected to the payment page.');
       }
     } catch (error) {
       console.error('Failed to get payment link:', error);
@@ -336,8 +338,14 @@ function TransactionDetail() {
   // Can create escrow: seller confirmed, no existing escrow link
   const canCreateEscrow = transaction.seller_confirmed && !hasEscrow && transaction.item_price >= 500;
   
-  // Can make payment: escrow created, awaiting payment
-  const canMakePayment = hasEscrow && isBuyer && ['CREATED', 'PENDING'].includes(escrowState);
+  // Can make payment: escrow created, buyer, awaiting payment
+  // Check both escrowState (CREATED/PENDING) and payment_status (Awaiting Payment)
+  const canMakePayment = hasEscrow && isBuyer && 
+    (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
+  
+  // Seller should see "Awaiting Buyer Payment" when escrow is created but not yet paid
+  const isAwaitingBuyerPayment = hasEscrow && isSeller && 
+    (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
   
   // Can start delivery: funds received, seller
   const canStartDelivery = hasEscrow && isSeller && escrowState === 'FUNDS_RECEIVED';
@@ -534,9 +542,35 @@ function TransactionDetail() {
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-blue-900 mb-2">Pay Securely with TrustTrade</h3>
-                <p className="text-sm text-blue-800 mb-4">
-                  Your escrow is ready. Click below to pay securely. Choose from EFT, Card, or Ozow.
+                <p className="text-sm text-blue-800 mb-3">
+                  Your escrow is ready. Click below to pay securely. You can choose EFT, Card, or Ozow on the payment page.
                 </p>
+                
+                {/* Fee Breakdown */}
+                <div className="bg-white rounded-lg p-4 mb-4 border border-blue-200">
+                  <h4 className="text-sm font-medium text-slate-700 mb-3">Payment Summary</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Item Price:</span>
+                      <span className="font-medium">R {transaction.item_price?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>TrustTrade Fee (2%):</span>
+                      <span>R {(transaction.item_price * 0.02)?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Payment Processing Fee:</span>
+                      <span className="text-xs">(shown at checkout)</span>
+                    </div>
+                    <div className="border-t pt-2 mt-2">
+                      <div className="flex justify-between font-semibold text-slate-900">
+                        <span>Estimated Total:</span>
+                        <span>R {transaction.total?.toFixed(2) || (transaction.item_price * 1.02)?.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
                 <div className="flex flex-wrap gap-2 mb-4">
                   <Badge className="bg-white border border-blue-200">EFT</Badge>
                   <Badge className="bg-white border border-blue-200">Card</Badge>
@@ -545,21 +579,42 @@ function TransactionDetail() {
                 <Button 
                   onClick={handleGetPaymentLink} 
                   disabled={loadingPaymentLink}
-                  className="bg-blue-600 hover:bg-blue-700"
+                  className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto text-lg py-6"
                   data-testid="make-payment-btn"
                 >
                   {loadingPaymentLink ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Loading...
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Loading Payment Page...
                     </>
                   ) : (
                     <>
-                      <ExternalLink className="w-4 h-4 mr-2" />
-                      Pay Now (R {transaction.total?.toFixed(2)})
+                      <CreditCard className="w-5 h-5 mr-2" />
+                      Pay Securely with TrustTrade
                     </>
                   )}
                 </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Seller Awaiting Payment Card */}
+        {isAwaitingBuyerPayment && (
+          <Card className="p-6 bg-amber-50 border-amber-200">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-amber-100 rounded-full">
+                <CreditCard className="w-6 h-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-amber-900 mb-2">Awaiting Buyer Payment</h3>
+                <p className="text-sm text-amber-800 mb-3">
+                  The escrow has been created. Waiting for the buyer to make payment. You will be notified once payment is received.
+                </p>
+                <div className="flex items-center gap-2 text-sm text-amber-700">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Waiting for buyer to pay...</span>
+                </div>
               </div>
             </div>
           </Card>

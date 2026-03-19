@@ -3006,11 +3006,27 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
     if not tradesafe_id:
         raise HTTPException(status_code=400, detail="Please create an escrow first before making payment.")
     
-    # Get payment link from TradeSafe
-    payment_info = await get_payment_link(tradesafe_id)
+    # Build redirect URLs - use frontend URL
+    frontend_url = os.environ.get('FRONTEND_URL', 'https://trusttradesa.co.za')
+    redirect_urls = {
+        "success": f"{frontend_url}/transaction/success?tx={transaction_id}",
+        "failure": f"{frontend_url}/transaction/failed?tx={transaction_id}",
+        "cancel": f"{frontend_url}/transaction/cancelled?tx={transaction_id}"
+    }
+    
+    # Get/generate payment link from TradeSafe
+    logger.info(f"=== GETTING PAYMENT URL ===")
+    logger.info(f"Transaction ID: {transaction_id}")
+    logger.info(f"TradeSafe ID: {tradesafe_id}")
+    
+    payment_info = await get_payment_link(tradesafe_id, redirect_urls)
     
     if not payment_info:
         raise HTTPException(status_code=500, detail="Payment processing error. Please try again.")
+    
+    if not payment_info.get("payment_link"):
+        logger.error(f"No payment link returned for {tradesafe_id}")
+        raise HTTPException(status_code=500, detail="Could not generate payment link. Please try again.")
     
     # Calculate fee breakdown for display
     fee_breakdown = calculate_fees(
@@ -3018,12 +3034,14 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
         transaction.get("fee_paid_by", "split")
     )
     
+    logger.info(f"=== PAYMENT URL SUCCESS ===")
+    logger.info(f"Payment Link: {payment_info.get('payment_link')}")
+    
     return {
         "transaction_id": transaction_id,
         "tradesafe_id": tradesafe_id,
         "payment_link": payment_info.get("payment_link"),
         "payment_methods": payment_info.get("payment_methods", ALLOWED_PAYMENT_METHODS),
-        "bank_details": payment_info.get("bank_details"),
         "state": payment_info.get("state"),
         "fee_breakdown": fee_breakdown
     }

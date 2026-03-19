@@ -368,8 +368,9 @@ async def create_tradesafe_transaction(
     
     logger.info(f"Tokens created - Buyer: {buyer_token}, Seller: {seller_token}")
     
-    # Convert amount to cents for API
-    amount_cents = int(amount * 100)
+    # TradeSafe API expects amount in RANDS (NOT cents)
+    # Example from docs: value: 10000.00 means R10,000.00
+    amount_rands = float(amount)
     
     # Map fee allocation - using correct enum values
     fee_map = {
@@ -434,7 +435,7 @@ async def create_tradesafe_transaction(
                     {
                         "title": "Payment for item/service",
                         "description": description,
-                        "value": amount_cents,
+                        "value": amount_rands,
                         "daysToDeliver": 7,
                         "daysToInspect": 2
                     }

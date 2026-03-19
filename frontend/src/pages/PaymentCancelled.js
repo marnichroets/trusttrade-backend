@@ -1,24 +1,35 @@
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { XCircle, ArrowRight, RefreshCw } from 'lucide-react';
+import { XCircle, AlertTriangle, ArrowRight, RefreshCw } from 'lucide-react';
 
 function PaymentCancelled() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const transactionId = searchParams.get('transaction_id');
+  // Support both 'tx' (from TradeSafe redirect) and 'transaction_id'
+  const transactionId = searchParams.get('tx') || searchParams.get('transaction_id');
   const reason = searchParams.get('reason');
+  
+  // Check if this is a failed payment (from /transaction/failed route)
+  const isFailed = location.pathname.includes('failed') || reason === 'failed';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 to-white flex items-center justify-center p-4">
+    <div className={`min-h-screen ${isFailed ? 'bg-gradient-to-br from-orange-50 to-white' : 'bg-gradient-to-br from-red-50 to-white'} flex items-center justify-center p-4`}>
       <Card className="max-w-md w-full p-8 text-center">
-        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <XCircle className="w-12 h-12 text-red-600" />
+        <div className={`w-20 h-20 ${isFailed ? 'bg-orange-100' : 'bg-red-100'} rounded-full flex items-center justify-center mx-auto mb-6`}>
+          {isFailed ? (
+            <AlertTriangle className="w-12 h-12 text-orange-600" />
+          ) : (
+            <XCircle className="w-12 h-12 text-red-600" />
+          )}
         </div>
         
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">Payment Cancelled</h1>
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">
+          {isFailed ? 'Payment Failed' : 'Payment Cancelled'}
+        </h1>
         <p className="text-slate-600 mb-6">
-          {reason === 'failed' 
+          {isFailed 
             ? 'Your payment could not be processed. Please try again or use a different payment method.'
             : 'Your payment was cancelled. No funds have been deducted from your account.'}
         </p>

@@ -124,12 +124,22 @@ function TransactionDetail() {
   };
 
   // Create escrow transaction
-  const handleCreateEscrow = async () => {
+  const handleCreateEscrow = async (e) => {
+    // Prevent default and stop propagation for mobile
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    console.log('Create Escrow button clicked');
+    
     if (!window.confirm('This will create a secure TrustTrade escrow. The buyer will then need to make payment. Proceed?')) {
       return;
     }
 
     setCreatingEscrow(true);
+    toast.info('Creating escrow...');
+    
     try {
       const response = await axios.post(
         `${API}/tradesafe/create-transaction`,
@@ -140,30 +150,55 @@ function TransactionDetail() {
         { withCredentials: true }
       );
 
+      console.log('Escrow created:', response.data);
       toast.success('TrustTrade escrow created! Buyer can now make payment.');
       fetchData();
     } catch (error) {
       console.error('Failed to create escrow:', error);
-      toast.error(error.response?.data?.detail || 'Failed to create escrow. Please try again.');
+      const errorMessage = error.response?.data?.detail || 'Failed to create escrow. Please try again.';
+      toast.error(errorMessage);
+      alert('Error: ' + errorMessage); // Fallback alert for mobile
     } finally {
       setCreatingEscrow(false);
     }
   };
 
   // Get payment link for buyer
-  const handleGetPaymentLink = async () => {
+  const handleGetPaymentLink = async (e) => {
+    // Prevent default and stop propagation for mobile
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    console.log('Pay button clicked');
+    
     setLoadingPaymentLink(true);
+    toast.info('Loading payment page...');
+    
     try {
+      console.log('Calling payment-url API...');
       const response = await axios.get(
         `${API}/tradesafe/payment-url/${transactionId}`,
         { withCredentials: true }
       );
 
+      console.log('Payment URL response:', response.data);
       setPaymentInfo(response.data);
       
       if (response.data.payment_link) {
         // Open payment link in new tab
-        window.open(response.data.payment_link, '_blank');
+        const paymentLink = response.data.payment_link;
+        console.log('Opening payment link:', paymentLink);
+        
+        // Try window.open first, fallback to location.href for mobile
+        const newWindow = window.open(paymentLink, '_blank');
+        if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+          // Popup blocked or mobile - use direct navigation
+          console.log('Popup blocked, using direct navigation');
+          window.location.href = paymentLink;
+        }
+        
         toast.success('Secure payment page opened. Complete payment via EFT, Card, or Ozow.');
       } else {
         // No payment link - show EFT bank details message
@@ -172,7 +207,9 @@ function TransactionDetail() {
       }
     } catch (error) {
       console.error('Failed to get payment link:', error);
-      toast.error(error.response?.data?.detail || 'Payment processing error. Please try again.');
+      const errorMessage = error.response?.data?.detail || 'Payment processing error. Please try again.';
+      toast.error(errorMessage);
+      alert('Error: ' + errorMessage); // Fallback alert for mobile
     } finally {
       setLoadingPaymentLink(false);
     }
@@ -511,10 +548,13 @@ function TransactionDetail() {
                   Both parties have confirmed. Create a secure TrustTrade escrow to protect this transaction. The buyer will then be able to make payment via EFT, Card, or Ozow.
                 </p>
                 <Button 
+                  type="button"
                   onClick={handleCreateEscrow} 
+                  onTouchEnd={handleCreateEscrow}
                   disabled={creatingEscrow}
-                  className="bg-emerald-600 hover:bg-emerald-700"
+                  className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 touch-manipulation cursor-pointer"
                   data-testid="create-escrow-btn"
+                  style={{ touchAction: 'manipulation' }}
                 >
                   {creatingEscrow ? (
                     <>
@@ -577,10 +617,13 @@ function TransactionDetail() {
                   <Badge className="bg-white border border-blue-200">Ozow</Badge>
                 </div>
                 <Button 
+                  type="button"
                   onClick={handleGetPaymentLink} 
+                  onTouchEnd={handleGetPaymentLink}
                   disabled={loadingPaymentLink}
-                  className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto text-lg py-6"
+                  className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 w-full sm:w-auto text-lg py-6 touch-manipulation cursor-pointer"
                   data-testid="make-payment-btn"
+                  style={{ touchAction: 'manipulation' }}
                 >
                   {loadingPaymentLink ? (
                     <>

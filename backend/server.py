@@ -1186,7 +1186,8 @@ async def join_transaction_by_share_code(request: Request, share_code: str):
     # Log the comparison details for debugging
     logger.info(f"=== TRANSACTION LINK VERIFICATION ===")
     logger.info(f"User email: '{user.email}'")
-    logger.info(f"User phone: '{getattr(user, 'phone', None)}'")
+    user_phone = getattr(user, 'phone', None) or ""
+    logger.info(f"User phone: '{user_phone}'")
     logger.info(f"Transaction buyer_email: '{transaction.get('buyer_email')}'")
     logger.info(f"Transaction seller_email: '{transaction.get('seller_email')}'")
     logger.info(f"Transaction buyer_phone: '{transaction.get('buyer_phone')}'")
@@ -1194,51 +1195,88 @@ async def join_transaction_by_share_code(request: Request, share_code: str):
     logger.info(f"Transaction recipient_info: '{transaction.get('recipient_info')}'")
     logger.info(f"Transaction recipient_type: '{transaction.get('recipient_type')}'")
     
-    # Check if user matches buyer or seller - CASE INSENSITIVE EMAIL COMPARISON
-    is_buyer = emails_match(transaction.get("buyer_email", ""), user.email)
-    is_seller = emails_match(transaction.get("seller_email", ""), user.email)
-    
-    # Also check phone number if email doesn't match
-    user_phone = getattr(user, 'phone', None) or ""
-    if not is_buyer and user_phone:
-        is_buyer = phones_match(transaction.get("buyer_phone", ""), user_phone)
-    if not is_seller and user_phone:
-        is_seller = phones_match(transaction.get("seller_phone", ""), user_phone)
-    
-    # Also check recipient_info for invites sent via phone
-    recipient_info = transaction.get("recipient_info", "")
     recipient_type = transaction.get("recipient_type", "email")
+    recipient_info = transaction.get("recipient_info", "")
+    is_buyer = False
+    is_seller = False
     
-    if not is_buyer and not is_seller and recipient_info:
-        if recipient_type == "phone" and user_phone:
-            # Phone-based invite - check if user phone matches
-            if phones_match(recipient_info, user_phone):
-                # Determine role based on creator_role
-                if transaction.get("creator_role") == "seller":
-                    is_buyer = True
-                else:
-                    is_seller = True
-        elif recipient_type == "email":
-            # Email-based invite - check with case insensitive comparison
+    # RULE: If invited by email → check email ONLY
+    # RULE: If invited by phone → check phone ONLY
+    # Never mix both checks
+    
+    if recipient_type == "email":
+        # EMAIL-BASED INVITE - check email only (case-insensitive)
+        logger.info("Checking EMAIL-based invite verification...")
+        
+        # Check buyer email match
+        buyer_email = transaction.get("buyer_email", "")
+        if buyer_email and emails_match(buyer_email, user.email):
+            is_buyer = True
+            logger.info(f"Email match: user is BUYER (buyer_email={buyer_email})")
+        
+        # Check seller email match
+        seller_email = transaction.get("seller_email", "")
+        if seller_email and emails_match(seller_email, user.email):
+            is_seller = True
+            logger.info(f"Email match: user is SELLER (seller_email={seller_email})")
+        
+        # Also check recipient_info for email match
+        if not is_buyer and not is_seller and recipient_info:
             if emails_match(recipient_info, user.email):
                 if transaction.get("creator_role") == "seller":
                     is_buyer = True
+                    logger.info(f"Email match via recipient_info: user is BUYER")
                 else:
                     is_seller = True
+                    logger.info(f"Email match via recipient_info: user is SELLER")
+    
+    elif recipient_type == "phone":
+        # PHONE-BASED INVITE - check phone only (format-insensitive)
+        logger.info("Checking PHONE-based invite verification...")
+        
+        if not user_phone:
+            # User has no verified phone - they need to verify their phone first
+            logger.warning("User has no verified phone number, cannot join phone-based invite")
+            raise HTTPException(
+                status_code=403, 
+                detail="This transaction was sent to a phone number. Please verify your phone number in Settings to access this transaction."
+            )
+        
+        # Check buyer phone match
+        buyer_phone = transaction.get("buyer_phone", "")
+        if buyer_phone and phones_match(buyer_phone, user_phone):
+            is_buyer = True
+            logger.info(f"Phone match: user is BUYER (buyer_phone={buyer_phone})")
+        
+        # Check seller phone match
+        seller_phone = transaction.get("seller_phone", "")
+        if seller_phone and phones_match(seller_phone, user_phone):
+            is_seller = True
+            logger.info(f"Phone match: user is SELLER (seller_phone={seller_phone})")
+        
+        # Also check recipient_info for phone match
+        if not is_buyer and not is_seller and recipient_info:
+            if phones_match(recipient_info, user_phone):
+                if transaction.get("creator_role") == "seller":
+                    is_buyer = True
+                    logger.info(f"Phone match via recipient_info: user is BUYER")
+                else:
+                    is_seller = True
+                    logger.info(f"Phone match via recipient_info: user is SELLER")
     
     logger.info(f"Match result: is_buyer={is_buyer}, is_seller={is_seller}")
     
     if not is_buyer and not is_seller:
-        # Provide helpful error message
+        # Provide helpful error message based on invite type
         if recipient_type == "phone":
             raise HTTPException(
                 status_code=403, 
-                detail="This transaction link was sent to a different phone number. Please log in with the correct account."
+                detail=f"This transaction was sent to phone number {recipient_info}. Your verified phone number ({user_phone}) does not match. Please use the correct phone number."
             )
         else:
             raise HTTPException(
                 status_code=403, 
-                detail="This transaction link was sent to a different email address. Please log in with the correct account."
+                detail=f"This transaction was sent to email address {recipient_info}. Your account email ({user.email}) does not match. Please log in with the correct account."
             )
     
     # Link user to transaction

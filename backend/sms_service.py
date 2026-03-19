@@ -1,7 +1,7 @@
 """
 SMS Messenger Service for TrustTrade
 Handles OTP verification and transaction notifications via SMS
-Uses SMS Messenger South Africa API (sms1.smsmessenger.co.za)
+Uses SMS Messenger South Africa API (Zoom Connect platform)
 """
 
 import os
@@ -9,16 +9,15 @@ import httpx
 import logging
 import random
 import string
-import base64
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
 
-# SMS Messenger Configuration
+# SMS Messenger Configuration - Uses Zoom Connect platform
 SMS_MESSENGER_API_KEY = os.environ.get('SMS_MESSENGER_API_KEY', '')
 SMS_MESSENGER_EMAIL = os.environ.get('SMS_MESSENGER_EMAIL', '')
-SMS_MESSENGER_API_URL = os.environ.get('SMS_MESSENGER_API_URL', 'https://sms1.smsmessenger.co.za/app/api/rest/v1/sms/send')
+SMS_MESSENGER_BASE_URL = "https://sms1.smsmessenger.co.za/app/api/rest/v1"
 
 # OTP Configuration
 OTP_LENGTH = 6
@@ -28,43 +27,48 @@ RESEND_COOLDOWN_SECONDS = 60
 
 def normalize_phone_number(phone: str) -> str:
     """
-    Normalize phone number to +27 format.
+    Normalize phone number to 27XXXXXXXXX format (no + prefix for API).
     Handles various input formats:
-    - 0821234567 -> +27821234567
-    - 27821234567 -> +27821234567
-    - +27821234567 -> +27821234567
+    - 0821234567 -> 27821234567
+    - 27821234567 -> 27821234567
+    - +27821234567 -> 27821234567
     """
     if not phone:
         return ""
     
-    # Remove all non-digit characters except leading +
+    # Remove all non-digit characters
     cleaned = phone.strip()
-    if cleaned.startswith('+'):
-        digits = '+' + ''.join(c for c in cleaned[1:] if c.isdigit())
-    else:
-        digits = ''.join(c for c in cleaned if c.isdigit())
+    digits = ''.join(c for c in cleaned if c.isdigit())
     
     # Handle different formats
-    if digits.startswith('+27'):
+    if digits.startswith('27') and len(digits) >= 11:
         return digits
-    elif digits.startswith('27') and len(digits) >= 11:
-        return '+' + digits
     elif digits.startswith('0') and len(digits) >= 10:
-        return '+27' + digits[1:]
+        return '27' + digits[1:]
     elif len(digits) == 9:
         # Assume SA number without leading 0
-        return '+27' + digits
+        return '27' + digits
     else:
-        # Return with +27 prefix if looks like a number
+        # Return with 27 prefix if looks like a number
         if len(digits) >= 9:
-            return '+27' + digits[-9:]
+            return '27' + digits[-9:]
         return digits
+
+
+def normalize_phone_for_display(phone: str) -> str:
+    """
+    Normalize phone number to +27XXXXXXXXX format for display/storage.
+    """
+    normalized = normalize_phone_number(phone)
+    if normalized and not normalized.startswith('+'):
+        return '+' + normalized
+    return normalized
 
 
 def phones_match(phone1: str, phone2: str) -> bool:
     """
     Compare two phone numbers in a format-insensitive way.
-    0821234567 should match +27821234567
+    0821234567 should match +27821234567 should match 27821234567
     """
     if not phone1 or not phone2:
         return False
@@ -84,8 +88,8 @@ def generate_otp() -> str:
 
 async def send_sms(to_phone: str, message: str) -> Dict[str, Any]:
     """
-    Send SMS via SMS Messenger API.
-    Uses Basic Auth with email:apikey
+    Send SMS via SMS Messenger API (Zoom Connect platform).
+    Uses email and token headers for authentication.
     
     Args:
         to_phone: Phone number in any format (will be normalized)
@@ -102,39 +106,33 @@ async def send_sms(to_phone: str, message: str) -> Dict[str, Any]:
         logger.error("SMS_MESSENGER_EMAIL not configured")
         return {"success": False, "error": "SMS service not configured - missing email"}
     
-    # Normalize phone number
+    # Normalize phone number (27XXXXXXXXX format, no + prefix)
     normalized_phone = normalize_phone_number(to_phone)
     
-    if not normalized_phone or len(normalized_phone) < 10:
-        logger.error(f"Invalid phone number: {to_phone}")
+    if not normalized_phone or len(normalized_phone) < 11:
+        logger.error(f"Invalid phone number: {to_phone} -> {normalized_phone}")
         return {"success": False, "error": "Invalid phone number"}
     
-    logger.info(f"=== SMS SEND ATTEMPT ===")
+    logger.info("=== SMS SEND ATTEMPT ===")
     logger.info(f"To: {normalized_phone}")
     logger.info(f"Message: {message[:50]}...")
-    logger.info(f"API URL: {SMS_MESSENGER_API_URL}")
     logger.info(f"Email: {SMS_MESSENGER_EMAIL}")
-    logger.info(f"API Key: {SMS_MESSENGER_API_KEY[:8]}...{SMS_MESSENGER_API_KEY[-4:]}")
     
     try:
-        # Create Basic Auth header
-        auth_string = f"{SMS_MESSENGER_EMAIL}:{SMS_MESSENGER_API_KEY}"
-        auth_bytes = base64.b64encode(auth_string.encode('utf-8')).decode('utf-8')
-        
-        # SMS Messenger API expects 'message' and 'recipientNumber' fields
+        # SMS Messenger uses email and token headers for auth
         payload = {
             "message": message,
             "recipientNumber": normalized_phone
         }
         
         logger.info(f"Request payload: {payload}")
-        logger.info(f"Auth header: Basic {auth_bytes[:20]}...")
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                SMS_MESSENGER_API_URL,
+                f"{SMS_MESSENGER_BASE_URL}/sms/send",
                 headers={
-                    "Authorization": f"Basic {auth_bytes}",
+                    "email": SMS_MESSENGER_EMAIL,
+                    "token": SMS_MESSENGER_API_KEY,
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                 },
@@ -142,21 +140,24 @@ async def send_sms(to_phone: str, message: str) -> Dict[str, Any]:
             )
             
             logger.info(f"SMS API Response Status: {response.status_code}")
-            logger.info(f"SMS API Response Headers: {dict(response.headers)}")
             logger.info(f"SMS API Response Body: {response.text}")
             
             if response.status_code in [200, 201, 202]:
-                try:
-                    data = response.json() if response.text else {}
-                except:
-                    data = {"raw_response": response.text}
-                    
-                logger.info(f"SMS sent successfully to {normalized_phone}")
+                # Parse XML response for message ID
+                response_text = response.text
+                message_id = None
+                if "<messageId>" in response_text:
+                    start = response_text.find("<messageId>") + len("<messageId>")
+                    end = response_text.find("</messageId>")
+                    if start > 0 and end > start:
+                        message_id = response_text[start:end]
+                
+                logger.info(f"SMS sent successfully to {normalized_phone}, messageId: {message_id}")
                 return {
                     "success": True,
-                    "message_id": data.get("messageId") or data.get("message_id") or data.get("id"),
+                    "message_id": message_id,
                     "status": "sent",
-                    "response": data
+                    "response": response_text
                 }
             else:
                 error_detail = response.text
@@ -175,6 +176,39 @@ async def send_sms(to_phone: str, message: str) -> Dict[str, Any]:
         return {"success": False, "error": f"Timeout error: {str(e)}"}
     except Exception as e:
         logger.error(f"SMS send error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def check_sms_balance() -> Dict[str, Any]:
+    """Check SMS credit balance."""
+    if not SMS_MESSENGER_API_KEY or not SMS_MESSENGER_EMAIL:
+        return {"success": False, "error": "SMS service not configured"}
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{SMS_MESSENGER_BASE_URL}/account/balance",
+                headers={
+                    "email": SMS_MESSENGER_EMAIL,
+                    "token": SMS_MESSENGER_API_KEY
+                }
+            )
+            
+            if response.status_code == 200:
+                # Parse XML for balance
+                response_text = response.text
+                balance = None
+                if "<creditBalance>" in response_text:
+                    start = response_text.find("<creditBalance>") + len("<creditBalance>")
+                    end = response_text.find("</creditBalance>")
+                    if start > 0 and end > start:
+                        balance = float(response_text[start:end])
+                
+                return {"success": True, "balance": balance}
+            else:
+                return {"success": False, "error": response.text}
+                
+    except Exception as e:
         return {"success": False, "error": str(e)}
 
 
@@ -264,7 +298,7 @@ def create_otp_record(phone: str) -> Dict[str, Any]:
     expires_at = now + timedelta(minutes=OTP_EXPIRY_MINUTES)
     
     return {
-        "phone": normalize_phone_number(phone),
+        "phone": normalize_phone_for_display(phone),
         "otp_code": otp_code,
         "created_at": now.isoformat(),
         "expires_at": expires_at.isoformat(),

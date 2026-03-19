@@ -13,6 +13,7 @@ import ShareTransaction from './pages/ShareTransaction';
 import UserProfile from './pages/UserProfile';
 import LiveActivity from './pages/LiveActivity';
 import IdentityVerification from './pages/IdentityVerification';
+import PhoneVerification from './pages/PhoneVerification';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentCancelled from './pages/PaymentCancelled';
 import BankingSettings from './pages/BankingSettings';
@@ -49,6 +50,7 @@ function AppRouter() {
       <Route path="/profile/:userId" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/activity" element={<ProtectedRoute><LiveActivity /></ProtectedRoute>} />
       <Route path="/verify" element={<ProtectedRoute><IdentityVerification /></ProtectedRoute>} />
+      <Route path="/verify/phone" element={<ProtectedRoute><PhoneVerification /></ProtectedRoute>} />
       <Route path="/settings/banking" element={<ProtectedRoute><BankingSettings /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -38,6 +38,17 @@ from tradesafe_service import (
     MINIMUM_TRANSACTION_AMOUNT as TRADESAFE_MINIMUM,
     ALLOWED_PAYMENT_METHODS
 )
+from sms_service import (
+    normalize_phone_number,
+    phones_match,
+    generate_otp,
+    send_otp_sms,
+    send_transaction_invite_sms,
+    send_dispute_sms,
+    create_otp_record,
+    is_otp_valid,
+    can_resend_otp
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -86,6 +97,10 @@ class User(BaseModel):
     trust_score: int = 50
     badges: List[str] = []
     verified: bool = False
+    # Phone verification
+    phone: Optional[str] = None  # Stored in +27 format
+    phone_verified: bool = False
+    phone_verified_at: Optional[str] = None
     # Wallet & Banking
     wallet_balance: float = 0.0
     pending_balance: float = 0.0  # Funds in escrow awaiting release
@@ -93,6 +108,29 @@ class User(BaseModel):
     banking_details: Optional[dict] = None  # Changed from BankingDetails to dict for flexibility
     banking_details_verified: bool = False
     created_at: Optional[str] = None  # Made optional for existing users
+
+
+def normalize_email(email: str) -> str:
+    """Normalize email for comparison - lowercase and strip whitespace."""
+    if not email:
+        return ""
+    return email.strip().lower()
+
+
+def emails_match(email1: str, email2: str) -> bool:
+    """
+    Compare two emails in a case-insensitive, whitespace-tolerant way.
+    john@gmail.com should match John@Gmail.com and " john@gmail.com "
+    """
+    if not email1 or not email2:
+        return False
+    
+    norm1 = normalize_email(email1)
+    norm2 = normalize_email(email2)
+    
+    logger.info(f"Email comparison: '{email1}' -> '{norm1}' vs '{email2}' -> '{norm2}' = {norm1 == norm2}")
+    
+    return norm1 == norm2
 
 class UserSession(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -110,8 +148,12 @@ class Transaction(BaseModel):
     seller_user_id: Optional[str] = None
     buyer_name: str
     buyer_email: str
+    buyer_phone: Optional[str] = None  # Phone in +27 format
     seller_name: str
     seller_email: str
+    seller_phone: Optional[str] = None  # Phone in +27 format
+    recipient_info: Optional[str] = None  # Email or phone used for invite
+    recipient_type: Optional[str] = None  # "email" or "phone"
     item_description: str
     item_condition: Optional[str] = None
     known_issues: Optional[str] = None
@@ -549,6 +591,189 @@ async def logout(request: Request, response: Response):
     response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out successfully"}
 
+
+# ============ PHONE VERIFICATION ENDPOINTS ============
+
+class PhoneSubmitRequest(BaseModel):
+    phone: str
+
+
+class OTPVerifyRequest(BaseModel):
+    phone: str
+    otp_code: str
+
+
+@api_router.post("/auth/phone/submit")
+async def submit_phone_number(request: Request, data: PhoneSubmitRequest):
+    """
+    Submit phone number for verification. 
+    Sends OTP via SMS if phone number is valid.
+    """
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Normalize phone number to +27 format
+    normalized_phone = normalize_phone_number(data.phone)
+    
+    if not normalized_phone or len(normalized_phone) < 12:
+        raise HTTPException(status_code=400, detail="Please enter a valid South African mobile number")
+    
+    logger.info(f"Phone submit: {data.phone} -> {normalized_phone} for user {user.email}")
+    
+    # Check if phone is already used by another account
+    existing_user = await db.users.find_one({
+        "phone": normalized_phone,
+        "phone_verified": True,
+        "user_id": {"$ne": user.user_id}
+    })
+    
+    if existing_user:
+        raise HTTPException(status_code=400, detail="This number is already linked to another account")
+    
+    # Check if can resend (60 second cooldown)
+    existing_otp = await db.phone_otps.find_one({"user_id": user.user_id})
+    can_send, seconds_remaining = can_resend_otp(existing_otp)
+    
+    if not can_send:
+        raise HTTPException(
+            status_code=429, 
+            detail=f"Please wait {seconds_remaining} seconds before requesting a new code"
+        )
+    
+    # Create OTP record
+    otp_record = create_otp_record(normalized_phone)
+    otp_record["user_id"] = user.user_id
+    
+    # Save to database (upsert)
+    await db.phone_otps.update_one(
+        {"user_id": user.user_id},
+        {"$set": otp_record},
+        upsert=True
+    )
+    
+    # Send OTP via SMS
+    sms_result = await send_otp_sms(normalized_phone, otp_record["otp_code"])
+    
+    if not sms_result.get("success"):
+        logger.error(f"Failed to send OTP SMS: {sms_result}")
+        # For sandbox/testing, still allow proceeding
+        logger.warning(f"OTP for testing: {otp_record['otp_code']}")
+    
+    # Update user with pending phone (not verified yet)
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"phone": normalized_phone, "phone_verified": False}}
+    )
+    
+    return {
+        "message": "Verification code sent",
+        "phone": normalized_phone,
+        "expires_in_minutes": 10,
+        "resend_cooldown_seconds": 60
+    }
+
+
+@api_router.post("/auth/phone/verify")
+async def verify_phone_otp(request: Request, data: OTPVerifyRequest):
+    """
+    Verify OTP code submitted by user.
+    Marks phone as verified if OTP is correct.
+    """
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    normalized_phone = normalize_phone_number(data.phone)
+    
+    # Get OTP record
+    otp_record = await db.phone_otps.find_one({"user_id": user.user_id})
+    
+    if not otp_record:
+        raise HTTPException(status_code=400, detail="No verification code found. Please request a new one.")
+    
+    # Check if phone matches
+    if otp_record.get("phone") != normalized_phone:
+        raise HTTPException(status_code=400, detail="Phone number does not match. Please request a new code.")
+    
+    # Increment attempts
+    await db.phone_otps.update_one(
+        {"user_id": user.user_id},
+        {"$inc": {"attempts": 1}}
+    )
+    
+    # Validate OTP
+    is_valid, error_msg = is_otp_valid(otp_record, data.otp_code)
+    
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
+    
+    # OTP is valid - mark as verified
+    now = datetime.now(timezone.utc).isoformat()
+    
+    await db.phone_otps.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"verified": True}}
+    )
+    
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {
+            "phone": normalized_phone,
+            "phone_verified": True,
+            "phone_verified_at": now
+        }}
+    )
+    
+    logger.info(f"Phone verified for user {user.email}: {normalized_phone}")
+    
+    return {
+        "message": "Phone number verified successfully",
+        "phone": normalized_phone,
+        "verified": True
+    }
+
+
+@api_router.post("/auth/phone/resend")
+async def resend_phone_otp(request: Request, data: PhoneSubmitRequest):
+    """
+    Resend OTP to the phone number.
+    Subject to 60 second cooldown.
+    """
+    # Reuse the submit endpoint logic
+    return await submit_phone_number(request, data)
+
+
+@api_router.get("/auth/phone/status")
+async def get_phone_verification_status(request: Request):
+    """
+    Get current phone verification status for user.
+    """
+    user = await get_user_from_token(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    phone = user_doc.get("phone")
+    phone_verified = user_doc.get("phone_verified", False)
+    
+    # Check if there's a pending OTP
+    otp_record = await db.phone_otps.find_one({"user_id": user.user_id})
+    can_send, seconds_remaining = can_resend_otp(otp_record)
+    
+    return {
+        "phone": phone,
+        "phone_verified": phone_verified,
+        "phone_verified_at": user_doc.get("phone_verified_at"),
+        "can_resend": can_send,
+        "resend_cooldown_remaining": seconds_remaining,
+        "requires_verification": not phone_verified
+    }
+
+
+# ============ END PHONE VERIFICATION ENDPOINTS ============
+
 # Terms & Conditions Endpoint
 @api_router.get("/terms")
 async def get_terms():
@@ -686,20 +911,38 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
     
     # Determine buyer and seller based on creator role
+    # Normalize emails for consistent storage
     if transaction_data.creator_role == "buyer":
         buyer_user_id = user.user_id
         buyer_name = user.name
-        buyer_email = user.email
+        buyer_email = normalize_email(user.email)
         seller_user_id = None
         seller_name = transaction_data.seller_name
-        seller_email = transaction_data.seller_email
+        seller_email = normalize_email(transaction_data.seller_email)
     else:  # creator_role == "seller"
         seller_user_id = user.user_id
         seller_name = user.name
-        seller_email = user.email
+        seller_email = normalize_email(user.email)
         buyer_user_id = None
         buyer_name = transaction_data.buyer_name
-        buyer_email = transaction_data.buyer_email
+        buyer_email = normalize_email(transaction_data.buyer_email)
+    
+    # Detect if recipient_info is phone or email
+    recipient_info = seller_email if transaction_data.creator_role == "buyer" else buyer_email
+    recipient_type = "email"
+    recipient_phone = None
+    
+    # Check if recipient_info looks like a phone number
+    if recipient_info and (recipient_info.startswith('+27') or recipient_info.startswith('0') and len(recipient_info) <= 12 and recipient_info.replace('+', '').isdigit()):
+        recipient_type = "phone"
+        recipient_phone = normalize_phone_number(recipient_info)
+        # Clear the email field if it was actually a phone
+        if transaction_data.creator_role == "buyer":
+            seller_email = ""
+        else:
+            buyer_email = ""
+    
+    logger.info(f"Transaction created by {user.email}: recipient={recipient_info}, type={recipient_type}")
     
     # Initialize timeline
     timeline = [{
@@ -745,8 +988,12 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "seller_user_id": seller_user_id,
         "buyer_name": buyer_name,
         "buyer_email": buyer_email,
+        "buyer_phone": recipient_phone if transaction_data.creator_role == "seller" else None,
         "seller_name": seller_name,
         "seller_email": seller_email,
+        "seller_phone": recipient_phone if transaction_data.creator_role == "buyer" else None,
+        "recipient_info": recipient_info,
+        "recipient_type": recipient_type,
         "item_description": transaction_data.item_description,
         "item_condition": transaction_data.item_condition,
         "known_issues": transaction_data.known_issues,
@@ -797,6 +1044,16 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         base_url=base_url
     )
     
+    # If recipient was invited via phone, also send SMS
+    if recipient_type == "phone" and recipient_phone:
+        share_link = f"{base_url}/share/{share_code}"
+        await send_transaction_invite_sms(
+            to_phone=recipient_phone,
+            sender_name=user.name,
+            share_link=share_link
+        )
+        logger.info(f"SMS invite sent to {recipient_phone}")
+    
     return Transaction(**transaction)
 
 @api_router.get("/transactions", response_model=List[Transaction])
@@ -810,14 +1067,27 @@ async def list_transactions(request: Request):
     if user.is_admin:
         query = {}
     else:
-        # Users see only their transactions
-        query = {
-            "$or": [
-                {"buyer_user_id": user.user_id},
-                {"buyer_email": user.email},
-                {"seller_email": user.email}
-            ]
-        }
+        # Users see only their transactions - use case-insensitive email matching
+        user_email_lower = normalize_email(user.email)
+        user_phone = getattr(user, 'phone', None)
+        
+        or_conditions = [
+            {"buyer_user_id": user.user_id},
+            {"seller_user_id": user.user_id},
+            {"buyer_email": {"$regex": f"^{user_email_lower}$", "$options": "i"}},
+            {"seller_email": {"$regex": f"^{user_email_lower}$", "$options": "i"}}
+        ]
+        
+        # Also match by phone if available
+        if user_phone:
+            normalized_phone = normalize_phone_number(user_phone)
+            or_conditions.extend([
+                {"buyer_phone": normalized_phone},
+                {"seller_phone": normalized_phone},
+                {"recipient_info": normalized_phone}
+            ])
+        
+        query = {"$or": or_conditions}
     
     transactions = await db.transactions.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return [Transaction(**t) for t in transactions]
@@ -913,12 +1183,63 @@ async def join_transaction_by_share_code(request: Request, share_code: str):
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
-    # Check if user's email matches buyer or seller
-    is_buyer = transaction.get("buyer_email") == user.email
-    is_seller = transaction.get("seller_email") == user.email
+    # Log the comparison details for debugging
+    logger.info(f"=== TRANSACTION LINK VERIFICATION ===")
+    logger.info(f"User email: '{user.email}'")
+    logger.info(f"User phone: '{getattr(user, 'phone', None)}'")
+    logger.info(f"Transaction buyer_email: '{transaction.get('buyer_email')}'")
+    logger.info(f"Transaction seller_email: '{transaction.get('seller_email')}'")
+    logger.info(f"Transaction buyer_phone: '{transaction.get('buyer_phone')}'")
+    logger.info(f"Transaction seller_phone: '{transaction.get('seller_phone')}'")
+    logger.info(f"Transaction recipient_info: '{transaction.get('recipient_info')}'")
+    logger.info(f"Transaction recipient_type: '{transaction.get('recipient_type')}'")
+    
+    # Check if user matches buyer or seller - CASE INSENSITIVE EMAIL COMPARISON
+    is_buyer = emails_match(transaction.get("buyer_email", ""), user.email)
+    is_seller = emails_match(transaction.get("seller_email", ""), user.email)
+    
+    # Also check phone number if email doesn't match
+    user_phone = getattr(user, 'phone', None) or ""
+    if not is_buyer and user_phone:
+        is_buyer = phones_match(transaction.get("buyer_phone", ""), user_phone)
+    if not is_seller and user_phone:
+        is_seller = phones_match(transaction.get("seller_phone", ""), user_phone)
+    
+    # Also check recipient_info for invites sent via phone
+    recipient_info = transaction.get("recipient_info", "")
+    recipient_type = transaction.get("recipient_type", "email")
+    
+    if not is_buyer and not is_seller and recipient_info:
+        if recipient_type == "phone" and user_phone:
+            # Phone-based invite - check if user phone matches
+            if phones_match(recipient_info, user_phone):
+                # Determine role based on creator_role
+                if transaction.get("creator_role") == "seller":
+                    is_buyer = True
+                else:
+                    is_seller = True
+        elif recipient_type == "email":
+            # Email-based invite - check with case insensitive comparison
+            if emails_match(recipient_info, user.email):
+                if transaction.get("creator_role") == "seller":
+                    is_buyer = True
+                else:
+                    is_seller = True
+    
+    logger.info(f"Match result: is_buyer={is_buyer}, is_seller={is_seller}")
     
     if not is_buyer and not is_seller:
-        raise HTTPException(status_code=403, detail="Your email doesn't match this transaction")
+        # Provide helpful error message
+        if recipient_type == "phone":
+            raise HTTPException(
+                status_code=403, 
+                detail="This transaction link was sent to a different phone number. Please log in with the correct account."
+            )
+        else:
+            raise HTTPException(
+                status_code=403, 
+                detail="This transaction link was sent to a different email address. Please log in with the correct account."
+            )
     
     # Link user to transaction
     update_field = "buyer_user_id" if is_buyer else "seller_user_id"
@@ -936,9 +1257,16 @@ async def join_transaction_by_share_code(request: Request, share_code: str):
         "by": user.name
     })
     
+    # Also update the email/phone on transaction if it was empty
+    update_data = {update_field: user.user_id, "timeline": timeline}
+    if is_buyer and not transaction.get("buyer_email"):
+        update_data["buyer_email"] = normalize_email(user.email)
+    if is_seller and not transaction.get("seller_email"):
+        update_data["seller_email"] = normalize_email(user.email)
+    
     await db.transactions.update_one(
         {"share_code": share_code},
-        {"$set": {update_field: user.user_id, "timeline": timeline}}
+        {"$set": update_data}
     )
     
     return {"message": "Successfully joined transaction", "transaction_id": transaction["transaction_id"], "role": "buyer" if is_buyer else "seller"}

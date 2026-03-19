@@ -7,9 +7,10 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Textarea } from '../components/ui/textarea';
+import { Input } from '../components/ui/input';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, ExternalLink, Shield, Loader2 } from 'lucide-react';
+import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, ExternalLink, Shield, Loader2, Phone, Lock } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -33,6 +34,15 @@ function TransactionDetail() {
   const [acceptingDelivery, setAcceptingDelivery] = useState(false);
   // Payment method selection
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
+  // Phone verification states
+  const [needsPhoneVerification, setNeedsPhoneVerification] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [verificationError, setVerificationError] = useState(null);
   const navigate = useNavigate();
   const { transactionId } = useParams();
 
@@ -40,21 +50,126 @@ function TransactionDetail() {
     fetchData();
   }, [transactionId]);
 
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
+
   const fetchData = async () => {
     try {
-      const [userRes, transactionRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/transactions/${transactionId}`, { withCredentials: true })
-      ]);
-
+      // First get user info
+      const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
       setUser(userRes.data);
+      
+      // Pre-fill phone if user has one
+      if (userRes.data.phone) {
+        setPhoneNumber(userRes.data.phone);
+      }
+      
+      // Then try to get transaction
+      const transactionRes = await axios.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
       setTransaction(transactionRes.data);
+      setNeedsPhoneVerification(false);
     } catch (error) {
       console.error('Failed to fetch transaction:', error);
-      toast.error('Transaction not found');
-      navigate('/transactions');
+      
+      // Check if it's a phone verification required error
+      const errorDetail = error.response?.data?.detail || '';
+      if (error.response?.status === 403 && errorDetail.includes('phone')) {
+        // Phone verification needed - show inline verification
+        setNeedsPhoneVerification(true);
+        setVerificationError(errorDetail);
+        
+        // Still try to get user info for pre-filling
+        try {
+          const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+          setUser(userRes.data);
+          if (userRes.data.phone) {
+            setPhoneNumber(userRes.data.phone);
+          }
+        } catch (e) {
+          console.error('Failed to get user:', e);
+        }
+      } else {
+        toast.error('Transaction not found');
+        navigate('/transactions');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Send OTP for phone verification
+  const handleSendOtp = async () => {
+    if (!phoneNumber || phoneNumber.length < 10) {
+      toast.error('Please enter a valid phone number');
+      return;
+    }
+
+    setSendingOtp(true);
+    try {
+      await axios.post(
+        `${API}/phone/send-otp`,
+        { phone_number: phoneNumber },
+        { withCredentials: true }
+      );
+      
+      setOtpSent(true);
+      setResendCooldown(60);
+      toast.success('Verification code sent to your phone');
+    } catch (error) {
+      console.error('Failed to send OTP:', error);
+      toast.error(error.response?.data?.detail || 'Failed to send verification code');
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  // Verify OTP and join transaction
+  const handleVerifyOtp = async () => {
+    if (!otpCode || otpCode.length !== 6) {
+      toast.error('Please enter the 6-digit code');
+      return;
+    }
+
+    setVerifyingOtp(true);
+    try {
+      // First verify the OTP
+      await axios.post(
+        `${API}/phone/verify-otp`,
+        { phone_number: phoneNumber, otp_code: otpCode },
+        { withCredentials: true }
+      );
+      
+      toast.success('Phone verified successfully!');
+      
+      // Now try to fetch the transaction again - should work now
+      const transactionRes = await axios.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
+      setTransaction(transactionRes.data);
+      setNeedsPhoneVerification(false);
+      setVerificationError(null);
+      
+      // Update user state with verified phone
+      const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      setUser(userRes.data);
+      
+      toast.success('You have joined the transaction!');
+    } catch (error) {
+      console.error('Failed to verify OTP:', error);
+      const errorDetail = error.response?.data?.detail || 'Verification failed';
+      
+      // Check if phone was verified but doesn't match transaction
+      if (errorDetail.includes('different') || errorDetail.includes('does not match')) {
+        setVerificationError(errorDetail);
+        toast.error('This transaction was sent to a different phone number');
+      } else {
+        toast.error(errorDetail);
+      }
+    } finally {
+      setVerifyingOtp(false);
     }
   };
 
@@ -365,6 +480,163 @@ function TransactionDetail() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
       </div>
+    );
+  }
+
+  // Show inline phone verification if needed
+  if (needsPhoneVerification) {
+    return (
+      <DashboardLayout user={user}>
+        <div className="max-w-md mx-auto py-12 px-4">
+          <Card className="p-8">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Lock className="w-8 h-8 text-blue-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900 mb-2">Verify Your Phone Number</h1>
+              <p className="text-slate-600">
+                This transaction was sent to a phone number. Please verify your number to continue.
+              </p>
+            </div>
+
+            {verificationError && verificationError.includes('different') && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-800">Phone Number Mismatch</p>
+                    <p className="text-sm text-red-600 mt-1">{verificationError}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!otpSent ? (
+              // Step 1: Enter phone number
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Phone Number
+                  </label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <Input
+                      type="tel"
+                      placeholder="+27 82 123 4567"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      className="pl-10"
+                      data-testid="phone-input"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Enter the phone number this transaction was sent to
+                  </p>
+                </div>
+
+                <Button
+                  onClick={handleSendOtp}
+                  disabled={sendingOtp || !phoneNumber}
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  data-testid="send-otp-btn"
+                >
+                  {sendingOtp ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    'Send Verification Code'
+                  )}
+                </Button>
+              </div>
+            ) : (
+              // Step 2: Enter OTP
+              <div className="space-y-4">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <p className="text-sm text-emerald-800">
+                      Code sent to <span className="font-medium">{phoneNumber}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Verification Code
+                  </label>
+                  <Input
+                    type="text"
+                    placeholder="Enter 6-digit code"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="text-center text-2xl tracking-widest font-mono"
+                    maxLength={6}
+                    data-testid="otp-input"
+                  />
+                  <p className="text-xs text-slate-500 mt-1 text-center">
+                    Code expires in 10 minutes
+                  </p>
+                </div>
+
+                <Button
+                  onClick={handleVerifyOtp}
+                  disabled={verifyingOtp || otpCode.length !== 6}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700"
+                  data-testid="verify-otp-btn"
+                >
+                  {verifyingOtp ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    'Verify & Join Transaction'
+                  )}
+                </Button>
+
+                <div className="flex items-center justify-between text-sm">
+                  <button
+                    onClick={() => {
+                      setOtpSent(false);
+                      setOtpCode('');
+                    }}
+                    className="text-slate-600 hover:text-slate-800"
+                  >
+                    Change number
+                  </button>
+                  
+                  {resendCooldown > 0 ? (
+                    <span className="text-slate-400">
+                      Resend in {resendCooldown}s
+                    </span>
+                  ) : (
+                    <button
+                      onClick={handleSendOtp}
+                      disabled={sendingOtp}
+                      className="text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Resend code
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <Button
+                variant="ghost"
+                onClick={() => navigate('/transactions')}
+                className="w-full"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to My Transactions
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </DashboardLayout>
     );
   }
 

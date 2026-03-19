@@ -31,6 +31,8 @@ function TransactionDetail() {
   const [paymentInfo, setPaymentInfo] = useState(null);
   const [startingDelivery, setStartingDelivery] = useState(false);
   const [acceptingDelivery, setAcceptingDelivery] = useState(false);
+  // Payment method selection
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   const navigate = useNavigate();
   const { transactionId } = useParams();
 
@@ -171,15 +173,20 @@ function TransactionDetail() {
       e.stopPropagation();
     }
     
-    console.log('Pay button clicked');
+    if (!selectedPaymentMethod) {
+      toast.error('Please select a payment method first');
+      return;
+    }
+    
+    console.log('Pay button clicked with method:', selectedPaymentMethod);
     
     setLoadingPaymentLink(true);
     toast.info('Loading payment page...');
     
     try {
-      console.log('Calling payment-url API...');
+      console.log('Calling payment-url API with method:', selectedPaymentMethod);
       const response = await axios.get(
-        `${API}/tradesafe/payment-url/${transactionId}`,
+        `${API}/tradesafe/payment-url/${transactionId}?payment_method=${selectedPaymentMethod}`,
         { withCredentials: true }
       );
 
@@ -199,7 +206,7 @@ function TransactionDetail() {
           window.location.href = paymentLink;
         }
         
-        toast.success('Secure payment page opened. Complete payment via EFT, Card, or Ozow.');
+        toast.success('Secure payment page opened. Complete your payment.');
       } else {
         // No payment link - show EFT bank details message
         setPaymentInfo(response.data);
@@ -575,53 +582,163 @@ function TransactionDetail() {
 
         {/* Make Payment Card (Buyer) */}
         {canMakePayment && (
-          <Card className="p-6 bg-blue-50 border-blue-200">
+          <Card className="p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
             <div className="flex items-start gap-4">
               <div className="p-3 bg-blue-100 rounded-full">
                 <CreditCard className="w-6 h-6 text-blue-600" />
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-blue-900 mb-2">Pay Securely with TrustTrade</h3>
-                <p className="text-sm text-blue-800 mb-3">
-                  Your escrow is ready. Click below to pay securely. You can choose EFT, Card, or Ozow on the payment page.
+                <p className="text-sm text-blue-800 mb-4">
+                  Your escrow is ready. Select a payment method below to complete your secure payment.
                 </p>
                 
-                {/* Fee Breakdown */}
-                <div className="bg-white rounded-lg p-4 mb-4 border border-blue-200">
-                  <h4 className="text-sm font-medium text-slate-700 mb-3">Payment Summary</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Item Price:</span>
-                      <span className="font-medium">R {transaction.item_price?.toFixed(2)}</span>
+                {/* Payment Method Selection */}
+                <div className="space-y-3 mb-5">
+                  {/* EFT Option - Recommended */}
+                  <div 
+                    onClick={() => setSelectedPaymentMethod('eft')}
+                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 touch-manipulation ${
+                      selectedPaymentMethod === 'eft' 
+                        ? 'border-blue-500 bg-white shadow-md ring-2 ring-blue-200' 
+                        : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm'
+                    }`}
+                    data-testid="payment-method-eft"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                        selectedPaymentMethod === 'eft' ? 'border-blue-500' : 'border-slate-300'
+                      }`}>
+                        {selectedPaymentMethod === 'eft' && (
+                          <div className="w-3 h-3 rounded-full bg-blue-500" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-2xl">🏦</span>
+                          <span className="font-semibold text-slate-800">EFT Bank Transfer</span>
+                          <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">Recommended</Badge>
+                          <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-xs">Lowest Fee</Badge>
+                        </div>
+                        <p className="text-sm text-slate-500 mt-1">Direct bank transfer — most affordable option</p>
+                        <p className="text-sm font-medium text-emerald-600 mt-1">Processing fee: 0.86%</p>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-slate-500">
-                      <span>TrustTrade Fee (2%):</span>
-                      <span>R {(transaction.item_price * 0.02)?.toFixed(2)}</span>
+                  </div>
+
+                  {/* Card Option */}
+                  <div 
+                    onClick={() => setSelectedPaymentMethod('card')}
+                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 touch-manipulation ${
+                      selectedPaymentMethod === 'card' 
+                        ? 'border-blue-500 bg-white shadow-md ring-2 ring-blue-200' 
+                        : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm'
+                    }`}
+                    data-testid="payment-method-card"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                        selectedPaymentMethod === 'card' ? 'border-blue-500' : 'border-slate-300'
+                      }`}>
+                        {selectedPaymentMethod === 'card' && (
+                          <div className="w-3 h-3 rounded-full bg-blue-500" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">💳</span>
+                          <span className="font-semibold text-slate-800">Credit/Debit Card</span>
+                        </div>
+                        <p className="text-sm text-slate-500 mt-1">Pay instantly with Visa or Mastercard</p>
+                        <p className="text-sm font-medium text-amber-600 mt-1">Processing fee: 2.88%</p>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-slate-500">
-                      <span>Payment Processing Fee:</span>
-                      <span className="text-xs">(shown at checkout)</span>
-                    </div>
-                    <div className="border-t pt-2 mt-2">
-                      <div className="flex justify-between font-semibold text-slate-900">
-                        <span>Estimated Total:</span>
-                        <span>R {transaction.total?.toFixed(2) || (transaction.item_price * 1.02)?.toFixed(2)}</span>
+                  </div>
+
+                  {/* Ozow Option */}
+                  <div 
+                    onClick={() => setSelectedPaymentMethod('ozow')}
+                    className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 touch-manipulation ${
+                      selectedPaymentMethod === 'ozow' 
+                        ? 'border-blue-500 bg-white shadow-md ring-2 ring-blue-200' 
+                        : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm'
+                    }`}
+                    data-testid="payment-method-ozow"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                        selectedPaymentMethod === 'ozow' ? 'border-blue-500' : 'border-slate-300'
+                      }`}>
+                        {selectedPaymentMethod === 'ozow' && (
+                          <div className="w-3 h-3 rounded-full bg-blue-500" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">⚡</span>
+                          <span className="font-semibold text-slate-800">Ozow Instant EFT</span>
+                        </div>
+                        <p className="text-sm text-slate-500 mt-1">Fast instant payment from your bank app</p>
+                        <p className="text-sm font-medium text-blue-600 mt-1">Processing fee: 1.73%</p>
                       </div>
                     </div>
                   </div>
                 </div>
                 
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <Badge className="bg-white border border-blue-200">EFT</Badge>
-                  <Badge className="bg-white border border-blue-200">Card</Badge>
-                  <Badge className="bg-white border border-blue-200">Ozow</Badge>
+                {/* Dynamic Price Summary */}
+                <div className="bg-white rounded-xl p-4 mb-5 border border-slate-200 shadow-sm">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Payment Summary
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Item Price:</span>
+                      <span className="font-medium text-slate-800">R {transaction.item_price?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">TrustTrade Fee (2%):</span>
+                      <span className="font-medium text-slate-800">R {(transaction.item_price * 0.02)?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">
+                        {selectedPaymentMethod === 'eft' && 'EFT Processing Fee (0.86%):'}
+                        {selectedPaymentMethod === 'card' && 'Card Processing Fee (2.88%):'}
+                        {selectedPaymentMethod === 'ozow' && 'Ozow Processing Fee (1.73%):'}
+                        {!selectedPaymentMethod && 'Processing Fee:'}
+                      </span>
+                      <span className="font-medium text-slate-800">
+                        {selectedPaymentMethod === 'eft' && `R ${(transaction.item_price * 0.0086)?.toFixed(2)}`}
+                        {selectedPaymentMethod === 'card' && `R ${(transaction.item_price * 0.0288)?.toFixed(2)}`}
+                        {selectedPaymentMethod === 'ozow' && `R ${(transaction.item_price * 0.0173)?.toFixed(2)}`}
+                        {!selectedPaymentMethod && <span className="text-slate-400 italic">Select method</span>}
+                      </span>
+                    </div>
+                    <div className="border-t border-slate-200 pt-3 mt-3">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-slate-900 text-base">Total:</span>
+                        <span className="font-bold text-lg text-slate-900">
+                          {selectedPaymentMethod === 'eft' && `R ${(transaction.item_price * 1.0286)?.toFixed(2)}`}
+                          {selectedPaymentMethod === 'card' && `R ${(transaction.item_price * 1.0488)?.toFixed(2)}`}
+                          {selectedPaymentMethod === 'ozow' && `R ${(transaction.item_price * 1.0373)?.toFixed(2)}`}
+                          {!selectedPaymentMethod && <span className="text-slate-400 text-base font-normal italic">Select method</span>}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+                
+                {/* Pay Button */}
                 <Button 
                   type="button"
                   onClick={handleGetPaymentLink} 
-                  onTouchEnd={handleGetPaymentLink}
-                  disabled={loadingPaymentLink}
-                  className="bg-blue-600 hover:bg-blue-700 active:bg-blue-800 w-full sm:w-auto text-lg py-6 touch-manipulation cursor-pointer"
+                  onTouchEnd={(e) => { e.preventDefault(); handleGetPaymentLink(e); }}
+                  disabled={loadingPaymentLink || !selectedPaymentMethod}
+                  className={`w-full text-lg py-6 touch-manipulation cursor-pointer transition-all duration-200 ${
+                    selectedPaymentMethod 
+                      ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800' 
+                      : 'bg-slate-300 cursor-not-allowed'
+                  }`}
                   data-testid="make-payment-btn"
                   style={{ touchAction: 'manipulation' }}
                 >
@@ -630,13 +747,29 @@ function TransactionDetail() {
                       <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                       Loading Payment Page...
                     </>
-                  ) : (
+                  ) : selectedPaymentMethod ? (
                     <>
                       <CreditCard className="w-5 h-5 mr-2" />
-                      Pay Securely with TrustTrade
+                      Pay R {
+                        selectedPaymentMethod === 'eft' ? (transaction.item_price * 1.0286)?.toFixed(2) :
+                        selectedPaymentMethod === 'card' ? (transaction.item_price * 1.0488)?.toFixed(2) :
+                        selectedPaymentMethod === 'ozow' ? (transaction.item_price * 1.0373)?.toFixed(2) :
+                        transaction.item_price?.toFixed(2)
+                      } Securely
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="w-5 h-5 mr-2 opacity-50" />
+                      Select a payment method
                     </>
                   )}
                 </Button>
+                
+                {/* Security Note */}
+                <p className="text-xs text-slate-500 mt-3 text-center flex items-center justify-center gap-1">
+                  <Shield className="w-3 h-3" />
+                  Your payment is protected by TrustTrade Escrow
+                </p>
               </div>
             </div>
           </Card>

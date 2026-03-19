@@ -1,6 +1,7 @@
 """
 SMS Messenger Service for TrustTrade
 Handles OTP verification and transaction notifications via SMS
+Uses SMS Messenger South Africa API (sms1.smsmessenger.co.za)
 """
 
 import os
@@ -8,6 +9,7 @@ import httpx
 import logging
 import random
 import string
+import base64
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 # SMS Messenger Configuration
 SMS_MESSENGER_API_KEY = os.environ.get('SMS_MESSENGER_API_KEY', '')
 SMS_MESSENGER_EMAIL = os.environ.get('SMS_MESSENGER_EMAIL', '')
-SMS_MESSENGER_API_URL = "https://api.smsmessenger.co.za/v1"
+SMS_MESSENGER_API_URL = os.environ.get('SMS_MESSENGER_API_URL', 'https://sms1.smsmessenger.co.za/app/api/rest/v1/sms/send')
 
 # OTP Configuration
 OTP_LENGTH = 6
@@ -83,6 +85,7 @@ def generate_otp() -> str:
 async def send_sms(to_phone: str, message: str) -> Dict[str, Any]:
     """
     Send SMS via SMS Messenger API.
+    Uses Basic Auth with email:apikey
     
     Args:
         to_phone: Phone number in any format (will be normalized)
@@ -92,8 +95,12 @@ async def send_sms(to_phone: str, message: str) -> Dict[str, Any]:
         Dict with status and message_id or error
     """
     if not SMS_MESSENGER_API_KEY:
-        logger.warning("SMS_MESSENGER_API_KEY not configured")
-        return {"success": False, "error": "SMS service not configured"}
+        logger.error("SMS_MESSENGER_API_KEY not configured")
+        return {"success": False, "error": "SMS service not configured - missing API key"}
+    
+    if not SMS_MESSENGER_EMAIL:
+        logger.error("SMS_MESSENGER_EMAIL not configured")
+        return {"success": False, "error": "SMS service not configured - missing email"}
     
     # Normalize phone number
     normalized_phone = normalize_phone_number(to_phone)
@@ -102,39 +109,70 @@ async def send_sms(to_phone: str, message: str) -> Dict[str, Any]:
         logger.error(f"Invalid phone number: {to_phone}")
         return {"success": False, "error": "Invalid phone number"}
     
-    logger.info(f"Sending SMS to {normalized_phone}")
+    logger.info(f"=== SMS SEND ATTEMPT ===")
+    logger.info(f"To: {normalized_phone}")
+    logger.info(f"Message: {message[:50]}...")
+    logger.info(f"API URL: {SMS_MESSENGER_API_URL}")
+    logger.info(f"Email: {SMS_MESSENGER_EMAIL}")
+    logger.info(f"API Key: {SMS_MESSENGER_API_KEY[:8]}...{SMS_MESSENGER_API_KEY[-4:]}")
     
     try:
+        # Create Basic Auth header
+        auth_string = f"{SMS_MESSENGER_EMAIL}:{SMS_MESSENGER_API_KEY}"
+        auth_bytes = base64.b64encode(auth_string.encode('utf-8')).decode('utf-8')
+        
+        # SMS Messenger API expects 'message' and 'recipientNumber' fields
+        payload = {
+            "message": message,
+            "recipientNumber": normalized_phone
+        }
+        
+        logger.info(f"Request payload: {payload}")
+        logger.info(f"Auth header: Basic {auth_bytes[:20]}...")
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{SMS_MESSENGER_API_URL}/sms/send",
+                SMS_MESSENGER_API_URL,
                 headers={
-                    "Authorization": f"Bearer {SMS_MESSENGER_API_KEY}",
-                    "Content-Type": "application/json"
+                    "Authorization": f"Basic {auth_bytes}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
                 },
-                json={
-                    "to": normalized_phone,
-                    "message": message,
-                    "from": "TrustTrade"
-                }
+                json=payload
             )
             
-            logger.info(f"SMS API response: {response.status_code} - {response.text}")
+            logger.info(f"SMS API Response Status: {response.status_code}")
+            logger.info(f"SMS API Response Headers: {dict(response.headers)}")
+            logger.info(f"SMS API Response Body: {response.text}")
             
             if response.status_code in [200, 201, 202]:
-                data = response.json() if response.text else {}
+                try:
+                    data = response.json() if response.text else {}
+                except:
+                    data = {"raw_response": response.text}
+                    
+                logger.info(f"SMS sent successfully to {normalized_phone}")
                 return {
                     "success": True,
-                    "message_id": data.get("message_id") or data.get("id"),
-                    "status": "sent"
+                    "message_id": data.get("messageId") or data.get("message_id") or data.get("id"),
+                    "status": "sent",
+                    "response": data
                 }
             else:
+                error_detail = response.text
+                logger.error(f"SMS API error: {response.status_code} - {error_detail}")
                 return {
                     "success": False,
                     "error": f"SMS API error: {response.status_code}",
-                    "details": response.text
+                    "details": error_detail
                 }
                 
+    except httpx.ConnectError as e:
+        logger.error(f"SMS connection error: {e}")
+        return {"success": False, "error": f"Connection error: {str(e)}"}
+    except httpx.TimeoutException as e:
+        logger.error(f"SMS timeout error: {e}")
+        return {"success": False, "error": f"Timeout error: {str(e)}"}
     except Exception as e:
         logger.error(f"SMS send error: {e}")
         return {"success": False, "error": str(e)}
@@ -172,7 +210,9 @@ async def send_transaction_invite_sms(
         Dict with success status
     """
     message = f"TrustTrade: {sender_name} sent you a secure transaction. View here: {share_link}"
-    return await send_sms(to_phone, message)
+    result = await send_sms(to_phone, message)
+    logger.info(f"Transaction invite SMS result: {result}")
+    return result
 
 
 async def send_funds_received_sms(

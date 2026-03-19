@@ -78,7 +78,7 @@ function PhotoUploader({ photos, setPhotos, minPhotos = 1, maxPhotos = 5, requir
           <label className="w-full h-32 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-blue-50 transition-colors">
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif"
               multiple
               onChange={handleFileSelect}
               className="hidden"

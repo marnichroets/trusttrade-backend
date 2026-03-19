@@ -833,11 +833,39 @@ async def upload_photo(request: Request, file: UploadFile = File(...)):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Validate file type
-    allowed_extensions = {".jpg", ".jpeg", ".png", ".webp"}
-    file_ext = Path(file.filename).suffix.lower()
-    if file_ext not in allowed_extensions:
-        raise HTTPException(status_code=400, detail="Only image files allowed (jpg, png, webp)")
+    # Validate file type - check both extension AND MIME type
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+    allowed_mime_types = {
+        "image/jpeg", "image/jpg", "image/png", "image/webp", 
+        "image/heic", "image/heif"
+    }
+    
+    file_ext = Path(file.filename).suffix.lower() if file.filename else ""
+    content_type = (file.content_type or "").lower()
+    
+    # Accept if either extension OR MIME type is valid
+    ext_valid = file_ext in allowed_extensions
+    mime_valid = content_type in allowed_mime_types
+    
+    logger.info(f"Photo upload - filename: {file.filename}, ext: {file_ext}, content_type: {content_type}")
+    
+    if not ext_valid and not mime_valid:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Only image files allowed (jpg, jpeg, png, webp). Got: {file_ext or 'no extension'}, {content_type or 'no mime type'}"
+        )
+    
+    # Use extension from filename, or derive from MIME type
+    if not file_ext or file_ext not in allowed_extensions:
+        mime_to_ext = {
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg", 
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/heic": ".heic",
+            "image/heif": ".heif"
+        }
+        file_ext = mime_to_ext.get(content_type, ".jpg")
     
     # Validate file size (5MB max)
     file.file.seek(0, 2)
@@ -863,11 +891,37 @@ async def upload_dispute_evidence(request: Request, file: UploadFile = File(...)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Validate file type
-    allowed_extensions = {".jpg", ".jpeg", ".png", ".webp"}
-    file_ext = Path(file.filename).suffix.lower()
-    if file_ext not in allowed_extensions:
-        raise HTTPException(status_code=400, detail="Only image files allowed")
+    # Validate file type - check both extension AND MIME type
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+    allowed_mime_types = {
+        "image/jpeg", "image/jpg", "image/png", "image/webp",
+        "image/heic", "image/heif"
+    }
+    
+    file_ext = Path(file.filename).suffix.lower() if file.filename else ""
+    content_type = (file.content_type or "").lower()
+    
+    # Accept if either extension OR MIME type is valid
+    ext_valid = file_ext in allowed_extensions
+    mime_valid = content_type in allowed_mime_types
+    
+    if not ext_valid and not mime_valid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only image files allowed (jpg, jpeg, png, webp). Got: {file_ext or 'no extension'}, {content_type or 'no mime type'}"
+        )
+    
+    # Use extension from filename, or derive from MIME type
+    if not file_ext or file_ext not in allowed_extensions:
+        mime_to_ext = {
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/heic": ".heic",
+            "image/heif": ".heif"
+        }
+        file_ext = mime_to_ext.get(content_type, ".jpg")
     
     # Validate file size
     file.file.seek(0, 2)

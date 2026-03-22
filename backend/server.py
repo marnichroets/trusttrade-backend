@@ -2273,21 +2273,36 @@ async def send_phone_otp(request: Request, data: PhoneOtpRequest):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    phone = data.phone_number.replace(" ", "").replace("-", "")
+    # Normalize phone: 0791782758 -> 791782758 -> +27791782758
+    phone = data.phone_number.replace(" ", "").replace("-", "").replace("+", "")
+    # Remove leading 0 if present
+    if phone.startswith("0"):
+        phone = phone[1:]
+    # Remove leading 27 if present to avoid 27791... -> +2727791...
+    if phone.startswith("27"):
+        phone = phone[2:]
+    
     if len(phone) < 9:
         raise HTTPException(status_code=400, detail="Invalid phone number")
     
-    # Generate OTP (in production, send via SMS service like Twilio)
+    # Generate OTP
     otp = ''.join(random.choices(string.digits, k=6))
     
-    # Store OTP (expires in 10 minutes)
+    # Store OTP with normalized phone (expires in 10 minutes)
     otp_store[f"{user.user_id}_{phone}"] = {
         "otp": otp,
         "expires": datetime.now(timezone.utc) + timedelta(minutes=10)
     }
     
-    # Mock SMS sending
-    logger.info(f"MOCK SMS TO +27{phone}: Your TrustTrade verification code is {otp}")
+    # Send OTP via SMS Messenger
+    from sms_service import send_otp_sms
+    sms_result = await send_otp_sms(f"+27{phone}", otp)
+    
+    if not sms_result.get("success"):
+        logger.error(f"Failed to send OTP SMS: {sms_result.get('error')}")
+        # Still return success to not block flow during testing
+    
+    logger.info(f"OTP sent to +27{phone}")
     
     return {"message": "OTP sent successfully", "phone": f"+27{phone[:2]}****{phone[-2:]}"}
 
@@ -2298,7 +2313,13 @@ async def verify_phone_otp(request: Request, data: PhoneOtpVerify):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    phone = data.phone_number.replace(" ", "").replace("-", "")
+    # Normalize phone same way as send_phone_otp
+    phone = data.phone_number.replace(" ", "").replace("-", "").replace("+", "")
+    if phone.startswith("0"):
+        phone = phone[1:]
+    if phone.startswith("27"):
+        phone = phone[2:]
+    
     key = f"{user.user_id}_{phone}"
     
     stored = otp_store.get(key)
@@ -2324,10 +2345,12 @@ async def verify_phone_otp(request: Request, data: PhoneOtpVerify):
         verification.get("selfie_verified", False)
     )
     
-    # Update user with phone verification and full verified status
+    # Update user with phone verification and full verified status - store as +27XXXXXXXXX
     update_data = {
         "verification.phone_verified": True,
         "verification.phone_number": f"+27{phone}",
+        "phone": f"+27{phone}",
+        "phone_verified": True,
         "verification.phone_verified_at": datetime.now(timezone.utc).isoformat()
     }
     

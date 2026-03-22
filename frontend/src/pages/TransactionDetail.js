@@ -43,6 +43,8 @@ function TransactionDetail() {
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [verificationError, setVerificationError] = useState(null);
+  // Wrong account state
+  const [wrongAccount, setWrongAccount] = useState(null);
   const navigate = useNavigate();
   const { transactionId } = useParams();
 
@@ -92,6 +94,27 @@ function TransactionDetail() {
           }
         } catch (e) {
           console.error('Failed to get user:', e);
+        }
+      } else if (error.response?.status === 403 && (errorDetail.includes('email') || errorDetail.includes('does not match'))) {
+        // Wrong account - extract expected email from error
+        const match = errorDetail.match(/sent to (?:email address |phone number )?([^\s.]+)/i);
+        const expectedEmail = match ? match[1] : 'the invited account';
+        
+        try {
+          const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+          setUser(userRes.data);
+          setWrongAccount({
+            expected: expectedEmail,
+            current: userRes.data.email,
+            message: errorDetail
+          });
+        } catch (e) {
+          console.error('Failed to get user:', e);
+          setWrongAccount({
+            expected: expectedEmail,
+            current: 'current account',
+            message: errorDetail
+          });
         }
       } else {
         toast.error('Transaction not found');
@@ -640,27 +663,107 @@ function TransactionDetail() {
     );
   }
 
+  // Show wrong account UI
+  if (wrongAccount) {
+    const handleLogout = async () => {
+      try {
+        await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+        // Redirect to login with the transaction link preserved
+        window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(window.location.href)}`;
+      } catch (error) {
+        console.error('Logout failed:', error);
+        window.location.href = '/';
+      }
+    };
+
+    return (
+      <DashboardLayout user={user}>
+        <div className="max-w-md mx-auto py-12 px-4">
+          <Card className="p-8">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-amber-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-slate-900 mb-2">Wrong Account</h1>
+              <p className="text-slate-600">
+                This transaction was sent to a different account.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-lg p-4 mb-6 space-y-3">
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Transaction sent to:</p>
+                <p className="font-medium text-slate-900">{wrongAccount.expected}</p>
+              </div>
+              <div className="border-t border-slate-200 pt-3">
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">You are logged in as:</p>
+                <p className="font-medium text-slate-900">{wrongAccount.current}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Button
+                onClick={handleLogout}
+                className="w-full bg-[#1a2942] hover:bg-[#243751]"
+              >
+                Log Out and Switch Account
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate('/transactions')}
+                className="w-full"
+              >
+                Continue as {wrongAccount.current?.split('@')[0]}
+              </Button>
+            </div>
+
+            <p className="text-xs text-slate-500 mt-4 text-center">
+              Log out and sign in with {wrongAccount.expected} to view this transaction.
+            </p>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   if (!transaction) {
     return null;
   }
 
-  const isBuyer = user?.user_id === transaction.buyer_user_id || user?.email === transaction.buyer_email;
-  const isSeller = user?.user_id === transaction.seller_user_id || user?.email === transaction.seller_email;
+  // Role detection with console logging for debugging
+  const isBuyer = user?.user_id === transaction.buyer_user_id || 
+    (user?.email && transaction.buyer_email && user.email.toLowerCase() === transaction.buyer_email.toLowerCase());
+  const isSeller = user?.user_id === transaction.seller_user_id || 
+    (user?.email && transaction.seller_email && user.email.toLowerCase() === transaction.seller_email.toLowerCase());
+  
+  // Debug logging
+  console.log('Role Detection:', {
+    userEmail: user?.email,
+    userId: user?.user_id,
+    buyerEmail: transaction.buyer_email,
+    buyerUserId: transaction.buyer_user_id,
+    sellerEmail: transaction.seller_email,
+    sellerUserId: transaction.seller_user_id,
+    isBuyer,
+    isSeller
+  });
   
   // Escrow flow conditions
   const hasEscrow = !!transaction.tradesafe_id;
   const escrowState = transaction.tradesafe_state;
   
   // Can create escrow: seller confirmed, no existing escrow link
-  const canCreateEscrow = transaction.seller_confirmed && !hasEscrow && transaction.item_price >= 500;
+  const canCreateEscrow = isSeller && transaction.seller_confirmed && !hasEscrow && transaction.item_price >= 500;
   
-  // Can make payment: escrow created, buyer, awaiting payment
+  // Can make payment: escrow created, buyer ONLY, awaiting payment
   // Check both escrowState (CREATED/PENDING) and payment_status (Awaiting Payment)
-  const canMakePayment = hasEscrow && isBuyer && 
+  const canMakePayment = hasEscrow && isBuyer && !isSeller && 
     (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
   
+  console.log('Payment Button Debug:', { hasEscrow, isBuyer, isSeller, escrowState, paymentStatus: transaction.payment_status, canMakePayment });
+  
   // Seller should see "Awaiting Buyer Payment" when escrow is created but not yet paid
-  const isAwaitingBuyerPayment = hasEscrow && isSeller && 
+  const isAwaitingBuyerPayment = hasEscrow && isSeller && !isBuyer && 
     (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
   
   // Can start delivery: funds received, seller
@@ -1317,13 +1420,34 @@ function TransactionDetail() {
               <h3 className="text-lg font-semibold text-slate-900 mb-4">Item Photos</h3>
               {transaction.item_photos && transaction.item_photos.length > 0 ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {transaction.item_photos.map((photo, index) => (
-                    <div key={index} className="relative">
-                      <div className="w-full h-48 bg-slate-100 rounded-lg flex items-center justify-center">
-                        <ImageIcon className="w-12 h-12 text-slate-400" />
+                  {transaction.item_photos.map((photo, index) => {
+                    // Construct full URL for the photo
+                    const photoUrl = photo.startsWith('http') 
+                      ? photo 
+                      : `${BACKEND_URL}/uploads/photos/${photo}`;
+                    return (
+                      <div 
+                        key={index} 
+                        className="relative cursor-pointer group"
+                        onClick={() => window.open(photoUrl, '_blank')}
+                      >
+                        <img 
+                          src={photoUrl}
+                          alt={`Item photo ${index + 1}`}
+                          className="w-full h-48 object-cover rounded-lg bg-slate-100 group-hover:opacity-90 transition-opacity"
+                          onError={(e) => { 
+                            e.target.onerror = null;
+                            e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="%23f1f5f9" width="200" height="200"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%2394a3b8" font-size="14">No Image</text></svg>'; 
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-lg transition-colors flex items-center justify-center">
+                          <span className="opacity-0 group-hover:opacity-100 text-white text-sm bg-black/50 px-3 py-1 rounded">
+                            Click to view
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-12">

@@ -56,7 +56,20 @@ function AdminDashboard() {
       t.buyer_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       t.seller_email?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
+    // Map filter values to actual payment_status values
+    let matchesStatus = true;
+    if (statusFilter !== 'all') {
+      const paymentStatus = t.payment_status?.toLowerCase() || '';
+      if (statusFilter === 'pending') {
+        matchesStatus = paymentStatus.includes('pending') || paymentStatus.includes('awaiting');
+      } else if (statusFilter === 'active') {
+        matchesStatus = paymentStatus.includes('paid') || paymentStatus.includes('funds') || paymentStatus.includes('delivery');
+      } else if (statusFilter === 'completed') {
+        matchesStatus = paymentStatus.includes('completed') || paymentStatus.includes('released');
+      } else if (statusFilter === 'disputed') {
+        matchesStatus = paymentStatus.includes('dispute') || t.status === 'disputed';
+      }
+    }
     
     return matchesSearch && matchesStatus;
   });
@@ -327,9 +340,9 @@ function AdminDashboard() {
             <h1 className="text-3xl font-bold text-slate-900" data-testid="admin-dashboard-title">Admin Dashboard</h1>
             <p className="text-slate-600 mt-2">Manage transactions, users, and disputes</p>
           </div>
-          <Button onClick={fetchData} variant="outline" size="sm">
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
+          <Button onClick={() => { setLoading(true); fetchData(); }} variant="outline" size="sm" disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
 

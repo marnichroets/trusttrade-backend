@@ -3,73 +3,123 @@
 ## Overview
 Professional escrow platform for peer-to-peer transactions in South Africa.
 
+## Core Features
+- Transaction Link System - Unique shareable links for every transaction
+- User Ratings and Reviews - 1-5 star rating system
+- Trust Badge System - Silver, Gold, Verified badges
+- Identity Verification - ID upload, selfie, phone verification
+- Live Transaction Activity Board - Platform-wide stats
+- Scam Detection System - Automatic flagging
+- Delivery Confirmation - Buyer confirms before funds release
+- Auto-Release Timer - Based on delivery method
+- Report User Feature - Suspicious behavior reporting
+- User Profiles - Public profiles with Trust Score
+
 ## Changelog
-- **2026-03-19**: Email/Phone Verification Fixes & OTP System
-  - Fixed transaction link email verification bug (case-insensitive comparison)
-  - Added `emails_match()` and `phones_match()` helper functions with detailed logging
-  - Added phone verification OTP system via SMS Messenger
-  - Added phone field to User model with +27 normalization
-  - Added phone-based transaction invites
-  - Added pre-transaction phone verification check
-  - Created PhoneVerification.js page with OTP input
-  - Added SMS Messenger API integration
 
-- **2026-03-18**: Payment Button Implementation
-- **2026-03-18**: Fixed Token and Transaction Creation
-- **2026-03-17**: Initial payment gateway integration
+### 2026-03-22: Admin Features & UI Overhaul (Session 12)
+**Implemented:**
+1. **Admin Transaction Detail Page** (`/admin/transaction/{id}`)
+   - Full transaction overview with all details
+   - Buyer/Seller details with verification status
+   - Item details with photo gallery
+   - Payment details section
+   - Transaction timeline with all events
+   - Admin actions panel (Release Funds, Refund, Suspend, Add Note)
+   - Admin notes section
 
-## Email Comparison Fix
-```python
-def normalize_email(email: str) -> str:
-    """Normalize email for comparison - lowercase and strip whitespace."""
-    return email.strip().lower() if email else ""
+2. **Admin Dispute Detail Page** (`/admin/dispute/{id}`)
+   - Dispute overview with type and status
+   - Full dispute reason and description
+   - Party statements (buyer and seller)
+   - Evidence photos gallery
+   - Related transaction details
+   - Dispute timeline
+   - Admin actions (Release to Seller, Refund Buyer, Request Info, Resolve)
+   - Admin notes section
 
-def emails_match(email1: str, email2: str) -> bool:
-    """Case-insensitive email comparison with logging."""
-    return normalize_email(email1) == normalize_email(email2)
-```
+3. **Fixed Image/File Loading**
+   - Added StaticFiles mount at `/uploads` in backend
+   - Fixed URL construction for photos, verification docs, dispute evidence
+   - Images now load correctly in all admin panels
 
-## Phone Verification Flow
-1. User signs up (Google or email)
-2. Redirected to `/verify/phone`
-3. Enter SA mobile number (auto-converts to +27 format)
-4. Receive 6-digit OTP via SMS
-5. Enter OTP (10 min expiry)
-6. Phone verified - can now create transactions
+4. **Consistent Color Scheme**
+   - Created CSS variables in index.css
+   - Applied TrustTrade color system globally:
+     - Primary: #1a2942 (dark navy)
+     - Green: #2ecc71 (success)
+     - Error: #e74c3c (red)
+     - Warning: #f39c12 (orange)
+     - Background: #ffffff
+     - Section: #f8f9fa
+     - Text: #212529
+     - Subtext: #6c757d
 
-## SMS Messenger Integration
-- API Key: Stored in `SMS_MESSENGER_API_KEY` env var
-- OTP Message: "TrustTrade: Your verification code is [OTP]. Valid for 10 minutes."
-- Transaction Invite: "TrustTrade: [Name] sent you a secure transaction. View here: [link]"
+5. **Admin Navigation**
+   - Created AdminNavbar component with:
+     - Dark navy background
+     - TrustTrade Admin branding
+     - Navigation links (Dashboard, Transactions, Users, Disputes)
+     - Admin badge and user info
+     - Logout button
+     - Mobile responsive hamburger menu
+   - Added Breadcrumbs component for all admin pages
 
-## API Endpoints - Phone Verification
-- `POST /api/auth/phone/submit` - Submit phone, send OTP
-- `POST /api/auth/phone/verify` - Verify OTP code
-- `POST /api/auth/phone/resend` - Resend OTP (60s cooldown)
-- `GET /api/auth/phone/status` - Get verification status
+6. **Database Cleanup**
+   - Removed 18 test users
+   - Removed 34 test transactions
+   - Protected real user emails from deletion
 
-## Transaction Link Verification
-When user clicks share link:
-1. Check if user email matches (case-insensitive)
-2. Check if user phone matches (format-insensitive)
-3. Check recipient_info field for phone/email invites
-4. Show clear error if no match found
+### Previous Sessions
+- 2026-03-19: Email/Phone Verification Fixes & OTP System
+- 2026-03-18: Payment Button Implementation, Token and Transaction Creation
+- 2026-03-17: Initial payment gateway integration
 
-## Error Messages
-| Situation | Message |
-|-----------|---------|
-| Wrong email | "This transaction link was sent to a different email address. Please log in with the correct account." |
-| Wrong phone | "This transaction link was sent to a different phone number. Please log in with the correct account." |
-| OTP expired | "Your verification code has expired. Please request a new one." |
-| OTP wrong | "Incorrect code. Please try again." |
-| Phone taken | "This number is already linked to another account." |
+## Architecture
 
-## Files Modified
-- `/app/backend/server.py` - Email/phone comparison, OTP endpoints
-- `/app/backend/sms_service.py` - NEW: SMS Messenger integration
-- `/app/backend/.env` - Added SMS_MESSENGER_API_KEY
-- `/app/frontend/src/pages/PhoneVerification.js` - NEW: OTP verification page
-- `/app/frontend/src/App.js` - Added /verify/phone route
+### Backend
+- **Framework**: FastAPI
+- **Database**: MongoDB (motor async driver)
+- **File Storage**: Local `/app/uploads/` served via StaticFiles
+- **Main file**: `/app/backend/server.py` (3900+ lines - needs refactoring)
 
-## Test Reports
-- `/app/test_reports/iteration_10.json`
+### Frontend
+- **Framework**: React
+- **Styling**: Tailwind CSS + Shadcn UI
+- **Routing**: React Router
+- **State**: useState/useEffect hooks
+
+### Integrations
+- **Email**: Postmark
+- **Payments**: TradeSafe
+- **SMS**: Zoom Connect (SMS Messenger API)
+- **Auth**: Emergent-managed Google OAuth
+
+## Key Files
+- `/app/backend/server.py` - Main API (needs refactoring)
+- `/app/backend/email_service.py` - Email templates
+- `/app/backend/sms_service.py` - SMS/OTP functionality
+- `/app/backend/tradesafe_service.py` - Payment gateway
+- `/app/frontend/src/pages/AdminDashboard.js` - Admin main page
+- `/app/frontend/src/pages/AdminTransactionDetail.js` - Transaction details
+- `/app/frontend/src/pages/AdminDisputeDetail.js` - Dispute management
+- `/app/frontend/src/components/AdminNavbar.js` - Admin navigation
+
+## Roadmap
+
+### P0 - Completed
+- [x] Admin Transaction Detail Page
+- [x] Admin Dispute Detail Page
+- [x] Fix Image Loading in Admin
+- [x] Consistent Color Scheme
+- [x] Admin Navigation
+- [x] Clean Test Data
+
+### P1 - Next
+- [ ] Refactor server.py monolith into modules
+- [ ] AI Scam Detection Enhancement
+
+### P2 - Backlog
+- [ ] In-App Chat feature
+- [ ] Advanced analytics dashboard
+- [ ] Bulk transaction management

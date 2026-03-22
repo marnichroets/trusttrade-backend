@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import DashboardLayout from '../components/DashboardLayout';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { AdminNavbar, Breadcrumbs } from '../components/AdminNavbar';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -20,7 +20,22 @@ import {
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+// TrustTrade Color System
+const COLORS = {
+  primary: '#1a2942',
+  green: '#2ecc71',
+  background: '#ffffff',
+  section: '#f8f9fa',
+  text: '#212529',
+  subtext: '#6c757d',
+  border: '#dee2e6',
+  error: '#e74c3c',
+  warning: '#f39c12',
+  info: '#3498db'
+};
+
 function AdminDashboard() {
+  const [searchParams] = useSearchParams();
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
@@ -28,6 +43,7 @@ function AdminDashboard() {
   const [disputes, setDisputes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'transactions');
   
   // Search and filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -281,20 +297,17 @@ function AdminDashboard() {
   };
 
   const getStatusBadge = (status) => {
-    const variants = {
-      'Pending': 'bg-yellow-100 text-yellow-800',
-      'Pending Seller Confirmation': 'bg-yellow-100 text-yellow-800',
-      'Pending Buyer Confirmation': 'bg-yellow-100 text-yellow-800',
-      'Ready for Payment': 'bg-blue-100 text-blue-800',
-      'Paid': 'bg-green-100 text-green-800',
-      'Released': 'bg-green-100 text-green-800',
-      'Refunded': 'bg-red-100 text-red-800',
-      'Resolved': 'bg-green-100 text-green-800',
-      'Open': 'bg-yellow-100 text-yellow-800',
-      'Under Review': 'bg-blue-100 text-blue-800',
-      'Escalated': 'bg-red-100 text-red-800'
-    };
-    return variants[status] || 'bg-slate-100 text-slate-600';
+    const s = status?.toLowerCase() || '';
+    // Use TrustTrade color scheme
+    if (s.includes('completed') || s.includes('released') || s.includes('resolved') || s.includes('paid')) 
+      return 'bg-[#2ecc71] text-white';
+    if (s.includes('dispute') || s.includes('refund') || s.includes('escalated')) 
+      return 'bg-[#e74c3c] text-white';
+    if (s.includes('pending') || s.includes('awaiting') || s.includes('open')) 
+      return 'bg-[#f39c12] text-white';
+    if (s.includes('active') || s.includes('review')) 
+      return 'bg-[#3498db] text-white';
+    return 'bg-[#6c757d] text-white';
   };
 
   const formatAutoRelease = (timestamp) => {
@@ -307,38 +320,71 @@ function AdminDashboard() {
     return `${Math.round(diffHours / 24)}d remaining`;
   };
 
+  // Helper to construct proper file URLs
+  const getFileUrl = (path, folder = 'photos') => {
+    if (!path) return null;
+    if (path.startsWith('http')) return path;
+    // Remove any leading slashes
+    const cleanPath = path.replace(/^\/+/, '');
+    // If path already contains folder structure, use as-is
+    if (cleanPath.includes('/')) {
+      return `${BACKEND_URL}/uploads/${cleanPath}`;
+    }
+    return `${BACKEND_URL}/uploads/${folder}/${cleanPath}`;
+  };
+
   const collectFiles = (item, type) => {
     const files = [];
     if (type === 'transaction') {
       if (item.item_photos?.length) {
-        item.item_photos.forEach((p, i) => files.push({ name: `Photo ${i+1}`, url: p, type: 'image' }));
+        item.item_photos.forEach((p, i) => files.push({ name: `Photo ${i+1}`, url: getFileUrl(p, 'photos'), type: 'image' }));
       }
       if (item.agreement_pdf_path) {
-        files.push({ name: 'Agreement PDF', url: item.agreement_pdf_path, type: 'pdf' });
+        files.push({ name: 'Agreement PDF', url: getFileUrl(item.agreement_pdf_path, 'pdfs'), type: 'pdf' });
       }
     } else if (type === 'user') {
-      if (item.id_front_path) files.push({ name: 'ID Front', url: item.id_front_path, type: 'image' });
-      if (item.id_back_path) files.push({ name: 'ID Back', url: item.id_back_path, type: 'image' });
-      if (item.selfie_path) files.push({ name: 'Selfie', url: item.selfie_path, type: 'image' });
+      // Check verification paths
+      const verification = item.verification || {};
+      if (item.id_front_path) files.push({ name: 'ID Front', url: getFileUrl(item.id_front_path, 'verification'), type: 'image' });
+      else if (verification.id_document_path) files.push({ name: 'ID Document', url: getFileUrl(verification.id_document_path, 'verification'), type: 'image' });
+      
+      if (item.id_back_path) files.push({ name: 'ID Back', url: getFileUrl(item.id_back_path, 'verification'), type: 'image' });
+      
+      if (item.selfie_path) files.push({ name: 'Selfie', url: getFileUrl(item.selfie_path, 'verification'), type: 'image' });
+      else if (verification.selfie_path) files.push({ name: 'Selfie', url: getFileUrl(verification.selfie_path, 'verification'), type: 'image' });
     }
     return files;
   };
 
+  const handleLogout = async () => {
+    try {
+      await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+      navigate('/');
+    } catch (error) {
+      navigate('/');
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: COLORS.section }}>
+        <div className="w-12 h-12 border-4 rounded-full animate-spin" style={{ borderColor: COLORS.primary, borderTopColor: 'transparent' }}></div>
       </div>
     );
   }
 
   return (
-    <DashboardLayout user={user}>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
+    <div className="min-h-screen" style={{ backgroundColor: COLORS.section }}>
+      <AdminNavbar user={user} onLogout={handleLogout} />
+      
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        {/* Breadcrumbs */}
+        <Breadcrumbs items={[{ label: 'Admin Dashboard' }]} />
+        
+        <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900" data-testid="admin-dashboard-title">Admin Dashboard</h1>
-            <p className="text-slate-600 mt-2">Manage transactions, users, and disputes</p>
+            <h1 className="text-3xl font-bold" style={{ color: COLORS.text }} data-testid="admin-dashboard-title">Admin Dashboard</h1>
+            <p style={{ color: COLORS.subtext }} className="mt-2">Manage transactions, users, and disputes</p>
           </div>
           <Button onClick={() => { setLoading(true); fetchData(); }} variant="outline" size="sm" disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -348,63 +394,63 @@ function AdminDashboard() {
 
         {/* Stats Cards */}
         {stats && (
-          <div className="grid md:grid-cols-5 gap-4">
-            <Card className="p-4 hover:shadow-md transition-shadow duration-200">
+          <div className="grid md:grid-cols-5 gap-4 mb-6">
+            <Card className="p-4 hover:shadow-md transition-shadow duration-200" style={{ backgroundColor: COLORS.background }}>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs text-slate-600 mb-1">Total Users</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.total_users}</p>
+                  <p className="text-xs mb-1" style={{ color: COLORS.subtext }}>Total Users</p>
+                  <p className="text-2xl font-bold" style={{ color: COLORS.text }}>{stats.total_users}</p>
                 </div>
-                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Users className="w-5 h-5 text-primary" />
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${COLORS.primary}15` }}>
+                  <Users className="w-5 h-5" style={{ color: COLORS.primary }} />
                 </div>
               </div>
             </Card>
 
-            <Card className="p-4 hover:shadow-md transition-shadow duration-200">
+            <Card className="p-4 hover:shadow-md transition-shadow duration-200" style={{ backgroundColor: COLORS.background }}>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs text-slate-600 mb-1">Total Transactions</p>
-                  <p className="text-2xl font-bold text-slate-900">{stats.total_transactions}</p>
+                  <p className="text-xs mb-1" style={{ color: COLORS.subtext }}>Total Transactions</p>
+                  <p className="text-2xl font-bold" style={{ color: COLORS.text }}>{stats.total_transactions}</p>
                 </div>
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-green-600" />
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${COLORS.green}20` }}>
+                  <FileText className="w-5 h-5" style={{ color: COLORS.green }} />
                 </div>
               </div>
             </Card>
 
-            <Card className="p-4 hover:shadow-md transition-shadow duration-200 bg-green-50 border-green-200">
+            <Card className="p-4 hover:shadow-md transition-shadow duration-200" style={{ backgroundColor: `${COLORS.green}10`, borderColor: COLORS.green }}>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs text-green-700 mb-1">Total Revenue (2%)</p>
-                  <p className="text-2xl font-bold text-green-700">R {(stats.total_volume * 0.02)?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) || '0.00'}</p>
+                  <p className="text-xs mb-1" style={{ color: COLORS.green }}>Total Revenue (2%)</p>
+                  <p className="text-2xl font-bold" style={{ color: COLORS.green }}>R {(stats.total_volume * 0.02)?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) || '0.00'}</p>
                 </div>
-                <div className="w-10 h-10 bg-green-200 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-5 h-5 text-green-700" />
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${COLORS.green}30` }}>
+                  <DollarSign className="w-5 h-5" style={{ color: COLORS.green }} />
                 </div>
               </div>
             </Card>
 
-            <Card className="p-4 hover:shadow-md transition-shadow duration-200">
+            <Card className="p-4 hover:shadow-md transition-shadow duration-200" style={{ backgroundColor: COLORS.background }}>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs text-slate-600 mb-1">Pending Disputes</p>
-                  <p className="text-2xl font-bold text-red-600">{stats.pending_disputes || 0}</p>
+                  <p className="text-xs mb-1" style={{ color: COLORS.subtext }}>Pending Disputes</p>
+                  <p className="text-2xl font-bold" style={{ color: COLORS.error }}>{stats.pending_disputes || 0}</p>
                 </div>
-                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                  <AlertCircle className="w-5 h-5 text-red-600" />
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${COLORS.error}15` }}>
+                  <AlertCircle className="w-5 h-5" style={{ color: COLORS.error }} />
                 </div>
               </div>
             </Card>
 
-            <Card className="p-4 hover:shadow-md transition-shadow duration-200">
+            <Card className="p-4 hover:shadow-md transition-shadow duration-200" style={{ backgroundColor: COLORS.background }}>
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs text-slate-600 mb-1">Pending ID Verification</p>
-                  <p className="text-2xl font-bold text-amber-600">{stats.pending_verifications || 0}</p>
+                  <p className="text-xs mb-1" style={{ color: COLORS.subtext }}>Pending ID Verification</p>
+                  <p className="text-2xl font-bold" style={{ color: COLORS.warning }}>{stats.pending_verifications || 0}</p>
                 </div>
-                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                  <ShieldCheck className="w-5 h-5 text-amber-600" />
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${COLORS.warning}20` }}>
+                  <ShieldCheck className="w-5 h-5" style={{ color: COLORS.warning }} />
                 </div>
               </div>
             </Card>
@@ -412,11 +458,11 @@ function AdminDashboard() {
         )}
 
         {/* Tabs */}
-        <Tabs defaultValue="transactions" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="transactions">Transactions ({filteredTransactions.length})</TabsTrigger>
-            <TabsTrigger value="users">Users ({filteredUsers.length})</TabsTrigger>
-            <TabsTrigger value="disputes">Disputes ({disputes.length})</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3" style={{ backgroundColor: COLORS.background }}>
+            <TabsTrigger value="transactions" style={{ color: activeTab === 'transactions' ? COLORS.primary : COLORS.subtext }}>Transactions ({filteredTransactions.length})</TabsTrigger>
+            <TabsTrigger value="users" style={{ color: activeTab === 'users' ? COLORS.primary : COLORS.subtext }}>Users ({filteredUsers.length})</TabsTrigger>
+            <TabsTrigger value="disputes" style={{ color: activeTab === 'disputes' ? COLORS.primary : COLORS.subtext }}>Disputes ({disputes.length})</TabsTrigger>
           </TabsList>
 
           {/* Transactions Tab */}
@@ -482,7 +528,7 @@ function AdminDashboard() {
                         <tr key={t.transaction_id} className="border-b hover:bg-slate-50">
                           <td className="p-3">
                             <button 
-                              onClick={() => setDetailModal({ open: true, type: 'transaction', data: t })}
+                              onClick={() => navigate(`/admin/transaction/${t.transaction_id}`)}
                               className="font-mono text-xs font-medium text-primary hover:underline"
                             >
                               {t.share_code || t.transaction_id?.slice(0, 8)}
@@ -709,7 +755,7 @@ function AdminDashboard() {
                       <tr key={d.dispute_id} className="border-b hover:bg-slate-50">
                         <td className="p-3">
                           <button 
-                            onClick={() => setDetailModal({ open: true, type: 'dispute', data: d })}
+                            onClick={() => navigate(`/admin/dispute/${d.dispute_id}`)}
                             className="font-mono text-xs font-medium text-primary hover:underline"
                           >
                             {d.dispute_id?.slice(0, 8)}
@@ -759,7 +805,6 @@ function AdminDashboard() {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
 
       {/* ============ MODALS ============ */}
 
@@ -771,11 +816,11 @@ function AdminDashboard() {
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
             {filesModal.files.map((f, i) => (
-              <div key={i} className="border rounded-lg p-3 cursor-pointer group" onClick={() => window.open(f.url.startsWith('http') ? f.url : `${API.replace('/api', '')}/uploads/photos/${f.url}`, '_blank')}>
+              <div key={i} className="border rounded-lg p-3 cursor-pointer group" onClick={() => window.open(f.url, '_blank')}>
                 <p className="text-sm font-medium mb-2">{f.name}</p>
                 {f.type === 'image' ? (
                   <img 
-                    src={f.url.startsWith('http') ? f.url : `${API.replace('/api', '')}/uploads/photos/${f.url}`} 
+                    src={f.url} 
                     alt={f.name} 
                     className="w-full h-48 object-contain rounded bg-slate-100 group-hover:opacity-90 transition-opacity" 
                     onError={(e) => { e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23f1f5f9" width="100" height="100"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%2394a3b8" font-size="12">No Image</text></svg>'; }}
@@ -785,7 +830,17 @@ function AdminDashboard() {
                     <FileText className="w-12 h-12 text-slate-400" />
                   </div>
                 )}
-                <p className="text-xs text-slate-500 mt-2 text-center group-hover:text-primary">Click to view full size</p>
+                <div className="flex justify-between items-center mt-2">
+                  <p className="text-xs text-slate-500 group-hover:text-primary">Click to view full size</p>
+                  <a 
+                    href={f.url} 
+                    download 
+                    className="text-xs text-primary hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Download
+                  </a>
+                </div>
               </div>
             ))}
             {filesModal.files.length === 0 && (
@@ -1072,7 +1127,8 @@ function AdminDashboard() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DashboardLayout>
+    </div>
+    </div>
   );
 }
 

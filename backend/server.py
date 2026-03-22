@@ -1,5 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Cookie, UploadFile, File
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -61,6 +62,13 @@ db = client[os.environ['DB_NAME']]
 
 # Create the main app without a prefix
 app = FastAPI()
+
+# Mount static files for uploads
+Path("/app/uploads/photos").mkdir(parents=True, exist_ok=True)
+Path("/app/uploads/verification").mkdir(parents=True, exist_ok=True)
+Path("/app/uploads/disputes").mkdir(parents=True, exist_ok=True)
+Path("/app/uploads/pdfs").mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="/app/uploads"), name="uploads")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -2402,6 +2410,147 @@ async def list_all_disputes_admin(request: Request):
     disputes = await db.disputes.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     # Return raw data to avoid validation errors
     return disputes
+
+@api_router.get("/admin/transaction/{transaction_id}")
+async def get_admin_transaction_detail(request: Request, transaction_id: str):
+    """Get full transaction details for admin (admin only)"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    # Get transaction
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Get buyer and seller details
+    buyer = None
+    seller = None
+    
+    if transaction.get("buyer_email"):
+        buyer_doc = await db.users.find_one({"email": transaction["buyer_email"]}, {"_id": 0})
+        if buyer_doc:
+            buyer = {
+                "user_id": buyer_doc.get("user_id"),
+                "name": buyer_doc.get("name"),
+                "email": buyer_doc.get("email"),
+                "phone": buyer_doc.get("phone"),
+                "id_number": buyer_doc.get("id_number"),
+                "id_verified": buyer_doc.get("id_verified") or buyer_doc.get("verified"),
+                "verified": buyer_doc.get("verified"),
+                "id_front_path": buyer_doc.get("id_front_path"),
+                "id_document": buyer_doc.get("verification", {}).get("id_document_path"),
+                "verification": buyer_doc.get("verification"),
+                "trust_score": buyer_doc.get("trust_score", 50),
+                "banking_details_added": buyer_doc.get("banking_details_added", False)
+            }
+    
+    if transaction.get("seller_email"):
+        seller_doc = await db.users.find_one({"email": transaction["seller_email"]}, {"_id": 0})
+        if seller_doc:
+            seller = {
+                "user_id": seller_doc.get("user_id"),
+                "name": seller_doc.get("name"),
+                "email": seller_doc.get("email"),
+                "phone": seller_doc.get("phone"),
+                "id_number": seller_doc.get("id_number"),
+                "id_verified": seller_doc.get("id_verified") or seller_doc.get("verified"),
+                "verified": seller_doc.get("verified"),
+                "id_front_path": seller_doc.get("id_front_path"),
+                "id_document": seller_doc.get("verification", {}).get("id_document_path"),
+                "verification": seller_doc.get("verification"),
+                "trust_score": seller_doc.get("trust_score", 50),
+                "banking_details_added": seller_doc.get("banking_details_added", False)
+            }
+    
+    return {
+        "transaction": transaction,
+        "buyer": buyer,
+        "seller": seller
+    }
+
+@api_router.get("/admin/dispute/{dispute_id}")
+async def get_admin_dispute_detail(request: Request, dispute_id: str):
+    """Get full dispute details for admin (admin only)"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    # Get dispute
+    dispute = await db.disputes.find_one({"dispute_id": dispute_id}, {"_id": 0})
+    if not dispute:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+    
+    # Get transaction
+    transaction = None
+    if dispute.get("transaction_id"):
+        transaction = await db.transactions.find_one({"transaction_id": dispute["transaction_id"]}, {"_id": 0})
+    
+    # Get buyer and seller
+    buyer = None
+    seller = None
+    
+    if transaction:
+        if transaction.get("buyer_email"):
+            buyer_doc = await db.users.find_one({"email": transaction["buyer_email"]}, {"_id": 0})
+            if buyer_doc:
+                buyer = {
+                    "user_id": buyer_doc.get("user_id"),
+                    "name": buyer_doc.get("name"),
+                    "email": buyer_doc.get("email"),
+                    "phone": buyer_doc.get("phone")
+                }
+        
+        if transaction.get("seller_email"):
+            seller_doc = await db.users.find_one({"email": transaction["seller_email"]}, {"_id": 0})
+            if seller_doc:
+                seller = {
+                    "user_id": seller_doc.get("user_id"),
+                    "name": seller_doc.get("name"),
+                    "email": seller_doc.get("email"),
+                    "phone": seller_doc.get("phone")
+                }
+    
+    return {
+        "dispute": dispute,
+        "transaction": transaction,
+        "buyer": buyer,
+        "seller": seller
+    }
+
+@api_router.post("/admin/users/{user_id}/suspend")
+async def admin_suspend_user(request: Request, user_id: str):
+    """Suspend a user account (admin only)"""
+    admin = await get_user_from_token(request)
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "suspension_flag": True,
+            "suspended_at": datetime.now(timezone.utc).isoformat(),
+            "suspended_by": admin.email
+        }}
+    )
+    
+    # Send notification email
+    try:
+        from email_service import send_custom_email
+        await send_custom_email(
+            to_email=user.get("email"),
+            to_name=user.get("name"),
+            subject="TrustTrade Account Suspended",
+            body=f"Your TrustTrade account has been suspended. Please contact support for more information."
+        )
+    except Exception as e:
+        logger.error(f"Failed to send suspension email: {e}")
+    
+    return {"message": "User suspended successfully", "user_id": user_id}
 
 @api_router.get("/admin/stats")
 async def get_admin_stats(request: Request):

@@ -4,6 +4,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* TrustTrade Color System */
+:root {
+    --tt-primary: #1a2942;
+    --tt-green: #2ecc71;
+    --tt-background: #ffffff;
+    --tt-section: #f8f9fa;
+    --tt-text: #212529;
+    --tt-subtext: #6c757d;
+    --tt-border: #dee2e6;
+    --tt-error: #e74c3c;
+    --tt-warning: #f39c12;
+    --tt-info: #3498db;
+}
+
 body {
     margin: 0;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -11,6 +25,8 @@ body {
         sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    background-color: var(--tt-background);
+    color: var(--tt-text);
 }
 
 code {
@@ -19,7 +35,24 @@ code {
 
 h1, h2, h3, h4, h5, h6 {
     font-family: 'Manrope', sans-serif;
+    color: var(--tt-text);
 }
+
+/* Utility classes for TrustTrade colors */
+.tt-bg-primary { background-color: var(--tt-primary); }
+.tt-bg-green { background-color: var(--tt-green); }
+.tt-bg-section { background-color: var(--tt-section); }
+.tt-bg-error { background-color: var(--tt-error); }
+.tt-bg-warning { background-color: var(--tt-warning); }
+.tt-bg-info { background-color: var(--tt-info); }
+
+.tt-text-primary { color: var(--tt-primary); }
+.tt-text-green { color: var(--tt-green); }
+.tt-text-subtext { color: var(--tt-subtext); }
+.tt-text-error { color: var(--tt-error); }
+.tt-text-warning { color: var(--tt-warning); }
+
+.tt-border { border-color: var(--tt-border); }
 
 @layer base {
     :root {
@@ -29,21 +62,21 @@ h1, h2, h3, h4, h5, h6 {
         --card-foreground: 222 47% 11%;
         --popover: 0 0% 100%;
         --popover-foreground: 222 47% 11%;
-        --primary: 222 100% 56%;
+        --primary: 215 50% 18%;
         --primary-foreground: 0 0% 100%;
         --secondary: 210 40% 96%;
         --secondary-foreground: 222 47% 11%;
         --muted: 210 40% 98%;
         --muted-foreground: 215 16% 47%;
         --accent: 222 80% 96%;
-        --accent-foreground: 222 100% 56%;
-        --destructive: 0 84% 60%;
+        --accent-foreground: 215 50% 18%;
+        --destructive: 4 74% 57%;
         --destructive-foreground: 0 0% 98%;
         --border: 214 32% 91%;
         --input: 214 32% 91%;
-        --ring: 222 100% 56%;
-        --success: 142 71% 45%;
-        --warning: 38 92% 50%;
+        --ring: 215 50% 18%;
+        --success: 145 63% 49%;
+        --warning: 36 100% 50%;
         --radius: 0.75rem;
     }
 }

@@ -8,6 +8,8 @@ import TransactionsList from './pages/TransactionsList';
 import TransactionDetail from './pages/TransactionDetail';
 import Disputes from './pages/Disputes';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminTransactionDetail from './pages/AdminTransactionDetail';
+import AdminDisputeDetail from './pages/AdminDisputeDetail';
 import TermsAndConditions from './pages/TermsAndConditions';
 import ShareTransaction from './pages/ShareTransaction';
 import UserProfile from './pages/UserProfile';
@@ -46,6 +48,8 @@ function AppRouter() {
       <Route path="/transactions/:transactionId" element={<ProtectedRoute><TransactionDetail /></ProtectedRoute>} />
       <Route path="/disputes" element={<ProtectedRoute><Disputes /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+      <Route path="/admin/transaction/:transactionId" element={<ProtectedRoute><AdminTransactionDetail /></ProtectedRoute>} />
+      <Route path="/admin/dispute/:disputeId" element={<ProtectedRoute><AdminDisputeDetail /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/activity" element={<ProtectedRoute><LiveActivity /></ProtectedRoute>} />

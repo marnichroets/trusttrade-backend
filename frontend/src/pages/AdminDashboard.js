@@ -29,6 +29,10 @@ function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   
+  // Search and filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  
   // Modal states
   const [refundModal, setRefundModal] = useState({ open: false, transaction: null, reason: '' });
   const [releaseModal, setReleaseModal] = useState({ open: false, transaction: null, notes: '' });
@@ -42,6 +46,27 @@ function AdminDashboard() {
   const [markPaidModal, setMarkPaidModal] = useState({ open: false, transaction: null });
   
   const navigate = useNavigate();
+
+  // Filter transactions based on search and status
+  const filteredTransactions = transactions.filter(t => {
+    const matchesSearch = !searchQuery || 
+      t.share_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.buyer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.seller_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.buyer_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.seller_email?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  // Filter users based on search
+  const filteredUsers = users.filter(u => {
+    if (!searchQuery) return true;
+    return u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      u.email?.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   useEffect(() => {
     fetchData();
@@ -310,51 +335,63 @@ function AdminDashboard() {
 
         {/* Stats Cards */}
         {stats && (
-          <div className="grid md:grid-cols-4 gap-6">
-            <Card className="p-6 hover:shadow-md transition-shadow duration-200">
+          <div className="grid md:grid-cols-5 gap-4">
+            <Card className="p-4 hover:shadow-md transition-shadow duration-200">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm text-slate-600 mb-1">Total Users</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.total_users}</p>
+                  <p className="text-xs text-slate-600 mb-1">Total Users</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats.total_users}</p>
                 </div>
-                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Users className="w-6 h-6 text-primary" />
+                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <Users className="w-5 h-5 text-primary" />
                 </div>
               </div>
             </Card>
 
-            <Card className="p-6 hover:shadow-md transition-shadow duration-200">
+            <Card className="p-4 hover:shadow-md transition-shadow duration-200">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm text-slate-600 mb-1">Total Transactions</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.total_transactions}</p>
+                  <p className="text-xs text-slate-600 mb-1">Total Transactions</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats.total_transactions}</p>
                 </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-green-600" />
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-green-600" />
                 </div>
               </div>
             </Card>
 
-            <Card className="p-6 hover:shadow-md transition-shadow duration-200">
+            <Card className="p-4 hover:shadow-md transition-shadow duration-200 bg-green-50 border-green-200">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm text-slate-600 mb-1">Pending Transactions</p>
-                  <p className="text-3xl font-bold text-yellow-600">{stats.pending_transactions}</p>
+                  <p className="text-xs text-green-700 mb-1">Total Revenue (2%)</p>
+                  <p className="text-2xl font-bold text-green-700">R {(stats.total_volume * 0.02)?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) || '0.00'}</p>
                 </div>
-                <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-yellow-600" />
+                <div className="w-10 h-10 bg-green-200 rounded-lg flex items-center justify-center">
+                  <DollarSign className="w-5 h-5 text-green-700" />
                 </div>
               </div>
             </Card>
 
-            <Card className="p-6 hover:shadow-md transition-shadow duration-200">
+            <Card className="p-4 hover:shadow-md transition-shadow duration-200">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm text-slate-600 mb-1">Open Disputes</p>
-                  <p className="text-3xl font-bold text-red-600">{stats.pending_disputes}</p>
+                  <p className="text-xs text-slate-600 mb-1">Pending Disputes</p>
+                  <p className="text-2xl font-bold text-red-600">{stats.pending_disputes || 0}</p>
                 </div>
-                <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                  <AlertCircle className="w-6 h-6 text-red-600" />
+                <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-4 hover:shadow-md transition-shadow duration-200">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs text-slate-600 mb-1">Pending ID Verification</p>
+                  <p className="text-2xl font-bold text-amber-600">{stats.pending_verifications || 0}</p>
+                </div>
+                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5 text-amber-600" />
                 </div>
               </div>
             </Card>
@@ -364,13 +401,51 @@ function AdminDashboard() {
         {/* Tabs */}
         <Tabs defaultValue="transactions" className="w-full">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="transactions">Transactions ({transactions.length})</TabsTrigger>
-            <TabsTrigger value="users">Users ({users.length})</TabsTrigger>
+            <TabsTrigger value="transactions">Transactions ({filteredTransactions.length})</TabsTrigger>
+            <TabsTrigger value="users">Users ({filteredUsers.length})</TabsTrigger>
             <TabsTrigger value="disputes">Disputes ({disputes.length})</TabsTrigger>
           </TabsList>
 
           {/* Transactions Tab */}
           <TabsContent value="transactions" className="mt-6">
+            {/* Search and Filters */}
+            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+              <div className="flex-1">
+                <Input
+                  placeholder="Search by ID, name or email..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full sm:w-[180px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="disputed">Disputed</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" onClick={() => {
+                const csv = filteredTransactions.map(t => 
+                  `${t.share_code},${t.buyer_name},${t.buyer_email},${t.seller_name},${t.seller_email},R${t.item_price},${t.payment_status},${t.created_at}`
+                ).join('\n');
+                const blob = new Blob(['ID,Buyer Name,Buyer Email,Seller Name,Seller Email,Amount,Status,Created\n' + csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `transactions-${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
+              }}>
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </Button>
+            </div>
+
             <Card className="overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -388,7 +463,7 @@ function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {transactions.slice(0, 30).map((t) => {
+                    {filteredTransactions.slice(0, 50).map((t) => {
                       const files = collectFiles(t, 'transaction');
                       return (
                         <tr key={t.transaction_id} className="border-b hover:bg-slate-50">
@@ -683,19 +758,21 @@ function AdminDashboard() {
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
             {filesModal.files.map((f, i) => (
-              <div key={i} className="border rounded-lg p-3">
+              <div key={i} className="border rounded-lg p-3 cursor-pointer group" onClick={() => window.open(f.url.startsWith('http') ? f.url : `${API.replace('/api', '')}/uploads/photos/${f.url}`, '_blank')}>
                 <p className="text-sm font-medium mb-2">{f.name}</p>
                 {f.type === 'image' ? (
-                  <img src={f.url} alt={f.name} className="w-full h-40 object-cover rounded" />
+                  <img 
+                    src={f.url.startsWith('http') ? f.url : `${API.replace('/api', '')}/uploads/photos/${f.url}`} 
+                    alt={f.name} 
+                    className="w-full h-48 object-contain rounded bg-slate-100 group-hover:opacity-90 transition-opacity" 
+                    onError={(e) => { e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect fill="%23f1f5f9" width="100" height="100"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%2394a3b8" font-size="12">No Image</text></svg>'; }}
+                  />
                 ) : (
-                  <div className="w-full h-40 bg-slate-100 rounded flex items-center justify-center">
+                  <div className="w-full h-48 bg-slate-100 rounded flex items-center justify-center">
                     <FileText className="w-12 h-12 text-slate-400" />
                   </div>
                 )}
-                <Button size="sm" variant="outline" className="w-full mt-2" onClick={() => window.open(f.url, '_blank')}>
-                  <Download className="w-3 h-3 mr-1" />
-                  Download
-                </Button>
+                <p className="text-xs text-slate-500 mt-2 text-center group-hover:text-primary">Click to view full size</p>
               </div>
             ))}
             {filesModal.files.length === 0 && (

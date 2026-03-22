@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { CreditCard, Building2, User, Hash, ShieldCheck, AlertCircle, ArrowLeft } from 'lucide-react';
+import { CreditCard, Building2, User, Hash, ShieldCheck, AlertCircle, ArrowLeft, CheckCircle, Lock } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -31,6 +31,7 @@ function BankingSettings() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [bankingDetailsAdded, setBankingDetailsAdded] = useState(false);
   const [bankingDetails, setBankingDetails] = useState({
     bank_name: '',
     account_holder: '',
@@ -46,28 +47,15 @@ function BankingSettings() {
 
   const fetchUserData = async () => {
     try {
-      const [userRes, bankingRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/banking-details`, { withCredentials: true }).catch(() => ({ data: {} }))
-      ]);
-
+      const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
       setUser(userRes.data);
+      setBankingDetailsAdded(userRes.data.banking_details_added || false);
       
-      if (bankingRes.data && Object.keys(bankingRes.data).length > 0) {
-        setBankingDetails({
-          bank_name: bankingRes.data.bank_name || '',
-          account_holder: bankingRes.data.account_holder || userRes.data.name,
-          account_number: '', // Don't pre-fill for security
-          branch_code: bankingRes.data.branch_code || '',
-          account_type: bankingRes.data.account_type || 'savings'
-        });
-      } else {
-        // Pre-fill account holder with user name
-        setBankingDetails(prev => ({
-          ...prev,
-          account_holder: userRes.data.name
-        }));
-      }
+      // Pre-fill account holder with user name
+      setBankingDetails(prev => ({
+        ...prev,
+        account_holder: userRes.data.name
+      }));
     } catch (error) {
       console.error('Failed to fetch data:', error);
       if (error.response?.status === 401) {
@@ -103,9 +91,15 @@ function BankingSettings() {
 
     setSaving(true);
     try {
-      await axios.post(`${API}/banking-details`, bankingDetails, { withCredentials: true });
-      toast.success('Banking details saved successfully');
-      navigate('/dashboard');
+      // Send to TradeSafe API - banking details are NOT stored in TrustTrade database
+      await axios.post(`${API}/tradesafe/banking-details`, bankingDetails, { withCredentials: true });
+      toast.success('Banking details saved securely');
+      setBankingDetailsAdded(true);
+      
+      // Redirect to dashboard after short delay
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1500);
     } catch (error) {
       console.error('Failed to save banking details:', error);
       toast.error(error.response?.data?.detail || 'Failed to save banking details');
@@ -122,6 +116,43 @@ function BankingSettings() {
     );
   }
 
+  // If already added banking details, show success state
+  if (bankingDetailsAdded) {
+    return (
+      <DashboardLayout user={user}>
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Banking Details</h1>
+              <p className="text-slate-600 dark:text-slate-400">Your payout account</p>
+            </div>
+          </div>
+
+          <Card className="p-8 text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-10 h-10 text-green-600" />
+            </div>
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">Banking Details Verified</h2>
+            <p className="text-slate-600 dark:text-slate-400 mb-6">
+              Your banking details are securely saved. Payouts will be sent to your verified account.
+            </p>
+            <div className="flex items-center justify-center gap-2 text-sm text-slate-500 mb-6">
+              <Lock className="w-4 h-4" />
+              <span>Details stored securely with our payment processor</span>
+            </div>
+            <Button onClick={() => navigate('/dashboard')} className="bg-[#1a2942] hover:bg-[#243751]">
+              Back to Dashboard
+            </Button>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout user={user}>
       <div className="max-w-2xl mx-auto space-y-6">
@@ -131,18 +162,18 @@ function BankingSettings() {
             Back
           </Button>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Banking Details</h1>
-            <p className="text-slate-600">Add your bank account to receive payouts</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Banking Details</h1>
+            <p className="text-slate-600 dark:text-slate-400">Add your bank account to receive payouts</p>
           </div>
         </div>
 
-        {/* Info Card */}
-        <Card className="p-4 bg-blue-50 border-blue-200">
+        {/* Security Info Card */}
+        <Card className="p-4 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
           <div className="flex gap-3">
-            <ShieldCheck className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-800">
-              <p className="font-medium mb-1">Secure Payouts via TrustTrade</p>
-              <p>Your banking details are securely stored and used only for releasing funds from completed transactions. Payouts are processed automatically when your wallet balance reaches R500.</p>
+            <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-blue-800 dark:text-blue-200">
+              <p className="font-medium mb-1">Secure & Private</p>
+              <p>Your banking details are sent directly to our secure payment processor. TrustTrade does not store your bank account number or sensitive details.</p>
             </div>
           </div>
         </Card>
@@ -160,12 +191,11 @@ function BankingSettings() {
                 id="bank_name"
                 value={bankingDetails.bank_name}
                 onChange={(e) => handleBankSelect(e.target.value)}
-                className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#1a2942]"
                 required
-                data-testid="bank-name-select"
               >
                 <option value="">Select your bank</option>
-                {SA_BANKS.map(bank => (
+                {SA_BANKS.map((bank) => (
                   <option key={bank.name} value={bank.name}>{bank.name}</option>
                 ))}
               </select>
@@ -179,12 +209,11 @@ function BankingSettings() {
               </Label>
               <Input
                 id="account_holder"
-                type="text"
                 value={bankingDetails.account_holder}
                 onChange={(e) => setBankingDetails(prev => ({ ...prev, account_holder: e.target.value }))}
-                placeholder="Name as it appears on your bank account"
+                placeholder="Full name as it appears on account"
                 required
-                data-testid="account-holder-input"
+                className="border-slate-200 dark:border-slate-700 focus:ring-[#1a2942]"
               />
             </div>
 
@@ -197,12 +226,12 @@ function BankingSettings() {
               <Input
                 id="account_number"
                 type="text"
+                inputMode="numeric"
                 value={bankingDetails.account_number}
                 onChange={(e) => setBankingDetails(prev => ({ ...prev, account_number: e.target.value.replace(/\D/g, '') }))}
-                placeholder="Enter your account number"
+                placeholder="Your bank account number"
                 required
-                maxLength={16}
-                data-testid="account-number-input"
+                className="border-slate-200 dark:border-slate-700 focus:ring-[#1a2942]"
               />
             </div>
 
@@ -214,17 +243,17 @@ function BankingSettings() {
               </Label>
               <Input
                 id="branch_code"
-                type="text"
                 value={bankingDetails.branch_code}
-                onChange={(e) => setBankingDetails(prev => ({ ...prev, branch_code: e.target.value.replace(/\D/g, '') }))}
+                onChange={(e) => setBankingDetails(prev => ({ ...prev, branch_code: e.target.value }))}
                 placeholder="6-digit branch code"
                 required
-                maxLength={6}
-                data-testid="branch-code-input"
+                className="border-slate-200 dark:border-slate-700 focus:ring-[#1a2942]"
               />
-              <p className="text-xs text-slate-500">
-                Universal branch codes are auto-filled for major banks
-              </p>
+              {bankingDetails.bank_name && bankingDetails.bank_name !== 'Other' && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Universal branch code auto-filled for {bankingDetails.bank_name}
+                </p>
+              )}
             </div>
 
             {/* Account Type */}
@@ -232,64 +261,68 @@ function BankingSettings() {
               <Label className="flex items-center gap-2">
                 Account Type *
               </Label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
+              <div className="grid grid-cols-2 gap-3">
+                <label className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
+                  bankingDetails.account_type === 'savings' 
+                    ? 'border-[#1a2942] bg-[#1a2942]/5 dark:bg-[#1a2942]/20' 
+                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                }`}>
                   <input
                     type="radio"
                     name="account_type"
                     value="savings"
                     checked={bankingDetails.account_type === 'savings'}
                     onChange={(e) => setBankingDetails(prev => ({ ...prev, account_type: e.target.value }))}
-                    className="w-4 h-4 text-primary"
+                    className="text-[#1a2942]"
                   />
-                  <span>Savings</span>
+                  <span className="text-sm font-medium text-slate-900 dark:text-white">Savings</span>
                 </label>
-                <label className="flex items-center gap-2 cursor-pointer">
+                <label className={`flex items-center gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
+                  bankingDetails.account_type === 'current' 
+                    ? 'border-[#1a2942] bg-[#1a2942]/5 dark:bg-[#1a2942]/20' 
+                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                }`}>
                   <input
                     type="radio"
                     name="account_type"
-                    value="checking"
-                    checked={bankingDetails.account_type === 'checking'}
+                    value="current"
+                    checked={bankingDetails.account_type === 'current'}
                     onChange={(e) => setBankingDetails(prev => ({ ...prev, account_type: e.target.value }))}
-                    className="w-4 h-4 text-primary"
+                    className="text-[#1a2942]"
                   />
-                  <span>Current/Cheque</span>
+                  <span className="text-sm font-medium text-slate-900 dark:text-white">Current/Cheque</span>
                 </label>
               </div>
             </div>
 
-            {/* Warning */}
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <div className="flex gap-3">
-                <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
-                <div className="text-sm text-yellow-800">
-                  <p className="font-medium">Important</p>
-                  <p>Please ensure your banking details are correct. Incorrect details may result in failed or delayed payouts.</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Submit */}
-            <div className="flex gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate('/dashboard')}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={saving}
-                className="flex-1"
-                data-testid="save-banking-btn"
-              >
-                {saving ? 'Saving...' : 'Save Banking Details'}
-              </Button>
-            </div>
+            {/* Submit Button */}
+            <Button
+              type="submit"
+              disabled={saving}
+              className="w-full h-12 bg-[#1a2942] hover:bg-[#243751] text-white font-semibold"
+            >
+              {saving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Saving Securely...
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4 mr-2" />
+                  Save Banking Details
+                </>
+              )}
+            </Button>
           </form>
         </Card>
+
+        {/* Security Note */}
+        <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+          <Lock className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Your banking details are encrypted and sent directly to our secure payment processor for payouts. TrustTrade never stores your full account number.
+          </p>
+        </div>
       </div>
     </DashboardLayout>
   );

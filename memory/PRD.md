@@ -1,10 +1,11 @@
 # TrustTrade PRD
 
 ## Overview
-Professional escrow platform for peer-to-peer transactions in South Africa.
+Professional escrow platform for peer-to-peer transactions in South Africa using TradeSafe payment gateway.
 
 ## Core Features
 - Transaction Link System - Unique shareable links for every transaction
+- TradeSafe Integration - Full payment gateway integration with escrow
 - User Ratings and Reviews - 1-5 star rating system
 - Trust Badge System - Silver, Gold, Verified badges
 - Identity Verification - ID upload, selfie, phone verification
@@ -15,65 +16,64 @@ Professional escrow platform for peer-to-peer transactions in South Africa.
 - Report User Feature - Suspicious behavior reporting
 - User Profiles - Public profiles with Trust Score
 
+## TradeSafe Happy Path Flow
+1. **Transaction Created** → Both parties notified (email + SMS)
+2. **Buyer Pays** → FUNDS_RECEIVED → Seller notified (email + SMS)
+3. **Seller Dispatches** → INITIATED → Buyer notified (email + SMS)
+4. **Buyer Confirms** → FUNDS_RELEASED → Seller notified (email + SMS)
+
 ## Changelog
 
-### 2026-03-22: Admin Features & UI Overhaul (Session 12)
+### 2026-03-22: TradeSafe Happy Path & Admin Overhaul (Session 13)
 **Implemented:**
-1. **Admin Transaction Detail Page** (`/admin/transaction/{id}`)
-   - Full transaction overview with all details
-   - Buyer/Seller details with verification status
-   - Item details with photo gallery
-   - Payment details section
-   - Transaction timeline with all events
-   - Admin actions panel (Release Funds, Refund, Suspend, Add Note)
-   - Admin notes section
 
-2. **Admin Dispute Detail Page** (`/admin/dispute/{id}`)
-   - Dispute overview with type and status
-   - Full dispute reason and description
-   - Party statements (buyer and seller)
-   - Evidence photos gallery
-   - Related transaction details
-   - Dispute timeline
-   - Admin actions (Release to Seller, Refund Buyer, Request Info, Resolve)
-   - Admin notes section
+1. **TradeSafe Happy Path Complete**
+   - Start Delivery endpoint: `/api/tradesafe/start-delivery/{id}`
+     - Shows when state is FUNDS_RECEIVED
+     - Only seller can click
+     - Calls TradeSafe allocationStartDelivery mutation
+     - Updates state to INITIATED
+     - Sends email AND SMS to buyer
+   - Accept Delivery endpoint: `/api/tradesafe/accept-delivery/{id}`
+     - Shows when state is INITIATED
+     - Only buyer can click
+     - Calls TradeSafe allocationAcceptDelivery mutation
+     - Updates state to FUNDS_RELEASED
+     - Sends email AND SMS to seller
+   - Webhook handler updated with SMS for all states:
+     - FUNDS_RECEIVED: SMS to seller + buyer
+     - INITIATED: SMS to buyer
+     - FUNDS_RELEASED: SMS to seller
 
-3. **Fixed Image/File Loading**
-   - Added StaticFiles mount at `/uploads` in backend
-   - Fixed URL construction for photos, verification docs, dispute evidence
-   - Images now load correctly in all admin panels
+2. **Admin Dashboard Complete Overhaul**
+   - Separate pages with proper routing:
+     - `/admin` - Dashboard with stats cards
+     - `/admin/transactions` - Full transactions list
+     - `/admin/users` - Full users list
+     - `/admin/disputes` - Full disputes list
+     - `/admin/transaction/{id}` - Transaction detail
+     - `/admin/user/{id}` - User detail with transactions
+     - `/admin/dispute/{id}` - Dispute resolution panel
+   - Navigation works correctly (Dashboard, Transactions, Users, Disputes)
+   - All table rows are clickable and navigate to detail pages
+   - Stats cards with dark navy styling
 
-4. **Consistent Color Scheme**
-   - Created CSS variables in index.css
-   - Applied TrustTrade color system globally:
-     - Primary: #1a2942 (dark navy)
-     - Green: #2ecc71 (success)
-     - Error: #e74c3c (red)
-     - Warning: #f39c12 (orange)
-     - Background: #ffffff
-     - Section: #f8f9fa
-     - Text: #212529
-     - Subtext: #6c757d
+3. **Admin User Detail Page**
+   - Full user information display
+   - ID documents viewable and downloadable
+   - All transactions as buyer/seller
+   - Admin actions: Verify ID, Reject ID, Suspend, Ban
 
-5. **Admin Navigation**
-   - Created AdminNavbar component with:
-     - Dark navy background
-     - TrustTrade Admin branding
-     - Navigation links (Dashboard, Transactions, Users, Disputes)
-     - Admin badge and user info
-     - Logout button
-     - Mobile responsive hamburger menu
-   - Added Breadcrumbs component for all admin pages
+4. **Images Fixed**
+   - Static files mounted at `/uploads`
+   - Proper URL construction for all image types
 
-6. **Database Cleanup**
-   - Removed 18 test users
-   - Removed 34 test transactions
-   - Protected real user emails from deletion
-
-### Previous Sessions
-- 2026-03-19: Email/Phone Verification Fixes & OTP System
-- 2026-03-18: Payment Button Implementation, Token and Transaction Creation
-- 2026-03-17: Initial payment gateway integration
+### 2026-03-22: Admin Features (Session 12)
+- Created AdminTransactionDetail.js
+- Created AdminDisputeDetail.js
+- Added CSS variables for color system
+- Created AdminNavbar component
+- Database cleanup (test data removed)
 
 ## Architecture
 
@@ -81,7 +81,7 @@ Professional escrow platform for peer-to-peer transactions in South Africa.
 - **Framework**: FastAPI
 - **Database**: MongoDB (motor async driver)
 - **File Storage**: Local `/app/uploads/` served via StaticFiles
-- **Main file**: `/app/backend/server.py` (3900+ lines - needs refactoring)
+- **Main file**: `/app/backend/server.py` (4300+ lines - needs refactoring)
 
 ### Frontend
 - **Framework**: React
@@ -91,29 +91,36 @@ Professional escrow platform for peer-to-peer transactions in South Africa.
 
 ### Integrations
 - **Email**: Postmark
-- **Payments**: TradeSafe
+- **Payments**: TradeSafe (GraphQL API)
 - **SMS**: Zoom Connect (SMS Messenger API)
 - **Auth**: Emergent-managed Google OAuth
 
-## Key Files
-- `/app/backend/server.py` - Main API (needs refactoring)
-- `/app/backend/email_service.py` - Email templates
-- `/app/backend/sms_service.py` - SMS/OTP functionality
-- `/app/backend/tradesafe_service.py` - Payment gateway
-- `/app/frontend/src/pages/AdminDashboard.js` - Admin main page
-- `/app/frontend/src/pages/AdminTransactionDetail.js` - Transaction details
-- `/app/frontend/src/pages/AdminDisputeDetail.js` - Dispute management
-- `/app/frontend/src/components/AdminNavbar.js` - Admin navigation
+## Key Admin Routes
+- `/admin` - Dashboard overview
+- `/admin/transactions` - All transactions
+- `/admin/users` - All users
+- `/admin/disputes` - All disputes
+- `/admin/transaction/:id` - Transaction detail
+- `/admin/user/:id` - User detail
+- `/admin/dispute/:id` - Dispute detail
+
+## Key API Endpoints
+- `POST /api/tradesafe/start-delivery/{id}` - Seller marks as dispatched
+- `POST /api/tradesafe/accept-delivery/{id}` - Buyer confirms receipt
+- `POST /api/tradesafe/webhook` - TradeSafe state change notifications
+- `GET /api/admin/transaction/{id}` - Admin transaction detail
+- `GET /api/admin/user/{id}` - Admin user detail
+- `GET /api/admin/dispute/{id}` - Admin dispute detail
 
 ## Roadmap
 
 ### P0 - Completed
-- [x] Admin Transaction Detail Page
-- [x] Admin Dispute Detail Page
-- [x] Fix Image Loading in Admin
-- [x] Consistent Color Scheme
-- [x] Admin Navigation
-- [x] Clean Test Data
+- [x] TradeSafe happy path (start delivery, accept delivery)
+- [x] SMS notifications for all state changes
+- [x] Admin separate pages with navigation
+- [x] Clickable table rows
+- [x] User detail page
+- [x] Image loading fixed
 
 ### P1 - Next
 - [ ] Refactor server.py monolith into modules

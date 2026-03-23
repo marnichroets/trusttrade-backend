@@ -7,16 +7,17 @@ export function AdminNavbar({ user, onLogout }) {
   const location = useLocation();
   
   const navLinks = [
-    { href: '/admin', label: 'Dashboard' },
-    { href: '/admin?tab=transactions', label: 'Transactions' },
-    { href: '/admin?tab=users', label: 'Users' },
-    { href: '/admin?tab=disputes', label: 'Disputes' },
+    { href: '/admin', label: 'Dashboard', exact: true },
+    { href: '/admin/transactions', label: 'Transactions' },
+    { href: '/admin/users', label: 'Users' },
+    { href: '/admin/disputes', label: 'Disputes' },
   ];
   
-  const isActive = (href) => {
-    if (href === '/admin' && location.pathname === '/admin' && !location.search) return true;
-    if (href.includes('?') && location.search.includes(href.split('?')[1])) return true;
-    return false;
+  const isActive = (link) => {
+    if (link.exact) {
+      return location.pathname === link.href;
+    }
+    return location.pathname.startsWith(link.href);
   };
 
   return (
@@ -27,7 +28,7 @@ export function AdminNavbar({ user, onLogout }) {
           <div className="flex items-center gap-6">
             <Link to="/admin" className="flex items-center gap-2">
               <Shield className="w-6 h-6 text-white" />
-              <span className="text-white font-bold text-lg">TrustTrade Admin</span>
+              <span className="text-white font-bold text-lg">TrustTrade</span>
             </Link>
             
             {/* Desktop Nav */}
@@ -36,10 +37,10 @@ export function AdminNavbar({ user, onLogout }) {
                 <Link
                   key={link.href}
                   to={link.href}
-                  className={`px-3 py-2 rounded text-sm transition-colors ${
-                    isActive(link.href)
-                      ? 'text-white bg-white/10'
-                      : 'text-white/70 hover:text-white hover:bg-white/5'
+                  className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
+                    isActive(link)
+                      ? 'text-white bg-white/20'
+                      : 'text-white/70 hover:text-white hover:bg-white/10'
                   }`}
                 >
                   {link.label}
@@ -53,7 +54,7 @@ export function AdminNavbar({ user, onLogout }) {
             {user && (
               <div className="hidden md:flex items-center gap-3">
                 <span className="text-white/70 text-sm">{user.name}</span>
-                <span className="px-2 py-1 text-xs rounded bg-white/10 text-white">Admin</span>
+                <span className="px-2 py-1 text-xs rounded bg-white/20 text-white font-medium">Admin</span>
               </div>
             )}
             
@@ -87,10 +88,10 @@ export function AdminNavbar({ user, onLogout }) {
                 key={link.href}
                 to={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-3 py-2 rounded text-sm ${
-                  isActive(link.href)
-                    ? 'text-white bg-white/10'
-                    : 'text-white/70 hover:text-white'
+                className={`block px-3 py-2 rounded text-sm font-medium ${
+                  isActive(link)
+                    ? 'text-white bg-white/20'
+                    : 'text-white/70 hover:text-white hover:bg-white/10'
                 }`}
               >
                 {link.label}
@@ -132,7 +133,7 @@ export function Breadcrumbs({ items }) {
               {item.label}
             </Link>
           ) : (
-            <span style={{ color: '#212529' }}>{item.label}</span>
+            <span style={{ color: '#212529' }} className="font-medium">{item.label}</span>
           )}
         </span>
       ))}

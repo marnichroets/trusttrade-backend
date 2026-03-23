@@ -47,6 +47,9 @@ from sms_service import (
     send_otp_sms,
     send_transaction_invite_sms,
     send_dispute_sms,
+    send_funds_received_sms,
+    send_delivery_sms,
+    send_funds_released_sms,
     create_otp_record,
     is_otp_valid,
     can_resend_otp
@@ -2552,6 +2555,124 @@ async def admin_suspend_user(request: Request, user_id: str):
     
     return {"message": "User suspended successfully", "user_id": user_id}
 
+@api_router.get("/admin/user/{user_id}")
+async def get_admin_user_detail(request: Request, user_id: str):
+    """Get full user details for admin (admin only)"""
+    admin = await get_user_from_token(request)
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    # Get user
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get transactions where user is buyer
+    buyer_transactions = await db.transactions.find(
+        {"buyer_email": user.get("email")},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    # Get transactions where user is seller
+    seller_transactions = await db.transactions.find(
+        {"seller_email": user.get("email")},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return {
+        "user": user,
+        "buyer_transactions": buyer_transactions,
+        "seller_transactions": seller_transactions
+    }
+
+@api_router.post("/admin/users/{user_id}/verification")
+async def admin_verify_user(request: Request, user_id: str):
+    """Verify or reject user ID verification (admin only)"""
+    admin = await get_user_from_token(request)
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    body = await request.json()
+    status = body.get("status")  # 'verified' or 'rejected'
+    notes = body.get("notes", "")
+    
+    if status not in ["verified", "rejected"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    update_data = {
+        "id_verification_status": status,
+        "verified": status == "verified",
+        "id_verified": status == "verified",
+        "verification_updated_at": datetime.now(timezone.utc).isoformat(),
+        "verification_updated_by": admin.email
+    }
+    
+    if notes:
+        update_data["verification_notes"] = notes
+    
+    await db.users.update_one({"user_id": user_id}, {"$set": update_data})
+    
+    # Send notification email
+    try:
+        from email_service import send_custom_email
+        if status == "verified":
+            await send_custom_email(
+                to_email=user.get("email"),
+                to_name=user.get("name"),
+                subject="TrustTrade ID Verification Approved",
+                body=f"Your identity has been verified on TrustTrade. You can now access all platform features."
+            )
+        else:
+            await send_custom_email(
+                to_email=user.get("email"),
+                to_name=user.get("name"),
+                subject="TrustTrade ID Verification Rejected",
+                body=f"Your identity verification was not approved. Reason: {notes or 'Documents could not be verified'}. Please re-submit your documents."
+            )
+    except Exception as e:
+        logger.error(f"Failed to send verification email: {e}")
+    
+    return {"message": f"User {status}", "user_id": user_id}
+
+@api_router.post("/admin/users/{user_id}/ban")
+async def admin_ban_user(request: Request, user_id: str):
+    """Permanently ban a user account (admin only)"""
+    admin = await get_user_from_token(request)
+    if not admin or not admin.is_admin:
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    user = await db.users.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {
+            "banned": True,
+            "suspension_flag": True,
+            "banned_at": datetime.now(timezone.utc).isoformat(),
+            "banned_by": admin.email
+        }}
+    )
+    
+    # Send notification email
+    try:
+        from email_service import send_custom_email
+        await send_custom_email(
+            to_email=user.get("email"),
+            to_name=user.get("name"),
+            subject="TrustTrade Account Permanently Banned",
+            body=f"Your TrustTrade account has been permanently banned due to policy violations."
+        )
+    except Exception as e:
+        logger.error(f"Failed to send ban email: {e}")
+    
+    return {"message": "User banned successfully", "user_id": user_id}
+
 @api_router.get("/admin/stats")
 async def get_admin_stats(request: Request):
     """Get admin dashboard stats"""
@@ -3799,6 +3920,8 @@ async def start_tradesafe_delivery(request: Request, transaction_id: str):
     
     # Send email to buyer about delivery started
     buyer_email = transaction.get("buyer_email")
+    buyer_phone = transaction.get("buyer_phone")
+    
     if buyer_email:
         await send_delivery_started_email(
             to_email=buyer_email,
@@ -3807,6 +3930,16 @@ async def start_tradesafe_delivery(request: Request, transaction_id: str):
             item_description=transaction["item_description"],
             seller_name=transaction.get("seller_name", "Seller")
         )
+    
+    # Send SMS to buyer
+    if buyer_phone:
+        try:
+            await send_delivery_sms(
+                to_phone=buyer_phone,
+                message=f"TrustTrade: Your item '{transaction['item_description'][:30]}...' has been dispatched by {transaction.get('seller_name', 'the seller')}. Please confirm receipt once delivered. Ref: {transaction.get('share_code', transaction_id)}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send delivery SMS to buyer: {e}")
     
     return {
         "status": "delivery_started",
@@ -3889,6 +4022,17 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         amount=transaction["item_price"],
         net_amount=net_amount
     )
+    
+    # Send SMS to seller
+    seller_phone = transaction.get("seller_phone")
+    if seller_phone:
+        try:
+            await send_funds_released_sms(
+                to_phone=seller_phone,
+                message=f"TrustTrade: Great news! The buyer confirmed receipt. R{net_amount:.2f} has been released to your account. Ref: {transaction.get('share_code', transaction_id)}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send funds released SMS to seller: {e}")
     
     return {
         "status": "funds_released",
@@ -4034,6 +4178,28 @@ async def handle_tradesafe_webhook(request: Request):
             amount=transaction["item_price"],
             role="buyer"
         )
+        
+        # SMS to seller - funds received, please deliver
+        seller_phone = transaction.get("seller_phone")
+        if seller_phone:
+            try:
+                await send_funds_received_sms(
+                    to_phone=seller_phone,
+                    message=f"TrustTrade: Payment of R{transaction['item_price']:.2f} received and secured! Please deliver '{transaction['item_description'][:30]}...' to the buyer. Ref: {transaction.get('share_code', transaction['transaction_id'])}"
+                )
+            except Exception as e:
+                logger.error(f"Webhook SMS failed (FUNDS_RECEIVED seller): {e}")
+        
+        # SMS to buyer - payment confirmed
+        buyer_phone = transaction.get("buyer_phone")
+        if buyer_phone:
+            try:
+                await send_funds_received_sms(
+                    to_phone=buyer_phone,
+                    message=f"TrustTrade: Your payment of R{transaction['item_price']:.2f} is now secured in escrow. The seller will deliver your item shortly. Ref: {transaction.get('share_code', transaction['transaction_id'])}"
+                )
+            except Exception as e:
+                logger.error(f"Webhook SMS failed (FUNDS_RECEIVED buyer): {e}")
     
     elif new_state == TransactionState.INITIATED:
         # Delivery started - notify buyer
@@ -4046,6 +4212,17 @@ async def handle_tradesafe_webhook(request: Request):
             item_description=transaction["item_description"],
             role="buyer"
         )
+        
+        # SMS to buyer - item dispatched
+        buyer_phone = transaction.get("buyer_phone")
+        if buyer_phone:
+            try:
+                await send_delivery_sms(
+                    to_phone=buyer_phone,
+                    message=f"TrustTrade: Your item has been dispatched! Please confirm receipt once you receive it. Ref: {transaction.get('share_code', transaction['transaction_id'])}"
+                )
+            except Exception as e:
+                logger.error(f"Webhook SMS failed (INITIATED buyer): {e}")
     
     elif new_state == TransactionState.FUNDS_RELEASED:
         # Funds released - notify seller
@@ -4063,6 +4240,17 @@ async def handle_tradesafe_webhook(request: Request):
             amount=transaction["item_price"],
             net_amount=net_amount
         )
+        
+        # SMS to seller - funds released
+        seller_phone = transaction.get("seller_phone")
+        if seller_phone:
+            try:
+                await send_funds_released_sms(
+                    to_phone=seller_phone,
+                    message=f"TrustTrade: Great news! R{net_amount:.2f} has been released to your account for '{transaction['item_description'][:30]}...'. Ref: {transaction.get('share_code', transaction['transaction_id'])}"
+                )
+            except Exception as e:
+                logger.error(f"Webhook SMS failed (FUNDS_RELEASED seller): {e}")
     
     elif new_state == TransactionState.DISPUTED:
         # Dispute opened - notify both parties

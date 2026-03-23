@@ -384,6 +384,30 @@ function TransactionDetail() {
     }
   };
 
+  // Manual override for start delivery (when webhook fails)
+  const handleManualStartDelivery = async () => {
+    if (!window.confirm('MANUAL OVERRIDE: Mark as dispatched? Use this if the normal button fails due to webhook issues.')) {
+      return;
+    }
+
+    setStartingDelivery(true);
+    try {
+      await axios.post(
+        `${API}/tradesafe/manual-start-delivery/${transactionId}`,
+        {},
+        { withCredentials: true }
+      );
+
+      toast.success('Delivery manually started! Buyer notified.');
+      fetchData();
+    } catch (error) {
+      console.error('Failed manual start delivery:', error);
+      toast.error(error.response?.data?.detail || 'Failed to start delivery.');
+    } finally {
+      setStartingDelivery(false);
+    }
+  };
+
   // Buyer accepts delivery
   const handleAcceptDelivery = async () => {
     if (!window.confirm('Confirm you have received the item? This will release funds to the seller. This action cannot be undone.')) {
@@ -403,6 +427,30 @@ function TransactionDetail() {
     } catch (error) {
       console.error('Failed to accept delivery:', error);
       toast.error(error.response?.data?.detail || 'Failed to confirm delivery. Please try again.');
+    } finally {
+      setAcceptingDelivery(false);
+    }
+  };
+
+  // Manual override for accept delivery (when webhook fails)
+  const handleManualAcceptDelivery = async () => {
+    if (!window.confirm('MANUAL OVERRIDE: Confirm receipt and release funds? Use this if the normal button fails.')) {
+      return;
+    }
+
+    setAcceptingDelivery(true);
+    try {
+      const response = await axios.post(
+        `${API}/tradesafe/manual-accept-delivery/${transactionId}`,
+        {},
+        { withCredentials: true }
+      );
+
+      toast.success(`Delivery confirmed! R${response.data.net_amount?.toFixed(2) || ''} released to seller.`);
+      fetchData();
+    } catch (error) {
+      console.error('Failed manual accept delivery:', error);
+      toast.error(error.response?.data?.detail || 'Failed to confirm delivery.');
     } finally {
       setAcceptingDelivery(false);
     }
@@ -766,11 +814,24 @@ function TransactionDetail() {
   const isAwaitingBuyerPayment = hasEscrow && isSeller && !isBuyer && 
     (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
   
-  // Can start delivery: funds received, seller
+  // Can start delivery: funds received, seller (normal flow)
   const canStartDelivery = hasEscrow && isSeller && escrowState === 'FUNDS_RECEIVED';
   
-  // Can accept delivery: delivery started, buyer
+  // Can show manual start delivery: seller and payment seems to have gone through
+  const canManualStartDelivery = hasEscrow && isSeller && 
+    (transaction.payment_status === 'Funds in Escrow' || 
+     transaction.payment_status === 'Paid' ||
+     transaction.funds_received_at ||
+     escrowState === 'FUNDS_RECEIVED');
+  
+  // Can accept delivery: delivery started, buyer (normal flow)
   const canAcceptDeliveryTS = hasEscrow && isBuyer && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState);
+  
+  // Can show manual accept delivery: buyer and delivery seems to have started
+  const canManualAcceptDelivery = hasEscrow && isBuyer &&
+    (transaction.payment_status === 'Delivery in Progress' ||
+     transaction.delivery_started_at ||
+     escrowState === 'INITIATED');
   
   // Legacy flow (without escrow)
   const canConfirmDelivery = !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
@@ -1206,6 +1267,44 @@ function TransactionDetail() {
           </Card>
         )}
 
+        {/* Manual Override - Seller Start Delivery (when webhook failed) */}
+        {!canStartDelivery && canManualStartDelivery && !transaction.delivery_started_at && (
+          <Card className="p-6 bg-amber-50 border-amber-200">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-amber-100 rounded-full">
+                <Truck className="w-6 h-6 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-amber-900 mb-2">Mark as Dispatched</h3>
+                <p className="text-sm text-amber-800 mb-2">
+                  Payment appears to have been received. Click below to mark the item as dispatched.
+                </p>
+                <p className="text-xs text-amber-700 mb-4 p-2 bg-amber-100 rounded">
+                  <strong>Note:</strong> Use this if the normal flow isn't showing buttons correctly.
+                </p>
+                <Button 
+                  onClick={handleManualStartDelivery} 
+                  disabled={startingDelivery}
+                  className="bg-amber-600 hover:bg-amber-700"
+                  data-testid="manual-start-delivery-btn"
+                >
+                  {startingDelivery ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Truck className="w-4 h-4 mr-2" />
+                      Mark as Dispatched
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Buyer Accept Delivery */}
         {canAcceptDeliveryTS && (
           <Card className="p-6 bg-green-50 border-green-200">
@@ -1226,6 +1325,44 @@ function TransactionDetail() {
                   disabled={acceptingDelivery}
                   className="bg-green-600 hover:bg-green-700"
                   data-testid="accept-delivery-btn"
+                >
+                  {acceptingDelivery ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Confirm Receipt & Release Funds
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Manual Override - Buyer Accept Delivery (when webhook failed) */}
+        {!canAcceptDeliveryTS && canManualAcceptDelivery && !transaction.delivery_confirmed && (
+          <Card className="p-6 bg-green-50 border-green-200">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-green-100 rounded-full">
+                <CheckCircle2 className="w-6 h-6 text-green-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-green-900 mb-2">Confirm Receipt</h3>
+                <p className="text-sm text-green-800 mb-4">
+                  Once you have received the item, confirm delivery to release funds to the seller.
+                </p>
+                <p className="text-xs text-green-700 mb-4 p-2 bg-green-100 rounded">
+                  <strong>Important:</strong> Only confirm if you have received the item and are satisfied. This action cannot be undone.
+                </p>
+                <Button 
+                  onClick={handleManualAcceptDelivery} 
+                  disabled={acceptingDelivery}
+                  className="bg-green-600 hover:bg-green-700"
+                  data-testid="manual-accept-delivery-btn"
                 >
                   {acceptingDelivery ? (
                     <>

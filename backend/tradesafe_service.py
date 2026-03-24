@@ -494,7 +494,6 @@ async def get_tradesafe_transaction(tradesafe_id: str) -> Optional[Dict[str, Any
             parties {
                 id
                 role
-                token
             }
         }
     }

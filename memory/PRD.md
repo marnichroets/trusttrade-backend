@@ -24,56 +24,67 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 
 ## Changelog
 
+### 2026-03-24: Production Reliability Upgrade (Session 14)
+**Implemented:**
+
+1. **Webhook Handler with Full Reliability**
+   - New `/app/backend/webhook_handler.py` module
+   - Strict idempotency using unique event IDs (SHA256 hash of payload)
+   - All webhook events logged to `webhook_events` collection
+   - Duplicate webhooks automatically ignored
+   - Email deduplication with `emails_sent` array tracking per transaction
+   - Comprehensive error logging
+
+2. **Transaction State Machine**
+   - New `/app/backend/transaction_state.py` module
+   - Strict state transitions enforced
+   - States: CREATED → PENDING_CONFIRMATION → AWAITING_PAYMENT → PAYMENT_SECURED → DELIVERY_IN_PROGRESS → DELIVERED → COMPLETED
+   - Terminal states: COMPLETED, CANCELLED, REFUNDED
+   - Special state: DISPUTED (can transition back to flow)
+
+3. **Background Jobs**
+   - New `/app/backend/background_jobs.py` module
+   - Fallback payment verification every 3 minutes
+   - Auto-release processing every 6 minutes
+   - Webhook health check every 15 minutes
+   - Graceful error handling
+
+4. **Admin Monitoring Endpoints**
+   - `/api/admin/monitoring/summary` - Overall health status
+   - `/api/admin/monitoring/webhooks` - Webhook processing stats and failures
+   - `/api/admin/monitoring/emails` - Email sending stats and failures
+   - `/api/admin/monitoring/transactions` - Stuck transactions
+
+5. **Frontend Integration**
+   - TransactionStatusCard integrated into TransactionDetail page
+   - TransactionTimeline integrated with visual progress
+   - Refresh Status button added
+   - mapPaymentStatusToState helper for legacy status mapping
+
+6. **Database Collections**
+   - `webhook_events` - All webhook events with idempotency
+   - `email_logs` - All email send attempts
+   - Indexes created on startup for performance
+
 ### 2026-03-22: TradeSafe Happy Path & Admin Overhaul (Session 13)
 **Implemented:**
 
 1. **TradeSafe Happy Path Complete**
    - Start Delivery endpoint: `/api/tradesafe/start-delivery/{id}`
-     - Shows when state is FUNDS_RECEIVED
-     - Only seller can click
-     - Calls TradeSafe allocationStartDelivery mutation
-     - Updates state to INITIATED
-     - Sends email AND SMS to buyer
    - Accept Delivery endpoint: `/api/tradesafe/accept-delivery/{id}`
-     - Shows when state is INITIATED
-     - Only buyer can click
-     - Calls TradeSafe allocationAcceptDelivery mutation
-     - Updates state to FUNDS_RELEASED
-     - Sends email AND SMS to seller
-   - Webhook handler updated with SMS for all states:
-     - FUNDS_RECEIVED: SMS to seller + buyer
-     - INITIATED: SMS to buyer
-     - FUNDS_RELEASED: SMS to seller
+   - Webhook handler with SMS for all states
 
 2. **Admin Dashboard Complete Overhaul**
-   - Separate pages with proper routing:
-     - `/admin` - Dashboard with stats cards
-     - `/admin/transactions` - Full transactions list
-     - `/admin/users` - Full users list
-     - `/admin/disputes` - Full disputes list
-     - `/admin/transaction/{id}` - Transaction detail
-     - `/admin/user/{id}` - User detail with transactions
-     - `/admin/dispute/{id}` - Dispute resolution panel
-   - Navigation works correctly (Dashboard, Transactions, Users, Disputes)
-   - All table rows are clickable and navigate to detail pages
-   - Stats cards with dark navy styling
+   - Separate pages with proper routing
+   - Navigation works correctly
+   - All table rows clickable
 
 3. **Admin User Detail Page**
    - Full user information display
    - ID documents viewable and downloadable
-   - All transactions as buyer/seller
-   - Admin actions: Verify ID, Reject ID, Suspend, Ban
 
 4. **Images Fixed**
    - Static files mounted at `/uploads`
-   - Proper URL construction for all image types
-
-### 2026-03-22: Admin Features (Session 12)
-- Created AdminTransactionDetail.js
-- Created AdminDisputeDetail.js
-- Added CSS variables for color system
-- Created AdminNavbar component
-- Database cleanup (test data removed)
 
 ## Architecture
 
@@ -81,7 +92,10 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 - **Framework**: FastAPI
 - **Database**: MongoDB (motor async driver)
 - **File Storage**: Local `/app/uploads/` served via StaticFiles
-- **Main file**: `/app/backend/server.py` (4300+ lines - needs refactoring)
+- **Main file**: `/app/backend/server.py` (4400+ lines - needs refactoring)
+- **Webhook Handler**: `/app/backend/webhook_handler.py`
+- **State Machine**: `/app/backend/transaction_state.py`
+- **Background Jobs**: `/app/backend/background_jobs.py`
 
 ### Frontend
 - **Framework**: React
@@ -90,8 +104,8 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 - **State**: useState/useEffect hooks
 
 ### Integrations
-- **Email**: Postmark
-- **Payments**: TradeSafe (GraphQL API)
+- **Email**: Postmark (PRODUCTION)
+- **Payments**: TradeSafe (GraphQL API - PRODUCTION)
 - **SMS**: Zoom Connect (SMS Messenger API)
 - **Auth**: Emergent-managed Google OAuth
 
@@ -100,33 +114,36 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 - `/admin/transactions` - All transactions
 - `/admin/users` - All users
 - `/admin/disputes` - All disputes
-- `/admin/transaction/:id` - Transaction detail
-- `/admin/user/:id` - User detail
-- `/admin/dispute/:id` - Dispute detail
+- `/admin/transaction/{id}` - Transaction detail
+- `/admin/user/{id}` - User detail
+- `/admin/dispute/{id}` - Dispute detail
 
 ## Key API Endpoints
-- `POST /api/tradesafe/start-delivery/{id}` - Seller marks as dispatched
-- `POST /api/tradesafe/accept-delivery/{id}` - Buyer confirms receipt
-- `POST /api/tradesafe/webhook` - TradeSafe state change notifications
-- `GET /api/admin/transaction/{id}` - Admin transaction detail
-- `GET /api/admin/user/{id}` - Admin user detail
-- `GET /api/admin/dispute/{id}` - Admin dispute detail
+- `/api/tradesafe-webhook` - Production-ready webhook handler
+- `/api/admin/monitoring/summary` - System health check
+- `/api/admin/monitoring/webhooks` - Webhook stats
+- `/api/admin/monitoring/emails` - Email stats
+- `/api/admin/monitoring/transactions` - Stuck transactions
 
-## Roadmap
+## Prioritized Backlog
 
-### P0 - Completed
-- [x] TradeSafe happy path (start delivery, accept delivery)
-- [x] SMS notifications for all state changes
-- [x] Admin separate pages with navigation
-- [x] Clickable table rows
-- [x] User detail page
-- [x] Image loading fixed
+### P0 (Critical) - COMPLETED
+- [x] Webhook idempotency
+- [x] Email deduplication
+- [x] Fallback payment verification
+- [x] State machine enforcement
+- [x] Admin monitoring endpoints
 
-### P1 - Next
-- [ ] Refactor server.py monolith into modules
+### P1 (High Priority)
+- [ ] Refactor `server.py` monolith into routes/services/models
 - [ ] AI Scam Detection Enhancement
+- [ ] Full admin monitoring UI dashboard
 
-### P2 - Backlog
+### P2 (Medium Priority)
 - [ ] In-App Chat feature
-- [ ] Advanced analytics dashboard
-- [ ] Bulk transaction management
+- [ ] Enhanced dispute resolution flow
+- [ ] Push notifications
+
+### P3 (Low Priority)
+- [ ] Mobile app
+- [ ] Multi-language support

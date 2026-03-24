@@ -1,6 +1,10 @@
 """
-TrustTrade Background Jobs
-Handles fallback payment verification, auto-release, and webhook recovery.
+TrustTrade Background Jobs - Production-Ready
+Handles:
+- Fallback payment verification (queries TradeSafe directly)
+- Auto-release processing
+- Webhook failure recovery
+- Stuck transaction detection
 """
 
 import asyncio
@@ -9,118 +13,168 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from transaction_state import (
+    TransactionState,
+    calculate_auto_release_time,
+    get_auto_release_hours,
+    map_tradesafe_state
+)
+
 logger = logging.getLogger(__name__)
 
-# Track processed events for idempotency
-processed_events: set = set()
 
-
-async def verify_pending_payments(db: AsyncIOMotorDatabase, tradesafe_service):
+async def verify_pending_payments(db: AsyncIOMotorDatabase, tradesafe_service) -> Dict[str, Any]:
     """
     Fallback payment verification job.
     Runs every 2-5 minutes to check TradeSafe for payment status.
     Handles cases where webhooks are delayed or fail.
+    
+    Returns summary of actions taken.
     """
-    logger.info("Running fallback payment verification...")
+    logger.info("=== FALLBACK: Running payment verification ===")
+    
+    summary = {
+        "checked": 0,
+        "updated": 0,
+        "errors": 0,
+        "details": []
+    }
     
     try:
         # Find transactions awaiting payment that were created more than 5 minutes ago
         cutoff_time = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
         
+        # Query for transactions that might have missed webhooks
         pending_transactions = await db.transactions.find({
-            "transaction_state": {"$in": ["AWAITING_PAYMENT", "CREATED", "PENDING_CONFIRMATION"]},
+            "$or": [
+                {"transaction_state": {"$in": ["AWAITING_PAYMENT", "CREATED", "PENDING_CONFIRMATION"]}},
+                {"tradesafe_state": {"$in": ["CREATED", "PENDING", None]}},
+                {"payment_status": {"$in": ["Awaiting Payment", "Ready for Payment", "Pending Seller Confirmation"]}}
+            ],
             "tradesafe_id": {"$exists": True, "$ne": None},
             "created_at": {"$lt": cutoff_time},
             "payment_verified": {"$ne": True}
         }).to_list(100)
         
+        summary["checked"] = len(pending_transactions)
         logger.info(f"Found {len(pending_transactions)} pending transactions to verify")
         
         for txn in pending_transactions:
             try:
-                await verify_single_transaction(db, txn, tradesafe_service)
+                result = await verify_single_transaction(db, txn, tradesafe_service)
+                if result.get("updated"):
+                    summary["updated"] += 1
+                    summary["details"].append({
+                        "transaction_id": txn.get("transaction_id"),
+                        "action": result.get("action")
+                    })
             except Exception as e:
+                summary["errors"] += 1
                 logger.error(f"Error verifying transaction {txn.get('transaction_id')}: {e}")
                 
     except Exception as e:
         logger.error(f"Payment verification job failed: {e}")
+        summary["errors"] += 1
+    
+    logger.info(f"Payment verification complete: {summary}")
+    return summary
 
 
-async def verify_single_transaction(db: AsyncIOMotorDatabase, txn: Dict, tradesafe_service):
+async def verify_single_transaction(
+    db: AsyncIOMotorDatabase, 
+    txn: Dict, 
+    tradesafe_service
+) -> Dict[str, Any]:
     """Verify a single transaction's payment status with TradeSafe"""
     transaction_id = txn.get("transaction_id")
     tradesafe_id = txn.get("tradesafe_id")
     
     if not tradesafe_id:
-        return
+        return {"updated": False, "reason": "no_tradesafe_id"}
     
     logger.info(f"Verifying payment for {transaction_id} (TradeSafe: {tradesafe_id})")
     
-    # Query TradeSafe for current status
     try:
-        ts_status = await tradesafe_service.get_transaction_status(tradesafe_id)
+        # Query TradeSafe for current status
+        ts_status = await tradesafe_service.get_tradesafe_transaction(tradesafe_id)
         
         if not ts_status:
             logger.warning(f"Could not get TradeSafe status for {tradesafe_id}")
-            return
+            return {"updated": False, "reason": "api_error"}
         
-        ts_state = ts_status.get("state", "").upper()
+        ts_state = (ts_status.get("state") or "").upper()
+        
+        logger.info(f"TradeSafe state for {transaction_id}: {ts_state}")
         
         # Check if funds have been received
         if ts_state in ["FUNDS_RECEIVED", "INITIATED", "SENT", "DELIVERED", "FUNDS_RELEASED"]:
             current_state = txn.get("transaction_state")
             
             # Only update if not already in a more advanced state
-            if current_state in ["AWAITING_PAYMENT", "CREATED", "PENDING_CONFIRMATION"]:
+            if current_state in ["AWAITING_PAYMENT", "CREATED", "PENDING_CONFIRMATION", None]:
                 logger.info(f"FALLBACK: Payment detected for {transaction_id}, updating state to PAYMENT_SECURED")
                 
+                now = datetime.now(timezone.utc).isoformat()
+                
+                # Build timeline entry
+                timeline = txn.get("timeline", [])
+                timeline.append({
+                    "status": "Payment Secured (Fallback Verified)",
+                    "timestamp": now,
+                    "by": "System",
+                    "details": f"Payment verified via fallback job. TradeSafe state: {ts_state}"
+                })
+                
                 # Update transaction
+                update_data = {
+                    "transaction_state": TransactionState.PAYMENT_SECURED.value,
+                    "tradesafe_state": ts_state,
+                    "payment_status": "Funds in Escrow",
+                    "payment_verified": True,
+                    "payment_verified_at": now,
+                    "payment_verified_by": "fallback_job",
+                    "funds_received_at": now,
+                    "timeline": timeline
+                }
+                
                 await db.transactions.update_one(
                     {"transaction_id": transaction_id},
-                    {"$set": {
-                        "transaction_state": "PAYMENT_SECURED",
-                        "tradesafe_state": ts_state,
-                        "payment_status": "Funds in Escrow",
-                        "payment_verified": True,
-                        "payment_verified_at": datetime.now(timezone.utc).isoformat(),
-                        "payment_verified_by": "fallback_job",
-                        "funds_received_at": datetime.now(timezone.utc).isoformat()
-                    },
-                    "$push": {
-                        "timeline": {
-                            "status": "Payment Secured (Verified)",
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                            "by": "System",
-                            "details": "Payment verified via fallback check"
-                        }
-                    }}
+                    {"$set": update_data}
                 )
                 
-                # Check if email was already sent
-                if not txn.get("payment_email_sent"):
-                    # Send emails
-                    await send_payment_secured_notifications(db, txn)
-                    
-                    await db.transactions.update_one(
-                        {"transaction_id": transaction_id},
-                        {"$set": {"payment_email_sent": True}}
-                    )
+                # Send emails ONLY if not already sent
+                await send_fallback_payment_notifications(db, txn)
                 
+                return {"updated": True, "action": "state_updated_to_PAYMENT_SECURED"}
+        
+        return {"updated": False, "reason": "no_payment_detected", "ts_state": ts_state}
+        
     except Exception as e:
         logger.error(f"TradeSafe API error for {tradesafe_id}: {e}")
+        return {"updated": False, "reason": "api_exception", "error": str(e)}
 
 
-async def send_payment_secured_notifications(db: AsyncIOMotorDatabase, txn: Dict):
-    """Send payment secured emails and SMS"""
-    from email_service import send_immediate_payment_secured_email, send_payment_received_email
-    from sms_service import send_funds_received_sms
+async def send_fallback_payment_notifications(db: AsyncIOMotorDatabase, txn: Dict) -> None:
+    """Send payment secured notifications via fallback (with deduplication)"""
+    from webhook_handler import (
+        send_email_with_tracking, 
+        send_sms_with_tracking,
+        EmailEvent
+    )
+    import email_service
+    import sms_service
     
     transaction_id = txn.get("transaction_id")
     share_code = txn.get("share_code", transaction_id)
     
+    logger.info(f"Sending fallback payment notifications for {transaction_id}")
+    
     try:
-        # Send buyer email FIRST (priority)
-        await send_immediate_payment_secured_email(
+        # Send buyer email (with deduplication)
+        await send_email_with_tracking(
+            db, transaction_id, EmailEvent.PAYMENT_SECURED_BUYER,
+            txn["buyer_email"],
+            email_service.send_immediate_payment_secured_email,
             to_email=txn["buyer_email"],
             to_name=txn["buyer_name"],
             share_code=share_code,
@@ -128,8 +182,11 @@ async def send_payment_secured_notifications(db: AsyncIOMotorDatabase, txn: Dict
             amount=txn["item_price"]
         )
         
-        # Send seller email
-        await send_payment_received_email(
+        # Send seller email (with deduplication)
+        await send_email_with_tracking(
+            db, transaction_id, EmailEvent.PAYMENT_SECURED_SELLER,
+            txn["seller_email"],
+            email_service.send_payment_received_email,
             to_email=txn["seller_email"],
             to_name=txn["seller_name"],
             share_code=share_code,
@@ -140,57 +197,85 @@ async def send_payment_secured_notifications(db: AsyncIOMotorDatabase, txn: Dict
         
         # SMS notifications
         if txn.get("buyer_phone"):
-            await send_funds_received_sms(
+            await send_sms_with_tracking(
+                db, transaction_id, "payment_secured_buyer_sms",
+                txn["buyer_phone"],
+                sms_service.send_funds_received_sms,
                 to_phone=txn["buyer_phone"],
                 message=f"TrustTrade: Your payment is secured in escrow. Ref: {share_code}"
             )
         
         if txn.get("seller_phone"):
-            await send_funds_received_sms(
+            await send_sms_with_tracking(
+                db, transaction_id, "payment_secured_seller_sms",
+                txn["seller_phone"],
+                sms_service.send_funds_received_sms,
                 to_phone=txn["seller_phone"],
                 message=f"TrustTrade: Payment received! Please deliver the item. Ref: {share_code}"
             )
             
-        logger.info(f"Payment notifications sent for {transaction_id}")
+        logger.info(f"Fallback notifications sent for {transaction_id}")
         
     except Exception as e:
-        logger.error(f"Failed to send payment notifications for {transaction_id}: {e}")
+        logger.error(f"Failed to send fallback notifications for {transaction_id}: {e}")
 
 
-async def process_auto_releases(db: AsyncIOMotorDatabase, tradesafe_service):
+async def process_auto_releases(db: AsyncIOMotorDatabase, tradesafe_service) -> Dict[str, Any]:
     """
     Process automatic fund releases based on delivery method timers.
     """
-    logger.info("Running auto-release check...")
+    logger.info("=== Running auto-release check ===")
+    
+    summary = {
+        "checked": 0,
+        "released": 0,
+        "errors": 0
+    }
     
     try:
         now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
         
         # Find transactions eligible for auto-release
         eligible = await db.transactions.find({
-            "transaction_state": "DELIVERED",
+            "transaction_state": TransactionState.DELIVERED.value,
             "delivery_confirmed": True,
-            "auto_release_at": {"$lte": now.isoformat()},
+            "auto_release_at": {"$lte": now_iso},
             "has_dispute": {"$ne": True},
             "auto_released": {"$ne": True}
         }).to_list(100)
         
+        summary["checked"] = len(eligible)
         logger.info(f"Found {len(eligible)} transactions eligible for auto-release")
         
         for txn in eligible:
             try:
                 await process_single_auto_release(db, txn, tradesafe_service)
+                summary["released"] += 1
             except Exception as e:
+                summary["errors"] += 1
                 logger.error(f"Auto-release failed for {txn.get('transaction_id')}: {e}")
                 
     except Exception as e:
         logger.error(f"Auto-release job failed: {e}")
+        summary["errors"] += 1
+    
+    return summary
 
 
-async def process_single_auto_release(db: AsyncIOMotorDatabase, txn: Dict, tradesafe_service):
+async def process_single_auto_release(
+    db: AsyncIOMotorDatabase, 
+    txn: Dict, 
+    tradesafe_service
+) -> None:
     """Process auto-release for a single transaction"""
+    from webhook_handler import send_email_with_tracking, send_sms_with_tracking, EmailEvent
+    import email_service
+    import sms_service
+    
     transaction_id = txn.get("transaction_id")
     allocation_id = txn.get("tradesafe_allocation_id")
+    share_code = txn.get("share_code", transaction_id)
     
     logger.info(f"Auto-releasing funds for {transaction_id}")
     
@@ -207,120 +292,154 @@ async def process_single_auto_release(db: AsyncIOMotorDatabase, txn: Dict, trade
     item_price = txn.get("item_price", 0)
     net_amount = item_price * 0.98  # 2% fee
     
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Build timeline entry
+    timeline = txn.get("timeline", [])
+    timeline.append({
+        "status": "Funds Auto-Released",
+        "timestamp": now,
+        "by": "System",
+        "details": f"Automatic release after delivery window. R{net_amount:.2f} released to seller."
+    })
+    
     # Update transaction
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
         {"$set": {
-            "transaction_state": "COMPLETED",
+            "transaction_state": TransactionState.COMPLETED.value,
             "tradesafe_state": "FUNDS_RELEASED",
             "payment_status": "Completed",
             "release_status": "Released",
-            "released_at": datetime.now(timezone.utc).isoformat(),
+            "released_at": now,
             "auto_released": True,
-            "net_amount": net_amount
-        },
-        "$push": {
-            "timeline": {
-                "status": "Funds Auto-Released",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "by": "System",
-                "details": f"Automatic release after delivery window. R{net_amount:.2f} released to seller."
-            }
+            "net_amount": net_amount,
+            "timeline": timeline
         }}
     )
     
-    # Send notification
-    from email_service import send_funds_released_email
-    from sms_service import send_funds_released_sms
-    
-    await send_funds_released_email(
+    # Send notifications (with deduplication)
+    await send_email_with_tracking(
+        db, transaction_id, EmailEvent.FUNDS_RELEASED_SELLER,
+        txn["seller_email"],
+        email_service.send_funds_released_email,
         to_email=txn["seller_email"],
         to_name=txn["seller_name"],
-        share_code=txn.get("share_code", transaction_id),
+        share_code=share_code,
         item_description=txn["item_description"],
         amount=item_price,
         net_amount=net_amount
     )
     
     if txn.get("seller_phone"):
-        await send_funds_released_sms(
+        await send_sms_with_tracking(
+            db, transaction_id, "auto_release_sms",
+            txn["seller_phone"],
+            sms_service.send_funds_released_sms,
             to_phone=txn["seller_phone"],
-            message=f"TrustTrade: R{net_amount:.2f} auto-released to your account. Ref: {txn.get('share_code', transaction_id)}"
+            message=f"TrustTrade: R{net_amount:.2f} auto-released to your account. Ref: {share_code}"
         )
+    
+    logger.info(f"Auto-release complete for {transaction_id}")
 
 
-async def check_webhook_failures(db: AsyncIOMotorDatabase):
+async def check_webhook_health(db: AsyncIOMotorDatabase) -> Dict[str, Any]:
     """
-    Check for and retry failed webhook processing.
-    Alert admin after repeated failures.
+    Check for webhook processing issues and alert admin.
     """
-    logger.info("Checking for webhook failures...")
+    logger.info("=== Checking webhook health ===")
+    
+    from datetime import timedelta
+    
+    summary = {
+        "failed_webhooks_24h": 0,
+        "failed_emails_24h": 0,
+        "stuck_transactions": 0
+    }
     
     try:
-        # Find failed webhooks from the last 24 hours
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        cutoff_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
         
-        failed_webhooks = await db.webhook_logs.find({
+        # Count failed webhooks
+        summary["failed_webhooks_24h"] = await db.webhook_events.count_documents({
             "status": "failed",
-            "timestamp": {"$gte": cutoff},
-            "retry_count": {"$lt": 3}
-        }).to_list(100)
+            "timestamp": {"$gte": cutoff_24h}
+        })
         
-        for webhook in failed_webhooks:
-            # Increment retry count
-            await db.webhook_logs.update_one(
-                {"_id": webhook["_id"]},
-                {"$inc": {"retry_count": 1}}
-            )
+        # Count failed emails
+        summary["failed_emails_24h"] = await db.email_logs.count_documents({
+            "success": False,
+            "timestamp": {"$gte": cutoff_24h}
+        })
+        
+        # Count stuck transactions (no update in 4 hours while in intermediate state)
+        cutoff_4h = (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat()
+        summary["stuck_transactions"] = await db.transactions.count_documents({
+            "transaction_state": {"$in": ["AWAITING_PAYMENT", "PAYMENT_SECURED", "DELIVERY_IN_PROGRESS"]},
+            "$or": [
+                {"last_webhook_at": {"$lt": cutoff_4h}},
+                {"last_webhook_at": {"$exists": False}}
+            ]
+        })
+        
+        # Log warnings if issues found
+        if summary["failed_webhooks_24h"] > 0:
+            logger.warning(f"ALERT: {summary['failed_webhooks_24h']} failed webhooks in last 24h")
+        
+        if summary["failed_emails_24h"] > 0:
+            logger.warning(f"ALERT: {summary['failed_emails_24h']} failed emails in last 24h")
+        
+        if summary["stuck_transactions"] > 0:
+            logger.warning(f"ALERT: {summary['stuck_transactions']} stuck transactions")
             
-            # Log for admin alert
-            if webhook.get("retry_count", 0) >= 2:
-                logger.warning(f"Webhook repeatedly failing: {webhook.get('webhook_id')} - Transaction: {webhook.get('transaction_id')}")
-                
     except Exception as e:
-        logger.error(f"Webhook failure check failed: {e}")
+        logger.error(f"Webhook health check failed: {e}")
+    
+    return summary
 
 
-def is_event_processed(event_id: str) -> bool:
-    """Check if an event has already been processed (idempotency)"""
-    return event_id in processed_events
-
-
-def mark_event_processed(event_id: str):
-    """Mark an event as processed"""
-    processed_events.add(event_id)
-    # Keep set from growing indefinitely - remove old entries periodically
-    if len(processed_events) > 10000:
-        # Remove oldest half
-        processed_events.clear()
-
-
-async def start_background_jobs(db: AsyncIOMotorDatabase, tradesafe_service, interval_minutes: int = 3):
+async def start_background_jobs(
+    db: AsyncIOMotorDatabase, 
+    tradesafe_service, 
+    interval_minutes: int = 3
+) -> None:
     """
     Start background jobs that run periodically.
     - Payment verification: every 3 minutes
-    - Auto-release check: every 5 minutes
-    - Webhook failure check: every 10 minutes
+    - Auto-release check: every 6 minutes (every 2nd iteration)
+    - Webhook health check: every 15 minutes (every 5th iteration)
     """
     logger.info(f"Starting background jobs with {interval_minutes} minute interval")
     
     iteration = 0
+    
     while True:
         try:
             iteration += 1
+            logger.info(f"=== Background job iteration {iteration} ===")
             
-            # Payment verification - every iteration
-            await verify_pending_payments(db, tradesafe_service)
+            # Payment verification - every iteration (3 minutes)
+            try:
+                await verify_pending_payments(db, tradesafe_service)
+            except Exception as e:
+                logger.error(f"Payment verification failed: {e}")
             
-            # Auto-release - every other iteration (6 minutes)
+            # Auto-release - every 2nd iteration (6 minutes)
             if iteration % 2 == 0:
-                await process_auto_releases(db, tradesafe_service)
+                try:
+                    await process_auto_releases(db, tradesafe_service)
+                except Exception as e:
+                    logger.error(f"Auto-release job failed: {e}")
             
-            # Webhook failures - every 4th iteration (12 minutes)
-            if iteration % 4 == 0:
-                await check_webhook_failures(db)
+            # Webhook health check - every 5th iteration (15 minutes)
+            if iteration % 5 == 0:
+                try:
+                    await check_webhook_health(db)
+                except Exception as e:
+                    logger.error(f"Webhook health check failed: {e}")
                 
         except Exception as e:
-            logger.error(f"Background job iteration failed: {e}")
+            logger.error(f"Background job iteration {iteration} failed: {e}")
         
+        # Sleep for interval
         await asyncio.sleep(interval_minutes * 60)

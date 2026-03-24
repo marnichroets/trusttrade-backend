@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import Timeline from '../components/Timeline';
+import { TransactionTimeline, AutoReleaseCountdown } from '../components/TransactionTimeline';
+import TransactionStatusCard from '../components/TransactionStatusCard';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -10,7 +12,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
 import axios from 'axios';
 import { toast } from 'sonner';
-import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, ExternalLink, Shield, Loader2, Phone, Lock } from 'lucide-react';
+import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, ExternalLink, Shield, Loader2, Phone, Lock, RefreshCw } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -546,6 +548,24 @@ function TransactionDetail() {
     return variants[status] || 'bg-slate-100 text-slate-600';
   };
 
+  // Helper to map legacy payment status to new state machine
+  const mapPaymentStatusToState = (paymentStatus, tradesafeState) => {
+    const ps = (paymentStatus || '').toLowerCase();
+    const ts = (tradesafeState || '').toUpperCase();
+    
+    if (ts === 'FUNDS_RELEASED' || ps.includes('completed') || ps.includes('released')) return 'COMPLETED';
+    if (ts === 'DELIVERED' || ps.includes('delivered')) return 'DELIVERED';
+    if (ts === 'INITIATED' || ts === 'SENT' || ps.includes('delivery') || ps.includes('dispatched')) return 'DELIVERY_IN_PROGRESS';
+    if (ts === 'FUNDS_RECEIVED' || ps.includes('escrow') || ps.includes('secured') || ps === 'paid') return 'PAYMENT_SECURED';
+    if (ps.includes('awaiting') || ts === 'CREATED' || ts === 'PENDING') return 'AWAITING_PAYMENT';
+    if (ps.includes('pending') || ps.includes('confirmation')) return 'PENDING_CONFIRMATION';
+    if (ps.includes('dispute')) return 'DISPUTED';
+    if (ps.includes('cancel')) return 'CANCELLED';
+    if (ps.includes('refund')) return 'REFUNDED';
+    
+    return 'CREATED';
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -924,6 +944,25 @@ function TransactionDetail() {
             </div>
           </Card>
         )}
+
+        {/* NEW: Transaction Status Card - Shows current state prominently */}
+        <TransactionStatusCard 
+          transaction={transaction} 
+          userRole={isBuyer ? 'buyer' : (isSeller ? 'seller' : 'viewer')} 
+        />
+
+        {/* Refresh Button for real-time updates */}
+        <div className="flex justify-end">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={fetchData}
+            data-testid="refresh-transaction-btn"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh Status
+          </Button>
+        </div>
 
         <Card className="p-6">
           <div className="grid md:grid-cols-2 gap-6">
@@ -1548,7 +1587,31 @@ function TransactionDetail() {
           <TabsContent value="timeline" className="mt-6">
             <Card className="p-6">
               <h3 className="text-lg font-semibold text-slate-900 mb-6">Transaction Progress</h3>
-              <Timeline transaction={transaction} />
+              
+              {/* New Visual Timeline */}
+              <div className="mb-8">
+                <TransactionTimeline 
+                  transaction={transaction}
+                  currentState={transaction.transaction_state || mapPaymentStatusToState(transaction.payment_status, transaction.tradesafe_state)}
+                  timeline={transaction.timeline}
+                />
+              </div>
+              
+              {/* Auto-Release Countdown (if applicable) */}
+              {transaction.transaction_state === 'DELIVERED' && (
+                <div className="mb-6">
+                  <AutoReleaseCountdown 
+                    autoReleaseAt={transaction.auto_release_at}
+                    hasDispute={transaction.has_dispute}
+                  />
+                </div>
+              )}
+              
+              {/* Legacy Timeline Events */}
+              <div className="border-t border-slate-200 pt-6">
+                <h4 className="text-sm font-medium text-slate-700 mb-4">Event History</h4>
+                <Timeline transaction={transaction} />
+              </div>
             </Card>
           </TabsContent>
 

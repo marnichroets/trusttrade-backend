@@ -64,10 +64,8 @@ from transaction_state import (
     get_ui_status,
     map_tradesafe_state
 )
-from background_jobs import (
-    is_event_processed,
-    mark_event_processed
-)
+# Note: is_event_processed and mark_event_processed are now in webhook_handler.py
+# and are only used within that module
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -3372,6 +3370,7 @@ async def get_tradesafe_token():
             logger.error(f"Failed to get TradeSafe token: {response.text}")
             return None
 
+# TradeSafe webhook payload model (kept for reference but using new handler)
 class TradeSafeWebhookPayload(BaseModel):
     """TradeSafe webhook payload structure"""
     event: Optional[str] = None
@@ -3381,109 +3380,8 @@ class TradeSafeWebhookPayload(BaseModel):
     amount: Optional[float] = None
     data: Optional[dict] = None
 
-@api_router.post("/tradesafe-webhook")
-async def tradesafe_webhook(request: Request):
-    """Handle TradeSafe webhook notifications"""
-    try:
-        payload = await request.json()
-        logger.info(f"TradeSafe Webhook received: {payload}")
-        
-        # Extract relevant data
-        event_type = payload.get("event") or payload.get("type")
-        reference = payload.get("reference") or payload.get("transaction_id")
-        status = payload.get("status")
-        
-        if not reference:
-            logger.warning("TradeSafe webhook missing reference")
-            return {"status": "ignored", "reason": "no reference"}
-        
-        # Find transaction by TradeSafe reference
-        transaction = await db.transactions.find_one(
-            {"$or": [
-                {"tradesafe_reference": reference},
-                {"transaction_id": reference}
-            ]},
-            {"_id": 0}
-        )
-        
-        if not transaction:
-            logger.warning(f"Transaction not found for TradeSafe reference: {reference}")
-            return {"status": "ignored", "reason": "transaction not found"}
-        
-        # Handle different webhook events
-        update_data = {}
-        timeline_entry = None
-        
-        if event_type in ["DEPOSIT_RECEIVED", "payment.success", "escrow.funded"]:
-            # Payment received - funds in escrow
-            update_data["payment_status"] = "Paid"
-            update_data["auto_release_at"] = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
-            timeline_entry = {
-                "status": "Payment Received - Funds Secured",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "by": "TrustTrade"
-            }
-            
-            # Send notifications
-            mock_send_email(
-                transaction["buyer_email"],
-                "Payment Received",
-                f"Your payment for transaction {transaction['transaction_id']} has been received and is held in escrow."
-            )
-            mock_send_email(
-                transaction["seller_email"],
-                "Payment Received - Please Deliver",
-                f"Payment for transaction {transaction['transaction_id']} has been received. Please deliver the item."
-            )
-            
-        elif event_type in ["FUNDS_RELEASED", "escrow.released"]:
-            # Funds released to seller
-            update_data["release_status"] = "Released"
-            update_data["payment_status"] = "Released"
-            timeline_entry = {
-                "status": "Funds Released to Seller",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "by": "TrustTrade"
-            }
-            
-        elif event_type in ["REFUND_PROCESSED", "escrow.refunded"]:
-            # Refund processed
-            update_data["release_status"] = "Refunded"
-            update_data["payment_status"] = "Refunded"
-            timeline_entry = {
-                "status": "Funds Refunded to Buyer",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "by": "TrustTrade"
-            }
-            
-        elif event_type in ["TRANSACTION_CANCELLED", "escrow.cancelled"]:
-            # Transaction cancelled
-            update_data["payment_status"] = "Cancelled"
-            timeline_entry = {
-                "status": "Transaction Cancelled",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "by": "TrustTrade"
-            }
-        
-        # Update transaction if we have changes
-        if update_data:
-            if timeline_entry:
-                timeline = transaction.get("timeline", [])
-                timeline.append(timeline_entry)
-                update_data["timeline"] = timeline
-            
-            await db.transactions.update_one(
-                {"transaction_id": transaction["transaction_id"]},
-                {"$set": update_data}
-            )
-            
-            logger.info(f"Transaction {transaction['transaction_id']} updated: {update_data}")
-        
-        return {"status": "success", "processed": bool(update_data)}
-        
-    except Exception as e:
-        logger.error(f"Payment webhook error: {str(e)}")
-        return {"status": "error", "message": str(e)}
+# NOTE: The main webhook endpoint is defined at the end of the file (handle_tradesafe_webhook)
+# using the new webhook_handler module for full reliability.
 
 @api_router.get("/oauth/callback")
 async def oauth_callback(request: Request, code: str = None, state: str = None):
@@ -4298,185 +4196,180 @@ async def get_tradesafe_status(request: Request, transaction_id: str):
 @api_router.post("/tradesafe-webhook")
 async def handle_tradesafe_webhook(request: Request):
     """
-    Webhook handler for TradeSafe transaction state changes.
-    TradeSafe sends callbacks when transaction state changes.
+    Production-ready webhook handler for TradeSafe transaction state changes.
+    Features:
+    - Strict idempotency (duplicate webhooks ignored)
+    - All events logged for debugging
+    - Email deduplication (no duplicate emails)
+    - State machine enforcement
+    - Comprehensive error handling
     """
+    from webhook_handler import process_webhook, log_webhook_event
+    import email_service
+    import sms_service
+    
     try:
         payload = await request.json()
-    except Exception:
+    except Exception as e:
+        logger.error(f"Invalid webhook payload: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
     
-    logger.info(f"TradeSafe webhook received: {payload}")
+    logger.info(f"=== TradeSafe Webhook Received ===")
+    logger.info(f"Payload: {payload}")
     
-    # Extract transaction info from webhook
-    tradesafe_id = payload.get("id") or payload.get("transaction", {}).get("id")
-    new_state = payload.get("state") or payload.get("transaction", {}).get("state")
-    reference = payload.get("reference") or payload.get("transaction", {}).get("reference")
+    try:
+        # Process webhook with full reliability guarantees
+        result = await process_webhook(db, payload, email_service, sms_service)
+        
+        logger.info(f"Webhook processing result: {result}")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Webhook processing error: {e}")
+        
+        # Log the failure
+        try:
+            from webhook_handler import generate_event_id
+            event_id = generate_event_id(payload)
+            await log_webhook_event(db, event_id, "", payload, "failed", str(e))
+        except:
+            pass
+        
+        # Return success to prevent TradeSafe from retrying (we logged it)
+        return {"status": "error_logged", "message": str(e)}
+
+
+# ============ ADMIN MONITORING ENDPOINTS ============
+
+@api_router.get("/admin/monitoring/webhooks")
+async def get_webhook_monitoring(request: Request, hours: int = 24):
+    """Get webhook processing statistics and failures for admin monitoring"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     
-    if not tradesafe_id and not reference:
-        logger.warning("Webhook missing transaction identifier")
-        return {"status": "ignored", "reason": "missing identifier"}
+    from webhook_handler import get_failed_webhooks
+    from datetime import timedelta
     
-    # Find our transaction
-    query = {}
-    if tradesafe_id:
-        query["tradesafe_id"] = tradesafe_id
-    elif reference:
-        query["transaction_id"] = reference
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     
-    transaction = await db.transactions.find_one(query, {"_id": 0})
+    # Get stats
+    total_received = await db.webhook_events.count_documents({"timestamp": {"$gte": cutoff}})
+    total_processed = await db.webhook_events.count_documents({"status": "processed", "timestamp": {"$gte": cutoff}})
+    total_failed = await db.webhook_events.count_documents({"status": "failed", "timestamp": {"$gte": cutoff}})
+    total_duplicates = await db.webhook_events.count_documents({"status": "duplicate", "timestamp": {"$gte": cutoff}})
     
-    if not transaction:
-        logger.warning(f"Webhook for unknown transaction: {tradesafe_id or reference}")
-        return {"status": "ignored", "reason": "transaction not found"}
+    # Get recent failures
+    failed_webhooks = await get_failed_webhooks(db, hours, limit=20)
     
-    # Get previous state
-    prev_state = transaction.get("tradesafe_state")
+    return {
+        "period_hours": hours,
+        "stats": {
+            "total_received": total_received,
+            "total_processed": total_processed,
+            "total_failed": total_failed,
+            "total_duplicates": total_duplicates,
+            "success_rate": round((total_processed / total_received * 100) if total_received > 0 else 100, 2)
+        },
+        "recent_failures": failed_webhooks
+    }
+
+
+@api_router.get("/admin/monitoring/emails")
+async def get_email_monitoring(request: Request, hours: int = 24):
+    """Get email sending statistics and failures for admin monitoring"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     
-    # Update transaction state
-    timeline = transaction.get("timeline", [])
-    timeline.append({
-        "status": f"TradeSafe: {new_state}",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "by": "TradeSafe Webhook"
+    from webhook_handler import get_failed_emails
+    from datetime import timedelta
+    
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    
+    # Get stats
+    total_sent = await db.email_logs.count_documents({"success": True, "timestamp": {"$gte": cutoff}})
+    total_failed = await db.email_logs.count_documents({"success": False, "timestamp": {"$gte": cutoff}})
+    
+    # Get recent failures
+    failed_emails = await get_failed_emails(db, hours, limit=20)
+    
+    return {
+        "period_hours": hours,
+        "stats": {
+            "total_sent": total_sent,
+            "total_failed": total_failed,
+            "success_rate": round((total_sent / (total_sent + total_failed) * 100) if (total_sent + total_failed) > 0 else 100, 2)
+        },
+        "recent_failures": failed_emails
+    }
+
+
+@api_router.get("/admin/monitoring/transactions")
+async def get_stuck_transactions_monitoring(request: Request):
+    """Get transactions that appear to be stuck for admin review"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from webhook_handler import get_stuck_transactions
+    
+    stuck = await get_stuck_transactions(db, hours=4)
+    
+    return {
+        "stuck_count": len(stuck),
+        "transactions": stuck
+    }
+
+
+@api_router.get("/admin/monitoring/summary")
+async def get_monitoring_summary(request: Request):
+    """Get overall system health summary for admin dashboard"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from datetime import timedelta
+    
+    cutoff_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    cutoff_4h = (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat()
+    
+    # Webhook health
+    webhook_failed = await db.webhook_events.count_documents({"status": "failed", "timestamp": {"$gte": cutoff_24h}})
+    
+    # Email health
+    email_failed = await db.email_logs.count_documents({"success": False, "timestamp": {"$gte": cutoff_24h}})
+    
+    # Stuck transactions
+    stuck_count = await db.transactions.count_documents({
+        "transaction_state": {"$in": ["AWAITING_PAYMENT", "PAYMENT_SECURED", "DELIVERY_IN_PROGRESS"]},
+        "$or": [
+            {"last_webhook_at": {"$lt": cutoff_4h}},
+            {"last_webhook_at": {"$exists": False}}
+        ]
     })
     
-    update_data = {
-        "tradesafe_state": new_state,
-        "payment_status": map_tradesafe_state_to_status(new_state),
-        "timeline": timeline
+    # Active disputes
+    active_disputes = await db.disputes.count_documents({"status": "Pending"})
+    
+    # Determine overall health
+    health_status = "healthy"
+    if webhook_failed > 5 or email_failed > 10 or stuck_count > 3:
+        health_status = "warning"
+    if webhook_failed > 20 or email_failed > 50 or stuck_count > 10:
+        health_status = "critical"
+    
+    return {
+        "health_status": health_status,
+        "metrics": {
+            "webhook_failures_24h": webhook_failed,
+            "email_failures_24h": email_failed,
+            "stuck_transactions": stuck_count,
+            "active_disputes": active_disputes
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
-    
-    # Handle specific state changes
-    base_url = os.environ.get('FRONTEND_URL', 'https://trusttradesa.co.za')
-    
-    if new_state == TransactionState.FUNDS_RECEIVED:
-        # Funds secured - send emails IMMEDIATELY (before TradeSafe email arrives!)
-        update_data["funds_received_at"] = datetime.now(timezone.utc).isoformat()
-        
-        # CRITICAL: Send buyer email FIRST - must arrive before TradeSafe email!
-        # Import the immediate email function
-        from email_service import send_immediate_payment_secured_email
-        
-        logger.info(f"FUNDS_RECEIVED: Sending IMMEDIATE payment secured email to buyer {transaction['buyer_email']}")
-        await send_immediate_payment_secured_email(
-            to_email=transaction["buyer_email"],
-            to_name=transaction["buyer_name"],
-            share_code=transaction.get("share_code", transaction["transaction_id"]),
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"]
-        )
-        
-        # Then email seller
-        await send_payment_received_email(
-            to_email=transaction["seller_email"],
-            to_name=transaction["seller_name"],
-            share_code=transaction.get("share_code", transaction["transaction_id"]),
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"],
-            role="seller"
-        )
-        
-        # SMS to buyer - immediate
-        buyer_phone = transaction.get("buyer_phone")
-        if buyer_phone:
-            try:
-                await send_funds_received_sms(
-                    to_phone=buyer_phone,
-                    message=f"TrustTrade: Your payment of R{transaction['item_price']:.2f} is now secured in escrow. The seller will deliver your item shortly. Ref: {transaction.get('share_code', transaction['transaction_id'])}"
-                )
-            except Exception as e:
-                logger.error(f"Webhook SMS failed (FUNDS_RECEIVED buyer): {e}")
-        
-        # SMS to seller
-        seller_phone = transaction.get("seller_phone")
-        if seller_phone:
-            try:
-                await send_funds_received_sms(
-                    to_phone=seller_phone,
-                    message=f"TrustTrade: Payment of R{transaction['item_price']:.2f} received and secured! Please deliver '{transaction['item_description'][:30]}...' to the buyer. Ref: {transaction.get('share_code', transaction['transaction_id'])}"
-                )
-            except Exception as e:
-                logger.error(f"Webhook SMS failed (FUNDS_RECEIVED seller): {e}")
-    
-    elif new_state == TransactionState.INITIATED:
-        # Delivery started - notify buyer
-        update_data["delivery_started_at"] = datetime.now(timezone.utc).isoformat()
-        
-        await send_delivery_confirmed_email(
-            to_email=transaction["buyer_email"],
-            to_name=transaction["buyer_name"],
-            share_code=transaction.get("share_code", transaction["transaction_id"]),
-            item_description=transaction["item_description"],
-            role="buyer"
-        )
-        
-        # SMS to buyer - item dispatched
-        buyer_phone = transaction.get("buyer_phone")
-        if buyer_phone:
-            try:
-                await send_delivery_sms(
-                    to_phone=buyer_phone,
-                    message=f"TrustTrade: Your item has been dispatched! Please confirm receipt once you receive it. Ref: {transaction.get('share_code', transaction['transaction_id'])}"
-                )
-            except Exception as e:
-                logger.error(f"Webhook SMS failed (INITIATED buyer): {e}")
-    
-    elif new_state == TransactionState.FUNDS_RELEASED:
-        # Funds released - notify seller
-        update_data["delivery_confirmed"] = True
-        update_data["release_status"] = "Released"
-        update_data["released_at"] = datetime.now(timezone.utc).isoformat()
-        
-        net_amount = transaction["item_price"] * (1 - PLATFORM_FEE_PERCENT / 100)
-        
-        await send_funds_released_email(
-            to_email=transaction["seller_email"],
-            to_name=transaction["seller_name"],
-            share_code=transaction.get("share_code", transaction["transaction_id"]),
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"],
-            net_amount=net_amount
-        )
-        
-        # SMS to seller - funds released
-        seller_phone = transaction.get("seller_phone")
-        if seller_phone:
-            try:
-                await send_funds_released_sms(
-                    to_phone=seller_phone,
-                    message=f"TrustTrade: Great news! R{net_amount:.2f} has been released to your account for '{transaction['item_description'][:30]}...'. Ref: {transaction.get('share_code', transaction['transaction_id'])}"
-                )
-            except Exception as e:
-                logger.error(f"Webhook SMS failed (FUNDS_RELEASED seller): {e}")
-    
-    elif new_state == TransactionState.DISPUTED:
-        # Dispute opened - notify both parties
-        await send_dispute_opened_email(
-            to_email=transaction["buyer_email"],
-            to_name=transaction["buyer_name"],
-            share_code=transaction.get("share_code", transaction["transaction_id"]),
-            dispute_type="TradeSafe Dispute",
-            description="A dispute has been opened on TradeSafe"
-        )
-        
-        await send_dispute_opened_email(
-            to_email=transaction["seller_email"],
-            to_name=transaction["seller_name"],
-            share_code=transaction.get("share_code", transaction["transaction_id"]),
-            dispute_type="TradeSafe Dispute",
-            description="A dispute has been opened on TradeSafe"
-        )
-    
-    # Update database
-    await db.transactions.update_one(
-        {"transaction_id": transaction["transaction_id"]},
-        {"$set": update_data}
-    )
-    
-    logger.info(f"Processed webhook: {transaction['transaction_id']} state {prev_state} -> {new_state}")
-    
-    return {"status": "processed", "transaction_id": transaction["transaction_id"], "new_state": new_state}
 
 
 # Include the router in the main app
@@ -4505,12 +4398,26 @@ async def startup_event():
     """Start background jobs on application startup"""
     global background_task
     
-    # Create webhook_logs collection index if not exists
+    # Create indexes for all monitoring collections
     try:
-        await db.webhook_logs.create_index("transaction_id")
-        await db.webhook_logs.create_index("timestamp")
-        await db.webhook_logs.create_index([("status", 1), ("timestamp", -1)])
-        logger.info("Webhook logs indexes created")
+        # Webhook events collection
+        await db.webhook_events.create_index("event_id", unique=True)
+        await db.webhook_events.create_index("transaction_id")
+        await db.webhook_events.create_index("timestamp")
+        await db.webhook_events.create_index([("status", 1), ("timestamp", -1)])
+        logger.info("Webhook events indexes created")
+        
+        # Email logs collection
+        await db.email_logs.create_index("transaction_id")
+        await db.email_logs.create_index("timestamp")
+        await db.email_logs.create_index([("success", 1), ("timestamp", -1)])
+        logger.info("Email logs indexes created")
+        
+        # Transaction state tracking index
+        await db.transactions.create_index("transaction_state")
+        await db.transactions.create_index("last_webhook_at")
+        logger.info("Transaction state indexes created")
+        
     except Exception as e:
         logger.error(f"Failed to create indexes: {e}")
     
@@ -4519,7 +4426,7 @@ async def startup_event():
         import tradesafe_service
         from background_jobs import start_background_jobs
         background_task = asyncio.create_task(start_background_jobs(db, tradesafe_service, interval_minutes=3))
-        logger.info("Background jobs started")
+        logger.info("=== Background jobs started (interval: 3 min) ===")
     except Exception as e:
         logger.error(f"Failed to start background jobs: {e}")
 

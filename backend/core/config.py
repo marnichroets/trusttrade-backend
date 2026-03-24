@@ -45,7 +45,7 @@ class Settings:
     
     # Admin
     ADMIN_ALERT_EMAIL: str = os.environ.get('ADMIN_ALERT_EMAIL', '')
-    ADMIN_EMAIL: str = 'marnichr@gmail.com'  # Primary admin email
+    ADMIN_EMAIL: str = os.environ.get('ADMIN_EMAIL', '')  # Primary admin email
     
     # Platform Constants
     MINIMUM_TRANSACTION_AMOUNT: float = 500.0  # R500 minimum

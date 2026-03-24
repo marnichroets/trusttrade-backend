@@ -20,10 +20,38 @@ const COLORS = {
 function LandingPage() {
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total_transactions: 0, success_rate: 100 });
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
+    // Check if user is already logged in
+    const checkExistingAuth = async () => {
+      try {
+        // Add timeout to prevent infinite loading
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await axios.get(`${API}/auth/me`, { 
+          withCredentials: true,
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (response.data && response.data.user_id) {
+          // User is already logged in, redirect to dashboard
+          navigate('/dashboard', { replace: true });
+          return;
+        }
+      } catch (error) {
+        // Not logged in or timeout - stay on landing page
+        console.log('Auth check:', error.name === 'CanceledError' ? 'timeout' : 'not authenticated');
+      }
+      setCheckingAuth(false);
+    };
+    
+    checkExistingAuth();
     fetchStats();
-  }, []);
+  }, [navigate]);
 
   const fetchStats = async () => {
     try {
@@ -42,6 +70,15 @@ function LandingPage() {
   const scrollToHowItWorks = () => {
     document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  // Show loading while checking auth (max 5 seconds)
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white">

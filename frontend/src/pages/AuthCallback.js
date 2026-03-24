@@ -18,17 +18,22 @@ function AuthCallback() {
 
     const processSession = async () => {
       try {
+        console.log('AuthCallback: Processing session...');
+        
         // Extract session_id from URL fragment
         const hash = location.hash;
         const params = new URLSearchParams(hash.substring(1));
         const sessionId = params.get('session_id');
 
         if (!sessionId) {
+          console.error('AuthCallback: No session ID found');
           toast.error('No session ID found');
           navigate('/', { replace: true });
           return;
         }
 
+        console.log('AuthCallback: Exchanging session_id for user data...');
+        
         // Exchange session_id for user data
         const response = await axios.post(
           `${API}/auth/session`,
@@ -37,14 +42,24 @@ function AuthCallback() {
         );
 
         const user = response.data;
+        console.log('AuthCallback: User authenticated:', user.email);
+        
+        toast.success(`Welcome, ${user.name || user.email}!`);
 
-        // Check if there's a pending share code to redirect to
+        // Check for redirect paths in order of priority
         const pendingShareCode = sessionStorage.getItem('pendingShareCode');
+        const redirectAfterLogin = sessionStorage.getItem('redirectAfterLogin');
+        
         if (pendingShareCode) {
           sessionStorage.removeItem('pendingShareCode');
+          console.log('AuthCallback: Redirecting to share code:', pendingShareCode);
           navigate(`/t/${pendingShareCode}`, { replace: true });
+        } else if (redirectAfterLogin) {
+          sessionStorage.removeItem('redirectAfterLogin');
+          console.log('AuthCallback: Redirecting to stored path:', redirectAfterLogin);
+          navigate(redirectAfterLogin, { replace: true });
         } else {
-          // Navigate directly to dashboard
+          console.log('AuthCallback: Redirecting to dashboard');
           navigate('/dashboard', { replace: true, state: { user } });
         }
       } catch (error) {
@@ -61,8 +76,9 @@ function AuthCallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">
       <div className="text-center">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-slate-600">Authenticating...</p>
+        <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-16 mx-auto mb-6 object-contain" />
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-slate-600">Signing you in...</p>
       </div>
     </div>
   );

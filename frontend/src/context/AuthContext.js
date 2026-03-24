@@ -3,41 +3,54 @@ import api from '../utils/api';
 
 const AuthContext = createContext(null);
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+// Initialize state synchronously from localStorage to prevent flash
+const getInitialState = () => {
+  const token = localStorage.getItem('session_token');
+  const storedUser = localStorage.getItem('user_data');
+  
+  if (token && storedUser) {
+    try {
+      const userData = JSON.parse(storedUser);
+      console.log('[AuthContext] Initial state from localStorage:', userData.email);
+      return { user: userData, isAuthenticated: true };
+    } catch (e) {
+      console.error('[AuthContext] Failed to parse stored user');
+    }
+  }
+  return { user: null, isAuthenticated: false };
+};
 
-  // Initialize auth state from localStorage on app start
+export function AuthProvider({ children }) {
+  // Initialize synchronously from localStorage
+  const initialState = getInitialState();
+  const [user, setUser] = useState(initialState.user);
+  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(initialState.isAuthenticated);
+
+  // Verify auth state on mount (background validation)
   useEffect(() => {
-    console.log('[AuthContext] Initializing...');
-    initializeAuth();
+    console.log('[AuthContext] Initializing - pre-loaded auth:', !!localStorage.getItem('session_token'));
+    verifyAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const initializeAuth = async () => {
+  const verifyAuth = async () => {
     const token = localStorage.getItem('session_token');
     const storedUser = localStorage.getItem('user_data');
     
-    console.log('[AuthContext] Token exists:', !!token);
-    console.log('[AuthContext] Stored user exists:', !!storedUser);
+    console.log('[AuthContext] Verifying - Token exists:', !!token);
+    console.log('[AuthContext] Verifying - Stored user exists:', !!storedUser);
 
     if (!token) {
       console.log('[AuthContext] No token - user not authenticated');
+      setUser(null);
+      setIsAuthenticated(false);
       setLoading(false);
       return;
     }
 
-    // We have a token - try to validate it
+    // We have a token - verify with API in background
     try {
-      // First, use stored user data for immediate UI
-      if (storedUser) {
-        const userData = JSON.parse(storedUser);
-        console.log('[AuthContext] Using stored user:', userData.email);
-        setUser(userData);
-        setIsAuthenticated(true);
-      }
-
-      // Then verify with API (in background)
       console.log('[AuthContext] Verifying token with API...');
       const response = await api.get('/auth/me');
       

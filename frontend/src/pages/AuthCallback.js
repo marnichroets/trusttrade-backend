@@ -103,7 +103,9 @@ function AuthCallback() {
         console.log('[AuthCallback] Navigating to:', destination);
         console.log('[AuthCallback] ========== END ==========');
         
-        // Navigate immediately - state is already updated
+        // Small delay to allow React state to update before navigation
+        // This prevents race condition where ProtectedRoute sees stale state
+        await new Promise(resolve => setTimeout(resolve, 50));
         navigate(destination, { replace: true });
 
       } catch (error) {

@@ -1,57 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, loading, user } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
-  const [checked, setChecked] = useState(false);
+  const hasRedirected = useRef(false);
+
+  // Check localStorage directly as fallback (handles race conditions)
+  const token = localStorage.getItem('session_token');
+  const userData = localStorage.getItem('user_data');
+  const hasLocalAuth = !!(token && userData);
+
+  console.log('[PROTECTED_ROUTE_RENDERED] loading:', loading, 'isAuthenticated:', isAuthenticated, 'hasLocalAuth:', hasLocalAuth);
 
   useEffect(() => {
-    // Double-check localStorage as fallback for race conditions
-    const token = localStorage.getItem('session_token');
-    const userData = localStorage.getItem('user_data');
+    // Don't redirect while loading
+    if (loading) return;
     
-    console.log('[ProtectedRoute] Check - loading:', loading, 'isAuthenticated:', isAuthenticated);
-    console.log('[ProtectedRoute] localStorage token:', token ? 'YES' : 'NO');
-    console.log('[ProtectedRoute] localStorage user:', userData ? 'YES' : 'NO');
+    // Don't redirect if already authenticated via context OR localStorage
+    if (isAuthenticated || hasLocalAuth) return;
     
-    // If context says not loading and not authenticated, but localStorage has token,
-    // wait a moment for context to sync (race condition from AuthCallback)
-    if (!loading && !isAuthenticated && token && userData) {
-      console.log('[ProtectedRoute] Race condition detected - token exists but context not synced, waiting...');
-      // Give context a moment to sync from AuthCallback's login() call
-      const timer = setTimeout(() => {
-        setChecked(true);
-      }, 100);
-      return () => clearTimeout(timer);
-    }
+    // Don't redirect multiple times
+    if (hasRedirected.current) return;
     
-    if (!loading) {
-      setChecked(true);
-    }
-  }, [loading, isAuthenticated]);
+    console.log('[PROTECTED_ROUTE_REDIRECT] Not authenticated, redirecting to /');
+    hasRedirected.current = true;
+    navigate('/', { replace: true });
+  }, [loading, isAuthenticated, hasLocalAuth, navigate]);
 
-  useEffect(() => {
-    // Only redirect after we've fully checked
-    if (checked && !loading && !isAuthenticated) {
-      // Final check - if localStorage still has valid token, don't redirect
-      const token = localStorage.getItem('session_token');
-      const userData = localStorage.getItem('user_data');
-      
-      if (token && userData) {
-        console.log('[ProtectedRoute] Token still in localStorage after check - not redirecting');
-        return;
-      }
-      
-      console.log('[ProtectedRoute] Not authenticated after full check, redirecting to /');
-      navigate('/', { replace: true });
-    }
-  }, [checked, loading, isAuthenticated, navigate]);
-
-  // Show loading while checking auth
-  if (loading || !checked) {
-    console.log('[ProtectedRoute] Loading... (loading:', loading, ', checked:', checked, ')');
+  // Show loading spinner while auth is being checked
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
@@ -62,20 +41,13 @@ function ProtectedRoute({ children }) {
     );
   }
 
-  // Check both context AND localStorage for authentication
-  const token = localStorage.getItem('session_token');
-  const userData = localStorage.getItem('user_data');
-  const effectivelyAuthenticated = isAuthenticated || (token && userData);
-
-  // Not authenticated
-  if (!effectivelyAuthenticated) {
-    console.log('[ProtectedRoute] Not authenticated, returning null');
-    return null;
+  // If authenticated via context OR localStorage, render children
+  if (isAuthenticated || hasLocalAuth) {
+    return children;
   }
 
-  // Authenticated - render children
-  console.log('[ProtectedRoute] Authenticated, rendering children');
-  return children;
+  // Not authenticated - return null (redirect will happen via useEffect)
+  return null;
 }
 
 export default ProtectedRoute;

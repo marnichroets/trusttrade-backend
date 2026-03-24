@@ -15,6 +15,7 @@ function AuthCallback() {
   const [status, setStatus] = useState('Processing...');
 
   useEffect(() => {
+    // Strict guard against double-processing
     if (hasProcessed.current) {
       console.log('[AuthCallback] Already processed, skipping');
       return;
@@ -27,8 +28,6 @@ function AuthCallback() {
         setStatus('Extracting session...');
         
         const hash = location.hash;
-        console.log('[AuthCallback] URL hash:', hash);
-        
         const params = new URLSearchParams(hash.substring(1));
         const sessionId = params.get('session_id');
 
@@ -49,13 +48,10 @@ function AuthCallback() {
           { withCredentials: true }
         );
 
-        console.log('[AuthCallback] API response status:', response.status);
-        
         const data = response.data;
         const token = data.session_token;
         
-        console.log('[AuthCallback] User:', data.email);
-        console.log('[AuthCallback] Token received:', token ? 'YES' : 'NO');
+        console.log('[TOKEN_PRESENT]', token ? 'YES' : 'NO');
 
         if (!token) {
           console.error('[AuthCallback] No token in response!');
@@ -73,21 +69,20 @@ function AuthCallback() {
           picture: data.picture,
         };
 
-        // Use AuthContext login function to update global state
-        console.log('[AuthCallback] Calling login()...');
+        // Call login() - this updates context AND localStorage
         login(userData, token);
         
-        // Verify it worked
+        // Verify localStorage was set
         const storedToken = localStorage.getItem('session_token');
-        console.log('[AuthCallback] Token in localStorage after login:', storedToken ? 'YES' : 'NO');
+        console.log('[AuthCallback] Verified localStorage token:', storedToken ? 'YES' : 'NO');
 
         setStatus('Login successful!');
         toast.success(`Welcome, ${userData.name || userData.email}!`);
 
-        // Clear URL hash
+        // Clear URL hash to prevent re-processing
         window.history.replaceState(null, '', window.location.pathname);
 
-        // Determine redirect
+        // Determine redirect destination
         const pendingShareCode = sessionStorage.getItem('pendingShareCode');
         const redirectAfterLogin = sessionStorage.getItem('redirectAfterLogin');
         
@@ -100,17 +95,14 @@ function AuthCallback() {
           destination = redirectAfterLogin;
         }
 
-        console.log('[AuthCallback] Navigating to:', destination);
+        console.log('[NAVIGATE_CALLED] destination:', destination);
         console.log('[AuthCallback] ========== END ==========');
         
-        // Small delay to allow React state to update before navigation
-        // This prevents race condition where ProtectedRoute sees stale state
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // Navigate ONCE to dashboard
         navigate(destination, { replace: true });
 
       } catch (error) {
         console.error('[AuthCallback] Error:', error);
-        console.error('[AuthCallback] Error response:', error.response?.data);
         setStatus('Authentication failed');
         toast.error(`Login failed: ${error.response?.data?.detail || error.message}`);
         navigate('/', { replace: true });
@@ -118,7 +110,7 @@ function AuthCallback() {
     };
 
     processSession();
-  }, [navigate, location.hash, login]);
+  }, []); // Empty dependency array - run only once on mount
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">

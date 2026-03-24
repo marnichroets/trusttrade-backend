@@ -3,6 +3,44 @@
 ## Overview
 Professional escrow platform for peer-to-peer transactions in South Africa using TradeSafe payment gateway.
 
+## Architecture (v2.0.0 - Refactored)
+
+### Backend Structure
+```
+/app/backend/
+├── main.py                 # FastAPI application entry point
+├── server.py               # Thin wrapper for uvicorn compatibility
+├── server.py.backup        # Original 4900+ line monolith backup
+├── core/                   # Configuration, database, security
+│   ├── config.py           # Environment-based configuration
+│   ├── database.py         # MongoDB connection management
+│   └── security.py         # Authentication utilities
+├── models/                 # Pydantic models
+│   ├── user.py             # User, Session, Profile models
+│   ├── transaction.py      # Transaction, TradeSafe models
+│   ├── dispute.py          # Dispute models
+│   └── common.py           # Shared models (Risk, Admin requests)
+├── routes/                 # API route handlers
+│   ├── auth.py             # Authentication, phone verification
+│   ├── transactions.py     # Transaction CRUD, file uploads
+│   ├── tradesafe.py        # TradeSafe escrow integration
+│   ├── share.py            # Share link functionality
+│   ├── disputes.py         # Dispute management
+│   ├── users.py            # User profiles, verification, wallet
+│   ├── admin.py            # Admin dashboard, user/transaction management
+│   ├── monitoring.py       # System health monitoring
+│   └── webhooks.py         # TradeSafe webhooks, alerts
+├── services/               # Existing business logic
+│   ├── email_service.py    # Postmark email integration
+│   ├── sms_service.py      # SMS Messenger integration
+│   ├── tradesafe_service.py # TradeSafe API client
+│   ├── webhook_handler.py  # Webhook processing
+│   ├── alert_service.py    # Critical alert system
+│   ├── background_jobs.py  # Payment verification jobs
+│   └── pdf_generator.py    # Escrow agreement PDFs
+└── .env.example            # Environment variable template
+```
+
 ## Core Features
 - Transaction Link System - Unique shareable links for every transaction
 - TradeSafe Integration - Full payment gateway integration with escrow (PRODUCTION)
@@ -23,6 +61,28 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 4. **Buyer Confirms** → FUNDS_RELEASED → Seller notified (email + SMS)
 
 ## Changelog
+
+### 2026-03-24: Backend Refactoring (v2.0.0)
+**Major refactoring from monolithic server.py (4900+ lines) to modular production structure:**
+
+1. **New Directory Structure:**
+   - `core/` - Configuration (config.py), database (database.py), security (security.py)
+   - `models/` - Pydantic models for user, transaction, dispute, common
+   - `routes/` - 9 route files for auth, transactions, tradesafe, share, disputes, users, admin, monitoring, webhooks
+
+2. **New Entry Point:**
+   - `main.py` - FastAPI application with lifespan handler, CORS, and all routers
+   - `server.py` - Thin wrapper for uvicorn compatibility (server:app)
+   - `server.py.backup` - Original monolith preserved
+
+3. **Environment Configuration:**
+   - `.env.example` - Template with all required environment variables
+   - All credentials from environment variables (no hardcoding)
+
+4. **Testing Results:**
+   - 20/20 backend tests passed
+   - API version 2.0.0 confirms refactored code running
+   - All existing functionality preserved
 
 ### 2026-03-24: White & Blue Color Scheme Update (Session 14 - Part 4)
 **Implemented:**

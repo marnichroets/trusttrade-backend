@@ -3,24 +3,31 @@ TrustTrade Authentication Routes
 Handles user authentication, sessions, and phone verification
 """
 
-import logging
-from datetime import datetime, timezone, timedelta
 import uuid
 import httpx
+import logging
+import random
+import string
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request, Response
 
+from core.config import settings
 from core.database import get_database
 from core.security import get_user_from_token, normalize_email
-from core.config import ADMIN_EMAIL
-from models.user import User
-from models.common import SessionExchangeRequest, TermsAcceptance, PhoneSubmitRequest, OTPVerifyRequest
-from services.sms_service import (
+from models.user import (
+    User, SessionExchangeRequest, TermsAcceptance,
+    PhoneSubmitRequest, OTPVerifyRequest
+)
+from sms_service import (
     normalize_phone_number, generate_otp, send_otp_sms,
     create_otp_record, is_otp_valid, can_resend_otp
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+
+# In-memory OTP store (use Redis in production)
+otp_store = {}
 
 
 @router.post("/session")
@@ -47,7 +54,7 @@ async def exchange_session(request: SessionExchangeRequest, response: Response):
         user_doc = await db.users.find_one({"email": email}, {"_id": 0})
         
         # Determine if admin
-        is_admin = email == ADMIN_EMAIL
+        is_admin = email == settings.ADMIN_EMAIL
         
         if not user_doc:
             # Create new user
@@ -112,8 +119,10 @@ async def exchange_session(request: SessionExchangeRequest, response: Response):
 @router.get("/me", response_model=User)
 async def get_current_user(request: Request):
     """Get current authenticated user"""
+    db = get_database()
+    
     try:
-        user = await get_user_from_token(request)
+        user = await get_user_from_token(request, db)
         if not user:
             raise HTTPException(status_code=401, detail="Not authenticated")
         return user
@@ -126,6 +135,7 @@ async def get_current_user(request: Request):
 async def logout(request: Request, response: Response):
     """Logout user and clear session"""
     db = get_database()
+    
     session_token = request.cookies.get("session_token")
     if session_token:
         await db.user_sessions.delete_one({"session_token": session_token})
@@ -134,12 +144,14 @@ async def logout(request: Request, response: Response):
     return {"message": "Logged out successfully"}
 
 
-# Phone Verification Endpoints
+# ============ PHONE VERIFICATION ENDPOINTS ============
+
 @router.post("/phone/submit")
 async def submit_phone_number(request: Request, data: PhoneSubmitRequest):
     """Submit phone number for verification. Sends OTP via SMS."""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
@@ -207,7 +219,8 @@ async def submit_phone_number(request: Request, data: PhoneSubmitRequest):
 async def verify_phone_otp(request: Request, data: OTPVerifyRequest):
     """Verify OTP code submitted by user."""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
@@ -263,7 +276,7 @@ async def verify_phone_otp(request: Request, data: OTPVerifyRequest):
 
 @router.post("/phone/resend")
 async def resend_phone_otp(request: Request, data: PhoneSubmitRequest):
-    """Resend OTP to the phone number."""
+    """Resend OTP to the phone number. Subject to 60 second cooldown."""
     return await submit_phone_number(request, data)
 
 
@@ -271,7 +284,8 @@ async def resend_phone_otp(request: Request, data: PhoneSubmitRequest):
 async def get_phone_verification_status(request: Request):
     """Get current phone verification status for user."""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     

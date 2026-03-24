@@ -1,10 +1,10 @@
 """
 TrustTrade User Models
-Pydantic models for user data
+Pydantic models for user data validation and serialization
 """
 
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
+from typing import Optional, List
 
 
 class BankingDetails(BaseModel):
@@ -18,7 +18,7 @@ class BankingDetails(BaseModel):
 
 
 class User(BaseModel):
-    """User model"""
+    """User model for authentication and profile data"""
     model_config = ConfigDict(extra="ignore")
     
     user_id: str
@@ -51,7 +51,7 @@ class User(BaseModel):
 
 
 class UserSession(BaseModel):
-    """User session model"""
+    """User session for authentication"""
     model_config = ConfigDict(extra="ignore")
     
     user_id: str
@@ -107,3 +107,57 @@ class VerificationStatus(BaseModel):
     phone_verified: bool = False
     phone_number: Optional[str] = None
     fully_verified: bool = False
+
+
+# Request/Response Models
+class SessionExchangeRequest(BaseModel):
+    """OAuth session exchange request"""
+    session_id: str
+
+
+class TermsAcceptance(BaseModel):
+    """Terms acceptance request"""
+    accepted: bool
+
+
+class BankingDetailsUpdate(BaseModel):
+    """Update banking details for a user"""
+    bank_name: str
+    account_holder: str
+    account_number: str
+    branch_code: str
+    account_type: str = "savings"
+
+
+class WalletResponse(BaseModel):
+    """Wallet information response"""
+    balance: float
+    pending_balance: float
+    total_earned: float
+    payout_threshold: float
+    progress_percent: float
+    remaining_to_payout: float
+    can_payout: bool
+    banking_details_set: bool
+
+
+class PhoneSubmitRequest(BaseModel):
+    """Phone number submission for verification"""
+    phone: str
+
+
+class OTPVerifyRequest(BaseModel):
+    """OTP verification request"""
+    phone: str
+    otp_code: str
+
+
+class PhoneOtpRequest(BaseModel):
+    """Legacy phone OTP request"""
+    phone_number: str
+
+
+class PhoneOtpVerify(BaseModel):
+    """Legacy phone OTP verification"""
+    phone_number: str
+    otp: str

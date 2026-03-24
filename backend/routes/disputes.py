@@ -1,31 +1,34 @@
 """
 TrustTrade Dispute Routes
-Handles dispute creation and management
+Handles dispute creation, management, and resolution
 """
 
-import logging
 import uuid
+import logging
 from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, HTTPException, Request
 
+from core.config import settings
 from core.database import get_database
 from core.security import get_user_from_token
 from models.dispute import Dispute, DisputeCreate, DisputeUpdate
-from services.email_service import send_dispute_opened_email
+from email_service import send_dispute_opened_email
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/disputes", tags=["Disputes"])
+router = APIRouter(prefix="/api/disputes", tags=["Disputes"])
 
 
 @router.post("", response_model=Dispute, status_code=201)
 async def create_dispute(request: Request, dispute_data: DisputeCreate):
     """Create a new dispute"""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    # Verify transaction access
     transaction = await db.transactions.find_one(
         {"transaction_id": dispute_data.transaction_id},
         {"_id": 0}
@@ -55,7 +58,13 @@ async def create_dispute(request: Request, dispute_data: DisputeCreate):
     
     await db.disputes.insert_one(dispute)
     
-    # Send dispute notification emails
+    # Mark transaction as having a dispute
+    await db.transactions.update_one(
+        {"transaction_id": dispute_data.transaction_id},
+        {"$set": {"has_dispute": True}}
+    )
+    
+    # Determine the other party and send notification email
     is_buyer = transaction.get("buyer_user_id") == user.user_id or transaction.get("buyer_email") == user.email
     
     if is_buyer:
@@ -78,17 +87,48 @@ async def create_dispute(request: Request, dispute_data: DisputeCreate):
     return Dispute(**dispute)
 
 
+@router.patch("/{dispute_id}/evidence")
+async def update_dispute_evidence(request: Request, dispute_id: str, evidence_filenames: List[str]):
+    """Update dispute with evidence photo filenames"""
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    dispute = await db.disputes.find_one(
+        {"dispute_id": dispute_id},
+        {"_id": 0}
+    )
+    
+    if not dispute:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+    
+    # Only dispute creator can add evidence
+    if dispute["raised_by_user_id"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Only dispute creator can add evidence")
+    
+    await db.disputes.update_one(
+        {"dispute_id": dispute_id},
+        {"$set": {"evidence_photos": evidence_filenames}}
+    )
+    
+    return {"message": "Evidence updated successfully"}
+
+
 @router.get("", response_model=List[Dispute])
 async def list_disputes(request: Request):
     """List disputes for current user (or all for admin)"""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     if user.is_admin:
         query = {}
     else:
+        # Get user's transactions
         user_transactions = await db.transactions.find(
             {
                 "$or": [
@@ -111,7 +151,8 @@ async def list_disputes(request: Request):
 async def update_dispute(request: Request, dispute_id: str, update_data: DisputeUpdate):
     """Update dispute status (admin only)"""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
@@ -120,17 +161,21 @@ async def update_dispute(request: Request, dispute_id: str, update_data: Dispute
     
     update_fields = {"status": update_data.status}
     
+    # Handle admin decision
     if update_data.admin_decision:
         update_fields["admin_decision"] = update_data.admin_decision
     
+    # Handle valid dispute marking
     if update_data.is_valid_dispute is not None:
         update_fields["is_valid_dispute"] = update_data.is_valid_dispute
         
+        # If marking as valid, increment user's dispute count
         if update_data.is_valid_dispute:
             dispute = await db.disputes.find_one({"dispute_id": dispute_id}, {"_id": 0})
             if dispute:
                 raised_by_user_id = dispute["raised_by_user_id"]
                 
+                # Increment valid disputes count
                 user_result = await db.users.find_one_and_update(
                     {"user_id": raised_by_user_id},
                     {"$inc": {"valid_disputes_count": 1}},
@@ -138,11 +183,13 @@ async def update_dispute(request: Request, dispute_id: str, update_data: Dispute
                     projection={"_id": 0}
                 )
                 
+                # Check if should suspend (3 or more valid disputes)
                 if user_result and user_result.get("valid_disputes_count", 0) >= 3:
                     await db.users.update_one(
                         {"user_id": raised_by_user_id},
                         {"$set": {"suspension_flag": True}}
                     )
+                    logger.info(f"User {raised_by_user_id} flagged for suspension (3+ valid disputes)")
     
     result = await db.disputes.update_one(
         {"dispute_id": dispute_id},
@@ -158,30 +205,3 @@ async def update_dispute(request: Request, dispute_id: str, update_data: Dispute
     )
     
     return Dispute(**updated_dispute)
-
-
-@router.patch("/{dispute_id}/evidence")
-async def update_dispute_evidence(request: Request, dispute_id: str, evidence_filenames: List[str]):
-    """Update dispute with evidence photo filenames"""
-    db = get_database()
-    user = await get_user_from_token(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    dispute = await db.disputes.find_one(
-        {"dispute_id": dispute_id},
-        {"_id": 0}
-    )
-    
-    if not dispute:
-        raise HTTPException(status_code=404, detail="Dispute not found")
-    
-    if dispute["raised_by_user_id"] != user.user_id:
-        raise HTTPException(status_code=403, detail="Only dispute creator can add evidence")
-    
-    await db.disputes.update_one(
-        {"dispute_id": dispute_id},
-        {"$set": {"evidence_photos": evidence_filenames}}
-    )
-    
-    return {"message": "Evidence updated successfully"}

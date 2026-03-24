@@ -1,39 +1,49 @@
 """
 TrustTrade Transaction Routes
-Handles transaction creation, listing, and management
+Handles transaction creation, management, payments, and TradeSafe integration
 """
 
-import logging
+import os
 import uuid
+import shutil
 import random
 import string
-from datetime import datetime, timezone
-from typing import List
+import logging
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Request
+from typing import List
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File
+from fastapi.responses import FileResponse
 
+from core.config import settings
 from core.database import get_database
-from core.security import get_user_from_token, normalize_email
-from core.config import (
-    MINIMUM_TRANSACTION_AMOUNT, MAXIMUM_TRANSACTION_AMOUNT,
-    PLATFORM_FEE_PERCENT, FRONTEND_URL
-)
+from core.security import get_user_from_token, normalize_email, emails_match
+from models.user import User
 from models.transaction import (
-    Transaction, TransactionCreate, TransactionUpdate, TransactionPreview,
-    RatingSubmit, SellerConfirmation
+    Transaction, TransactionCreate, TransactionUpdate,
+    SellerConfirmation, RatingSubmit, PaymentConfirmation,
+    TradeSafeTransactionCreate
 )
-from services.email_service import (
+from models.common import RiskAssessment
+from pdf_generator import generate_escrow_agreement_pdf
+from email_service import (
     send_transaction_created_email, send_payment_received_email,
-    send_funds_released_email, send_delivery_confirmed_email
+    send_funds_released_email, send_delivery_confirmed_email,
+    send_delivery_started_email, send_immediate_payment_secured_email
 )
-from services.sms_service import (
-    normalize_phone_number, phones_match, send_transaction_invite_sms
+from sms_service import (
+    normalize_phone_number, send_transaction_invite_sms,
+    send_delivery_sms, send_funds_released_sms
 )
-from services.risk_service import assess_transaction_risk
-from services.pdf_generator import generate_escrow_agreement_pdf
+from tradesafe_service import (
+    create_tradesafe_transaction, get_tradesafe_transaction,
+    get_payment_link, start_delivery, accept_delivery,
+    validate_minimum_transaction, calculate_fees,
+    map_tradesafe_state_to_status, ALLOWED_PAYMENT_METHODS
+)
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/transactions", tags=["Transactions"])
+router = APIRouter(prefix="/api", tags=["Transactions"])
 
 
 def generate_share_code() -> str:
@@ -42,11 +52,229 @@ def generate_share_code() -> str:
     return f"TT-{numbers}"
 
 
-@router.post("", response_model=Transaction, status_code=201)
+def mock_send_email(to_email: str, subject: str, body: str):
+    """Mock email function for fallback"""
+    logger.info(f"MOCK EMAIL TO: {to_email}")
+    logger.info(f"SUBJECT: {subject}")
+    logger.info(f"BODY: {body}")
+
+
+async def assess_transaction_risk(user: User, item_price: float, db) -> RiskAssessment:
+    """Assess risk level for a transaction"""
+    risk_score = 0
+    flags = []
+    warnings = []
+    
+    # Get user's account age
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    created_at = user_doc.get("created_at")
+    if created_at:
+        account_age_days = (datetime.now(timezone.utc) - datetime.fromisoformat(created_at.replace('Z', '+00:00'))).days
+    else:
+        account_age_days = 0
+    
+    # Flag 1: New account with high-value transaction
+    if account_age_days < 7 and item_price > 5000:
+        risk_score += 30
+        flags.append("new_account_high_value")
+        warnings.append("New account attempting high-value transaction (R5,000+)")
+    
+    # Flag 2: Account with multiple valid disputes
+    valid_disputes = user_doc.get("valid_disputes_count", 0)
+    if valid_disputes >= 2:
+        risk_score += 25
+        flags.append("multiple_disputes")
+        warnings.append(f"User has {valid_disputes} valid disputes against them")
+    
+    # Flag 3: Unverified account with high-value transaction
+    if not user_doc.get("verified", False) and item_price > 10000:
+        risk_score += 20
+        flags.append("unverified_high_value")
+        warnings.append("Unverified account with very high-value transaction (R10,000+)")
+    
+    # Flag 4: Very low trust score
+    trust_score = user_doc.get("trust_score", 50)
+    if trust_score < 30:
+        risk_score += 25
+        flags.append("low_trust_score")
+        warnings.append(f"User has a low trust score ({trust_score}/100)")
+    
+    # Flag 5: Account is suspended or flagged
+    if user_doc.get("suspension_flag", False):
+        risk_score += 50
+        flags.append("suspended_account")
+        warnings.append("User account has been flagged for suspension")
+    
+    # Flag 6: Unusually low price (potential scam)
+    if item_price < 50:
+        risk_score += 10
+        flags.append("very_low_price")
+        warnings.append("Transaction amount is unusually low")
+    
+    # Determine risk level
+    if risk_score >= 60:
+        risk_level = "high"
+    elif risk_score >= 30:
+        risk_level = "medium"
+    else:
+        risk_level = "low"
+    
+    return RiskAssessment(
+        risk_level=risk_level,
+        risk_score=risk_score,
+        flags=flags,
+        warnings=warnings
+    )
+
+
+async def update_user_rating(email: str, new_rating: int, db):
+    """Recalculate user's average rating"""
+    user_doc = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user_doc:
+        return
+    
+    # Count ratings
+    buyer_ratings_pipeline = db.transactions.find({"buyer_email": email, "seller_rating": {"$exists": True}}, {"_id": 0, "seller_rating": 1})
+    seller_ratings_pipeline = db.transactions.find({"seller_email": email, "buyer_rating": {"$exists": True}}, {"_id": 0, "buyer_rating": 1})
+    
+    total_rating = 0
+    count = 0
+    async for txn in buyer_ratings_pipeline:
+        total_rating += txn.get("seller_rating", 0)
+        count += 1
+    async for txn in seller_ratings_pipeline:
+        total_rating += txn.get("buyer_rating", 0)
+        count += 1
+    
+    avg_rating = round(total_rating / count, 1) if count > 0 else 0.0
+    
+    # Update user with new stats
+    await db.users.update_one(
+        {"email": email},
+        {"$set": {
+            "average_rating": avg_rating,
+            "total_trades": count,
+            "successful_trades": count
+        }}
+    )
+    
+    # Award badges
+    badges = []
+    if count >= 3:
+        badges.append("Silver")
+    if count >= 10:
+        badges.append("Gold")
+    if user_doc.get("verified"):
+        badges.append("Verified")
+    
+    await db.users.update_one({"email": email}, {"$set": {"badges": badges}})
+
+
+# ============ FILE UPLOAD ENDPOINTS ============
+
+@router.post("/upload/photo")
+async def upload_photo(request: Request, file: UploadFile = File(...)):
+    """Upload a photo for transaction or dispute"""
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Validate file type
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+    allowed_mime_types = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"}
+    
+    file_ext = Path(file.filename).suffix.lower() if file.filename else ""
+    content_type = (file.content_type or "").lower()
+    
+    ext_valid = file_ext in allowed_extensions
+    mime_valid = content_type in allowed_mime_types
+    
+    if not ext_valid and not mime_valid:
+        raise HTTPException(status_code=400, detail="Only image files allowed (jpg, jpeg, png, webp)")
+    
+    # Use extension from filename, or derive from MIME type
+    if not file_ext or file_ext not in allowed_extensions:
+        mime_to_ext = {
+            "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png",
+            "image/webp": ".webp", "image/heic": ".heic", "image/heif": ".heif"
+        }
+        file_ext = mime_to_ext.get(content_type, ".jpg")
+    
+    # Validate file size (5MB max)
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    if file_size > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size must be less than 5MB")
+    
+    # Generate unique filename
+    unique_filename = f"{uuid.uuid4().hex}{file_ext}"
+    file_path = Path(settings.PHOTOS_PATH) / unique_filename
+    
+    # Save file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    return {"filename": unique_filename, "path": str(file_path)}
+
+
+@router.post("/upload/dispute-evidence")
+async def upload_dispute_evidence(request: Request, file: UploadFile = File(...)):
+    """Upload evidence photo for dispute"""
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Validate file type
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+    allowed_mime_types = {"image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"}
+    
+    file_ext = Path(file.filename).suffix.lower() if file.filename else ""
+    content_type = (file.content_type or "").lower()
+    
+    ext_valid = file_ext in allowed_extensions
+    mime_valid = content_type in allowed_mime_types
+    
+    if not ext_valid and not mime_valid:
+        raise HTTPException(status_code=400, detail="Only image files allowed (jpg, jpeg, png, webp)")
+    
+    if not file_ext or file_ext not in allowed_extensions:
+        mime_to_ext = {
+            "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png",
+            "image/webp": ".webp", "image/heic": ".heic", "image/heif": ".heif"
+        }
+        file_ext = mime_to_ext.get(content_type, ".jpg")
+    
+    # Validate file size
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    if file_size > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size must be less than 5MB")
+    
+    # Generate unique filename
+    unique_filename = f"{uuid.uuid4().hex}{file_ext}"
+    file_path = Path(settings.DISPUTES_PATH) / unique_filename
+    
+    # Save file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    return {"filename": unique_filename, "path": str(file_path)}
+
+
+# ============ TRANSACTION CRUD ============
+
+@router.post("/transactions", response_model=Transaction, status_code=201)
 async def create_transaction(request: Request, transaction_data: TransactionCreate):
     """Create a new transaction"""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
@@ -54,32 +282,32 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     if user.suspension_flag:
         raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")
     
-    # Check if seller has banking details (required to receive funds)
+    # Check if seller has banking details
     if transaction_data.creator_role == "seller":
         user_doc = await db.users.find_one({"user_id": user.user_id})
         if not user_doc or not user_doc.get("banking_details_added"):
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="Please add your banking details before creating a transaction as a seller. Go to Settings > Banking Details."
             )
     
-    # Validate minimum transaction amount
-    if transaction_data.item_price < MINIMUM_TRANSACTION_AMOUNT:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Minimum transaction amount is R{MINIMUM_TRANSACTION_AMOUNT:.0f}"
-        )
-    
-    # Validate maximum transaction amount
-    if transaction_data.item_price > MAXIMUM_TRANSACTION_AMOUNT:
+    # Validate minimum transaction amount (R500)
+    if transaction_data.item_price < settings.MINIMUM_TRANSACTION_AMOUNT:
         raise HTTPException(
             status_code=400,
-            detail=f"Maximum transaction amount is R{MAXIMUM_TRANSACTION_AMOUNT:,.0f}. Please contact support for larger transactions."
+            detail=f"Minimum transaction amount is R{settings.MINIMUM_TRANSACTION_AMOUNT:.0f}"
+        )
+    
+    # Validate maximum transaction amount (R500,000)
+    if transaction_data.item_price > settings.MAXIMUM_TRANSACTION_AMOUNT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum transaction amount is R{settings.MAXIMUM_TRANSACTION_AMOUNT:,.0f}. Please contact support for larger transactions."
         )
     
     # Calculate fees (2% platform fee)
     item_price = transaction_data.item_price
-    trusttrade_fee = round(item_price * (PLATFORM_FEE_PERCENT / 100), 2)
+    trusttrade_fee = round(item_price * (settings.PLATFORM_FEE_PERCENT / 100), 2)
     total = round(item_price + trusttrade_fee, 2)
     
     transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
@@ -113,6 +341,8 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         else:
             buyer_email = ""
     
+    logger.info(f"Transaction created by {user.email}: recipient={recipient_info}, type={recipient_type}")
+    
     # Initialize timeline
     timeline = [{
         "status": "Transaction Created",
@@ -126,7 +356,7 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         share_code = generate_share_code()
     
     # Assess transaction risk
-    risk_assessment = await assess_transaction_risk(db, user, item_price)
+    risk_assessment = await assess_transaction_risk(user, item_price, db)
     
     if risk_assessment.risk_level in ["medium", "high"]:
         timeline.append({
@@ -138,7 +368,14 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     
     # Determine auto-release days based on delivery method
     delivery_method = transaction_data.delivery_method
-    auto_release_days = {"courier": 3, "bank_deposit": 2, "digital": 0}.get(delivery_method, 3)
+    if delivery_method == "courier":
+        auto_release_days = 3
+    elif delivery_method == "bank_deposit":
+        auto_release_days = 2
+    elif delivery_method == "digital":
+        auto_release_days = 0
+    else:
+        auto_release_days = 3
     
     transaction = {
         "transaction_id": transaction_id,
@@ -180,8 +417,10 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     
     await db.transactions.insert_one(transaction)
     
+    # Get base URL for email links
+    base_url = settings.FRONTEND_URL
+    
     # Send transaction created emails
-    base_url = FRONTEND_URL
     await send_transaction_created_email(
         to_email=buyer_email,
         to_name=buyer_name,
@@ -211,21 +450,25 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
             sender_name=user.name,
             share_link=share_link
         )
+        logger.info(f"SMS invite sent to {recipient_phone}")
     
     return Transaction(**transaction)
 
 
-@router.get("", response_model=List[Transaction])
+@router.get("/transactions", response_model=List[Transaction])
 async def list_transactions(request: Request):
     """List transactions for current user (or all for admin)"""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    # Admin sees all
     if user.is_admin:
         query = {}
     else:
+        # Users see only their transactions
         user_email_lower = normalize_email(user.email)
         user_phone = getattr(user, 'phone', None)
         
@@ -246,6 +489,7 @@ async def list_transactions(request: Request):
         
         query = {"$or": or_conditions}
     
+    # Optimize query with projection for list view
     projection = {
         "_id": 0,
         "transaction_id": 1, "share_code": 1, "item_description": 1, "item_price": 1,
@@ -258,11 +502,12 @@ async def list_transactions(request: Request):
     return [Transaction(**t) for t in transactions]
 
 
-@router.get("/{transaction_id}", response_model=Transaction)
+@router.get("/transactions/{transaction_id}", response_model=Transaction)
 async def get_transaction(request: Request, transaction_id: str):
     """Get transaction details"""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
@@ -281,7 +526,7 @@ async def get_transaction(request: Request, transaction_id: str):
             transaction.get("seller_email") != user.email):
             raise HTTPException(status_code=403, detail="Access denied")
     
-    # Generate share_code for old transactions
+    # Generate share_code for old transactions that don't have one
     if not transaction.get("share_code"):
         share_code = generate_share_code()
         while await db.transactions.find_one({"share_code": share_code}):
@@ -295,26 +540,55 @@ async def get_transaction(request: Request, transaction_id: str):
     return Transaction(**transaction)
 
 
-@router.post("/{transaction_id}/seller-confirm")
-async def seller_confirm_transaction(request: Request, transaction_id: str, confirmation: SellerConfirmation):
-    """Seller confirms transaction details"""
+@router.patch("/transactions/{transaction_id}/photos")
+async def update_transaction_photos(request: Request, transaction_id: str, photo_filenames: List[str]):
+    """Update transaction with uploaded photo filenames"""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    transaction = await db.transactions.find_one(
-        {"transaction_id": transaction_id},
-        {"_id": 0}
-    )
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
     
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
+    # Only creator can update photos
+    creator_role = transaction.get("creator_role")
+    if creator_role == "buyer" and transaction.get("buyer_user_id") != user.user_id:
+        raise HTTPException(status_code=403, detail="Only transaction creator can add photos")
+    if creator_role == "seller" and transaction.get("seller_user_id") != user.user_id:
+        raise HTTPException(status_code=403, detail="Only transaction creator can add photos")
+    
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {"item_photos": photo_filenames}}
+    )
+    
+    return {"message": "Photos updated successfully"}
+
+
+@router.post("/transactions/{transaction_id}/seller-confirm")
+async def seller_confirm_transaction(request: Request, transaction_id: str, confirmation: SellerConfirmation):
+    """Seller confirms transaction details"""
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Only seller can confirm
     if transaction.get("seller_email") != user.email:
         raise HTTPException(status_code=403, detail="Only seller can confirm transaction")
     
     if confirmation.confirmed:
+        # Update timeline
         timeline = transaction.get("timeline", [])
         timeline.append({
             "status": "Seller Confirmed",
@@ -324,7 +598,7 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
         
         # Generate escrow agreement PDF
         pdf_filename = f"agreement_{transaction_id}.pdf"
-        pdf_path = Path("/app/uploads/pdfs") / pdf_filename
+        pdf_path = Path(settings.PDFS_PATH) / pdf_filename
         
         try:
             generate_escrow_agreement_pdf(transaction, str(pdf_path))
@@ -347,29 +621,64 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
     return {"message": "Confirmation cancelled"}
 
 
-@router.patch("/{transaction_id}/delivery")
-async def confirm_delivery(request: Request, transaction_id: str, update_data: TransactionUpdate):
-    """Confirm delivery and release funds"""
+@router.get("/transactions/{transaction_id}/agreement-pdf")
+async def download_agreement_pdf(request: Request, transaction_id: str):
+    """Download escrow agreement PDF"""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    transaction = await db.transactions.find_one(
-        {"transaction_id": transaction_id},
-        {"_id": 0}
-    )
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
     
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
+    # Check privacy
+    if not user.is_admin:
+        if transaction.get("buyer_email") != user.email and transaction.get("seller_email") != user.email:
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    pdf_filename = transaction.get("agreement_pdf_path")
+    if not pdf_filename:
+        raise HTTPException(status_code=404, detail="Agreement PDF not generated yet")
+    
+    pdf_path = Path(settings.PDFS_PATH) / pdf_filename
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="PDF file not found")
+    
+    return FileResponse(
+        path=str(pdf_path),
+        media_type="application/pdf",
+        filename=f"TrustTrade_Agreement_{transaction_id}.pdf"
+    )
+
+
+@router.patch("/transactions/{transaction_id}/delivery")
+async def confirm_delivery(request: Request, transaction_id: str, update_data: TransactionUpdate):
+    """Confirm delivery and release funds"""
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Only buyer can confirm
     if transaction["buyer_user_id"] != user.user_id and transaction["buyer_email"] != user.email:
         raise HTTPException(status_code=403, detail="Only buyer can confirm delivery")
     
+    # Check that payment has been made
     if transaction.get("payment_status") != "Paid":
         raise HTTPException(status_code=400, detail="Cannot confirm delivery before payment is received")
     
     if update_data.delivery_confirmed:
+        # Update timeline
         timeline = transaction.get("timeline", [])
         timeline.append({
             "status": "Delivery Confirmed & Funds Released",
@@ -387,8 +696,10 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
             }}
         )
         
+        # Calculate net amount after fee
         net_amount = transaction["item_price"] - (transaction["item_price"] * 0.02)
         
+        # Send funds released email
         await send_funds_released_email(
             to_email=transaction["seller_email"],
             to_name=transaction["seller_name"],
@@ -398,6 +709,7 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
             net_amount=net_amount
         )
         
+        # Send delivery confirmed email to buyer
         await send_delivery_confirmed_email(
             to_email=transaction["buyer_email"],
             to_name=transaction["buyer_name"],
@@ -406,19 +718,87 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
             role="buyer"
         )
     
-    updated_transaction = await db.transactions.find_one(
-        {"transaction_id": transaction_id},
-        {"_id": 0}
-    )
+    updated_transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
     
     return Transaction(**updated_transaction)
 
 
-@router.post("/{transaction_id}/rate")
+@router.post("/transactions/{transaction_id}/confirm-payment")
+async def confirm_payment(request: Request, transaction_id: str, payment: PaymentConfirmation):
+    """Mark transaction as paid (admin only)"""
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only admin can confirm payment")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    if not transaction.get("seller_confirmed"):
+        raise HTTPException(status_code=400, detail="Seller must confirm transaction first")
+    
+    if payment.confirmed:
+        # Calculate auto-release time (48 hours)
+        auto_release_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
+        
+        # Update timeline
+        timeline = transaction.get("timeline", [])
+        timeline.append({
+            "status": "Payment Received in Escrow",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "by": "TrustTrade System"
+        })
+        timeline.append({
+            "status": "Auto-Release Timer Started (48 hours)",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "by": "TrustTrade System"
+        })
+        
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {
+                "payment_status": "Paid",
+                "auto_release_at": auto_release_at,
+                "timeline": timeline
+            }}
+        )
+        
+        # Send payment received emails
+        await send_payment_received_email(
+            to_email=transaction["buyer_email"],
+            to_name=transaction["buyer_name"],
+            share_code=transaction.get("share_code", transaction_id),
+            item_description=transaction["item_description"],
+            amount=transaction["item_price"],
+            role="buyer"
+        )
+        
+        await send_payment_received_email(
+            to_email=transaction["seller_email"],
+            to_name=transaction["seller_name"],
+            share_code=transaction.get("share_code", transaction_id),
+            item_description=transaction["item_description"],
+            amount=transaction["item_price"],
+            role="seller"
+        )
+        
+        return {"message": "Payment confirmed", "status": "Paid", "auto_release_at": auto_release_at}
+    
+    return {"message": "Payment not confirmed"}
+
+
+@router.post("/transactions/{transaction_id}/rate")
 async def rate_transaction(request: Request, transaction_id: str, rating_data: RatingSubmit):
     """Submit rating for completed transaction"""
     db = get_database()
-    user = await get_user_from_token(request)
+    
+    user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
@@ -426,15 +806,18 @@ async def rate_transaction(request: Request, transaction_id: str, rating_data: R
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
+    # Check if transaction is completed
     if not transaction.get("delivery_confirmed"):
         raise HTTPException(status_code=400, detail="Cannot rate incomplete transaction")
     
+    # Determine if user is buyer or seller
     is_buyer = transaction.get("buyer_user_id") == user.user_id or transaction.get("buyer_email") == user.email
     is_seller = transaction.get("seller_user_id") == user.user_id or transaction.get("seller_email") == user.email
     
     if not is_buyer and not is_seller:
         raise HTTPException(status_code=403, detail="Not part of this transaction")
     
+    # Update rating
     if is_buyer:
         if transaction.get("buyer_rating"):
             raise HTTPException(status_code=400, detail="Already rated")
@@ -442,6 +825,9 @@ async def rate_transaction(request: Request, transaction_id: str, rating_data: R
             {"transaction_id": transaction_id},
             {"$set": {"buyer_rating": rating_data.rating, "buyer_review": rating_data.review}}
         )
+        # Update seller's average rating
+        seller_email = transaction["seller_email"]
+        await update_user_rating(seller_email, rating_data.rating, db)
     else:
         if transaction.get("seller_rating"):
             raise HTTPException(status_code=400, detail="Already rated")
@@ -449,35 +835,48 @@ async def rate_transaction(request: Request, transaction_id: str, rating_data: R
             {"transaction_id": transaction_id},
             {"$set": {"seller_rating": rating_data.rating, "seller_review": rating_data.review}}
         )
+        # Update buyer's average rating
+        buyer_email = transaction["buyer_email"]
+        await update_user_rating(buyer_email, rating_data.rating, db)
     
     return {"message": "Rating submitted", "rating": rating_data.rating}
 
 
-@router.patch("/{transaction_id}/photos")
-async def update_transaction_photos(request: Request, transaction_id: str, photo_filenames: List[str]):
-    """Update transaction with uploaded photo filenames"""
+# ============ PLATFORM SETTINGS ============
+
+@router.get("/platform/settings")
+async def get_platform_settings():
+    """Get platform settings (public endpoint)"""
+    return {
+        "minimum_transaction": settings.MINIMUM_TRANSACTION_AMOUNT,
+        "payout_threshold": settings.PAYOUT_THRESHOLD,
+        "platform_fee_percent": settings.PLATFORM_FEE_PERCENT,
+        "currency": "ZAR",
+        "currency_symbol": "R",
+        "payment_methods": ALLOWED_PAYMENT_METHODS
+    }
+
+
+@router.get("/public/stats")
+async def get_public_stats():
+    """Get public platform statistics for landing page"""
     db = get_database()
-    user = await get_user_from_token(request)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
     
-    transaction = await db.transactions.find_one(
-        {"transaction_id": transaction_id},
-        {"_id": 0}
-    )
-    
-    if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-    
-    creator_role = transaction.get("creator_role")
-    if creator_role == "buyer" and transaction.get("buyer_user_id") != user.user_id:
-        raise HTTPException(status_code=403, detail="Only transaction creator can add photos")
-    if creator_role == "seller" and transaction.get("seller_user_id") != user.user_id:
-        raise HTTPException(status_code=403, detail="Only transaction creator can add photos")
-    
-    await db.transactions.update_one(
-        {"transaction_id": transaction_id},
-        {"$set": {"item_photos": photo_filenames}}
-    )
-    
-    return {"message": "Photos updated successfully"}
+    try:
+        total_transactions = await db.transactions.count_documents({})
+        completed_transactions = await db.transactions.count_documents({"status": "completed"})
+        
+        return {
+            "total_transactions": total_transactions if total_transactions > 0 else 1000,
+            "completed_transactions": completed_transactions,
+            "success_rate": 100,
+            "platform": "TrustTrade South Africa"
+        }
+    except Exception as e:
+        logger.error(f"Failed to get public stats: {e}")
+        return {
+            "total_transactions": 1000,
+            "completed_transactions": 950,
+            "success_rate": 100,
+            "platform": "TrustTrade South Africa"
+        }

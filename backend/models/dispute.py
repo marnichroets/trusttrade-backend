@@ -1,10 +1,10 @@
 """
 TrustTrade Dispute Models
-Pydantic models for dispute data
+Pydantic models for dispute data validation and serialization
 """
 
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional
+from typing import Optional, List
 
 
 class Dispute(BaseModel):

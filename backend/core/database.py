@@ -1,104 +1,121 @@
 """
-TrustTrade Database Connection
-MongoDB async connection using Motor
+TrustTrade Database Configuration
+MongoDB connection management using Motor (async driver)
 """
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from core.config import MONGO_URL, DB_NAME
+from typing import Optional
 import logging
+
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Global database client and database instances
-client: AsyncIOMotorClient = None
-db: AsyncIOMotorDatabase = None
+# Global database client and instance
+_client: Optional[AsyncIOMotorClient] = None
+_db: Optional[AsyncIOMotorDatabase] = None
 
 
 def get_database() -> AsyncIOMotorDatabase:
-    """Get the database instance"""
-    global db
-    if db is None:
-        raise RuntimeError("Database not initialized. Call init_database() first.")
-    return db
+    """Get the database instance, creating connection if needed"""
+    global _client, _db
+    
+    if _db is None:
+        _client = AsyncIOMotorClient(settings.MONGO_URL)
+        _db = _client[settings.DB_NAME]
+        logger.info(f"Connected to MongoDB: {settings.DB_NAME}")
+    
+    return _db
 
 
-def init_database() -> AsyncIOMotorDatabase:
-    """Initialize database connection"""
-    global client, db
+def get_client() -> AsyncIOMotorClient:
+    """Get the MongoDB client instance"""
+    global _client
     
-    if not MONGO_URL:
-        raise ValueError("MONGO_URL environment variable is required")
-    if not DB_NAME:
-        raise ValueError("DB_NAME environment variable is required")
+    if _client is None:
+        _client = AsyncIOMotorClient(settings.MONGO_URL)
     
-    client = AsyncIOMotorClient(MONGO_URL)
-    db = client[DB_NAME]
-    
-    logger.info(f"Database initialized: {DB_NAME}")
-    return db
+    return _client
 
 
 async def close_database():
     """Close database connection"""
-    global client
-    if client:
-        client.close()
-        logger.info("Database connection closed")
-
-
-async def create_indexes():
-    """Create database indexes for optimal performance"""
-    database = get_database()
+    global _client, _db
     
+    if _client:
+        _client.close()
+        _client = None
+        _db = None
+        logger.info("MongoDB connection closed")
+
+
+async def create_indexes(db: AsyncIOMotorDatabase):
+    """Create necessary database indexes for performance"""
     try:
-        # User indexes
-        await database.users.create_index("user_id", unique=True)
-        await database.users.create_index("email")
-        await database.users.create_index("phone")
+        # Users collection indexes
+        await db.users.create_index("user_id", unique=True)
+        await db.users.create_index("email", unique=True)
+        await db.users.create_index("phone")
         
-        # Transaction indexes
-        await database.transactions.create_index("transaction_id", unique=True)
-        await database.transactions.create_index("share_code", unique=True, sparse=True)
-        await database.transactions.create_index("buyer_user_id")
-        await database.transactions.create_index("seller_user_id")
-        await database.transactions.create_index("buyer_email")
-        await database.transactions.create_index("seller_email")
-        await database.transactions.create_index("tradesafe_id", sparse=True)
-        await database.transactions.create_index("transaction_state")
-        await database.transactions.create_index("last_webhook_at")
-        await database.transactions.create_index("created_at")
+        # Transactions collection indexes
+        await db.transactions.create_index("transaction_id", unique=True)
+        await db.transactions.create_index("share_code", unique=True, sparse=True)
+        await db.transactions.create_index("tradesafe_id", sparse=True)
+        await db.transactions.create_index("buyer_email")
+        await db.transactions.create_index("seller_email")
+        await db.transactions.create_index("buyer_user_id")
+        await db.transactions.create_index("seller_user_id")
+        await db.transactions.create_index("transaction_state")
+        await db.transactions.create_index("created_at")
+        await db.transactions.create_index("last_webhook_at")
         
-        # Session indexes
-        await database.user_sessions.create_index("session_token", unique=True)
-        await database.user_sessions.create_index("user_id")
-        await database.user_sessions.create_index("expires_at")
+        # User sessions
+        await db.user_sessions.create_index("session_token", unique=True)
+        await db.user_sessions.create_index("user_id")
+        await db.user_sessions.create_index("expires_at")
         
-        # Webhook events indexes
-        await database.webhook_events.create_index("event_id", unique=True)
-        await database.webhook_events.create_index("transaction_id")
-        await database.webhook_events.create_index("timestamp")
-        await database.webhook_events.create_index([("status", 1), ("timestamp", -1)])
+        # Disputes collection
+        await db.disputes.create_index("dispute_id", unique=True)
+        await db.disputes.create_index("transaction_id")
+        await db.disputes.create_index("raised_by_user_id")
+        await db.disputes.create_index("status")
         
-        # Email logs indexes
-        await database.email_logs.create_index("transaction_id")
-        await database.email_logs.create_index("timestamp")
-        await database.email_logs.create_index([("success", 1), ("timestamp", -1)])
+        # Webhook events collection
+        await db.webhook_events.create_index("event_id", unique=True)
+        await db.webhook_events.create_index("transaction_id")
+        await db.webhook_events.create_index("timestamp")
+        await db.webhook_events.create_index([("status", 1), ("timestamp", -1)])
         
-        # Disputes indexes
-        await database.disputes.create_index("dispute_id", unique=True)
-        await database.disputes.create_index("transaction_id")
-        await database.disputes.create_index("status")
+        # Email logs collection
+        await db.email_logs.create_index("transaction_id")
+        await db.email_logs.create_index("timestamp")
+        await db.email_logs.create_index([("success", 1), ("timestamp", -1)])
         
-        # Alerts indexes
-        await database.alerts.create_index("alert_type")
-        await database.alerts.create_index("timestamp")
-        await database.alerts.create_index([("resolved", 1), ("timestamp", -1)])
+        # Reports collection
+        await db.reports.create_index("report_id", unique=True)
+        await db.reports.create_index("reporter_user_id")
+        await db.reports.create_index("reported_user_id")
         
-        # OTP indexes
-        await database.phone_otps.create_index("user_id")
-        await database.phone_otps.create_index("expires_at")
+        # Phone OTPs
+        await db.phone_otps.create_index("user_id", unique=True)
+        
+        # Alerts
+        await db.alerts.create_index("alert_id", unique=True)
+        await db.alerts.create_index("resolved")
+        await db.alerts.create_index("timestamp")
+        
+        # Admin actions audit trail
+        await db.admin_actions.create_index("timestamp")
+        await db.admin_actions.create_index("admin_email")
         
         logger.info("Database indexes created successfully")
         
     except Exception as e:
-        logger.error(f"Failed to create indexes: {e}")
+        logger.error(f"Failed to create database indexes: {e}")
+        raise
+
+
+# Dependency for FastAPI
+async def get_db() -> AsyncIOMotorDatabase:
+    """FastAPI dependency for database access"""
+    return get_database()

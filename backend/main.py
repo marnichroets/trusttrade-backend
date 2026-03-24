@@ -97,16 +97,9 @@ app = FastAPI(
 )
 
 # Add CORS middleware
-# Note: When using credentials, we cannot use '*' - must specify actual origins
+# Origins are read from CORS_ORIGINS environment variable
+# For production deployment, set CORS_ORIGINS to your frontend domain(s)
 cors_origins = settings.CORS_ORIGINS
-if cors_origins == ['*'] or '*' in cors_origins:
-    # Replace wildcard with actual frontend URL for credentials support
-    cors_origins = [
-        "https://67282134-4e91-40b3-894e-4c730970c014.preview.emergentagent.com",
-        "http://localhost:3000",
-        "https://trusttradesa.co.za",
-        "https://www.trusttradesa.co.za"
-    ]
 
 app.add_middleware(
     CORSMiddleware,

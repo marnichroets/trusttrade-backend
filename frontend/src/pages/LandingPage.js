@@ -26,13 +26,13 @@ function LandingPage() {
       {/* Navigation */}
       <nav className="bg-white sticky top-0 z-50 border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-10 object-contain" />
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" onClick={handleLogin} className="text-slate-700 hover:text-blue-600">
+          <div className="flex justify-between items-center h-20">
+            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-12 object-contain" />
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" onClick={handleLogin} className="text-slate-700 hover:text-blue-600 font-medium">
                 Log In
               </Button>
-              <Button onClick={handleLogin} className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Button onClick={handleLogin} className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6">
                 Sign Up
               </Button>
             </div>
@@ -41,14 +41,14 @@ function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className="bg-gradient-to-b from-blue-50 to-white py-20 px-4">
+      <section className="bg-gradient-to-b from-blue-50 to-white py-24 px-4">
         <div className="max-w-7xl mx-auto text-center">
-          <div className="bg-white rounded-2xl p-6 inline-block shadow-lg mb-6">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-20 md:h-24 object-contain" />
+          <div className="bg-white rounded-3xl p-8 inline-block shadow-xl mb-8 border border-slate-100">
+            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-32 md:h-40 object-contain" />
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">TrustTrade</h1>
-          <p className="text-xl text-blue-600 font-medium mb-4">Secure Escrow Protection for South Africa</p>
-          <p className="text-lg text-slate-600 max-w-2xl mx-auto mb-10">
+          <h1 className="text-5xl md:text-6xl font-bold text-slate-900 mb-6">TrustTrade</h1>
+          <p className="text-2xl text-blue-600 font-semibold mb-4">Secure Escrow Protection for South Africa</p>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto mb-12">
             Protect your money when buying or selling online. Funds held securely until delivery is confirmed.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -168,12 +168,12 @@ function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="bg-white py-12 px-4 border-t border-slate-200">
+      <footer className="bg-white py-16 px-4 border-t border-slate-200">
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div className="md:col-span-2">
-              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-12 object-contain mb-3" />
-              <p className="text-slate-500 text-sm">Secure Escrow Protection for South Africa</p>
+              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-16 object-contain mb-4" />
+              <p className="text-slate-500">Secure Escrow Protection for South Africa</p>
             </div>
             <div>
               <h4 className="text-sm font-semibold text-slate-900 mb-4">Links</h4>

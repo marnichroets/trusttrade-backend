@@ -102,9 +102,9 @@ function AdminDashboard() {
       <div className="max-w-7xl mx-auto px-4 py-6">
         <Breadcrumbs items={[{ label: 'Admin Dashboard' }]} />
         
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-4">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-14 object-contain" />
+            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-16 object-contain" />
             <div>
               <h1 className="text-3xl font-bold" style={{ color: COLORS.text }}>Admin Dashboard</h1>
               <p style={{ color: COLORS.subtext }} className="mt-1">Platform overview and management</p>

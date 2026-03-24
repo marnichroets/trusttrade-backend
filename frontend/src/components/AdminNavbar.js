@@ -24,12 +24,12 @@ export function AdminNavbar({ user, onLogout }) {
   return (
     <nav className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <div className="flex items-center gap-6">
-            <Link to="/admin" className="flex items-center gap-2">
-              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-10 object-contain" />
-              <span className="text-xs text-blue-600 font-semibold px-2 py-0.5 bg-blue-50 rounded border border-blue-200">Admin</span>
+            <Link to="/admin" className="flex items-center gap-3">
+              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-12 object-contain" />
+              <span className="text-xs text-blue-600 font-semibold px-2 py-1 bg-blue-50 rounded border border-blue-200">Admin</span>
             </Link>
             
             {/* Desktop Nav */}

@@ -216,8 +216,8 @@ export default function AdminMonitoring() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-200">
-              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-10 object-contain" />
+            <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
+              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-14 object-contain" />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">System Monitoring</h1>

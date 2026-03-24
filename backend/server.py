@@ -6,6 +6,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
@@ -23,7 +24,8 @@ from email_service import (
     send_dispute_opened_email,
     send_verification_status_email,
     send_dispute_resolved_email,
-    send_refund_email
+    send_refund_email,
+    send_immediate_payment_secured_email
 )
 from tradesafe_service import (
     get_tradesafe_token,
@@ -53,6 +55,18 @@ from sms_service import (
     create_otp_record,
     is_otp_valid,
     can_resend_otp
+)
+from transaction_state import (
+    TransactionState as TrustTradeState,
+    is_valid_transition,
+    get_auto_release_hours,
+    calculate_auto_release_time,
+    get_ui_status,
+    map_tradesafe_state
+)
+from background_jobs import (
+    is_event_processed,
+    mark_event_processed
 )
 
 ROOT_DIR = Path(__file__).parent
@@ -4483,6 +4497,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Background task reference
+background_task = None
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background jobs on application startup"""
+    global background_task
+    
+    # Create webhook_logs collection index if not exists
+    try:
+        await db.webhook_logs.create_index("transaction_id")
+        await db.webhook_logs.create_index("timestamp")
+        await db.webhook_logs.create_index([("status", 1), ("timestamp", -1)])
+        logger.info("Webhook logs indexes created")
+    except Exception as e:
+        logger.error(f"Failed to create indexes: {e}")
+    
+    # Start background jobs
+    try:
+        import tradesafe_service
+        from background_jobs import start_background_jobs
+        background_task = asyncio.create_task(start_background_jobs(db, tradesafe_service, interval_minutes=3))
+        logger.info("Background jobs started")
+    except Exception as e:
+        logger.error(f"Failed to start background jobs: {e}")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    global background_task
+    if background_task:
+        background_task.cancel()
     client.close()

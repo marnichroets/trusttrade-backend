@@ -4,12 +4,9 @@ import DashboardLayout from '../components/DashboardLayout';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import axios from 'axios';
+import api from '../utils/api';
 import { Plus, FileText, Search } from 'lucide-react';
 import { Input } from '../components/ui/input';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 function TransactionsList() {
   const [user, setUser] = useState(null);
@@ -30,8 +27,8 @@ function TransactionsList() {
   const fetchData = async () => {
     try {
       const [userRes, transactionsRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/transactions`, { withCredentials: true })
+        api.get('/auth/me'),
+        api.get('/transactions')
       ]);
 
       setUser(userRes.data);

@@ -27,7 +27,10 @@ async def get_user_from_token(request: Request, db: AsyncIOMotorDatabase) -> Opt
             session_token = auth_header.split(" ")[1]
     
     if not session_token:
+        logger.debug("No session token found in cookies or Authorization header")
         return None
+    
+    logger.debug(f"Looking up session token: {session_token[:20]}...")
     
     # Find session
     session_doc = await db.user_sessions.find_one(
@@ -36,17 +39,30 @@ async def get_user_from_token(request: Request, db: AsyncIOMotorDatabase) -> Opt
     )
     
     if not session_doc:
+        logger.info(f"Session not found for token: {session_token[:30]}...")
         return None
+    
+    logger.info(f"Session found for user_id: {session_doc.get('user_id')}")
     
     # Check expiry
     expires_at = session_doc["expires_at"]
     if isinstance(expires_at, str):
-        expires_at = datetime.fromisoformat(expires_at)
+        # Handle different date formats
+        expires_str = expires_at.replace('Z', '+00:00')
+        try:
+            expires_at = datetime.fromisoformat(expires_str)
+        except ValueError:
+            # Fallback for formats without timezone
+            expires_at = datetime.strptime(expires_at[:19], '%Y-%m-%dT%H:%M:%S')
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     
     if expires_at < datetime.now(timezone.utc):
+        logger.info(f"Session expired: {expires_at} < {datetime.now(timezone.utc)}")
         return None
+    
+    logger.info(f"Session valid, fetching user: {session_doc['user_id']}")
     
     # Get user
     user_doc = await db.users.find_one(
@@ -55,8 +71,10 @@ async def get_user_from_token(request: Request, db: AsyncIOMotorDatabase) -> Opt
     )
     
     if not user_doc:
+        logger.info(f"User not found for user_id: {session_doc['user_id']}")
         return None
     
+    logger.info(f"User found: {user_doc.get('email')}")
     return User(**user_doc)
 
 

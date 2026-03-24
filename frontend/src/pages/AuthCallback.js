@@ -44,6 +44,12 @@ function AuthCallback() {
         const user = response.data;
         console.log('AuthCallback: User authenticated:', user.email);
         
+        // Store session token in localStorage as fallback for cookie issues
+        if (user.session_token) {
+          localStorage.setItem('session_token', user.session_token);
+          console.log('AuthCallback: Session token stored in localStorage');
+        }
+        
         toast.success(`Welcome, ${user.name || user.email}!`);
 
         // Check for redirect paths in order of priority

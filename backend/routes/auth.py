@@ -107,9 +107,12 @@ async def exchange_session(request: SessionExchangeRequest, response: Response):
             max_age=7*24*60*60
         )
         
-        # Return user data
+        # Return user data with session token for localStorage fallback
         user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-        return User(**user)
+        user_data = User(**user).model_dump()
+        user_data["session_token"] = session_token  # Include token for localStorage fallback
+        logger.info(f"Session exchange complete for {email}, returning session_token: {session_token[:20]}...")
+        return user_data
     
     except Exception as e:
         logger.error(f"Session exchange error: {str(e)}")
@@ -121,11 +124,19 @@ async def get_current_user(request: Request):
     """Get current authenticated user"""
     db = get_database()
     
+    # Debug: log the cookies
+    cookies = request.cookies
+    logger.info(f"Auth me called - cookies: {list(cookies.keys())}")
+    
     try:
         user = await get_user_from_token(request, db)
         if not user:
+            logger.info("Auth me - no user from token")
             raise HTTPException(status_code=401, detail="Not authenticated")
+        logger.info(f"Auth me - user found: {user.email}")
         return user
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Auth me error: {str(e)}")
         raise HTTPException(status_code=401, detail="Not authenticated")

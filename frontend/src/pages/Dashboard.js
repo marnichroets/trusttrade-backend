@@ -4,11 +4,8 @@ import DashboardLayout from '../components/DashboardLayout';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import axios from 'axios';
+import api from '../utils/api';
 import { Plus, FileText, AlertCircle, TrendingUp, ShieldCheck, Wallet, Users, Lock, Eye, EyeOff, CreditCard, ArrowRight, Clock, Shield } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 // Helper to format currency with security (rounded for users)
 const formatSecureAmount = (amount, isAdmin = false) => {
@@ -44,11 +41,11 @@ function Dashboard() {
   const fetchDashboardData = async () => {
     try {
       const [userRes, transactionsRes, disputesRes, statsRes, walletRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/transactions`, { withCredentials: true }),
-        axios.get(`${API}/disputes`, { withCredentials: true }),
-        axios.get(`${API}/platform/stats`, { withCredentials: true }),
-        axios.get(`${API}/wallet`, { withCredentials: true }).catch(() => ({ data: null }))
+        api.get('/auth/me'),
+        api.get('/transactions'),
+        api.get('/disputes'),
+        api.get('/platform/stats'),
+        api.get('/wallet').catch(() => ({ data: null }))
       ]);
 
       setUser(userRes.data);
@@ -61,8 +58,8 @@ function Dashboard() {
       if (userRes.data.is_admin) {
         try {
           const [adminStatsRes, escrowDetailsRes] = await Promise.all([
-            axios.get(`${API}/admin/stats`, { withCredentials: true }),
-            axios.get(`${API}/admin/escrow-details`, { withCredentials: true }).catch(() => ({ data: null }))
+            api.get('/admin/stats'),
+            api.get('/admin/escrow-details').catch(() => ({ data: null }))
           ]);
           setAdminData({
             ...adminStatsRes.data,

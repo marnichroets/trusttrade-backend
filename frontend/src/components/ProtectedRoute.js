@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
-
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+import api from '../utils/api';
 
 function ProtectedRoute({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
@@ -12,12 +10,20 @@ function ProtectedRoute({ children }) {
   useEffect(() => {
     if (window.location.hash?.includes('session_id=')) return;
 
-    axios.get(`${API}/auth/me`, { withCredentials: true })
+    const token = localStorage.getItem('session_token');
+    console.log('ProtectedRoute: Checking auth, token exists:', !!token);
+
+    api.get('/auth/me')
       .then(res => {
+        console.log('ProtectedRoute: Auth success, user:', res.data?.email);
         if (res.data?.user_id) setIsAuthenticated(true);
         else setIsAuthenticated(false);
       })
-      .catch(() => setIsAuthenticated(false));
+      .catch((err) => {
+        console.log('ProtectedRoute: Auth failed:', err.response?.status);
+        localStorage.removeItem('session_token');
+        setIsAuthenticated(false);
+      });
   }, [location.pathname]);
 
   if (isAuthenticated === null) {
@@ -29,6 +35,7 @@ function ProtectedRoute({ children }) {
   }
 
   if (!isAuthenticated) {
+    console.log('ProtectedRoute: Not authenticated, redirecting to /');
     navigate('/', { replace: true });
     return null;
   }

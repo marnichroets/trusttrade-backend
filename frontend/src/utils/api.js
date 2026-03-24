@@ -12,25 +12,34 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('session_token');
+    console.log('[API] Request interceptor:', config.method?.toUpperCase(), config.url);
+    console.log('[API] Token from localStorage:', token ? token.substring(0, 20) + '...' : 'NULL');
+    
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('[API] Authorization header added');
+    } else {
+      console.log('[API] No token - request will use cookies only');
     }
     return config;
   },
   (error) => {
+    console.error('[API] Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
 // Response interceptor to handle auth errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('[API] Response:', response.status, response.config.url);
+    return response;
+  },
   (error) => {
+    console.error('[API] Response error:', error.response?.status, error.config?.url);
     if (error.response?.status === 401) {
-      // Clear invalid token
+      console.log('[API] 401 Unauthorized - clearing localStorage token');
       localStorage.removeItem('session_token');
-      // Optionally redirect to login
-      // window.location.href = '/';
     }
     return Promise.reject(error);
   }

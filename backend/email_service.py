@@ -317,15 +317,21 @@ def get_payment_received_email(
 ) -> tuple[str, str]:
     """Generate payment received email content"""
     
-    subject = f"{share_code} - Payment secured by TrustTrade"
+    subject = f"{share_code} — Payment Secured by TrustTrade"
     
     if role.lower() == "seller":
         intro_text = "Great news! Payment has been received and is now secured in escrow. Please deliver the item to the buyer. Once they confirm delivery, the funds will be released to your account."
     else:
-        intro_text = "Your payment has been received and is now held securely in escrow. The seller has been notified to deliver your item."
+        intro_text = "<strong>Your payment has been secured safely in TrustTrade Escrow.</strong><br><br>Your funds are protected until you confirm delivery."
     
-    # Add note about payment processor emails
-    processor_note = "<p style='font-size: 12px; color: #6c757d; margin-top: 16px; padding: 12px; background-color: #f8f9fa; border-radius: 6px;'><strong>Note:</strong> You may also receive a payment confirmation from our secure payment processor — this is normal and expected. Your transaction is protected by TrustTrade.</p>"
+    # Add note about payment processor emails - prominent placement
+    processor_note = """
+    <div style='margin-top: 20px; padding: 16px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;'>
+        <p style='font-size: 13px; color: #92400e; margin: 0; font-weight: 500;'>
+            <strong>Note:</strong> You may also receive a separate payment notification from our secure payment processor — this is completely normal and expected as part of our security process.
+        </p>
+    </div>
+    """
     
     details = {
         "Reference": share_code,
@@ -349,6 +355,71 @@ def get_payment_received_email(
     return subject, html_content
 
 
+# Priority email - send IMMEDIATELY when payment received (before TradeSafe email)
+def get_immediate_payment_secured_email(
+    recipient_name: str,
+    share_code: str,
+    item_description: str,
+    amount: float
+) -> tuple[str, str]:
+    """
+    Generate IMMEDIATE payment secured email for buyer.
+    This email is sent the MOMENT payment is confirmed to arrive before TradeSafe's email.
+    """
+    
+    subject = f"{share_code} — Payment Secured by TrustTrade"
+    
+    intro_html = """
+    <p style='font-size: 18px; color: #10b981; font-weight: 700; margin: 0 0 16px 0;'>Your payment has been secured safely in TrustTrade Escrow.</p>
+    <p style='font-size: 15px; color: #212529; margin: 0 0 20px 0; line-height: 1.6;'>Your funds are protected until you confirm delivery.</p>
+    """
+    
+    # Prominent note about TradeSafe email - this is key!
+    processor_note = """
+    <div style='margin: 24px 0; padding: 16px 20px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px;'>
+        <p style='font-size: 14px; color: #92400e; margin: 0; line-height: 1.5;'>
+            <strong>Note:</strong> You may also receive a separate payment notification from our secure payment processor — this is completely normal and expected.
+        </p>
+    </div>
+    """
+    
+    details = {
+        "Reference": share_code,
+        "Item": item_description,
+        "Amount": f"R {amount:,.2f}",
+        "Status": "Funds Secured in Escrow"
+    }
+    
+    html_content = get_base_email_template(
+        heading="Payment Secured",
+        greeting_name=recipient_name,
+        intro_text=intro_html + processor_note,
+        details=details,
+        cta_text="View Transaction",
+        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        show_how_it_works=True,
+        status_badge="Payment Secured",
+        status_color="#10b981"
+    )
+    
+    return subject, html_content
+
+
+async def send_immediate_payment_secured_email(
+    to_email: str,
+    to_name: str,
+    share_code: str,
+    item_description: str,
+    amount: float
+) -> bool:
+    """
+    Send IMMEDIATE payment secured email to buyer.
+    Called the MOMENT webhook receives FUNDS_RECEIVED - must be fast!
+    """
+    subject, html = get_immediate_payment_secured_email(to_name, share_code, item_description, amount)
+    return await send_email(to_email, to_name, subject, html)
+
+
 def get_delivery_started_email(
     recipient_name: str,
     share_code: str,
@@ -357,9 +428,16 @@ def get_delivery_started_email(
 ) -> tuple[str, str]:
     """Generate delivery started email for buyer"""
     
-    subject = f"{share_code} - Your item is on its way"
+    subject = f"{share_code} — Your item is on its way"
     
     intro_text = f"Good news! {seller_name} has dispatched your item. Please confirm delivery once you receive it to release the funds to the seller."
+    
+    # Add payment processor note
+    processor_note = """
+    <p style='font-size: 12px; color: #6c757d; margin-top: 16px; padding: 12px; background-color: #f8f9fa; border-radius: 6px;'>
+        <strong>Note:</strong> You may receive a separate notification from our secure payment processor — this is normal and part of our security process.
+    </p>
+    """
     
     details = {
         "Reference": share_code,
@@ -371,7 +449,7 @@ def get_delivery_started_email(
     html_content = get_base_email_template(
         heading="Item Dispatched",
         greeting_name=recipient_name,
-        intro_text=intro_text,
+        intro_text=intro_text + processor_note,
         details=details,
         cta_text="Confirm Delivery",
         cta_link=f"https://trusttradesa.co.za/t/{share_code}",
@@ -430,9 +508,16 @@ def get_funds_released_email(
 ) -> tuple[str, str]:
     """Generate funds released email content"""
     
-    subject = f"{share_code} - Your funds have been released"
+    subject = f"{share_code} — Your funds have been released"
     
     intro_text = "Congratulations! Your funds have been released and will be deposited to your bank account during the next payout window (10:00 or 15:00 daily)."
+    
+    # Add payment processor note
+    processor_note = """
+    <p style='font-size: 12px; color: #6c757d; margin-top: 16px; padding: 12px; background-color: #f8f9fa; border-radius: 6px;'>
+        <strong>Note:</strong> You may receive a separate notification from our secure payment processor — this is normal and part of our security process.
+    </p>
+    """
     
     details = {
         "Reference": share_code,
@@ -445,7 +530,7 @@ def get_funds_released_email(
     html_content = get_base_email_template(
         heading="Funds Released",
         greeting_name=recipient_name,
-        intro_text=intro_text,
+        intro_text=intro_text + processor_note,
         details=details,
         cta_text="View Transaction",
         cta_link=f"https://trusttradesa.co.za/t/{share_code}",

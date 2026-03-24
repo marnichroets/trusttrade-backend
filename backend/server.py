@@ -3318,7 +3318,7 @@ async def get_pending_auto_releases(request: Request):
 # TradeSafe Configuration
 TRADESAFE_CLIENT_ID = os.environ.get("TRADESAFE_CLIENT_ID", "")
 TRADESAFE_CLIENT_SECRET = os.environ.get("TRADESAFE_CLIENT_SECRET", "")
-TRADESAFE_API_URL = os.environ.get("TRADESAFE_API_URL", "https://api-developer.tradesafe.dev/graphql")  # Use production URL when live
+TRADESAFE_API_URL = os.environ.get("TRADESAFE_API_URL", "https://api.tradesafe.co.za/graphql")
 TRADESAFE_AUTH_URL = "https://auth.tradesafe.co.za/oauth/token"
 
 # Store TradeSafe access token (in production use Redis)
@@ -4337,10 +4337,23 @@ async def handle_tradesafe_webhook(request: Request):
     base_url = os.environ.get('FRONTEND_URL', 'https://trusttradesa.co.za')
     
     if new_state == TransactionState.FUNDS_RECEIVED:
-        # Funds secured - notify seller to deliver
+        # Funds secured - send emails IMMEDIATELY (before TradeSafe email arrives!)
         update_data["funds_received_at"] = datetime.now(timezone.utc).isoformat()
         
-        # Email seller
+        # CRITICAL: Send buyer email FIRST - must arrive before TradeSafe email!
+        # Import the immediate email function
+        from email_service import send_immediate_payment_secured_email
+        
+        logger.info(f"FUNDS_RECEIVED: Sending IMMEDIATE payment secured email to buyer {transaction['buyer_email']}")
+        await send_immediate_payment_secured_email(
+            to_email=transaction["buyer_email"],
+            to_name=transaction["buyer_name"],
+            share_code=transaction.get("share_code", transaction["transaction_id"]),
+            item_description=transaction["item_description"],
+            amount=transaction["item_price"]
+        )
+        
+        # Then email seller
         await send_payment_received_email(
             to_email=transaction["seller_email"],
             to_name=transaction["seller_name"],
@@ -4350,28 +4363,7 @@ async def handle_tradesafe_webhook(request: Request):
             role="seller"
         )
         
-        # Email buyer confirmation
-        await send_payment_received_email(
-            to_email=transaction["buyer_email"],
-            to_name=transaction["buyer_name"],
-            share_code=transaction.get("share_code", transaction["transaction_id"]),
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"],
-            role="buyer"
-        )
-        
-        # SMS to seller - funds received, please deliver
-        seller_phone = transaction.get("seller_phone")
-        if seller_phone:
-            try:
-                await send_funds_received_sms(
-                    to_phone=seller_phone,
-                    message=f"TrustTrade: Payment of R{transaction['item_price']:.2f} received and secured! Please deliver '{transaction['item_description'][:30]}...' to the buyer. Ref: {transaction.get('share_code', transaction['transaction_id'])}"
-                )
-            except Exception as e:
-                logger.error(f"Webhook SMS failed (FUNDS_RECEIVED seller): {e}")
-        
-        # SMS to buyer - payment confirmed
+        # SMS to buyer - immediate
         buyer_phone = transaction.get("buyer_phone")
         if buyer_phone:
             try:
@@ -4381,6 +4373,17 @@ async def handle_tradesafe_webhook(request: Request):
                 )
             except Exception as e:
                 logger.error(f"Webhook SMS failed (FUNDS_RECEIVED buyer): {e}")
+        
+        # SMS to seller
+        seller_phone = transaction.get("seller_phone")
+        if seller_phone:
+            try:
+                await send_funds_received_sms(
+                    to_phone=seller_phone,
+                    message=f"TrustTrade: Payment of R{transaction['item_price']:.2f} received and secured! Please deliver '{transaction['item_description'][:30]}...' to the buyer. Ref: {transaction.get('share_code', transaction['transaction_id'])}"
+                )
+            except Exception as e:
+                logger.error(f"Webhook SMS failed (FUNDS_RECEIVED seller): {e}")
     
     elif new_state == TransactionState.INITIATED:
         # Delivery started - notify buyer

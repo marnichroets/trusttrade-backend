@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 TRADESAFE_CLIENT_ID = os.environ.get('TRADESAFE_CLIENT_ID', '')
 TRADESAFE_CLIENT_SECRET = os.environ.get('TRADESAFE_CLIENT_SECRET', '')
 TRADESAFE_AUTH_URL = os.environ.get('TRADESAFE_AUTH_URL', 'https://auth.tradesafe.co.za/oauth/token')
-TRADESAFE_API_URL = os.environ.get('TRADESAFE_API_URL', 'https://api-developer.tradesafe.dev/graphql')
-TRADESAFE_PAYMENT_URL = os.environ.get('TRADESAFE_PAYMENT_URL', 'https://pay-sandbox.tradesafe.dev')
-TRADESAFE_ENV = os.environ.get('TRADESAFE_ENV', 'sandbox')
+TRADESAFE_API_URL = os.environ.get('TRADESAFE_API_URL', 'https://api.tradesafe.co.za/graphql')
+TRADESAFE_PAYMENT_URL = os.environ.get('TRADESAFE_PAYMENT_URL', 'https://pay.tradesafe.co.za')
+TRADESAFE_ENV = os.environ.get('TRADESAFE_ENV', 'production')
 
 # TrustTrade Platform Settings
 MINIMUM_TRANSACTION_AMOUNT = 500.0  # R500 minimum per user requirement

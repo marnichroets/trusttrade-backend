@@ -103,9 +103,12 @@ function AdminDashboard() {
         <Breadcrumbs items={[{ label: 'Admin Dashboard' }]} />
         
         <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-3xl font-bold" style={{ color: COLORS.text }}>Admin Dashboard</h1>
-            <p style={{ color: COLORS.subtext }} className="mt-1">Platform overview and management</p>
+          <div className="flex items-center gap-4">
+            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-14 object-contain" />
+            <div>
+              <h1 className="text-3xl font-bold" style={{ color: COLORS.text }}>Admin Dashboard</h1>
+              <p style={{ color: COLORS.subtext }} className="mt-1">Platform overview and management</p>
+            </div>
           </div>
           <Button onClick={() => { setLoading(true); fetchData(); }} variant="outline" size="sm" disabled={loading}>
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />

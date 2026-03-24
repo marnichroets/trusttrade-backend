@@ -40,7 +40,7 @@ function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold text-white">TrustTrade</span>
+              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-10 object-contain" />
             </div>
             <div className="flex items-center gap-3">
               <Button
@@ -66,6 +66,7 @@ function LandingPage() {
       {/* Hero Section - Dark Navy */}
       <section className="bg-[#1a2942] py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center">
+          <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-20 md:h-24 mx-auto mb-6 object-contain" />
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-tight mb-4">
             TrustTrade
           </h1>
@@ -210,8 +211,8 @@ function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div className="md:col-span-2">
-              <h3 className="text-2xl font-bold text-white mb-2">TrustTrade</h3>
-              <p className="text-white/60 text-sm">Secure Escrow Protection</p>
+              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-12 object-contain mb-2" />
+              <p className="text-white/60 text-sm">Secure Escrow Protection for South Africa</p>
             </div>
             <div>
               <h4 className="text-sm font-semibold text-white mb-4">Links</h4>

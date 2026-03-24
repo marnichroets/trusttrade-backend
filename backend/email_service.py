@@ -97,6 +97,9 @@ async def send_email(
         return False
 
 
+# Logo URL for emails
+EMAIL_LOGO_URL = "https://customer-assets.emergentagent.com/job_trust-trade-pay/artifacts/g0wqdpup_TrustTrade%20Logo.png"
+
 # ============ BASE EMAIL TEMPLATE ============
 
 def get_base_email_template(
@@ -209,9 +212,8 @@ def get_base_email_template(
                         
                         <!-- Header -->
                         <tr>
-                            <td style="background-color: {BRAND_NAVY}; padding: 30px 24px; text-align: center; border-radius: 8px 8px 0 0;">
-                                <h1 style="margin: 0 0 8px 0; font-size: 24px; font-weight: 700; color: white; letter-spacing: -0.5px;">TrustTrade</h1>
-                                <p style="margin: 0; font-size: 13px; color: rgba(255,255,255,0.8); font-weight: 400;">Secure Escrow Protection</p>
+                            <td style="background-color: {BRAND_NAVY}; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
+                                <img src="{EMAIL_LOGO_URL}" alt="TrustTrade" style="height: 40px; max-width: 200px; display: block; margin: 0 auto;">
                             </td>
                         </tr>
                         

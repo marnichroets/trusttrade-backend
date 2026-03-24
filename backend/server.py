@@ -4744,6 +4744,80 @@ async def get_admin_actions(request: Request, limit: int = 50):
     return {"actions": actions, "count": len(actions)}
 
 
+# ============ ALERT SYSTEM ENDPOINTS ============
+
+@api_router.get("/admin/alerts")
+async def get_alerts(request: Request, hours: int = 24, limit: int = 100, active_only: bool = False):
+    """Get alerts for the admin dashboard"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from alert_service import get_active_alerts, get_all_alerts, get_alert_stats
+    
+    if active_only:
+        alerts = await get_active_alerts(db, limit)
+    else:
+        alerts = await get_all_alerts(db, hours, limit)
+    
+    stats = await get_alert_stats(db, hours)
+    
+    return {
+        "alerts": alerts,
+        "stats": stats,
+        "count": len(alerts)
+    }
+
+
+@api_router.post("/admin/alerts/{alert_id}/resolve")
+async def resolve_alert_endpoint(alert_id: str, request: Request):
+    """Mark an alert as resolved"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from alert_service import resolve_alert
+    
+    success = await resolve_alert(db, alert_id, user.email)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    
+    # Log admin action
+    await db.admin_actions.insert_one({
+        "admin_email": user.email,
+        "admin_name": user.name,
+        "action": "resolve_alert",
+        "alert_id": alert_id,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    return {"success": True, "alert_id": alert_id, "resolved_by": user.email}
+
+
+@api_router.post("/admin/alerts/test")
+async def test_alert_endpoint(request: Request):
+    """Send a test alert (for testing purposes)"""
+    user = await get_user_from_token(request)
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from alert_service import trigger_alert, AlertType
+    
+    # Get admin email from environment or use user's email
+    admin_email = os.environ.get('ADMIN_ALERT_EMAIL', user.email)
+    
+    result = await trigger_alert(
+        db=db,
+        alert_type=AlertType.SYSTEM_ERROR,
+        message="This is a test alert to verify the alert system is working correctly.",
+        admin_email=admin_email,
+        details={"triggered_by": user.email, "test": True}
+    )
+    
+    return {"success": True, "result": result}
+
+
 # Include the router in the main app
 app.include_router(api_router)
 

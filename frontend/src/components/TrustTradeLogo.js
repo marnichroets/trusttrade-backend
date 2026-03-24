@@ -1,58 +1,42 @@
 import { Link } from 'react-router-dom';
-import { Shield } from 'lucide-react';
 
-// TrustTrade Logo Component - Use everywhere for brand consistency
-export function TrustTradeLogo({ variant = 'default', size = 'md', linkTo = '/', showText = true, clickable = true }) {
+// TrustTrade Logo Component - Use the actual brand logo everywhere
+export function TrustTradeLogo({ variant = 'default', size = 'md', linkTo = '/', showText = false, clickable = true }) {
   const sizes = {
-    sm: { height: 24, textSize: 'text-lg' },
-    md: { height: 32, textSize: 'text-xl' },
-    lg: { height: 48, textSize: 'text-2xl' },
-    xl: { height: 64, textSize: 'text-3xl' }
+    xs: { height: 20 },
+    sm: { height: 28 },
+    md: { height: 36 },
+    lg: { height: 48 },
+    xl: { height: 64 },
+    xxl: { height: 80 }
   };
   
-  const { height, textSize } = sizes[size] || sizes.md;
+  const { height } = sizes[size] || sizes.md;
   
-  const LogoContent = () => (
-    <div className="flex items-center gap-2">
-      <div 
-        className="flex items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 text-white"
-        style={{ width: `${height}px`, height: `${height}px` }}
-      >
-        <Shield className="w-5 h-5" style={{ width: `${height * 0.6}px`, height: `${height * 0.6}px` }} />
-      </div>
-      {showText && (
-        <span className={`font-bold ${textSize} ${variant === 'white' ? 'text-white' : 'text-slate-900'}`}>
-          TrustTrade
-        </span>
-      )}
-    </div>
+  const LogoImage = () => (
+    <img 
+      src="/trusttrade-logo.png" 
+      alt="TrustTrade" 
+      style={{ height: `${height}px` }}
+      className="object-contain"
+    />
   );
   
-  // For dark backgrounds (navbar, footer)
-  if (variant === 'white') {
-    if (!clickable) {
-      return <LogoContent />;
-    }
-    return (
-      <Link to={linkTo} className="flex items-center gap-2 hover:opacity-90 transition-opacity">
-        <LogoContent />
-      </Link>
-    );
-  }
-  
-  // Default - colored logo
   if (!clickable) {
-    return <LogoContent />;
+    return <LogoImage />;
   }
   
   return (
-    <Link to={linkTo} className="flex items-center gap-2 hover:opacity-90 transition-opacity">
-      <LogoContent />
+    <Link to={linkTo} className="flex items-center hover:opacity-90 transition-opacity">
+      <LogoImage />
     </Link>
   );
 }
 
-// Logo for emails (hosted URL)
-export const EMAIL_LOGO_URL = "https://trust-trade-pay.preview.emergentagent.com/images/trusttrade-logo.png";
+// Logo URL for emails (hosted publicly)
+export const EMAIL_LOGO_URL = "https://customer-assets.emergentagent.com/job_trust-trade-pay/artifacts/g0wqdpup_TrustTrade%20Logo.png";
+
+// Fallback URL for emails in case the primary doesn't work
+export const EMAIL_LOGO_URL_FALLBACK = "https://trust-trade-pay.preview.emergentagent.com/trusttrade-logo.png";
 
 export default TrustTradeLogo;

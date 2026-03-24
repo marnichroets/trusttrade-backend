@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminNavbar from '../components/AdminNavbar';
-import TrustTradeLogo from '../components/TrustTradeLogo';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -14,7 +13,7 @@ import {
   Activity, AlertTriangle, CheckCircle, XCircle, Clock, 
   RefreshCw, Mail, Webhook, Server, TrendingUp, Users,
   AlertOctagon, RotateCcw, Send, Edit, Eye, Shield,
-  Loader2, ChevronRight, ExternalLink
+  Loader2, ChevronRight, ExternalLink, Bell, BellOff
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -27,6 +26,8 @@ export default function AdminMonitoring() {
   const [webhookEvents, setWebhookEvents] = useState([]);
   const [emailLogs, setEmailLogs] = useState([]);
   const [adminActions, setAdminActions] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [alertStats, setAlertStats] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -42,17 +43,20 @@ export default function AdminMonitoring() {
     try {
       setRefreshing(true);
       
-      const [dashboardRes, webhooksRes, emailsRes, actionsRes] = await Promise.all([
+      const [dashboardRes, webhooksRes, emailsRes, actionsRes, alertsRes] = await Promise.all([
         axios.get(`${API_URL}/api/admin/monitoring/dashboard`, { withCredentials: true }),
         axios.get(`${API_URL}/api/admin/monitoring/webhook-events?limit=100`, { withCredentials: true }),
         axios.get(`${API_URL}/api/admin/monitoring/email-logs?limit=100`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/admin/monitoring/actions?limit=50`, { withCredentials: true })
+        axios.get(`${API_URL}/api/admin/monitoring/actions?limit=50`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/admin/alerts?hours=24&limit=50`, { withCredentials: true })
       ]);
       
       setDashboard(dashboardRes.data);
       setWebhookEvents(webhooksRes.data.events || []);
       setEmailLogs(emailsRes.data.logs || []);
       setAdminActions(actionsRes.data.actions || []);
+      setAlerts(alertsRes.data.alerts || []);
+      setAlertStats(alertsRes.data.stats || null);
       setLastRefresh(new Date());
       
       if (showToast) {
@@ -134,6 +138,32 @@ export default function AdminMonitoring() {
     }
   };
 
+  const handleResolveAlert = async (alertId) => {
+    try {
+      setActionLoading(true);
+      await axios.post(`${API_URL}/api/admin/alerts/${alertId}/resolve`, {}, { withCredentials: true });
+      toast.success('Alert resolved');
+      fetchDashboardData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to resolve alert');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleTestAlert = async () => {
+    try {
+      setActionLoading(true);
+      await axios.post(`${API_URL}/api/admin/alerts/test`, {}, { withCredentials: true });
+      toast.success('Test alert sent! Check your email.');
+      fetchDashboardData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to send test alert');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const getHealthStatusColor = (status) => {
     switch (status) {
       case 'healthy': return 'bg-emerald-500';
@@ -186,7 +216,7 @@ export default function AdminMonitoring() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <TrustTradeLogo size="md" />
+            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-12 object-contain" />
             <div>
               <h1 className="text-2xl font-bold text-slate-900">System Monitoring</h1>
               <p className="text-sm text-slate-500">Real-time production reliability dashboard</p>
@@ -325,13 +355,120 @@ export default function AdminMonitoring() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
+            <TabsTrigger value="alerts" data-testid="tab-alerts" className="relative">
+              Alerts
+              {alerts.filter(a => !a.resolved).length > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs text-white flex items-center justify-center">
+                  {alerts.filter(a => !a.resolved).length}
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="webhooks" data-testid="tab-webhooks">Webhooks</TabsTrigger>
             <TabsTrigger value="emails" data-testid="tab-emails">Emails</TabsTrigger>
-            <TabsTrigger value="stuck" data-testid="tab-stuck">Stuck Transactions</TabsTrigger>
-            <TabsTrigger value="actions" data-testid="tab-actions">Admin Actions</TabsTrigger>
+            <TabsTrigger value="stuck" data-testid="tab-stuck">Stuck</TabsTrigger>
+            <TabsTrigger value="actions" data-testid="tab-actions">Actions</TabsTrigger>
           </TabsList>
+
+          {/* Alerts Tab */}
+          <TabsContent value="alerts">
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-red-600" />
+                  <h3 className="font-semibold text-lg">Critical Alerts</h3>
+                </div>
+                <div className="flex items-center gap-3">
+                  {alertStats && (
+                    <div className="text-sm text-slate-600">
+                      <span className="font-medium text-red-600">{alertStats.unresolved}</span> unresolved / 
+                      <span className="font-medium ml-1">{alertStats.total_24h}</span> total (24h)
+                    </div>
+                  )}
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleTestAlert}
+                    disabled={actionLoading}
+                  >
+                    Test Alert
+                  </Button>
+                </div>
+              </div>
+              
+              {alerts.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <BellOff className="w-12 h-12 mx-auto mb-3 text-emerald-500" />
+                  <p className="font-medium">No alerts</p>
+                  <p className="text-sm">Everything is running smoothly</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {alerts.map((alert, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`p-4 rounded-lg border ${
+                        alert.resolved 
+                          ? 'bg-slate-50 border-slate-200' 
+                          : alert.priority === 'CRITICAL' 
+                            ? 'bg-red-50 border-red-200' 
+                            : 'bg-amber-50 border-amber-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            {alert.priority === 'CRITICAL' && !alert.resolved && (
+                              <AlertOctagon className="w-4 h-4 text-red-600" />
+                            )}
+                            <Badge className={
+                              alert.resolved 
+                                ? 'bg-slate-100 text-slate-600' 
+                                : alert.priority === 'CRITICAL' 
+                                  ? 'bg-red-100 text-red-800' 
+                                  : 'bg-amber-100 text-amber-800'
+                            }>
+                              {alert.alert_type?.replace(/_/g, ' ').toUpperCase()}
+                            </Badge>
+                            {alert.resolved && (
+                              <Badge className="bg-emerald-100 text-emerald-800">
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Resolved
+                              </Badge>
+                            )}
+                            {alert.email_sent && (
+                              <Badge variant="outline" className="text-xs">
+                                <Mail className="w-3 h-3 mr-1" />
+                                Email Sent
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-slate-700 mb-2">{alert.message}</p>
+                          <div className="flex items-center gap-4 text-xs text-slate-500">
+                            {alert.share_code && <span>Ref: {alert.share_code}</span>}
+                            <span>{getTimeSince(alert.timestamp)}</span>
+                            {alert.resolved_by && <span>Resolved by: {alert.resolved_by}</span>}
+                          </div>
+                        </div>
+                        {!alert.resolved && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => handleResolveAlert(alert.alert_id || alert._id)}
+                            disabled={actionLoading}
+                          >
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Resolve
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </TabsContent>
 
           {/* Overview Tab */}
           <TabsContent value="overview">

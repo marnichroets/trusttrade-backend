@@ -345,11 +345,16 @@ async def process_single_auto_release(
 
 async def check_webhook_health(db: AsyncIOMotorDatabase) -> Dict[str, Any]:
     """
-    Check for webhook processing issues and alert admin.
+    Check for webhook processing issues and trigger alerts.
     """
     logger.info("=== Checking webhook health ===")
     
     from datetime import timedelta
+    from alert_service import trigger_alert, AlertType
+    import os
+    
+    # Get admin email for alerts
+    admin_email = os.environ.get('ADMIN_ALERT_EMAIL', '')
     
     summary = {
         "failed_webhooks_24h": 0,
@@ -359,6 +364,8 @@ async def check_webhook_health(db: AsyncIOMotorDatabase) -> Dict[str, Any]:
     
     try:
         cutoff_24h = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        cutoff_10min = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+        cutoff_5min = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
         
         # Count failed webhooks
         summary["failed_webhooks_24h"] = await db.webhook_events.count_documents({
@@ -372,17 +379,63 @@ async def check_webhook_health(db: AsyncIOMotorDatabase) -> Dict[str, Any]:
             "timestamp": {"$gte": cutoff_24h}
         })
         
-        # Count stuck transactions (no update in 4 hours while in intermediate state)
-        cutoff_4h = (datetime.now(timezone.utc) - timedelta(hours=4)).isoformat()
+        # Count stuck transactions (no update in 10 minutes while in active state)
         summary["stuck_transactions"] = await db.transactions.count_documents({
             "transaction_state": {"$in": ["AWAITING_PAYMENT", "PAYMENT_SECURED", "DELIVERY_IN_PROGRESS"]},
             "$or": [
-                {"last_webhook_at": {"$lt": cutoff_4h}},
-                {"last_webhook_at": {"$exists": False}}
+                {"last_webhook_at": {"$lt": cutoff_10min}},
+                {"last_webhook_at": {"$exists": False}, "updated_at": {"$lt": cutoff_10min}},
+                {"last_webhook_at": {"$exists": False}, "updated_at": {"$exists": False}, "created_at": {"$lt": cutoff_10min}}
             ]
         })
         
-        # Log warnings if issues found
+        # Check for payment not synced (payment received but state not updated within 5 min)
+        payment_stuck = await db.transactions.count_documents({
+            "tradesafe_state": {"$in": ["FUNDS_RECEIVED"]},
+            "transaction_state": {"$ne": "PAYMENT_SECURED"},
+            "funds_received_at": {"$lt": cutoff_5min}
+        })
+        
+        # TRIGGER ALERTS for critical issues
+        if admin_email:
+            # Alert for stuck transactions
+            if summary["stuck_transactions"] > 0:
+                stuck_txns = await db.transactions.find({
+                    "transaction_state": {"$in": ["AWAITING_PAYMENT", "PAYMENT_SECURED", "DELIVERY_IN_PROGRESS"]},
+                    "$or": [
+                        {"last_webhook_at": {"$lt": cutoff_10min}},
+                        {"last_webhook_at": {"$exists": False}}
+                    ]
+                }, {"transaction_id": 1, "share_code": 1, "transaction_state": 1}).limit(5).to_list(5)
+                
+                for txn in stuck_txns:
+                    await trigger_alert(
+                        db=db,
+                        alert_type=AlertType.TRANSACTION_STUCK,
+                        message=f"Transaction {txn.get('share_code', txn.get('transaction_id'))} has no updates for >10 minutes. Current state: {txn.get('transaction_state')}",
+                        admin_email=admin_email,
+                        transaction_id=txn.get("transaction_id"),
+                        share_code=txn.get("share_code")
+                    )
+            
+            # Alert for payment not synced
+            if payment_stuck > 0:
+                stuck_payments = await db.transactions.find({
+                    "tradesafe_state": {"$in": ["FUNDS_RECEIVED"]},
+                    "transaction_state": {"$ne": "PAYMENT_SECURED"}
+                }, {"transaction_id": 1, "share_code": 1, "tradesafe_state": 1, "transaction_state": 1}).limit(5).to_list(5)
+                
+                for txn in stuck_payments:
+                    await trigger_alert(
+                        db=db,
+                        alert_type=AlertType.PAYMENT_NOT_SYNCED,
+                        message=f"Payment received for {txn.get('share_code', txn.get('transaction_id'))} but state not updated. TradeSafe: {txn.get('tradesafe_state')}, Our state: {txn.get('transaction_state')}",
+                        admin_email=admin_email,
+                        transaction_id=txn.get("transaction_id"),
+                        share_code=txn.get("share_code")
+                    )
+        
+        # Log warnings
         if summary["failed_webhooks_24h"] > 0:
             logger.warning(f"ALERT: {summary['failed_webhooks_24h']} failed webhooks in last 24h")
         

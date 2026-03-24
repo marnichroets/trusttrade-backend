@@ -29,8 +29,7 @@ export function AdminNavbar({ user, onLogout }) {
           {/* Logo */}
           <div className="flex items-center gap-6">
             <Link to="/admin" className="flex items-center gap-2">
-              <TrustTradeLogo size="sm" showText={false} clickable={false} />
-              <span className="text-white font-bold text-lg">TrustTrade</span>
+              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-8 object-contain" />
               <span className="text-xs text-emerald-400 font-medium px-2 py-0.5 bg-emerald-500/20 rounded">Admin</span>
             </Link>
             

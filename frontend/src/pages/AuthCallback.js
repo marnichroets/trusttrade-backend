@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
@@ -10,33 +10,36 @@ function AuthCallback() {
   const navigate = useNavigate();
   const location = useLocation();
   const hasProcessed = useRef(false);
+  const [status, setStatus] = useState('Processing...');
 
   useEffect(() => {
-    // CRITICAL: Use useRef to prevent double processing in StrictMode
-    if (hasProcessed.current) return;
+    if (hasProcessed.current) {
+      console.log('[AUTH] Already processed, skipping');
+      return;
+    }
     hasProcessed.current = true;
 
     const processSession = async () => {
       try {
-        console.log('[AUTH] Step 1: Processing session...');
-        console.log('[AUTH] Current URL hash:', location.hash);
+        console.log('[AUTH] ========== AUTH CALLBACK START ==========');
+        setStatus('Extracting session...');
         
-        // Extract session_id from URL fragment
         const hash = location.hash;
+        console.log('[AUTH] URL hash:', hash);
+        
         const params = new URLSearchParams(hash.substring(1));
         const sessionId = params.get('session_id');
 
-        console.log('[AUTH] Step 2: Extracted session_id:', sessionId ? sessionId.substring(0, 20) + '...' : 'NULL');
-
         if (!sessionId) {
-          console.error('[AUTH] ERROR: No session ID found in URL');
+          console.error('[AUTH] No session_id in URL');
           toast.error('No session ID found');
           navigate('/', { replace: true });
           return;
         }
 
-        console.log('[AUTH] Step 3: Calling POST /api/auth/session...');
-        
+        console.log('[AUTH] Session ID found:', sessionId.substring(0, 15) + '...');
+        setStatus('Authenticating...');
+
         // Exchange session_id for user data
         const response = await axios.post(
           `${API}/auth/session`,
@@ -44,61 +47,80 @@ function AuthCallback() {
           { withCredentials: true }
         );
 
-        console.log('[AUTH] Step 4: API Response received');
-        console.log('[AUTH] Response status:', response.status);
-        console.log('[AUTH] Response data keys:', Object.keys(response.data));
+        console.log('[AUTH] API Response status:', response.status);
+        console.log('[AUTH] API Response keys:', Object.keys(response.data));
         
-        const user = response.data;
-        console.log('[AUTH] Step 5: User email:', user.email);
-        console.log('[AUTH] Step 5: Has session_token in response:', !!user.session_token);
+        const userData = response.data;
+        const token = userData.session_token;
         
-        // Store session token in localStorage as fallback for cookie issues
-        if (user.session_token) {
-          localStorage.setItem('session_token', user.session_token);
-          console.log('[AUTH] Step 6: Token stored in localStorage');
-          console.log('[AUTH] Verification - localStorage token:', localStorage.getItem('session_token')?.substring(0, 20) + '...');
-        } else {
-          console.error('[AUTH] ERROR: No session_token in API response!');
-          console.log('[AUTH] Full response data:', JSON.stringify(user, null, 2));
+        console.log('[AUTH] User email:', userData.email);
+        console.log('[AUTH] Token received:', token ? 'YES (' + token.substring(0, 15) + '...)' : 'NO!');
+
+        if (!token) {
+          console.error('[AUTH] CRITICAL: No session_token in response!');
+          console.error('[AUTH] Full response:', JSON.stringify(userData));
+          toast.error('Authentication error: No token received');
+          navigate('/', { replace: true });
+          return;
         }
+
+        // Store token in localStorage
+        localStorage.setItem('session_token', token);
         
-        toast.success(`Welcome, ${user.name || user.email}!`);
+        // Also store basic user info for quick access
+        localStorage.setItem('user_data', JSON.stringify({
+          user_id: userData.user_id,
+          email: userData.email,
+          name: userData.name,
+          is_admin: userData.is_admin
+        }));
+        
+        // Verify storage
+        const storedToken = localStorage.getItem('session_token');
+        const storedUser = localStorage.getItem('user_data');
+        
+        console.log('[AUTH] Token stored:', storedToken ? 'YES' : 'NO');
+        console.log('[AUTH] User stored:', storedUser ? 'YES' : 'NO');
+        
+        if (!storedToken) {
+          console.error('[AUTH] CRITICAL: localStorage.setItem failed!');
+          toast.error('Failed to save login session');
+          navigate('/', { replace: true });
+          return;
+        }
 
-        // Small delay to ensure localStorage is persisted before navigation
-        await new Promise(resolve => setTimeout(resolve, 100));
+        setStatus('Login successful!');
+        toast.success(`Welcome, ${userData.name || userData.email}!`);
 
-        // Check for redirect paths in order of priority
+        // Clear the URL hash
+        window.history.replaceState(null, '', window.location.pathname);
+
+        // Determine redirect destination
         const pendingShareCode = sessionStorage.getItem('pendingShareCode');
         const redirectAfterLogin = sessionStorage.getItem('redirectAfterLogin');
         
-        console.log('[AUTH] Step 7: Determining redirect...');
-        console.log('[AUTH] pendingShareCode:', pendingShareCode);
-        console.log('[AUTH] redirectAfterLogin:', redirectAfterLogin);
-        
-        // Final verification before redirect
-        const verifyToken = localStorage.getItem('session_token');
-        console.log('[AUTH] Final token verification:', verifyToken ? 'EXISTS' : 'MISSING');
-        
-        // Clear the hash from URL before navigating to prevent re-triggering auth
-        window.history.replaceState(null, '', window.location.pathname);
-        
+        let destination = '/dashboard';
         if (pendingShareCode) {
           sessionStorage.removeItem('pendingShareCode');
-          console.log('[AUTH] Step 8: Redirecting to share code:', pendingShareCode);
-          navigate(`/t/${pendingShareCode}`, { replace: true });
+          destination = `/t/${pendingShareCode}`;
         } else if (redirectAfterLogin) {
           sessionStorage.removeItem('redirectAfterLogin');
-          console.log('[AUTH] Step 8: Redirecting to stored path:', redirectAfterLogin);
-          navigate(redirectAfterLogin, { replace: true });
-        } else {
-          console.log('[AUTH] Step 8: Redirecting to /dashboard');
-          navigate('/dashboard', { replace: true });
+          destination = redirectAfterLogin;
         }
+
+        console.log('[AUTH] Navigating to:', destination);
+        console.log('[AUTH] ========== AUTH CALLBACK END ==========');
+        
+        // Small delay to ensure storage is persisted
+        setTimeout(() => {
+          navigate(destination, { replace: true });
+        }, 50);
+
       } catch (error) {
-        console.error('[AUTH] ERROR in processSession:', error);
+        console.error('[AUTH] ERROR:', error);
         console.error('[AUTH] Error response:', error.response?.data);
-        console.error('[AUTH] Error status:', error.response?.status);
-        toast.error(`Authentication failed: ${error.response?.data?.detail || error.message}`);
+        setStatus('Authentication failed');
+        toast.error(`Login failed: ${error.response?.data?.detail || error.message}`);
         navigate('/', { replace: true });
       }
     };
@@ -111,7 +133,7 @@ function AuthCallback() {
       <div className="text-center">
         <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-16 mx-auto mb-6 object-contain" />
         <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-slate-600">Signing you in...</p>
+        <p className="text-slate-600">{status}</p>
       </div>
     </div>
   );

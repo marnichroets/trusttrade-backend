@@ -2,29 +2,32 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+console.log('[API] Initializing with base URL:', API_URL);
+
 // Create axios instance with default config
 const api = axios.create({
   baseURL: `${API_URL}/api`,
   withCredentials: true,
+  timeout: 30000,
 });
 
 // Request interceptor to add Authorization header from localStorage
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('session_token');
-    console.log('[API] Request interceptor:', config.method?.toUpperCase(), config.url);
-    console.log('[API] Token from localStorage:', token ? token.substring(0, 20) + '...' : 'NULL');
+    
+    console.log('[API] Request:', config.method?.toUpperCase(), config.url);
+    console.log('[API] Token:', token ? 'Present (' + token.substring(0, 15) + '...)' : 'Not found');
     
     if (token) {
+      config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
-      console.log('[API] Authorization header added');
-    } else {
-      console.log('[API] No token - request will use cookies only');
     }
+    
     return config;
   },
   (error) => {
-    console.error('[API] Request interceptor error:', error);
+    console.error('[API] Request error:', error);
     return Promise.reject(error);
   }
 );
@@ -36,11 +39,15 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    console.error('[API] Response error:', error.response?.status, error.config?.url);
-    if (error.response?.status === 401) {
-      console.log('[API] 401 Unauthorized - clearing localStorage token');
-      localStorage.removeItem('session_token');
+    const status = error.response?.status;
+    const url = error.config?.url;
+    console.error('[API] Error:', status, url, error.message);
+    
+    if (status === 401) {
+      console.log('[API] 401 Unauthorized - token may be invalid');
+      // Don't clear token here - let ProtectedRoute handle it
     }
+    
     return Promise.reject(error);
   }
 );

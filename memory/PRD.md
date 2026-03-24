@@ -62,6 +62,33 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 
 ## Changelog
 
+### 2026-03-24: P0 Login Bug Fix - Auth State Management
+**Fixed critical login bug where users were redirected to homepage after Google OAuth:**
+
+1. **Root Cause:** Race condition between React state updates and navigation. After OAuth callback, `login()` updated state but `navigate('/dashboard')` happened before React re-rendered with new state.
+
+2. **Solution - Token-based Auth with Synchronous State Initialization:**
+   - `AuthContext.js`: Added `getInitialState()` function that reads from localStorage SYNCHRONOUSLY before React renders, preventing flash of unauthenticated state
+   - `ProtectedRoute.js`: Added localStorage check as fallback for race conditions, with 100ms delay for state sync
+   - `AuthCallback.js`: Added 50ms delay before navigation to allow React state to settle
+   - `api.js`: Axios interceptor adds Bearer token from localStorage to all API requests
+
+3. **Key Files Updated:**
+   - `/app/frontend/src/context/AuthContext.js`
+   - `/app/frontend/src/components/ProtectedRoute.js`
+   - `/app/frontend/src/pages/AuthCallback.js`
+   - `/app/frontend/src/utils/api.js`
+
+4. **Backend Already Working:**
+   - `/api/auth/session` returns `session_token` in response body
+   - `/api/auth/me` accepts Bearer token in Authorization header
+   - `/app/backend/core/security.py` checks both cookies and Authorization header
+
+5. **Testing Results (iteration_15.json):**
+   - 17/17 backend tests passed
+   - Frontend auth flow verified
+   - ProtectedRoute correctly handles authenticated/unauthenticated users
+
 ### 2026-03-24: Backend Refactoring (v2.0.0)
 **Major refactoring from monolithic server.py (4900+ lines) to modular production structure:**
 
@@ -229,15 +256,19 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 - [x] Admin monitoring dashboard
 - [x] Critical alert system with email notifications
 - [x] TrustTrade logo everywhere
+- [x] Backend refactoring (v2.0.0)
+- [x] **Login bug fix - Auth state management with token-based auth**
 
 ### P1 (High Priority)
-- [ ] Refactor `server.py` monolith into routes/services/models
+- [ ] Admin Manual Actions wiring (Retry Webhook, Resend Email)
 - [ ] AI Scam Detection Enhancement
 
 ### P2 (Medium Priority)
 - [ ] In-App Chat feature
 - [ ] Enhanced dispute resolution flow
 - [ ] Push notifications
+- [ ] Robust Pre-Login Auth Check on landing page
+- [ ] Verify logo size adjustments
 
 ### P3 (Low Priority)
 - [ ] Mobile app

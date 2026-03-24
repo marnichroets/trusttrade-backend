@@ -62,32 +62,31 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 
 ## Changelog
 
-### 2026-03-24: P0 Login Bug Fix - Auth State Management
-**Fixed critical login bug where users were redirected to homepage after Google OAuth:**
+### 2026-03-24: P0 Login Bug Fix - Auth State Management (Final)
+**Fixed critical login bug where users were stuck in redirect loops after Google OAuth:**
 
-1. **Root Cause:** Race condition between React state updates and navigation. After OAuth callback, `login()` updated state but `navigate('/dashboard')` happened before React re-rendered with new state.
+1. **Root Cause:** Multiple useEffects and missing guards caused race conditions and redirect loops between AuthContext state updates and ProtectedRoute navigation.
 
-2. **Solution - Token-based Auth with Synchronous State Initialization:**
-   - `AuthContext.js`: Added `getInitialState()` function that reads from localStorage SYNCHRONOUSLY before React renders, preventing flash of unauthenticated state
-   - `ProtectedRoute.js`: Added localStorage check as fallback for race conditions, with 100ms delay for state sync
-   - `AuthCallback.js`: Added 50ms delay before navigation to allow React state to settle
-   - `api.js`: Axios interceptor adds Bearer token from localStorage to all API requests
+2. **Solution - Clean Single-Execution Pattern:**
+   - `AuthContext.js`: Added `initialized` useRef to ensure auth initialization runs ONCE. Synchronous state init from localStorage.
+   - `ProtectedRoute.js`: Added `hasRedirected` useRef to prevent redirect loops. `hasLocalAuth` fallback check.
+   - `AuthCallback.js`: Added `hasProcessed` useRef with empty dependency array to run ONCE.
+   - `DashboardLayout.js`: Updated to use AuthContext `logout()` instead of direct localStorage manipulation.
 
-3. **Key Files Updated:**
-   - `/app/frontend/src/context/AuthContext.js`
-   - `/app/frontend/src/components/ProtectedRoute.js`
-   - `/app/frontend/src/pages/AuthCallback.js`
-   - `/app/frontend/src/utils/api.js`
+3. **Console Logs Added:**
+   - `[AUTH_STATE_INITIALIZED]` - On context initialization
+   - `[TOKEN_PRESENT]` - When token received
+   - `[NAVIGATE_CALLED]` - Before navigation
+   - `[PROTECTED_ROUTE_RENDERED]` - On protected route render
+   - `[LOGIN_CALLED]` / `[LOGIN_COMPLETE]` - Login flow
+   - `[LOGOUT_CALLED]` / `[LOGOUT_COMPLETE]` - Logout flow
 
-4. **Backend Already Working:**
-   - `/api/auth/session` returns `session_token` in response body
-   - `/api/auth/me` accepts Bearer token in Authorization header
-   - `/app/backend/core/security.py` checks both cookies and Authorization header
-
-5. **Testing Results (iteration_15.json):**
-   - 17/17 backend tests passed
-   - Frontend auth flow verified
-   - ProtectedRoute correctly handles authenticated/unauthenticated users
+4. **Testing Results (iteration_16.json):**
+   - 10/10 tests passed (3 backend + 7 frontend)
+   - Login works on first attempt
+   - Refresh dashboard auth persists
+   - Logout works correctly
+   - No redirect loops
 
 ### 2026-03-24: Backend Refactoring (v2.0.0)
 **Major refactoring from monolithic server.py (4900+ lines) to modular production structure:**

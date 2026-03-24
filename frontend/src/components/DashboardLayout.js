@@ -1,16 +1,16 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { ShieldCheck, LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings, User, Activity } from 'lucide-react';
 import { Button } from './ui/button';
-import api from '../utils/api';
+import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 
 function DashboardLayout({ children, user }) {
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const handleLogout = async () => {
     try {
-      await api.post('/auth/logout', {});
-      localStorage.removeItem('session_token');
+      await logout();
       toast.success('Logged out successfully');
       navigate('/');
     } catch (error) {

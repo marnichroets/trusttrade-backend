@@ -15,16 +15,16 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
 const COLORS = {
-  primary: '#1a2942',
-  green: '#2ecc71',
+  primary: '#3b82f6',  // Blue
+  green: '#10b981',
   background: '#ffffff',
-  section: '#f8f9fa',
-  text: '#212529',
-  subtext: '#6c757d',
-  border: '#dee2e6',
-  error: '#e74c3c',
-  warning: '#f39c12',
-  info: '#3498db'
+  section: '#f8fafc',
+  text: '#1e293b',
+  subtext: '#64748b',
+  border: '#e2e8f0',
+  error: '#ef4444',
+  warning: '#f59e0b',
+  info: '#3b82f6'
 };
 
 const getStatusColor = (status) => {

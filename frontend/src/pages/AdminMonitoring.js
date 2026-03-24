@@ -166,7 +166,7 @@ export default function AdminMonitoring() {
 
   const getHealthStatusColor = (status) => {
     switch (status) {
-      case 'healthy': return 'bg-emerald-500';
+      case 'healthy': return 'bg-blue-500';
       case 'warning': return 'bg-amber-500';
       case 'critical': return 'bg-red-500';
       default: return 'bg-slate-500';
@@ -175,7 +175,7 @@ export default function AdminMonitoring() {
 
   const getHealthStatusBg = (status) => {
     switch (status) {
-      case 'healthy': return 'bg-emerald-50 border-emerald-200';
+      case 'healthy': return 'bg-blue-50 border-blue-200';
       case 'warning': return 'bg-amber-50 border-amber-200';
       case 'critical': return 'bg-red-50 border-red-200';
       default: return 'bg-slate-50 border-slate-200';
@@ -199,10 +199,10 @@ export default function AdminMonitoring() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-white">
         <AdminNavbar />
         <div className="flex items-center justify-center h-[80vh]">
-          <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
         </div>
       </div>
     );
@@ -216,7 +216,9 @@ export default function AdminMonitoring() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-12 object-contain" />
+            <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-200">
+              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-10 object-contain" />
+            </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">System Monitoring</h1>
               <p className="text-sm text-slate-500">Real-time production reliability dashboard</p>
@@ -229,7 +231,7 @@ export default function AdminMonitoring() {
               <span className="text-sm text-slate-600">Auto-refresh</span>
               <button
                 onClick={() => setAutoRefresh(!autoRefresh)}
-                className={`w-12 h-6 rounded-full transition-colors ${autoRefresh ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                className={`w-12 h-6 rounded-full transition-colors ${autoRefresh ? 'bg-blue-500' : 'bg-slate-300'}`}
                 data-testid="auto-refresh-toggle"
               >
                 <div className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${autoRefresh ? 'translate-x-6' : 'translate-x-0.5'}`} />
@@ -320,11 +322,11 @@ export default function AdminMonitoring() {
             </Card>
             
             <Card className="p-4" data-testid="metric-secured-24h">
-              <div className="flex items-center gap-2 text-emerald-600 mb-2">
+              <div className="flex items-center gap-2 text-blue-600 mb-2">
                 <Shield className="w-4 h-4" />
                 <span className="text-xs">Secured (24h)</span>
               </div>
-              <p className="text-2xl font-bold text-emerald-600">{dashboard.metrics.transactions.payments_secured_24h}</p>
+              <p className="text-2xl font-bold text-blue-600">{dashboard.metrics.transactions.payments_secured_24h}</p>
             </Card>
             
             <Card className="p-4" data-testid="metric-webhook-failures">
@@ -399,7 +401,7 @@ export default function AdminMonitoring() {
               
               {alerts.length === 0 ? (
                 <div className="text-center py-12 text-slate-500">
-                  <BellOff className="w-12 h-12 mx-auto mb-3 text-emerald-500" />
+                  <BellOff className="w-12 h-12 mx-auto mb-3 text-blue-500" />
                   <p className="font-medium">No alerts</p>
                   <p className="text-sm">Everything is running smoothly</p>
                 </div>
@@ -432,7 +434,7 @@ export default function AdminMonitoring() {
                               {alert.alert_type?.replace(/_/g, ' ').toUpperCase()}
                             </Badge>
                             {alert.resolved && (
-                              <Badge className="bg-emerald-100 text-emerald-800">
+                              <Badge className="bg-blue-100 text-blue-800">
                                 <CheckCircle className="w-3 h-3 mr-1" />
                                 Resolved
                               </Badge>
@@ -487,7 +489,7 @@ export default function AdminMonitoring() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Processed</span>
-                      <span className="font-medium text-emerald-600">{dashboard.metrics.webhooks.processed}</span>
+                      <span className="font-medium text-blue-600">{dashboard.metrics.webhooks.processed}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Failed</span>
@@ -500,7 +502,7 @@ export default function AdminMonitoring() {
                     <div className="pt-3 border-t">
                       <div className="flex justify-between">
                         <span className="text-slate-600">Success Rate</span>
-                        <span className={`font-bold ${dashboard.metrics.webhooks.success_rate >= 95 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        <span className={`font-bold ${dashboard.metrics.webhooks.success_rate >= 95 ? 'text-blue-600' : 'text-amber-600'}`}>
                           {dashboard.metrics.webhooks.success_rate}%
                         </span>
                       </div>
@@ -517,7 +519,7 @@ export default function AdminMonitoring() {
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <span className="text-slate-600">Sent Successfully</span>
-                      <span className="font-medium text-emerald-600">{dashboard.metrics.emails.sent_24h}</span>
+                      <span className="font-medium text-blue-600">{dashboard.metrics.emails.sent_24h}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Failed</span>
@@ -526,7 +528,7 @@ export default function AdminMonitoring() {
                     <div className="pt-3 border-t">
                       <div className="flex justify-between">
                         <span className="text-slate-600">Success Rate</span>
-                        <span className={`font-bold ${dashboard.metrics.emails.success_rate >= 95 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        <span className={`font-bold ${dashboard.metrics.emails.success_rate >= 95 ? 'text-blue-600' : 'text-amber-600'}`}>
                           {dashboard.metrics.emails.success_rate}%
                         </span>
                       </div>
@@ -613,7 +615,7 @@ export default function AdminMonitoring() {
                           </td>
                           <td className="py-2 px-3">
                             <Badge className={
-                              event.status === 'processed' ? 'bg-emerald-100 text-emerald-800' :
+                              event.status === 'processed' ? 'bg-blue-100 text-blue-800' :
                               event.status === 'failed' ? 'bg-red-100 text-red-800' :
                               event.status === 'duplicate' ? 'bg-slate-100 text-slate-600' :
                               'bg-blue-100 text-blue-800'
@@ -686,7 +688,7 @@ export default function AdminMonitoring() {
                           <td className="py-2 px-3 text-slate-600">{log.recipient || 'N/A'}</td>
                           <td className="py-2 px-3">
                             {log.success ? (
-                              <Badge className="bg-emerald-100 text-emerald-800">
+                              <Badge className="bg-blue-100 text-blue-800">
                                 <CheckCircle className="w-3 h-3 mr-1" />
                                 Sent
                               </Badge>
@@ -737,7 +739,7 @@ export default function AdminMonitoring() {
               
               {dashboard?.stuck_transactions?.length === 0 ? (
                 <div className="text-center py-8 text-slate-500">
-                  <CheckCircle className="w-12 h-12 mx-auto mb-2 text-emerald-500" />
+                  <CheckCircle className="w-12 h-12 mx-auto mb-2 text-blue-500" />
                   <p>No stuck transactions detected</p>
                 </div>
               ) : (
@@ -893,7 +895,7 @@ export default function AdminMonitoring() {
                 Cancel
               </Button>
               <Button 
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
                 onClick={handleUpdateStatus}
                 disabled={!newStatus || actionLoading}
               >

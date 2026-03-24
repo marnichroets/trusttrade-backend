@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, LogOut, Shield, Activity } from 'lucide-react';
-import TrustTradeLogo from './TrustTradeLogo';
+import { Menu, X, LogOut, Activity } from 'lucide-react';
 
 export function AdminNavbar({ user, onLogout }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -23,14 +22,14 @@ export function AdminNavbar({ user, onLogout }) {
   };
 
   return (
-    <nav className="sticky top-0 z-50" style={{ backgroundColor: '#1a2942' }}>
+    <nav className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between h-14">
+        <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center gap-6">
             <Link to="/admin" className="flex items-center gap-2">
-              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-8 object-contain" />
-              <span className="text-xs text-emerald-400 font-medium px-2 py-0.5 bg-emerald-500/20 rounded">Admin</span>
+              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-10 object-contain" />
+              <span className="text-xs text-blue-600 font-semibold px-2 py-0.5 bg-blue-50 rounded border border-blue-200">Admin</span>
             </Link>
             
             {/* Desktop Nav */}
@@ -39,10 +38,10 @@ export function AdminNavbar({ user, onLogout }) {
                 <Link
                   key={link.href}
                   to={link.href}
-                  className={`px-3 py-2 rounded text-sm font-medium transition-colors flex items-center gap-1 ${
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
                     isActive(link)
-                      ? 'text-white bg-white/20'
-                      : 'text-white/70 hover:text-white hover:bg-white/10'
+                      ? 'text-blue-600 bg-blue-50'
+                      : 'text-slate-600 hover:text-blue-600 hover:bg-slate-50'
                   }`}
                 >
                   {link.icon && <link.icon className="w-4 h-4" />}
@@ -56,14 +55,14 @@ export function AdminNavbar({ user, onLogout }) {
           <div className="flex items-center gap-4">
             {user && (
               <div className="hidden md:flex items-center gap-3">
-                <span className="text-white/70 text-sm">{user.name}</span>
+                <span className="text-slate-600 text-sm">{user.name}</span>
               </div>
             )}
             
             {onLogout && (
               <button
                 onClick={onLogout}
-                className="hidden md:flex items-center gap-1 text-white/70 hover:text-white text-sm transition-colors"
+                className="hidden md:flex items-center gap-1 text-slate-500 hover:text-red-600 text-sm transition-colors"
               >
                 <LogOut className="w-4 h-4" />
                 Logout
@@ -73,7 +72,7 @@ export function AdminNavbar({ user, onLogout }) {
             {/* Mobile menu button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 text-white"
+              className="md:hidden p-2 text-slate-600"
             >
               {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -83,17 +82,17 @@ export function AdminNavbar({ user, onLogout }) {
       
       {/* Mobile menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-white/10" style={{ backgroundColor: '#1a2942' }}>
+        <div className="md:hidden border-t border-slate-200 bg-white">
           <div className="px-4 py-3 space-y-1">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 to={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-3 py-2 rounded text-sm font-medium flex items-center gap-2 ${
+                className={`block px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 ${
                   isActive(link)
-                    ? 'text-white bg-white/20'
-                    : 'text-white/70 hover:text-white hover:bg-white/10'
+                    ? 'text-blue-600 bg-blue-50'
+                    : 'text-slate-600 hover:text-blue-600 hover:bg-slate-50'
                 }`}
               >
                 {link.icon && <link.icon className="w-4 h-4" />}
@@ -101,12 +100,12 @@ export function AdminNavbar({ user, onLogout }) {
               </Link>
             ))}
             {user && (
-              <div className="pt-3 mt-3 border-t border-white/10">
-                <p className="px-3 py-1 text-white/70 text-sm">{user.name}</p>
+              <div className="pt-3 mt-3 border-t border-slate-200">
+                <p className="px-3 py-1 text-slate-500 text-sm">{user.name}</p>
                 {onLogout && (
                   <button
                     onClick={onLogout}
-                    className="flex items-center gap-2 px-3 py-2 text-white/70 hover:text-white text-sm w-full"
+                    className="flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-red-600 text-sm w-full"
                   >
                     <LogOut className="w-4 h-4" />
                     Logout
@@ -121,27 +120,22 @@ export function AdminNavbar({ user, onLogout }) {
   );
 }
 
+export default AdminNavbar;
+
+// Breadcrumbs component
 export function Breadcrumbs({ items }) {
   return (
-    <nav className="flex items-center gap-2 text-sm mb-6" style={{ color: '#6c757d' }}>
+    <nav className="flex items-center space-x-2 text-sm text-slate-500 mb-4">
       {items.map((item, index) => (
-        <span key={index} className="flex items-center gap-2">
-          {index > 0 && (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          )}
+        <span key={index} className="flex items-center">
+          {index > 0 && <span className="mx-2">/</span>}
           {item.href ? (
-            <Link to={item.href} className="hover:underline hover:text-[#212529]">
-              {item.label}
-            </Link>
+            <a href={item.href} className="hover:text-blue-600">{item.label}</a>
           ) : (
-            <span style={{ color: '#212529' }} className="font-medium">{item.label}</span>
+            <span className="text-slate-700 font-medium">{item.label}</span>
           )}
         </span>
       ))}
     </nav>
   );
 }
-
-export default AdminNavbar;

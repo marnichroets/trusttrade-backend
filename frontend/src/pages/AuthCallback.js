@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { toast } from 'sonner';
+import { useAuth } from '../context/AuthContext';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -9,35 +10,36 @@ const API = `${BACKEND_URL}/api`;
 function AuthCallback() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { login } = useAuth();
   const hasProcessed = useRef(false);
   const [status, setStatus] = useState('Processing...');
 
   useEffect(() => {
     if (hasProcessed.current) {
-      console.log('[AUTH] Already processed, skipping');
+      console.log('[AuthCallback] Already processed, skipping');
       return;
     }
     hasProcessed.current = true;
 
     const processSession = async () => {
       try {
-        console.log('[AUTH] ========== AUTH CALLBACK START ==========');
+        console.log('[AuthCallback] ========== START ==========');
         setStatus('Extracting session...');
         
         const hash = location.hash;
-        console.log('[AUTH] URL hash:', hash);
+        console.log('[AuthCallback] URL hash:', hash);
         
         const params = new URLSearchParams(hash.substring(1));
         const sessionId = params.get('session_id');
 
         if (!sessionId) {
-          console.error('[AUTH] No session_id in URL');
+          console.error('[AuthCallback] No session_id in URL');
           toast.error('No session ID found');
           navigate('/', { replace: true });
           return;
         }
 
-        console.log('[AUTH] Session ID found:', sessionId.substring(0, 15) + '...');
+        console.log('[AuthCallback] Session ID:', sessionId.substring(0, 15) + '...');
         setStatus('Authenticating...');
 
         // Exchange session_id for user data
@@ -47,55 +49,45 @@ function AuthCallback() {
           { withCredentials: true }
         );
 
-        console.log('[AUTH] API Response status:', response.status);
-        console.log('[AUTH] API Response keys:', Object.keys(response.data));
+        console.log('[AuthCallback] API response status:', response.status);
         
-        const userData = response.data;
-        const token = userData.session_token;
+        const data = response.data;
+        const token = data.session_token;
         
-        console.log('[AUTH] User email:', userData.email);
-        console.log('[AUTH] Token received:', token ? 'YES (' + token.substring(0, 15) + '...)' : 'NO!');
+        console.log('[AuthCallback] User:', data.email);
+        console.log('[AuthCallback] Token received:', token ? 'YES' : 'NO');
 
         if (!token) {
-          console.error('[AUTH] CRITICAL: No session_token in response!');
-          console.error('[AUTH] Full response:', JSON.stringify(userData));
-          toast.error('Authentication error: No token received');
+          console.error('[AuthCallback] No token in response!');
+          toast.error('Authentication error');
           navigate('/', { replace: true });
           return;
         }
 
-        // Store token in localStorage
-        localStorage.setItem('session_token', token);
+        // Create user object
+        const userData = {
+          user_id: data.user_id,
+          email: data.email,
+          name: data.name,
+          is_admin: data.is_admin,
+          picture: data.picture,
+        };
+
+        // Use AuthContext login function to update global state
+        console.log('[AuthCallback] Calling login()...');
+        login(userData, token);
         
-        // Also store basic user info for quick access
-        localStorage.setItem('user_data', JSON.stringify({
-          user_id: userData.user_id,
-          email: userData.email,
-          name: userData.name,
-          is_admin: userData.is_admin
-        }));
-        
-        // Verify storage
+        // Verify it worked
         const storedToken = localStorage.getItem('session_token');
-        const storedUser = localStorage.getItem('user_data');
-        
-        console.log('[AUTH] Token stored:', storedToken ? 'YES' : 'NO');
-        console.log('[AUTH] User stored:', storedUser ? 'YES' : 'NO');
-        
-        if (!storedToken) {
-          console.error('[AUTH] CRITICAL: localStorage.setItem failed!');
-          toast.error('Failed to save login session');
-          navigate('/', { replace: true });
-          return;
-        }
+        console.log('[AuthCallback] Token in localStorage after login:', storedToken ? 'YES' : 'NO');
 
         setStatus('Login successful!');
         toast.success(`Welcome, ${userData.name || userData.email}!`);
 
-        // Clear the URL hash
+        // Clear URL hash
         window.history.replaceState(null, '', window.location.pathname);
 
-        // Determine redirect destination
+        // Determine redirect
         const pendingShareCode = sessionStorage.getItem('pendingShareCode');
         const redirectAfterLogin = sessionStorage.getItem('redirectAfterLogin');
         
@@ -108,17 +100,15 @@ function AuthCallback() {
           destination = redirectAfterLogin;
         }
 
-        console.log('[AUTH] Navigating to:', destination);
-        console.log('[AUTH] ========== AUTH CALLBACK END ==========');
+        console.log('[AuthCallback] Navigating to:', destination);
+        console.log('[AuthCallback] ========== END ==========');
         
-        // Small delay to ensure storage is persisted
-        setTimeout(() => {
-          navigate(destination, { replace: true });
-        }, 50);
+        // Navigate immediately - state is already updated
+        navigate(destination, { replace: true });
 
       } catch (error) {
-        console.error('[AUTH] ERROR:', error);
-        console.error('[AUTH] Error response:', error.response?.data);
+        console.error('[AuthCallback] Error:', error);
+        console.error('[AuthCallback] Error response:', error.response?.data);
         setStatus('Authentication failed');
         toast.error(`Login failed: ${error.response?.data?.detail || error.message}`);
         navigate('/', { replace: true });
@@ -126,7 +116,7 @@ function AuthCallback() {
     };
 
     processSession();
-  }, [navigate, location.hash]);
+  }, [navigate, location.hash, login]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">

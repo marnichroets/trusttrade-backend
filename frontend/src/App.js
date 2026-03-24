@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
+import { AuthProvider } from './context/AuthContext';
 import LandingPage from './pages/LandingPage';
 import AuthCallback from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
@@ -78,8 +79,10 @@ function App() {
   return (
     <div className="App">
       <BrowserRouter>
-        <AppRouter />
-        <Toaster position="top-right" />
+        <AuthProvider>
+          <AppRouter />
+          <Toaster position="top-right" />
+        </AuthProvider>
       </BrowserRouter>
     </div>
   );

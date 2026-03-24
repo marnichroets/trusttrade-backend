@@ -5,7 +5,7 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 
 ## Core Features
 - Transaction Link System - Unique shareable links for every transaction
-- TradeSafe Integration - Full payment gateway integration with escrow
+- TradeSafe Integration - Full payment gateway integration with escrow (PRODUCTION)
 - User Ratings and Reviews - 1-5 star rating system
 - Trust Badge System - Silver, Gold, Verified badges
 - Identity Verification - ID upload, selfie, phone verification
@@ -24,66 +24,67 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 
 ## Changelog
 
-### 2026-03-24: Admin Monitoring Dashboard (Session 14 - Part 2)
+### 2026-03-24: Critical Alert System & Logo Integration (Session 14 - Part 3)
 **Implemented:**
 
-1. **Real-Time Admin Monitoring Dashboard** (`/admin/monitoring`)
-   - Health status banner with color-coded indicators (healthy/warning/critical)
-   - 6 key metric cards: Active Transactions, Awaiting Payment, Secured 24h, Webhook Failures, Email Failures, Stuck Transactions
-   - Auto-refresh every 15 seconds (toggleable)
-   - Manual refresh button
+1. **Critical Alert System** (`/app/backend/alert_service.py`)
+   - Email alerts via Postmark for critical issues
+   - Alert types: failed webhooks, failed emails, stuck transactions, payment not synced
+   - Rate limiting (max 1 alert per issue type per transaction every 10 min)
+   - All alerts stored in `alerts` collection
+   - Alert resolve functionality for admin
 
-2. **5 Dashboard Tabs:**
-   - **Overview**: Webhook & email statistics with success rates
-   - **Webhooks**: Full event table with status highlighting (processed/failed/duplicate), retry action for failed webhooks
-   - **Emails**: Full logs table with sent/failed status, resend action for failed emails
-   - **Stuck Transactions**: Detection for transactions with no update >10 minutes
-   - **Admin Actions**: Complete audit log of all admin actions
+2. **Alert Endpoints:**
+   - `GET /api/admin/alerts` - Get alerts with stats
+   - `POST /api/admin/alerts/{id}/resolve` - Resolve alert
+   - `POST /api/admin/alerts/test` - Send test alert
 
-3. **Manual Admin Actions (with full logging):**
-   - Retry failed webhook processing
-   - Resend failed emails
-   - Manually update transaction status with reason
-   - All actions logged to `admin_actions` collection with admin email, timestamp, and details
+3. **Admin Monitoring Dashboard - Alerts Tab:**
+   - Active alerts counter with badge
+   - Critical alerts highlighted in red
+   - Resolve button for each alert
+   - Email sent indicator
+   - Alert statistics (unresolved, total 24h)
 
-4. **Backend Endpoints:**
-   - `GET /api/admin/monitoring/dashboard` - Comprehensive metrics
-   - `GET /api/admin/monitoring/webhook-events` - Webhook event list with filters
-   - `GET /api/admin/monitoring/email-logs` - Email log list with filters
-   - `GET /api/admin/monitoring/actions` - Admin action audit trail
-   - `POST /api/admin/monitoring/retry-webhook/{event_id}` - Retry failed webhook
-   - `POST /api/admin/monitoring/resend-email/{txn_id}/{type}` - Resend email
-   - `POST /api/admin/monitoring/update-transaction-status/{txn_id}` - Manual status update
+4. **TrustTrade Logo Integration (EVERYWHERE):**
+   - Landing page navbar
+   - Landing page hero section
+   - Landing page footer
+   - Admin navbar
+   - Admin dashboard header
+   - Admin monitoring page header
+   - Dashboard layout header
+   - Share transaction page
+   - All email templates
 
-5. **AdminNavbar Updated:**
-   - Added "Monitoring" link with Activity icon
-   - Integrated TrustTrade logo with proper styling
+5. **Database Query Optimizations:**
+   - Added projections to list endpoints (users, transactions, disputes)
+   - Reduced data transfer for admin list views
+   - Limited reports to 500 items
+
+### 2026-03-24: Admin Monitoring Dashboard (Session 14 - Part 2)
+**Implemented:**
+- Real-time system monitoring dashboard at `/admin/monitoring`
+- Health status banner (healthy/warning/critical)
+- 6 key metric cards
+- Auto-refresh every 15 seconds
+- 5 tabs: Overview, Alerts, Webhooks, Emails, Stuck Transactions, Actions
+- Manual admin actions (retry webhook, resend email, update status)
 
 ### 2026-03-24: Production Reliability Upgrade (Session 14 - Part 1)
 **Implemented:**
-
-1. **Webhook Handler with Full Reliability** (`/app/backend/webhook_handler.py`)
-   - Strict idempotency using unique event IDs (SHA256 hash of payload)
-   - All webhook events logged to `webhook_events` collection
-   - Email deduplication with `emails_sent` array tracking
-   - Comprehensive error logging
-
-2. **Transaction State Machine** (`/app/backend/transaction_state.py`)
-   - Strict state transitions enforced
-   - States: CREATED → PENDING_CONFIRMATION → AWAITING_PAYMENT → PAYMENT_SECURED → DELIVERY_IN_PROGRESS → DELIVERED → COMPLETED
-
-3. **Background Jobs** (`/app/backend/background_jobs.py`)
-   - Fallback payment verification every 3 minutes
-   - Auto-release processing every 6 minutes
-   - Webhook health check every 15 minutes
+- Webhook handler with strict idempotency
+- Email deduplication
+- Transaction state machine
+- Background jobs (payment verification, auto-release, health check)
 
 ## Architecture
 
 ### Backend
 - **Framework**: FastAPI
 - **Database**: MongoDB (motor async driver)
-- **File Storage**: Local `/app/uploads/` served via StaticFiles
-- **Main file**: `/app/backend/server.py` (4600+ lines - needs refactoring)
+- **Main file**: `/app/backend/server.py` (4900+ lines - needs refactoring)
+- **Alert Service**: `/app/backend/alert_service.py`
 - **Webhook Handler**: `/app/backend/webhook_handler.py`
 - **State Machine**: `/app/backend/transaction_state.py`
 - **Background Jobs**: `/app/backend/background_jobs.py`
@@ -91,42 +92,45 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 ### Frontend
 - **Framework**: React
 - **Styling**: Tailwind CSS + Shadcn UI
-- **Routing**: React Router
-- **State**: useState/useEffect hooks
+- **Logo**: `/app/frontend/public/trusttrade-logo.png`
 
 ### Integrations
 - **Email**: Postmark (PRODUCTION)
-- **Payments**: TradeSafe (GraphQL API - PRODUCTION)
+- **Payments**: TradeSafe (PRODUCTION)
 - **SMS**: Zoom Connect (SMS Messenger API)
 - **Auth**: Emergent-managed Google OAuth
 
 ## Key Admin Routes
 - `/admin` - Dashboard overview
-- `/admin/monitoring` - **NEW** Real-time system monitoring
+- `/admin/monitoring` - Real-time system monitoring
 - `/admin/transactions` - All transactions
 - `/admin/users` - All users
 - `/admin/disputes` - All disputes
-- `/admin/transaction/{id}` - Transaction detail
-- `/admin/user/{id}` - User detail
-- `/admin/dispute/{id}` - Dispute detail
 
 ## Key API Endpoints
 - `/api/tradesafe-webhook` - Production-ready webhook handler
 - `/api/admin/monitoring/dashboard` - System health metrics
-- `/api/admin/monitoring/webhook-events` - Webhook event list
-- `/api/admin/monitoring/email-logs` - Email log list
-- `/api/admin/monitoring/actions` - Admin action audit trail
-- `/api/admin/monitoring/retry-webhook/{event_id}` - Retry webhook
-- `/api/admin/monitoring/resend-email/{txn_id}/{type}` - Resend email
-- `/api/admin/monitoring/update-transaction-status/{txn_id}` - Manual status update
+- `/api/admin/alerts` - Alert management
+- `/api/admin/alerts/{id}/resolve` - Resolve alert
+- `/api/admin/alerts/test` - Test alert
 
 ## Database Collections
-- `transactions` - Main transaction data
-- `users` - User accounts and profiles
+- `transactions` - Transaction data
+- `users` - User accounts
 - `disputes` - Dispute records
-- `webhook_events` - Webhook event log (idempotency)
-- `email_logs` - Email send attempts
-- `admin_actions` - Admin action audit trail
+- `webhook_events` - Webhook log (idempotency)
+- `email_logs` - Email attempts
+- `alerts` - System alerts
+- `admin_actions` - Admin audit trail
+
+## Deployment Readiness
+- ✅ All environment variables externalized
+- ✅ Logo using local path (not hardcoded URL)
+- ✅ Database queries optimized with projections
+- ✅ Rate limiting on alerts
+- ✅ Admin access control on all admin endpoints
+- ✅ CORS configured
+- ✅ Static files served correctly
 
 ## Prioritized Backlog
 
@@ -136,8 +140,8 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 - [x] Fallback payment verification
 - [x] State machine enforcement
 - [x] Admin monitoring dashboard
-- [x] Admin manual actions (retry, resend, update status)
-- [x] Admin action logging/audit trail
+- [x] Critical alert system with email notifications
+- [x] TrustTrade logo everywhere
 
 ### P1 (High Priority)
 - [ ] Refactor `server.py` monolith into routes/services/models

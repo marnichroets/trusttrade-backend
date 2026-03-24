@@ -310,10 +310,14 @@ async def trigger_alert(
 
 async def get_active_alerts(db: AsyncIOMotorDatabase, limit: int = 50) -> List[Dict]:
     """Get active (unresolved) alerts for dashboard display"""
-    alerts = await db.alerts.find(
-        {"resolved": {"$ne": True}},
-        {"_id": 0}
-    ).sort("timestamp", -1).limit(limit).to_list(limit)
+    cursor = db.alerts.find(
+        {"resolved": {"$ne": True}}
+    ).sort("timestamp", -1).limit(limit)
+    
+    alerts = []
+    async for alert in cursor:
+        alert["alert_id"] = str(alert.pop("_id"))  # Convert ObjectId to string
+        alerts.append(alert)
     
     return alerts
 
@@ -322,10 +326,14 @@ async def get_all_alerts(db: AsyncIOMotorDatabase, hours: int = 24, limit: int =
     """Get all alerts from the last X hours"""
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     
-    alerts = await db.alerts.find(
-        {"timestamp": {"$gte": cutoff}},
-        {"_id": 0}
-    ).sort("timestamp", -1).limit(limit).to_list(limit)
+    cursor = db.alerts.find(
+        {"timestamp": {"$gte": cutoff}}
+    ).sort("timestamp", -1).limit(limit)
+    
+    alerts = []
+    async for alert in cursor:
+        alert["alert_id"] = str(alert.pop("_id"))  # Convert ObjectId to string
+        alerts.append(alert)
     
     return alerts
 

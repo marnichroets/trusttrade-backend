@@ -128,9 +128,9 @@ function ShareTransaction() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <img 
-                src="https://customer-assets.emergentagent.com/job_trust-trade-pay/artifacts/u0eeoxzq_TrustTrade%20Logo.png" 
+                src="/trusttrade-logo.png" 
                 alt="TrustTrade" 
-                className="h-12"
+                className="h-12 object-contain"
               />
             </div>
             {user ? (

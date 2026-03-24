@@ -1186,7 +1186,16 @@ async def list_transactions(request: Request):
         
         query = {"$or": or_conditions}
     
-    transactions = await db.transactions.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    # Optimize query with projection for list view (exclude large fields)
+    projection = {
+        "_id": 0,
+        "transaction_id": 1, "share_code": 1, "item_description": 1, "item_price": 1,
+        "payment_status": 1, "release_status": 1, "transaction_state": 1, "tradesafe_state": 1,
+        "created_at": 1, "buyer_name": 1, "buyer_email": 1, "seller_name": 1, "seller_email": 1,
+        "buyer_user_id": 1, "seller_user_id": 1, "delivery_method": 1, "has_dispute": 1,
+        "buyer_confirmed": 1, "seller_confirmed": 1, "tradesafe_id": 1
+    }
+    transactions = await db.transactions.find(query, projection).sort("created_at", -1).to_list(1000)
     return [Transaction(**t) for t in transactions]
 
 @api_router.get("/transactions/{transaction_id}", response_model=Transaction)
@@ -1865,7 +1874,7 @@ async def list_disputes(request: Request):
     if user.is_admin:
         query = {}
     else:
-        # Get user's transactions
+        # Get user's transactions - optimize: only fetch transaction_id
         user_transactions = await db.transactions.find(
             {
                 "$or": [
@@ -1874,7 +1883,7 @@ async def list_disputes(request: Request):
                     {"seller_email": user.email}
                 ]
             },
-            {"_id": 0}
+            {"_id": 0, "transaction_id": 1}
         ).to_list(1000)
         
         transaction_ids = [t["transaction_id"] for t in user_transactions]
@@ -2065,7 +2074,8 @@ async def list_reports(request: Request):
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin only")
     
-    reports = await db.reports.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    # Optimize: add limit and consider pagination for large datasets
+    reports = await db.reports.find({}, {"_id": 0}).sort("created_at", -1).limit(500).to_list(500)
     return [UserReport(**r) for r in reports]
 
 @api_router.patch("/reports/{report_id}")
@@ -2400,8 +2410,14 @@ async def list_all_users(request: Request):
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin only")
     
-    users = await db.users.find({}, {"_id": 0}).to_list(1000)
-    # Return raw data, not validated User objects to avoid validation errors
+    # Optimize: fetch only fields needed for list view
+    projection = {
+        "_id": 0, "user_id": 1, "name": 1, "email": 1, "phone": 1,
+        "verified": 1, "is_admin": 1, "created_at": 1, "total_trades": 1,
+        "trust_score": 1, "badge": 1, "picture": 1, "id_verified": 1,
+        "selfie_verified": 1, "phone_verified": 1
+    }
+    users = await db.users.find({}, projection).to_list(1000)
     return users
 
 @api_router.get("/admin/transactions")
@@ -2411,8 +2427,14 @@ async def list_all_transactions_admin(request: Request):
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin only")
     
-    transactions = await db.transactions.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    # Return raw data to avoid validation errors with old transactions
+    # Optimize: fetch only fields needed for list view
+    projection = {
+        "_id": 0, "transaction_id": 1, "share_code": 1, "buyer_name": 1, "buyer_email": 1,
+        "seller_name": 1, "seller_email": 1, "item_description": 1, "item_price": 1,
+        "payment_status": 1, "release_status": 1, "transaction_state": 1, "tradesafe_state": 1,
+        "created_at": 1, "has_dispute": 1, "delivery_method": 1, "tradesafe_id": 1
+    }
+    transactions = await db.transactions.find({}, projection).sort("created_at", -1).to_list(1000)
     return transactions
 
 @api_router.get("/admin/disputes")
@@ -2422,8 +2444,13 @@ async def list_all_disputes_admin(request: Request):
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Admin only")
     
-    disputes = await db.disputes.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    # Return raw data to avoid validation errors
+    # Optimize: exclude large fields like evidence_photos for list view
+    projection = {
+        "_id": 0, "dispute_id": 1, "transaction_id": 1, "raised_by_user_id": 1,
+        "raised_by_name": 1, "raised_by_email": 1, "dispute_type": 1, "description": 1,
+        "status": 1, "created_at": 1, "resolution": 1, "resolved_at": 1
+    }
+    disputes = await db.disputes.find({}, projection).sort("created_at", -1).to_list(1000)
     return disputes
 
 @api_router.get("/admin/transaction/{transaction_id}")
@@ -2579,16 +2606,23 @@ async def get_admin_user_detail(request: Request, user_id: str):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Optimize: fetch only summary fields for transaction lists
+    txn_projection = {
+        "_id": 0, "transaction_id": 1, "share_code": 1, "item_description": 1,
+        "item_price": 1, "payment_status": 1, "transaction_state": 1, "created_at": 1,
+        "buyer_name": 1, "seller_name": 1
+    }
+    
     # Get transactions where user is buyer
     buyer_transactions = await db.transactions.find(
         {"buyer_email": user.get("email")},
-        {"_id": 0}
+        txn_projection
     ).sort("created_at", -1).to_list(100)
     
     # Get transactions where user is seller
     seller_transactions = await db.transactions.find(
         {"seller_email": user.get("email")},
-        {"_id": 0}
+        txn_projection
     ).sort("created_at", -1).to_list(100)
     
     return {

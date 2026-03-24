@@ -24,67 +24,58 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 
 ## Changelog
 
-### 2026-03-24: Production Reliability Upgrade (Session 14)
+### 2026-03-24: Admin Monitoring Dashboard (Session 14 - Part 2)
 **Implemented:**
 
-1. **Webhook Handler with Full Reliability**
-   - New `/app/backend/webhook_handler.py` module
+1. **Real-Time Admin Monitoring Dashboard** (`/admin/monitoring`)
+   - Health status banner with color-coded indicators (healthy/warning/critical)
+   - 6 key metric cards: Active Transactions, Awaiting Payment, Secured 24h, Webhook Failures, Email Failures, Stuck Transactions
+   - Auto-refresh every 15 seconds (toggleable)
+   - Manual refresh button
+
+2. **5 Dashboard Tabs:**
+   - **Overview**: Webhook & email statistics with success rates
+   - **Webhooks**: Full event table with status highlighting (processed/failed/duplicate), retry action for failed webhooks
+   - **Emails**: Full logs table with sent/failed status, resend action for failed emails
+   - **Stuck Transactions**: Detection for transactions with no update >10 minutes
+   - **Admin Actions**: Complete audit log of all admin actions
+
+3. **Manual Admin Actions (with full logging):**
+   - Retry failed webhook processing
+   - Resend failed emails
+   - Manually update transaction status with reason
+   - All actions logged to `admin_actions` collection with admin email, timestamp, and details
+
+4. **Backend Endpoints:**
+   - `GET /api/admin/monitoring/dashboard` - Comprehensive metrics
+   - `GET /api/admin/monitoring/webhook-events` - Webhook event list with filters
+   - `GET /api/admin/monitoring/email-logs` - Email log list with filters
+   - `GET /api/admin/monitoring/actions` - Admin action audit trail
+   - `POST /api/admin/monitoring/retry-webhook/{event_id}` - Retry failed webhook
+   - `POST /api/admin/monitoring/resend-email/{txn_id}/{type}` - Resend email
+   - `POST /api/admin/monitoring/update-transaction-status/{txn_id}` - Manual status update
+
+5. **AdminNavbar Updated:**
+   - Added "Monitoring" link with Activity icon
+   - Integrated TrustTrade logo with proper styling
+
+### 2026-03-24: Production Reliability Upgrade (Session 14 - Part 1)
+**Implemented:**
+
+1. **Webhook Handler with Full Reliability** (`/app/backend/webhook_handler.py`)
    - Strict idempotency using unique event IDs (SHA256 hash of payload)
    - All webhook events logged to `webhook_events` collection
-   - Duplicate webhooks automatically ignored
-   - Email deduplication with `emails_sent` array tracking per transaction
+   - Email deduplication with `emails_sent` array tracking
    - Comprehensive error logging
 
-2. **Transaction State Machine**
-   - New `/app/backend/transaction_state.py` module
+2. **Transaction State Machine** (`/app/backend/transaction_state.py`)
    - Strict state transitions enforced
    - States: CREATED → PENDING_CONFIRMATION → AWAITING_PAYMENT → PAYMENT_SECURED → DELIVERY_IN_PROGRESS → DELIVERED → COMPLETED
-   - Terminal states: COMPLETED, CANCELLED, REFUNDED
-   - Special state: DISPUTED (can transition back to flow)
 
-3. **Background Jobs**
-   - New `/app/backend/background_jobs.py` module
+3. **Background Jobs** (`/app/backend/background_jobs.py`)
    - Fallback payment verification every 3 minutes
    - Auto-release processing every 6 minutes
    - Webhook health check every 15 minutes
-   - Graceful error handling
-
-4. **Admin Monitoring Endpoints**
-   - `/api/admin/monitoring/summary` - Overall health status
-   - `/api/admin/monitoring/webhooks` - Webhook processing stats and failures
-   - `/api/admin/monitoring/emails` - Email sending stats and failures
-   - `/api/admin/monitoring/transactions` - Stuck transactions
-
-5. **Frontend Integration**
-   - TransactionStatusCard integrated into TransactionDetail page
-   - TransactionTimeline integrated with visual progress
-   - Refresh Status button added
-   - mapPaymentStatusToState helper for legacy status mapping
-
-6. **Database Collections**
-   - `webhook_events` - All webhook events with idempotency
-   - `email_logs` - All email send attempts
-   - Indexes created on startup for performance
-
-### 2026-03-22: TradeSafe Happy Path & Admin Overhaul (Session 13)
-**Implemented:**
-
-1. **TradeSafe Happy Path Complete**
-   - Start Delivery endpoint: `/api/tradesafe/start-delivery/{id}`
-   - Accept Delivery endpoint: `/api/tradesafe/accept-delivery/{id}`
-   - Webhook handler with SMS for all states
-
-2. **Admin Dashboard Complete Overhaul**
-   - Separate pages with proper routing
-   - Navigation works correctly
-   - All table rows clickable
-
-3. **Admin User Detail Page**
-   - Full user information display
-   - ID documents viewable and downloadable
-
-4. **Images Fixed**
-   - Static files mounted at `/uploads`
 
 ## Architecture
 
@@ -92,7 +83,7 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 - **Framework**: FastAPI
 - **Database**: MongoDB (motor async driver)
 - **File Storage**: Local `/app/uploads/` served via StaticFiles
-- **Main file**: `/app/backend/server.py` (4400+ lines - needs refactoring)
+- **Main file**: `/app/backend/server.py` (4600+ lines - needs refactoring)
 - **Webhook Handler**: `/app/backend/webhook_handler.py`
 - **State Machine**: `/app/backend/transaction_state.py`
 - **Background Jobs**: `/app/backend/background_jobs.py`
@@ -111,6 +102,7 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 
 ## Key Admin Routes
 - `/admin` - Dashboard overview
+- `/admin/monitoring` - **NEW** Real-time system monitoring
 - `/admin/transactions` - All transactions
 - `/admin/users` - All users
 - `/admin/disputes` - All disputes
@@ -120,10 +112,21 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 
 ## Key API Endpoints
 - `/api/tradesafe-webhook` - Production-ready webhook handler
-- `/api/admin/monitoring/summary` - System health check
-- `/api/admin/monitoring/webhooks` - Webhook stats
-- `/api/admin/monitoring/emails` - Email stats
-- `/api/admin/monitoring/transactions` - Stuck transactions
+- `/api/admin/monitoring/dashboard` - System health metrics
+- `/api/admin/monitoring/webhook-events` - Webhook event list
+- `/api/admin/monitoring/email-logs` - Email log list
+- `/api/admin/monitoring/actions` - Admin action audit trail
+- `/api/admin/monitoring/retry-webhook/{event_id}` - Retry webhook
+- `/api/admin/monitoring/resend-email/{txn_id}/{type}` - Resend email
+- `/api/admin/monitoring/update-transaction-status/{txn_id}` - Manual status update
+
+## Database Collections
+- `transactions` - Main transaction data
+- `users` - User accounts and profiles
+- `disputes` - Dispute records
+- `webhook_events` - Webhook event log (idempotency)
+- `email_logs` - Email send attempts
+- `admin_actions` - Admin action audit trail
 
 ## Prioritized Backlog
 
@@ -132,12 +135,13 @@ Professional escrow platform for peer-to-peer transactions in South Africa using
 - [x] Email deduplication
 - [x] Fallback payment verification
 - [x] State machine enforcement
-- [x] Admin monitoring endpoints
+- [x] Admin monitoring dashboard
+- [x] Admin manual actions (retry, resend, update status)
+- [x] Admin action logging/audit trail
 
 ### P1 (High Priority)
 - [ ] Refactor `server.py` monolith into routes/services/models
 - [ ] AI Scam Detection Enhancement
-- [ ] Full admin monitoring UI dashboard
 
 ### P2 (Medium Priority)
 - [ ] In-App Chat feature

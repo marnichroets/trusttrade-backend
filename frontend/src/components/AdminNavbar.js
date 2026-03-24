@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, LogOut, Shield } from 'lucide-react';
+import { Menu, X, LogOut, Shield, Activity } from 'lucide-react';
+import TrustTradeLogo from './TrustTradeLogo';
 
 export function AdminNavbar({ user, onLogout }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -8,6 +9,7 @@ export function AdminNavbar({ user, onLogout }) {
   
   const navLinks = [
     { href: '/admin', label: 'Dashboard', exact: true },
+    { href: '/admin/monitoring', label: 'Monitoring', icon: Activity },
     { href: '/admin/transactions', label: 'Transactions' },
     { href: '/admin/users', label: 'Users' },
     { href: '/admin/disputes', label: 'Disputes' },
@@ -27,8 +29,9 @@ export function AdminNavbar({ user, onLogout }) {
           {/* Logo */}
           <div className="flex items-center gap-6">
             <Link to="/admin" className="flex items-center gap-2">
-              <Shield className="w-6 h-6 text-white" />
+              <TrustTradeLogo size="sm" showText={false} />
               <span className="text-white font-bold text-lg">TrustTrade</span>
+              <span className="text-xs text-emerald-400 font-medium px-2 py-0.5 bg-emerald-500/20 rounded">Admin</span>
             </Link>
             
             {/* Desktop Nav */}
@@ -37,12 +40,13 @@ export function AdminNavbar({ user, onLogout }) {
                 <Link
                   key={link.href}
                   to={link.href}
-                  className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
+                  className={`px-3 py-2 rounded text-sm font-medium transition-colors flex items-center gap-1 ${
                     isActive(link)
                       ? 'text-white bg-white/20'
                       : 'text-white/70 hover:text-white hover:bg-white/10'
                   }`}
                 >
+                  {link.icon && <link.icon className="w-4 h-4" />}
                   {link.label}
                 </Link>
               ))}
@@ -54,7 +58,6 @@ export function AdminNavbar({ user, onLogout }) {
             {user && (
               <div className="hidden md:flex items-center gap-3">
                 <span className="text-white/70 text-sm">{user.name}</span>
-                <span className="px-2 py-1 text-xs rounded bg-white/20 text-white font-medium">Admin</span>
               </div>
             )}
             
@@ -88,12 +91,13 @@ export function AdminNavbar({ user, onLogout }) {
                 key={link.href}
                 to={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`block px-3 py-2 rounded text-sm font-medium ${
+                className={`block px-3 py-2 rounded text-sm font-medium flex items-center gap-2 ${
                   isActive(link)
                     ? 'text-white bg-white/20'
                     : 'text-white/70 hover:text-white hover:bg-white/10'
                 }`}
               >
+                {link.icon && <link.icon className="w-4 h-4" />}
                 {link.label}
               </Link>
             ))}

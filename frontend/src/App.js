@@ -14,6 +14,7 @@ import AdminDisputes from './pages/AdminDisputes';
 import AdminTransactionDetail from './pages/AdminTransactionDetail';
 import AdminDisputeDetail from './pages/AdminDisputeDetail';
 import AdminUserDetail from './pages/AdminUserDetail';
+import AdminMonitoring from './pages/AdminMonitoring';
 import TermsAndConditions from './pages/TermsAndConditions';
 import ShareTransaction from './pages/ShareTransaction';
 import UserProfile from './pages/UserProfile';
@@ -54,6 +55,7 @@ function AppRouter() {
       
       {/* Admin Routes */}
       <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+      <Route path="/admin/monitoring" element={<ProtectedRoute><AdminMonitoring /></ProtectedRoute>} />
       <Route path="/admin/transactions" element={<ProtectedRoute><AdminTransactions /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute><AdminUsers /></ProtectedRoute>} />
       <Route path="/admin/disputes" element={<ProtectedRoute><AdminDisputes /></ProtectedRoute>} />

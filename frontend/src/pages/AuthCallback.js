@@ -99,7 +99,7 @@ function AuthCallback() {
         console.log('[AuthCallback] ========== END ==========');
         
         // Navigate ONCE to dashboard
-        navigate(destination, { replace: true });
+        window.location.href = destination;
 
       } catch (error) {
         console.error('[AuthCallback] Error:', error);

@@ -7,27 +7,30 @@ function ProtectedRoute({ children }) {
   const navigate = useNavigate();
   const hasRedirected = useRef(false);
 
-  // Check localStorage directly as fallback (handles race conditions)
+  // Check localStorage directly as a sync fallback
   const token = localStorage.getItem('session_token');
   const userData = localStorage.getItem('user_data');
   const hasLocalAuth = !!(token && userData);
 
-  console.log('[PROTECTED_ROUTE_RENDERED] loading:', loading, 'isAuthenticated:', isAuthenticated, 'hasLocalAuth:', hasLocalAuth);
+  // Effective auth = context OR localStorage (handles race conditions)
+  const effectivelyAuthenticated = isAuthenticated || hasLocalAuth;
+
+  console.log('[PROTECTED_ROUTE] loading:', loading, 'contextAuth:', isAuthenticated, 'localAuth:', hasLocalAuth);
 
   useEffect(() => {
     // Don't redirect while loading
     if (loading) return;
     
-    // Don't redirect if already authenticated via context OR localStorage
-    if (isAuthenticated || hasLocalAuth) return;
+    // Don't redirect if authenticated
+    if (effectivelyAuthenticated) return;
     
     // Don't redirect multiple times
     if (hasRedirected.current) return;
     
-    console.log('[PROTECTED_ROUTE_REDIRECT] Not authenticated, redirecting to /');
+    console.log('[PROTECTED_ROUTE] Not authenticated, redirecting to /');
     hasRedirected.current = true;
     navigate('/', { replace: true });
-  }, [loading, isAuthenticated, hasLocalAuth, navigate]);
+  }, [loading, effectivelyAuthenticated, navigate]);
 
   // Show loading spinner while auth is being checked
   if (loading) {
@@ -41,12 +44,12 @@ function ProtectedRoute({ children }) {
     );
   }
 
-  // If authenticated via context OR localStorage, render children
-  if (isAuthenticated || hasLocalAuth) {
+  // If authenticated, render children
+  if (effectivelyAuthenticated) {
     return children;
   }
 
-  // Not authenticated - return null (redirect will happen via useEffect)
+  // Not authenticated - return null while redirect happens
   return null;
 }
 

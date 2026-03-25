@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowRight, CheckCircle, Users, Lock, Zap, Shield, Truck, CreditCard, UserCheck } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -8,12 +10,29 @@ const API = `${BACKEND_URL}/api`;
 
 function LandingPage() {
   const [stats, setStats] = useState({ total_transactions: 0, success_rate: 100 });
+  const { isAuthenticated, loading } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate]);
 
   useEffect(() => {
     axios.get(`${API}/public/stats`).then(res => setStats(res.data)).catch(() => {});
   }, []);
 
   const handleLogin = () => {
+    // Check localStorage first (handles edge cases)
+    const token = localStorage.getItem('session_token');
+    const userData = localStorage.getItem('user_data');
+    if (token && userData) {
+      navigate('/dashboard', { replace: true });
+      return;
+    }
+    // Redirect to Emergent Auth with current origin as callback
     window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(window.location.origin)}`;
   };
 
@@ -21,13 +40,22 @@ function LandingPage() {
     document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Show loading while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
       <nav className="bg-white sticky top-0 z-50 border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-12 object-contain" />
+            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-14 md:h-16 object-contain" />
             <div className="flex items-center gap-4">
               <Button variant="ghost" onClick={handleLogin} className="text-slate-700 hover:text-blue-600 font-medium">
                 Log In
@@ -172,7 +200,7 @@ function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div className="md:col-span-2">
-              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-16 object-contain mb-4" />
+              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-20 md:h-24 object-contain mb-4" />
               <p className="text-slate-500">Secure Escrow Protection for South Africa</p>
             </div>
             <div>

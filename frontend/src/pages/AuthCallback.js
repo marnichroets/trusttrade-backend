@@ -10,11 +10,18 @@ const API = `${BACKEND_URL}/api`;
 function AuthCallback() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const hasProcessed = useRef(false);
   const [status, setStatus] = useState('Processing...');
 
   useEffect(() => {
+    // If already authenticated, go to dashboard
+    if (isAuthenticated) {
+      console.log('[AuthCallback] Already authenticated, redirecting to dashboard');
+      navigate('/dashboard', { replace: true });
+      return;
+    }
+
     // Strict guard against double-processing
     if (hasProcessed.current) {
       console.log('[AuthCallback] Already processed, skipping');
@@ -69,7 +76,11 @@ function AuthCallback() {
           picture: data.picture,
         };
 
-        // Call login() - this updates context AND localStorage
+        // Store in localStorage FIRST before calling login
+        localStorage.setItem('session_token', token);
+        localStorage.setItem('user_data', JSON.stringify(userData));
+
+        // Call login() - this updates context state
         login(userData, token);
         
         // Verify localStorage was set
@@ -98,7 +109,7 @@ function AuthCallback() {
         console.log('[NAVIGATE_CALLED] destination:', destination);
         console.log('[AuthCallback] ========== END ==========');
         
-        // Navigate ONCE to dashboard
+        // Navigate to dashboard
         navigate(destination, { replace: true });
 
       } catch (error) {
@@ -110,7 +121,8 @@ function AuthCallback() {
     };
 
     processSession();
-  }, []); // Empty dependency array - run only once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]); // Only depend on isAuthenticated for early redirect
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">

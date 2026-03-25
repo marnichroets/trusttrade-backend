@@ -10,45 +10,33 @@ const API = `${BACKEND_URL}/api`;
 function AuthCallback() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isAuthenticated } = useAuth();
+  const { login } = useAuth();
   const hasProcessed = useRef(false);
   const [status, setStatus] = useState('Processing...');
 
   useEffect(() => {
-    // If already authenticated, go to dashboard
-    if (isAuthenticated) {
-      console.log('[AuthCallback] Already authenticated, redirecting to dashboard');
-      navigate('/dashboard', { replace: true });
-      return;
-    }
-
-    // Strict guard against double-processing
-    if (hasProcessed.current) {
-      console.log('[AuthCallback] Already processed, skipping');
-      return;
-    }
+    // Process exactly once
+    if (hasProcessed.current) return;
     hasProcessed.current = true;
 
     const processSession = async () => {
       try {
-        console.log('[AuthCallback] ========== START ==========');
-        setStatus('Extracting session...');
+        console.log('[CALLBACK] Start processing');
         
         const hash = location.hash;
         const params = new URLSearchParams(hash.substring(1));
         const sessionId = params.get('session_id');
 
         if (!sessionId) {
-          console.error('[AuthCallback] No session_id in URL');
+          console.log('[CALLBACK] No session_id');
           toast.error('No session ID found');
           navigate('/', { replace: true });
           return;
         }
 
-        console.log('[AuthCallback] Session ID:', sessionId.substring(0, 15) + '...');
         setStatus('Authenticating...');
 
-        // Exchange session_id for user data
+        // Exchange session_id for user data - this validates with Emergent Auth
         const response = await axios.post(
           `${API}/auth/session`,
           { session_id: sessionId },
@@ -57,43 +45,48 @@ function AuthCallback() {
 
         const data = response.data;
         const token = data.session_token;
-        
-        console.log('[TOKEN_PRESENT]', token ? 'YES' : 'NO');
 
         if (!token) {
-          console.error('[AuthCallback] No token in response!');
+          console.log('[CALLBACK] No token in response');
           toast.error('Authentication error');
           navigate('/', { replace: true });
           return;
         }
 
-        // Create user object
+        console.log('[CALLBACK] Got token, validating with /auth/me');
+
+        // Store token first
+        localStorage.setItem('session_token', token);
+
+        // Validate token is working by calling /auth/me
+        const meResponse = await axios.get(`${API}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!meResponse.data?.user_id) {
+          throw new Error('Token validation failed');
+        }
+
+        console.log('[CALLBACK] Token validated, user:', meResponse.data.email);
+
         const userData = {
-          user_id: data.user_id,
-          email: data.email,
-          name: data.name,
-          is_admin: data.is_admin,
-          picture: data.picture,
+          user_id: meResponse.data.user_id,
+          email: meResponse.data.email,
+          name: meResponse.data.name,
+          is_admin: meResponse.data.is_admin,
+          picture: meResponse.data.picture,
         };
 
-        // Store in localStorage FIRST before calling login
-        localStorage.setItem('session_token', token);
-        localStorage.setItem('user_data', JSON.stringify(userData));
+        // Now call login to update context state
+        await login(userData, token);
 
-        // Call login() - this updates context state
-        login(userData, token);
-        
-        // Verify localStorage was set
-        const storedToken = localStorage.getItem('session_token');
-        console.log('[AuthCallback] Verified localStorage token:', storedToken ? 'YES' : 'NO');
-
-        setStatus('Login successful!');
-        toast.success(`Welcome, ${userData.name || userData.email}!`);
-
-        // Clear URL hash to prevent re-processing
+        // Clear URL hash
         window.history.replaceState(null, '', window.location.pathname);
 
-        // Determine redirect destination
+        setStatus('Success!');
+        toast.success(`Welcome, ${userData.name || userData.email}!`);
+
+        // Get redirect destination
         const pendingShareCode = sessionStorage.getItem('pendingShareCode');
         const redirectAfterLogin = sessionStorage.getItem('redirectAfterLogin');
         
@@ -106,23 +99,22 @@ function AuthCallback() {
           destination = redirectAfterLogin;
         }
 
-        console.log('[NAVIGATE_CALLED] destination:', destination);
-        console.log('[AuthCallback] ========== END ==========');
-        
-        // Navigate to dashboard
+        console.log('[CALLBACK] Navigating to:', destination);
         navigate(destination, { replace: true });
 
       } catch (error) {
-        console.error('[AuthCallback] Error:', error);
+        console.error('[CALLBACK] Error:', error);
+        localStorage.removeItem('session_token');
+        localStorage.removeItem('user_data');
         setStatus('Authentication failed');
-        toast.error(`Login failed: ${error.response?.data?.detail || error.message}`);
+        toast.error('Login failed');
         navigate('/', { replace: true });
       }
     };
 
     processSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]); // Only depend on isAuthenticated for early redirect
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">

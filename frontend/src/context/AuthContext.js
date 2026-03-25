@@ -4,48 +4,33 @@ import api from '../utils/api';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  // Track if we've initialized to prevent re-runs
   const initialized = useRef(false);
-  
-  // Initialize state synchronously from localStorage
-  const [user, setUser] = useState(() => {
-    const storedUser = localStorage.getItem('user_data');
-    if (storedUser) {
-      try {
-        return JSON.parse(storedUser);
-      } catch (e) {
-        return null;
-      }
-    }
-    return null;
-  });
-  
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    const token = localStorage.getItem('session_token');
-    const storedUser = localStorage.getItem('user_data');
-    return !!(token && storedUser);
-  });
-  
+  const [user, setUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Initialize ONCE on mount
+  // Validate token with backend on mount - this is the ONLY way to become authenticated
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-    
-    const token = localStorage.getItem('session_token');
-    console.log('[AUTH_STATE_INITIALIZED] token:', token ? 'YES' : 'NO', 'isAuthenticated:', !!(token && localStorage.getItem('user_data')));
-    
-    if (!token) {
-      setLoading(false);
-      return;
-    }
 
-    // Verify token in background
-    api.get('/auth/me')
-      .then(response => {
+    const validateToken = async () => {
+      const token = localStorage.getItem('session_token');
+      
+      console.log('[AUTH] Validating token:', token ? 'present' : 'none');
+      
+      if (!token) {
+        console.log('[AUTH] No token, setting unauthenticated');
+        setIsAuthenticated(false);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await api.get('/auth/me');
         if (response.data?.user_id) {
-          console.log('[TOKEN_VALID] user:', response.data.email);
+          console.log('[AUTH] Token valid, user:', response.data.email);
           const userData = {
             user_id: response.data.user_id,
             email: response.data.email,
@@ -56,46 +41,47 @@ export function AuthProvider({ children }) {
           setUser(userData);
           setIsAuthenticated(true);
           localStorage.setItem('user_data', JSON.stringify(userData));
+        } else {
+          throw new Error('Invalid response');
         }
-      })
-      .catch(error => {
-        console.log('[TOKEN_INVALID]', error.response?.status || error.message);
-        if (error.response?.status === 401) {
-          localStorage.removeItem('session_token');
-          localStorage.removeItem('user_data');
-          setUser(null);
-          setIsAuthenticated(false);
-        }
-      })
-      .finally(() => {
+      } catch (error) {
+        console.log('[AUTH] Token invalid, clearing:', error.response?.status || error.message);
+        localStorage.removeItem('session_token');
+        localStorage.removeItem('user_data');
+        setUser(null);
+        setIsAuthenticated(false);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+
+    validateToken();
   }, []);
 
-  // Login function - called after successful OAuth
-  const login = useCallback((userData, token) => {
-    console.log('[LOGIN_CALLED] user:', userData.email);
+  // Login: store token and validate with backend
+  const login = useCallback(async (userData, token) => {
+    console.log('[AUTH] Login called for:', userData.email);
     
-    // Store in localStorage FIRST
+    // Store token
     localStorage.setItem('session_token', token);
     localStorage.setItem('user_data', JSON.stringify(userData));
     
-    // Then update state
+    // Set state - token is already validated by AuthCallback
     setUser(userData);
     setIsAuthenticated(true);
     setLoading(false);
     
-    console.log('[LOGIN_COMPLETE] isAuthenticated: true');
+    console.log('[AUTH] Login complete');
   }, []);
 
-  // Logout function
+  // Logout
   const logout = useCallback(async () => {
-    console.log('[LOGOUT_CALLED]');
+    console.log('[AUTH] Logout called');
     
     try {
       await api.post('/auth/logout');
     } catch (error) {
-      // Ignore logout API errors
+      // Ignore
     }
     
     localStorage.removeItem('session_token');
@@ -103,10 +89,9 @@ export function AuthProvider({ children }) {
     setUser(null);
     setIsAuthenticated(false);
     
-    console.log('[LOGOUT_COMPLETE]');
+    console.log('[AUTH] Logout complete');
   }, []);
 
-  // Refresh user data from API
   const refreshUser = useCallback(async () => {
     try {
       const response = await api.get('/auth/me');
@@ -123,22 +108,13 @@ export function AuthProvider({ children }) {
         return userData;
       }
     } catch (error) {
-      console.error('[REFRESH_FAILED]', error);
+      console.error('[AUTH] Refresh failed:', error);
     }
     return null;
   }, []);
 
-  const value = {
-    user,
-    loading,
-    isAuthenticated,
-    login,
-    logout,
-    refreshUser,
-  };
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ user, loading, isAuthenticated, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

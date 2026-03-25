@@ -7,50 +7,39 @@ function ProtectedRoute({ children }) {
   const navigate = useNavigate();
   const hasRedirected = useRef(false);
 
-  // Check localStorage directly as a sync fallback
-  const token = localStorage.getItem('session_token');
-  const userData = localStorage.getItem('user_data');
-  const hasLocalAuth = !!(token && userData);
-
-  // Effective auth = context OR localStorage (handles race conditions)
-  const effectivelyAuthenticated = isAuthenticated || hasLocalAuth;
-
-  console.log('[PROTECTED_ROUTE] loading:', loading, 'contextAuth:', isAuthenticated, 'localAuth:', hasLocalAuth);
+  console.log('[PROTECTED] loading:', loading, 'isAuthenticated:', isAuthenticated);
 
   useEffect(() => {
-    // Don't redirect while loading
+    // Wait for auth check to complete
     if (loading) return;
     
-    // Don't redirect if authenticated
-    if (effectivelyAuthenticated) return;
+    // Already authenticated - do nothing
+    if (isAuthenticated) return;
     
-    // Don't redirect multiple times
+    // Prevent multiple redirects
     if (hasRedirected.current) return;
-    
-    console.log('[PROTECTED_ROUTE] Not authenticated, redirecting to /');
     hasRedirected.current = true;
+    
+    console.log('[PROTECTED] Not authenticated, redirecting to /');
     navigate('/', { replace: true });
-  }, [loading, effectivelyAuthenticated, navigate]);
+  }, [loading, isAuthenticated, navigate]);
 
-  // Show loading spinner while auth is being checked
+  // Show loading while auth is being validated
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-500 text-sm">Loading...</p>
-        </div>
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
-  // If authenticated, render children
-  if (effectivelyAuthenticated) {
-    return children;
+  // Not authenticated - show nothing while redirect happens
+  if (!isAuthenticated) {
+    return null;
   }
 
-  // Not authenticated - return null while redirect happens
-  return null;
+  // Authenticated - render children
+  return children;
 }
 
 export default ProtectedRoute;

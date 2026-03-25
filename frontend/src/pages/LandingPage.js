@@ -13,9 +13,14 @@ function LandingPage() {
   const { isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect to dashboard if already authenticated
+  // Redirect to dashboard ONLY if backend-validated authenticated
   useEffect(() => {
-    if (!loading && isAuthenticated) {
+    // Wait for auth validation to complete
+    if (loading) return;
+    
+    // Only redirect if truly authenticated (validated by backend)
+    if (isAuthenticated) {
+      console.log('[LANDING] Authenticated, redirecting to dashboard');
       navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, loading, navigate]);
@@ -25,13 +30,6 @@ function LandingPage() {
   }, []);
 
   const handleLogin = () => {
-    // Check localStorage first (handles edge cases)
-    const token = localStorage.getItem('session_token');
-    const userData = localStorage.getItem('user_data');
-    if (token && userData) {
-      navigate('/dashboard', { replace: true });
-      return;
-    }
     // Redirect to Emergent Auth with current origin as callback
     window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(window.location.origin)}`;
   };
@@ -40,7 +38,7 @@ function LandingPage() {
     document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Show loading while checking auth
+  // Show loading while auth is being validated
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">

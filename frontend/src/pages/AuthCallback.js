@@ -18,13 +18,11 @@ function AuthCallback() {
     if (hasProcessed.current) return;
     hasProcessed.current = true;
 
-    // 5-second timeout to prevent infinite loading
     const timeout = setTimeout(() => {
-      console.log('[CALLBACK] Timeout - clearing auth and redirecting');
       localStorage.removeItem('session_token');
       localStorage.removeItem('user_data');
-      navigate('/', { replace: true });
-    }, 5000);
+      window.location.href = '/';
+    }, 10000);
 
     const processSession = async () => {
       try {
@@ -34,7 +32,7 @@ function AuthCallback() {
 
         if (!sessionId) {
           clearTimeout(timeout);
-          navigate('/', { replace: true });
+          window.location.href = '/';
           return;
         }
 
@@ -49,7 +47,7 @@ function AuthCallback() {
         const token = response.data.session_token;
         if (!token) {
           clearTimeout(timeout);
-          navigate('/', { replace: true });
+          window.location.href = '/';
           return;
         }
 
@@ -71,18 +69,24 @@ function AuthCallback() {
           picture: meResponse.data.picture,
         };
 
+        localStorage.setItem('user_data', JSON.stringify(userData));
+        
         clearTimeout(timeout);
+        
+        // Call login to update context
         await login(userData, token);
-        window.history.replaceState(null, '', window.location.pathname);
+        
         toast.success(`Welcome, ${userData.name || userData.email}!`);
-        navigate('/dashboard', { replace: true });
+        
+        // Use window.location for full page load - ensures AuthContext re-initializes with token
+        window.location.href = '/dashboard';
 
       } catch (error) {
         console.error('[CALLBACK] Error:', error);
         clearTimeout(timeout);
         localStorage.removeItem('session_token');
         localStorage.removeItem('user_data');
-        navigate('/', { replace: true });
+        window.location.href = '/';
       }
     };
 

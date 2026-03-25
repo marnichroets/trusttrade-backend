@@ -7,13 +7,19 @@ function ProtectedRoute({ children }) {
   const navigate = useNavigate();
   const hasRedirected = useRef(false);
 
+  // Check localStorage as fallback for race condition after AuthCallback
+  const token = localStorage.getItem('session_token');
+  const hasToken = !!token;
+
   useEffect(() => {
     if (loading) return;
-    if (isAuthenticated) return;
+    // If context says not authenticated BUT localStorage has token, don't redirect yet
+    // This handles the race condition after AuthCallback stores token
+    if (isAuthenticated || hasToken) return;
     if (hasRedirected.current) return;
     hasRedirected.current = true;
     navigate('/', { replace: true });
-  }, [loading, isAuthenticated, navigate]);
+  }, [loading, isAuthenticated, hasToken, navigate]);
 
   if (loading) {
     return (
@@ -23,7 +29,8 @@ function ProtectedRoute({ children }) {
     );
   }
 
-  if (!isAuthenticated) return null;
+  // Allow render if context authenticated OR localStorage has token
+  if (!isAuthenticated && !hasToken) return null;
 
   return children;
 }

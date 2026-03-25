@@ -29,8 +29,8 @@ class Transaction(BaseModel):
     known_issues: Optional[str] = None
     item_photos: List[str] = []
     item_price: float
-    trusttrade_fee: float
-    total: float
+    trusttrade_fee: Optional[float] = 0.0
+    total: Optional[float] = None
     fee_paid_by: str = "split"  # "buyer", "seller", or "split"
     delivery_method: str = "courier"  # "courier", "bank_deposit", "digital"
     auto_release_days: int = 3

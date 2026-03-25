@@ -9,7 +9,7 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Validate token with backend on mount - this is the ONLY way to become authenticated
+  // Validate token with backend on mount
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
@@ -17,10 +17,7 @@ export function AuthProvider({ children }) {
     const validateToken = async () => {
       const token = localStorage.getItem('session_token');
       
-      console.log('[AUTH] Validating token:', token ? 'present' : 'none');
-      
       if (!token) {
-        console.log('[AUTH] No token, setting unauthenticated');
         setIsAuthenticated(false);
         setUser(null);
         setLoading(false);
@@ -30,7 +27,6 @@ export function AuthProvider({ children }) {
       try {
         const response = await api.get('/auth/me');
         if (response.data?.user_id) {
-          console.log('[AUTH] Token valid, user:', response.data.email);
           const userData = {
             user_id: response.data.user_id,
             email: response.data.email,
@@ -45,17 +41,21 @@ export function AuthProvider({ children }) {
           throw new Error('Invalid response');
         }
       } catch (error) {
-        console.log('[AUTH] Token invalid, clearing:', error.response?.status || error.message);
         localStorage.removeItem('session_token');
         localStorage.removeItem('user_data');
         setUser(null);
         setIsAuthenticated(false);
-      } finally {
-        setLoading(false);
       }
+      // ALWAYS set loading to false
+      setLoading(false);
     };
 
-    validateToken();
+    // Timeout to guarantee loading exits
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
+
+    validateToken().finally(() => clearTimeout(timeout));
   }, []);
 
   // Login: store token and validate with backend

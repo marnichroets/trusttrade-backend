@@ -15,59 +15,53 @@ function AuthCallback() {
   const [status, setStatus] = useState('Processing...');
 
   useEffect(() => {
-    // Process exactly once
     if (hasProcessed.current) return;
     hasProcessed.current = true;
 
+    // 5-second timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      console.log('[CALLBACK] Timeout - clearing auth and redirecting');
+      localStorage.removeItem('session_token');
+      localStorage.removeItem('user_data');
+      navigate('/', { replace: true });
+    }, 5000);
+
     const processSession = async () => {
       try {
-        console.log('[CALLBACK] Start processing');
-        
         const hash = location.hash;
         const params = new URLSearchParams(hash.substring(1));
         const sessionId = params.get('session_id');
 
         if (!sessionId) {
-          console.log('[CALLBACK] No session_id');
-          toast.error('No session ID found');
+          clearTimeout(timeout);
           navigate('/', { replace: true });
           return;
         }
 
         setStatus('Authenticating...');
 
-        // Exchange session_id for user data - this validates with Emergent Auth
         const response = await axios.post(
           `${API}/auth/session`,
           { session_id: sessionId },
           { withCredentials: true }
         );
 
-        const data = response.data;
-        const token = data.session_token;
-
+        const token = response.data.session_token;
         if (!token) {
-          console.log('[CALLBACK] No token in response');
-          toast.error('Authentication error');
+          clearTimeout(timeout);
           navigate('/', { replace: true });
           return;
         }
 
-        console.log('[CALLBACK] Got token, validating with /auth/me');
-
-        // Store token first
         localStorage.setItem('session_token', token);
 
-        // Validate token is working by calling /auth/me
         const meResponse = await axios.get(`${API}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
         if (!meResponse.data?.user_id) {
-          throw new Error('Token validation failed');
+          throw new Error('Validation failed');
         }
-
-        console.log('[CALLBACK] Token validated, user:', meResponse.data.email);
 
         const userData = {
           user_id: meResponse.data.user_id,
@@ -77,37 +71,17 @@ function AuthCallback() {
           picture: meResponse.data.picture,
         };
 
-        // Now call login to update context state
+        clearTimeout(timeout);
         await login(userData, token);
-
-        // Clear URL hash
         window.history.replaceState(null, '', window.location.pathname);
-
-        setStatus('Success!');
         toast.success(`Welcome, ${userData.name || userData.email}!`);
-
-        // Get redirect destination
-        const pendingShareCode = sessionStorage.getItem('pendingShareCode');
-        const redirectAfterLogin = sessionStorage.getItem('redirectAfterLogin');
-        
-        let destination = '/dashboard';
-        if (pendingShareCode) {
-          sessionStorage.removeItem('pendingShareCode');
-          destination = `/t/${pendingShareCode}`;
-        } else if (redirectAfterLogin) {
-          sessionStorage.removeItem('redirectAfterLogin');
-          destination = redirectAfterLogin;
-        }
-
-        console.log('[CALLBACK] Navigating to:', destination);
-        navigate(destination, { replace: true });
+        navigate('/dashboard', { replace: true });
 
       } catch (error) {
         console.error('[CALLBACK] Error:', error);
+        clearTimeout(timeout);
         localStorage.removeItem('session_token');
         localStorage.removeItem('user_data');
-        setStatus('Authentication failed');
-        toast.error('Login failed');
         navigate('/', { replace: true });
       }
     };

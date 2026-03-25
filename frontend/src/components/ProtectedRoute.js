@@ -7,24 +7,14 @@ function ProtectedRoute({ children }) {
   const navigate = useNavigate();
   const hasRedirected = useRef(false);
 
-  console.log('[PROTECTED] loading:', loading, 'isAuthenticated:', isAuthenticated);
-
   useEffect(() => {
-    // Wait for auth check to complete
     if (loading) return;
-    
-    // Already authenticated - do nothing
     if (isAuthenticated) return;
-    
-    // Prevent multiple redirects
     if (hasRedirected.current) return;
     hasRedirected.current = true;
-    
-    console.log('[PROTECTED] Not authenticated, redirecting to /');
     navigate('/', { replace: true });
   }, [loading, isAuthenticated, navigate]);
 
-  // Show loading while auth is being validated
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -33,12 +23,8 @@ function ProtectedRoute({ children }) {
     );
   }
 
-  // Not authenticated - show nothing while redirect happens
-  if (!isAuthenticated) {
-    return null;
-  }
+  if (!isAuthenticated) return null;
 
-  // Authenticated - render children
   return children;
 }
 

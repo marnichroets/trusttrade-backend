@@ -14,7 +14,7 @@ function LandingPage() {
   }, []);
 
   const handleLogin = () => {
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(window.location.origin)}`;
+    window.location.href = `${process.env.REACT_APP_BACKEND_URL}/api/auth/google`;
   };
 
   const scrollToHowItWorks = () => {

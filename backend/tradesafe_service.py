@@ -516,6 +516,14 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
         tradesafe_id: The TradeSafe transaction ID
         redirect_urls: Optional dict with success, failure, cancel URLs
     """
+    import traceback
+    
+    print(f"=== get_payment_link called ===")
+    print(f"tradesafe_id: {tradesafe_id}")
+    print(f"redirect_urls: {redirect_urls}")
+    print(f"TRADESAFE_ENV: {TRADESAFE_ENV}")
+    print(f"TRADESAFE_API_URL: {TRADESAFE_API_URL}")
+    
     # Default redirect URLs (use environment variables)
     if not redirect_urls:
         redirect_urls = {
@@ -539,22 +547,35 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     }
     """
     
-    result = await execute_graphql(query, {"id": tradesafe_id})
-    logger.info(f"=== GET TRANSACTION FOR PAYMENT ===")
-    logger.info(f"Result: {result}")
+    try:
+        result = await execute_graphql(query, {"id": tradesafe_id})
+        print(f"=== GET TRANSACTION RAW RESPONSE ===")
+        print(f"Result: {result}")
+        logger.info(f"=== GET TRANSACTION FOR PAYMENT ===")
+        logger.info(f"Result: {result}")
+    except Exception as e:
+        print(f"=== ERROR fetching transaction ===")
+        print(f"Error: {str(e)}")
+        traceback.print_exc()
+        return None
     
     if not result or 'transaction' not in result:
         if result and 'errors' in result:
+            print(f"Transaction query errors: {result['errors']}")
             logger.error(f"Transaction query error: {result['errors']}")
+        print(f"Could not fetch transaction {tradesafe_id}")
         logger.error(f"Could not fetch transaction {tradesafe_id}")
         return None
     
     tx = result['transaction']
+    print(f"Transaction state: {tx.get('state')}")
     
     # Check if there's already a deposit with payment link
     deposits = tx.get('deposits', [])
+    print(f"Existing deposits: {deposits}")
     for deposit in deposits:
         if deposit.get('paymentLink'):
+            print(f"Found existing payment link: {deposit['paymentLink']}")
             logger.info(f"Found existing payment link: {deposit['paymentLink']}")
             return {
                 "tradesafe_id": tx['id'],
@@ -589,11 +610,21 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
             "redirects": redirect_urls
         }
         
+        print(f"=== TRYING PAYMENT METHOD: {method} ===")
+        print(f"Request variables: {variables}")
         logger.info(f"=== TRYING PAYMENT METHOD: {method} ===")
-        result = await execute_graphql(mutation, variables)
+        
+        try:
+            result = await execute_graphql(mutation, variables)
+            print(f"Raw result for {method}: {result}")
+        except Exception as e:
+            print(f"Exception calling transactionDeposit with {method}: {str(e)}")
+            traceback.print_exc()
+            continue
         
         if result and 'errors' in result:
             error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
+            print(f"Method {method} failed with errors: {result['errors']}")
             logger.warning(f"Method {method} failed: {error_msg}")
             continue
         
@@ -602,6 +633,11 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
             last_deposit = deposit
             payment_link = deposit.get('paymentLink')
             
+            print(f"Deposit created with {method}:")
+            print(f"  deposit_id: {deposit.get('id')}")
+            print(f"  paymentLink: {payment_link}")
+            print(f"  value: {deposit.get('value')}")
+            print(f"  processingFee: {deposit.get('processingFee')}")
             logger.info(f"Deposit created with {method}: link={payment_link}, value={deposit.get('value')}")
             
             if payment_link:
@@ -620,6 +656,8 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     # If we got a deposit but no payment link (EFT case), return deposit info
     # The frontend will show bank details or instruct user
     if last_deposit:
+        print(f"=== Returning EFT deposit info (no payment link) ===")
+        print(f"last_deposit: {last_deposit}")
         logger.info(f"Returning EFT deposit info without payment link")
         return {
             "tradesafe_id": tradesafe_id,
@@ -633,6 +671,7 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
             "message": "Please use bank details for EFT payment. See transaction for bank account details."
         }
     
+    print("=== get_payment_link returning None - no deposit created ===")
     return None
 
 

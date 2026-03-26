@@ -153,6 +153,9 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
 @router.get("/payment-url/{transaction_id}")
 async def get_tradesafe_payment_url(request: Request, transaction_id: str):
     """Get TradeSafe payment URL for a transaction."""
+    import traceback
+    
+    print("=== PAY FLOW START ===")
     db = get_database()
     
     user = await get_user_from_token(request, db)
@@ -165,6 +168,12 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
         raise HTTPException(status_code=404, detail="Transaction not found")
     
     tradesafe_id = transaction.get("tradesafe_id")
+    tradesafe_allocation_id = transaction.get("tradesafe_allocation_id")
+    
+    print(f"TrustTrade txn_id: {transaction_id}")
+    print(f"TradeSafe transaction ID: {tradesafe_id}")
+    print(f"TradeSafe allocation ID: {tradesafe_allocation_id}")
+    
     if not tradesafe_id:
         raise HTTPException(status_code=400, detail="Please create an escrow first before making payment.")
     
@@ -176,16 +185,27 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
         "cancel": f"{frontend_url}/transaction/cancelled?tx={transaction_id}"
     }
     
+    print(f"Redirect URLs: {redirect_urls}")
+    
     logger.info(f"=== GETTING PAYMENT URL for {transaction_id} ===")
     
-    payment_info = await get_payment_link(tradesafe_id, redirect_urls)
+    try:
+        payment_info = await get_payment_link(tradesafe_id, redirect_urls)
+        print(f"TradeSafe raw payment_info response: {payment_info}")
+    except Exception as e:
+        print("=== PAY FLOW ERROR ===")
+        print(f"Error calling get_payment_link: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Payment processing error: {str(e)}")
     
     if not payment_info:
+        print("=== PAY FLOW ERROR: payment_info is None ===")
         raise HTTPException(status_code=500, detail="Payment processing error. Please try again.")
     
-    if not payment_info.get("payment_link"):
-        logger.error(f"No payment link returned for {tradesafe_id}")
-        raise HTTPException(status_code=500, detail="Could not generate payment link. Please try again.")
+    # For EFT payments, payment_link may be None - that's OK
+    # TradeSafe EFT deposits don't generate a redirect link, buyer uses bank details
+    payment_link = payment_info.get("payment_link")
+    print(f"Parsed payment_link: {payment_link}")
     
     # Calculate fee breakdown
     fee_breakdown = calculate_fees(
@@ -193,15 +213,19 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
         transaction.get("fee_paid_by", "split")
     )
     
-    logger.info(f"=== PAYMENT URL: {payment_info.get('payment_link')} ===")
+    logger.info(f"=== PAYMENT URL: {payment_link} ===")
+    print(f"=== PAY FLOW END (success) ===")
     
     return {
         "transaction_id": transaction_id,
         "tradesafe_id": tradesafe_id,
-        "payment_link": payment_info.get("payment_link"),
+        "payment_link": payment_link,
         "payment_methods": payment_info.get("payment_methods", ALLOWED_PAYMENT_METHODS),
         "state": payment_info.get("state"),
-        "fee_breakdown": fee_breakdown
+        "fee_breakdown": fee_breakdown,
+        "deposit_id": payment_info.get("deposit_id"),
+        "method": payment_info.get("method"),
+        "message": payment_info.get("message")
     }
 
 

@@ -36,6 +36,7 @@ function Disputes() {
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     transaction_id: '',
+    dispute_type: 'Other',
     description: ''
   });
   const navigate = useNavigate();
@@ -89,7 +90,7 @@ function Disputes() {
       );
 
       toast.success('Dispute raised successfully');
-      setFormData({ transaction_id: '', description: '' });
+      setFormData({ transaction_id: '', dispute_type: 'Other', description: '' });
       setShowForm(false);
       fetchData(); // Refresh data
     } catch (error) {
@@ -158,6 +159,25 @@ function Disputes() {
                         {getTransactionLabel(txn)}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="dispute_type">Dispute Type *</Label>
+                <Select
+                  value={formData.dispute_type}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, dispute_type: value }))}
+                >
+                  <SelectTrigger id="dispute_type" data-testid="select-dispute-type">
+                    <SelectValue placeholder="Select dispute type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Item Not Received">Item Not Received</SelectItem>
+                    <SelectItem value="Item Not As Described">Item Not As Described</SelectItem>
+                    <SelectItem value="Damaged Item">Damaged Item</SelectItem>
+                    <SelectItem value="Payment Issue">Payment Issue</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

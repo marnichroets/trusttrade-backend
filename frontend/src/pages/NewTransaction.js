@@ -17,6 +17,19 @@ import { ArrowLeft, Calculator, UserCircle, Camera, AlertCircle } from 'lucide-r
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+function parseErrorMessage(error) {
+  const detail = error.response?.data?.detail;
+  if (!detail) return 'An error occurred';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
+  }
+  if (typeof detail === 'object') {
+    return detail.msg || detail.message || JSON.stringify(detail);
+  }
+  return 'An error occurred';
+}
+
 // Item categories for scam detection and reporting
 const ITEM_CATEGORIES = [
   { value: 'electronics', label: 'Electronics' },
@@ -208,7 +221,7 @@ function NewTransaction() {
       navigate(`/transactions/${transactionId}`);
     } catch (error) {
       console.error('Failed to create transaction:', error);
-      toast.error(error.response?.data?.detail || 'Failed to create transaction');
+      toast.error(parseErrorMessage(error));
     } finally {
       setLoading(false);
     }

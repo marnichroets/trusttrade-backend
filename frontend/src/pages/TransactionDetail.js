@@ -17,6 +17,19 @@ import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCirc
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+function parseErrorMessage(error) {
+  const detail = error.response?.data?.detail;
+  if (!detail) return 'An error occurred';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
+  }
+  if (typeof detail === 'object') {
+    return detail.msg || detail.message || JSON.stringify(detail);
+  }
+  return 'An error occurred';
+}
+
 function TransactionDetail() {
   const [user, setUser] = useState(null);
   const [transaction, setTransaction] = useState(null);
@@ -147,7 +160,7 @@ function TransactionDetail() {
       toast.success('Verification code sent to your phone');
     } catch (error) {
       console.error('Failed to send OTP:', error);
-      toast.error(error.response?.data?.detail || 'Failed to send verification code');
+      toast.error(parseErrorMessage(error) || 'Failed to send verification code');
     } finally {
       setSendingOtp(false);
     }
@@ -215,7 +228,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to confirm:', error);
-      toast.error(error.response?.data?.detail || 'Failed to confirm transaction');
+      toast.error(parseErrorMessage(error) || 'Failed to confirm transaction');
     } finally {
       setSellerConfirming(false);
     }
@@ -238,7 +251,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to confirm delivery:', error);
-      toast.error(error.response?.data?.detail || 'Failed to confirm delivery');
+      toast.error(parseErrorMessage(error) || 'Failed to confirm delivery');
     } finally {
       setConfirming(false);
     }
@@ -297,7 +310,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to create escrow:', error);
-      const errorMessage = error.response?.data?.detail || 'Failed to create escrow. Please try again.';
+      const errorMessage = parseErrorMessage(error) || 'Failed to create escrow. Please try again.';
       toast.error(errorMessage);
       alert('Error: ' + errorMessage); // Fallback alert for mobile
     } finally {
@@ -380,7 +393,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to start delivery:', error);
-      toast.error(error.response?.data?.detail || 'Failed to start delivery. Please try again.');
+      toast.error(parseErrorMessage(error) || 'Failed to start delivery. Please try again.');
     } finally {
       setStartingDelivery(false);
     }
@@ -404,7 +417,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed manual start delivery:', error);
-      toast.error(error.response?.data?.detail || 'Failed to start delivery.');
+      toast.error(parseErrorMessage(error) || 'Failed to start delivery.');
     } finally {
       setStartingDelivery(false);
     }
@@ -428,7 +441,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to accept delivery:', error);
-      toast.error(error.response?.data?.detail || 'Failed to confirm delivery. Please try again.');
+      toast.error(parseErrorMessage(error) || 'Failed to confirm delivery. Please try again.');
     } finally {
       setAcceptingDelivery(false);
     }
@@ -452,7 +465,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed manual accept delivery:', error);
-      toast.error(error.response?.data?.detail || 'Failed to confirm delivery.');
+      toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.');
     } finally {
       setAcceptingDelivery(false);
     }
@@ -476,7 +489,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to submit rating:', error);
-      toast.error(error.response?.data?.detail || 'Failed to submit rating');
+      toast.error(parseErrorMessage(error) || 'Failed to submit rating');
     } finally {
       setSubmittingRating(false);
     }

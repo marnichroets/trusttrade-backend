@@ -30,10 +30,10 @@ TRADESAFE_ENV = os.environ.get('TRADESAFE_ENV', 'production')
 MINIMUM_TRANSACTION_AMOUNT = 500.0  # R500 minimum per user requirement
 PLATFORM_FEE_PERCENT = 2.0  # TrustTrade 2% agent fee
 
-# Redirect URLs after payment
-PAYMENT_SUCCESS_URL = "https://trusttradesa.co.za/transaction/success"
-PAYMENT_FAILURE_URL = "https://trusttradesa.co.za/transaction/failed"
-PAYMENT_CANCEL_URL = "https://trusttradesa.co.za/transaction/cancelled"
+# Redirect URLs after payment (from environment variables)
+PAYMENT_SUCCESS_URL = os.environ.get('PAYMENT_SUCCESS_URL', 'https://trusttradesa.co.za/transaction/success')
+PAYMENT_FAILURE_URL = os.environ.get('PAYMENT_FAILURE_URL', 'https://trusttradesa.co.za/transaction/failed')
+PAYMENT_CANCEL_URL = os.environ.get('PAYMENT_CANCEL_URL', 'https://trusttradesa.co.za/transaction/cancelled')
 
 # Payment methods allowed
 ALLOWED_PAYMENT_METHODS = ["EFT", "CARD", "OZOW"]
@@ -516,12 +516,12 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
         tradesafe_id: The TradeSafe transaction ID
         redirect_urls: Optional dict with success, failure, cancel URLs
     """
-    # Default redirect URLs
+    # Default redirect URLs (use environment variables)
     if not redirect_urls:
         redirect_urls = {
-            "success": "https://trusttradesa.co.za/transaction/success",
-            "failure": "https://trusttradesa.co.za/transaction/failed",
-            "cancel": "https://trusttradesa.co.za/transaction/cancelled"
+            "success": PAYMENT_SUCCESS_URL,
+            "failure": PAYMENT_FAILURE_URL,
+            "cancel": PAYMENT_CANCEL_URL
         }
     
     # First, get the transaction to check state and existing deposits

@@ -14,6 +14,19 @@ import { AlertCircle, Plus } from 'lucide-react';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+function parseErrorMessage(error) {
+  const detail = error.response?.data?.detail;
+  if (!detail) return 'An error occurred';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
+  }
+  if (typeof detail === 'object') {
+    return detail.msg || detail.message || JSON.stringify(detail);
+  }
+  return 'An error occurred';
+}
+
 function Disputes() {
   const [user, setUser] = useState(null);
   const [disputes, setDisputes] = useState([]);
@@ -81,7 +94,7 @@ function Disputes() {
       fetchData(); // Refresh data
     } catch (error) {
       console.error('Failed to create dispute:', error);
-      toast.error(error.response?.data?.detail || 'Failed to create dispute');
+      toast.error(parseErrorMessage(error));
     } finally {
       setSubmitting(false);
     }

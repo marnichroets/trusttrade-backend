@@ -346,6 +346,19 @@ function TransactionDetail() {
       console.log('Payment URL response:', response.data);
       setPaymentInfo(response.data);
       
+      // Check if transaction is already paid
+      if (response.data.already_paid) {
+        console.log('Transaction already paid:', response.data.state);
+        toast.success('This transaction has already been paid.');
+        // Update local transaction state to reflect payment
+        setTransaction(prev => ({
+          ...prev,
+          tradesafe_state: response.data.state,
+          status: 'paid'
+        }));
+        return;
+      }
+      
       if (response.data.payment_link) {
         // Open payment link in new tab
         const paymentLink = response.data.payment_link;
@@ -363,7 +376,7 @@ function TransactionDetail() {
       } else {
         // No payment link - show EFT bank details message
         setPaymentInfo(response.data);
-        toast.info('Payment deposit created. For sandbox testing, bank details will be shown for EFT payment. In production, you will be redirected to the payment page.');
+        toast.info('Payment deposit created. For EFT payment, please use the bank details provided. In production, you will be redirected to the payment page.');
       }
     } catch (error) {
       console.error('Failed to get payment link:', error);

@@ -10,7 +10,7 @@ import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, ExternalLink, Shield, Loader2, Phone, Lock, RefreshCw } from 'lucide-react';
 
@@ -78,7 +78,7 @@ function TransactionDetail() {
   const fetchData = async () => {
     try {
       // First get user info
-      const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
       setUser(userRes.data);
       
       // Pre-fill phone if user has one
@@ -87,7 +87,7 @@ function TransactionDetail() {
       }
       
       // Then try to get transaction
-      const transactionRes = await axios.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
+      const transactionRes = await api.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
       setTransaction(transactionRes.data);
       setNeedsPhoneVerification(false);
     } catch (error) {
@@ -102,7 +102,7 @@ function TransactionDetail() {
         
         // Still try to get user info for pre-filling
         try {
-          const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+          const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
           setUser(userRes.data);
           if (userRes.data.phone) {
             setPhoneNumber(userRes.data.phone);
@@ -116,7 +116,7 @@ function TransactionDetail() {
         const expectedEmail = match ? match[1] : 'the invited account';
         
         try {
-          const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+          const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
           setUser(userRes.data);
           setWrongAccount({
             expected: expectedEmail,
@@ -149,7 +149,7 @@ function TransactionDetail() {
 
     setSendingOtp(true);
     try {
-      await axios.post(
+      await api.post(
         `${API}/phone/send-otp`,
         { phone_number: phoneNumber },
         { withCredentials: true }
@@ -176,7 +176,7 @@ function TransactionDetail() {
     setVerifyingOtp(true);
     try {
       // First verify the OTP
-      await axios.post(
+      await api.post(
         `${API}/phone/verify-otp`,
         { phone_number: phoneNumber, otp_code: otpCode },
         { withCredentials: true }
@@ -185,13 +185,13 @@ function TransactionDetail() {
       toast.success('Phone verified successfully!');
       
       // Now try to fetch the transaction again - should work now
-      const transactionRes = await axios.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
+      const transactionRes = await api.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
       setTransaction(transactionRes.data);
       setNeedsPhoneVerification(false);
       setVerificationError(null);
       
       // Update user state with verified phone
-      const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
       setUser(userRes.data);
       
       toast.success('You have joined the transaction!');
@@ -218,7 +218,7 @@ function TransactionDetail() {
 
     setSellerConfirming(true);
     try {
-      await axios.post(
+      await api.post(
         `${API}/transactions/${transactionId}/seller-confirm`,
         { confirmed: true },
         { withCredentials: true }
@@ -241,7 +241,7 @@ function TransactionDetail() {
 
     setConfirming(true);
     try {
-      await axios.patch(
+      await api.patch(
         `${API}/transactions/${transactionId}/delivery`,
         { delivery_confirmed: true },
         { withCredentials: true }
@@ -259,7 +259,7 @@ function TransactionDetail() {
 
   const handleDownloadPDF = async () => {
     try {
-      const response = await axios.get(
+      const response = await api.get(
         `${API}/transactions/${transactionId}/agreement-pdf`,
         { withCredentials: true, responseType: 'blob' }
       );
@@ -296,7 +296,7 @@ function TransactionDetail() {
     toast.info('Creating escrow...');
     
     try {
-      const response = await axios.post(
+      const response = await api.post(
         `${API}/tradesafe/create-transaction`,
         { 
           transaction_id: transactionId,
@@ -338,7 +338,7 @@ function TransactionDetail() {
     
     try {
       console.log('Calling payment-url API with method:', selectedPaymentMethod);
-      const response = await axios.get(
+      const response = await api.get(
         `${API}/tradesafe/payment-url/${transactionId}?payment_method=${selectedPaymentMethod}`,
         { withCredentials: true }
       );
@@ -383,7 +383,7 @@ function TransactionDetail() {
 
     setStartingDelivery(true);
     try {
-      await axios.post(
+      await api.post(
         `${API}/tradesafe/start-delivery/${transactionId}`,
         {},
         { withCredentials: true }
@@ -407,7 +407,7 @@ function TransactionDetail() {
 
     setStartingDelivery(true);
     try {
-      await axios.post(
+      await api.post(
         `${API}/tradesafe/manual-start-delivery/${transactionId}`,
         {},
         { withCredentials: true }
@@ -431,7 +431,7 @@ function TransactionDetail() {
 
     setAcceptingDelivery(true);
     try {
-      const response = await axios.post(
+      const response = await api.post(
         `${API}/tradesafe/accept-delivery/${transactionId}`,
         {},
         { withCredentials: true }
@@ -455,7 +455,7 @@ function TransactionDetail() {
 
     setAcceptingDelivery(true);
     try {
-      const response = await axios.post(
+      const response = await api.post(
         `${API}/tradesafe/manual-accept-delivery/${transactionId}`,
         {},
         { withCredentials: true }
@@ -479,7 +479,7 @@ function TransactionDetail() {
 
     setSubmittingRating(true);
     try {
-      await axios.post(
+      await api.post(
         `${API}/transactions/${transactionId}/rate`,
         { rating, review: review.trim() || null },
         { withCredentials: true }
@@ -748,7 +748,7 @@ function TransactionDetail() {
   if (wrongAccount) {
     const handleLogout = async () => {
       try {
-        await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+        await api.post(`${API}/auth/logout`, {}, { withCredentials: true });
         // Redirect to login with the transaction link preserved
         window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(window.location.href)}`;
       } catch (error) {

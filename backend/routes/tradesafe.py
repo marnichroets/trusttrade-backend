@@ -200,7 +200,15 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
     
     if not payment_info:
         print("=== PAY FLOW ERROR: payment_info is None ===")
-        raise HTTPException(status_code=500, detail="Payment processing error. Please try again.")
+        raise HTTPException(
+            status_code=404, 
+            detail={
+                "error": "transaction_not_found_on_tradesafe",
+                "message": "This transaction no longer exists on TradeSafe. It may have expired or been deleted. Please create a new escrow.",
+                "transaction_id": transaction_id,
+                "tradesafe_id": tradesafe_id
+            }
+        )
     
     # For EFT payments, payment_link may be None - that's OK
     # TradeSafe EFT deposits don't generate a redirect link, buyer uses bank details

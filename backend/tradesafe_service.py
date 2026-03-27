@@ -568,9 +568,24 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
         return None
     
     tx = result['transaction']
-    print(f"Transaction state: {tx.get('state')}")
+    tx_state = tx.get('state')
+    print(f"Transaction state: {tx_state}")
     
-    # Check if there's already a deposit with payment link
+    # Check if transaction is already fully paid
+    PAID_STATES = ['FUNDS_DEPOSITED', 'FUNDS_RELEASED', 'COMPLETED', 'DELIVERED']
+    if tx_state in PAID_STATES:
+        print(f"=== Transaction already in {tx_state} state - no payment needed ===")
+        logger.info(f"Transaction {tradesafe_id} already in {tx_state} state")
+        return {
+            "tradesafe_id": tx['id'],
+            "state": tx_state,
+            "payment_link": None,
+            "payment_methods": ALLOWED_PAYMENT_METHODS,
+            "message": f"Transaction already paid. Current state: {tx_state}",
+            "already_paid": True
+        }
+    
+    # Check if there's already a deposit with payment link (for unpaid transactions)
     deposits = tx.get('deposits', [])
     print(f"Existing deposits: {deposits}")
     for deposit in deposits:
@@ -579,7 +594,7 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
             logger.info(f"Found existing payment link: {deposit['paymentLink']}")
             return {
                 "tradesafe_id": tx['id'],
-                "state": tx['state'],
+                "state": tx_state,
                 "payment_link": deposit['paymentLink'],
                 "payment_methods": ALLOWED_PAYMENT_METHODS
             }

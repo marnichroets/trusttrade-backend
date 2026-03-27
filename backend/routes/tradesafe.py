@@ -210,6 +210,27 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
             }
         )
     
+    # Check if transaction is already paid
+    if payment_info.get("already_paid"):
+        print(f"=== PAY FLOW: Transaction already paid ===")
+        # Update local DB state to match TradeSafe
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {"tradesafe_state": payment_info.get("state")}}
+        )
+        return {
+            "transaction_id": transaction_id,
+            "tradesafe_id": tradesafe_id,
+            "payment_link": None,
+            "state": payment_info.get("state"),
+            "already_paid": True,
+            "message": payment_info.get("message", "This transaction has already been paid."),
+            "fee_breakdown": calculate_fees(
+                transaction["item_price"],
+                transaction.get("fee_paid_by", "split")
+            )
+        }
+    
     # For EFT payments, payment_link may be None - that's OK
     # TradeSafe EFT deposits don't generate a redirect link, buyer uses bank details
     payment_link = payment_info.get("payment_link")

@@ -10,12 +10,9 @@ import { Card } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Checkbox } from '../components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { ArrowLeft, Calculator, UserCircle, Camera, AlertCircle } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;
@@ -91,7 +88,7 @@ function NewTransaction() {
 
   const fetchUser = async () => {
     try {
-      const response = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const response = await api.get('/auth/me');
       setUser(response.data);
     } catch (error) {
       console.error('Failed to fetch user:', error);
@@ -186,8 +183,8 @@ function NewTransaction() {
     setLoading(true);
 
     try {
-      const transactionResponse = await axios.post(
-        `${API}/transactions`,
+      const transactionResponse = await api.post(
+        '/transactions',
         {
           creator_role: role,
           buyer_name: role === 'buyer' ? user.name : formData.buyer_name,
@@ -204,17 +201,16 @@ function NewTransaction() {
           buyer_details_confirmed: confirmations.buyer_details,
           seller_details_confirmed: confirmations.seller_details,
           item_accuracy_confirmed: confirmations.item_accuracy
-        },
-        { withCredentials: true }
+        }
       );
 
       const transactionId = transactionResponse.data.transaction_id;
 
       const photoFilenames = photos.map(p => p.filename);
-      await axios.patch(
-        `${API}/transactions/${transactionId}/photos`,
+      await api.patch(
+        `/transactions/${transactionId}/photos`,
         photoFilenames,
-        { withCredentials: true, headers: { 'Content-Type': 'application/json' } }
+        { headers: { 'Content-Type': 'application/json' } }
       );
 
       toast.success('Transaction created successfully!');

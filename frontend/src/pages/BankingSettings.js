@@ -5,12 +5,9 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { CreditCard, Building2, User, Hash, ShieldCheck, AlertCircle, ArrowLeft, CheckCircle, Lock } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 // South African banks
 const SA_BANKS = [
@@ -47,7 +44,7 @@ function BankingSettings() {
 
   const fetchUserData = async () => {
     try {
-      const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const userRes = await api.get('/auth/me');
       setUser(userRes.data);
       setBankingDetailsAdded(userRes.data.banking_details_added || false);
       
@@ -92,7 +89,7 @@ function BankingSettings() {
     setSaving(true);
     try {
       // Send to TradeSafe API - banking details are NOT stored in TrustTrade database
-      await axios.post(`${API}/tradesafe/banking-details`, bankingDetails, { withCredentials: true });
+      await api.post('/tradesafe/banking-details', bankingDetails);
       toast.success('Banking details saved securely');
       setBankingDetailsAdded(true);
       

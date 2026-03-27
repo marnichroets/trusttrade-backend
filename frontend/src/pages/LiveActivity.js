@@ -2,12 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import { Card } from '../components/ui/card';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { Activity, TrendingUp, ShieldCheck, Package, Users, DollarSign, CheckCircle, AlertTriangle } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 function LiveActivity() {
   const [user, setUser] = useState(null);
@@ -25,8 +22,8 @@ function LiveActivity() {
   const fetchData = async () => {
     try {
       const [userRes, statsRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/platform/stats`, { withCredentials: true })
+        api.get('/auth/me'),
+        api.get('/platform/stats')
       ]);
 
       setUser(userRes.data);

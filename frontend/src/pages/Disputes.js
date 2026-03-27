@@ -7,12 +7,9 @@ import { Badge } from '../components/ui/badge';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { AlertCircle, Plus } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;
@@ -57,9 +54,9 @@ function Disputes() {
   const fetchData = async () => {
     try {
       const [userRes, disputesRes, transactionsRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/disputes`, { withCredentials: true }),
-        axios.get(`${API}/transactions`, { withCredentials: true })
+        api.get('/auth/me'),
+        api.get('/disputes'),
+        api.get('/transactions')
       ]);
 
       setUser(userRes.data);
@@ -83,11 +80,7 @@ function Disputes() {
 
     setSubmitting(true);
     try {
-      await axios.post(
-        `${API}/disputes`,
-        formData,
-        { withCredentials: true }
-      );
+      await api.post('/disputes', formData);
 
       toast.success('Dispute raised successfully');
       setFormData({ transaction_id: '', dispute_type: 'Other', description: '' });

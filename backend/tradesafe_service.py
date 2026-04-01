@@ -31,9 +31,9 @@ MINIMUM_TRANSACTION_AMOUNT = 500.0  # R500 minimum per user requirement
 PLATFORM_FEE_PERCENT = 2.0  # TrustTrade 2% agent fee
 
 # Redirect URLs after payment (from environment variables)
-PAYMENT_SUCCESS_URL = os.environ.get('PAYMENT_SUCCESS_URL', 'https://trusttradesa.co.za/transaction/success')
-PAYMENT_FAILURE_URL = os.environ.get('PAYMENT_FAILURE_URL', 'https://trusttradesa.co.za/transaction/failed')
-PAYMENT_CANCEL_URL = os.environ.get('PAYMENT_CANCEL_URL', 'https://trusttradesa.co.za/transaction/cancelled')
+PAYMENT_SUCCESS_URL = os.environ.get('PAYMENT_SUCCESS_URL', 'https://www.trusttradesa.co.za/transaction/success')
+PAYMENT_FAILURE_URL = os.environ.get('PAYMENT_FAILURE_URL', 'https://www.trusttradesa.co.za/transaction/failed')
+PAYMENT_CANCEL_URL = os.environ.get('PAYMENT_CANCEL_URL', 'https://www.trusttradesa.co.za/transaction/cancelled')
 
 # Payment methods allowed
 ALLOWED_PAYMENT_METHODS = ["EFT", "CARD", "OZOW"]

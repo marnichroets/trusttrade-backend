@@ -24,7 +24,7 @@ class Settings:
     CORS_ORIGINS: List[str] = os.environ.get('CORS_ORIGINS', '*').split(',')
     
     # Frontend URL for email links
-    FRONTEND_URL: str = os.environ.get('FRONTEND_URL', 'https://trusttradesa.co.za')
+    FRONTEND_URL: str = os.environ.get('FRONTEND_URL', 'https://www.trusttradesa.co.za')
     
     # TradeSafe Integration
     TRADESAFE_CLIENT_ID: str = os.environ.get('TRADESAFE_CLIENT_ID', '')

@@ -293,7 +293,7 @@ async def create_tradesafe_transaction(
     agent_fee_allocation: str = "SELLER"
 ) -> Optional[Dict[str, Any]]:
     """
-    Create a new escrow transaction.
+    Create a new escrow transaction with TrustTrade as AGENT to collect 2% platform fee.
     
     Args:
         internal_reference: TrustTrade internal transaction ID
@@ -306,8 +306,12 @@ async def create_tradesafe_transaction(
         seller_email: Seller's email
         buyer_mobile: Buyer's mobile number
         seller_mobile: Seller's mobile number
-        fee_allocation: Who pays fee - BUYER, SELLER, or 50_50
-        agent_fee_allocation: Who pays TrustTrade 2% fee - BUYER, SELLER, or 50_50
+        fee_allocation: Who pays TradeSafe processing fee - BUYER, SELLER, or split
+        agent_fee_allocation: Who pays TrustTrade 2% fee - BUYER, SELLER, or split
+    
+    Fee Structure:
+        - TradeSafe Processing Fee: Paid by fee_allocation party (processing costs)
+        - TrustTrade Platform Fee: 2% collected via AGENT role, paid by agent_fee_allocation party
     
     Returns:
         Transaction details or error dict on failure
@@ -317,6 +321,9 @@ async def create_tradesafe_transaction(
     logger.info(f"Amount: R{amount}")
     logger.info(f"Buyer: {buyer_name} ({buyer_email}) Mobile: {buyer_mobile}")
     logger.info(f"Seller: {seller_name} ({seller_email}) Mobile: {seller_mobile}")
+    logger.info(f"TradeSafe Fee Allocation: {fee_allocation}")
+    logger.info(f"TrustTrade Agent Fee Allocation: {agent_fee_allocation}")
+    logger.info(f"TrustTrade Platform Fee: {PLATFORM_FEE_PERCENT}%")
     
     # Validate minimum amount
     is_valid, error_msg = validate_minimum_transaction(amount)
@@ -369,19 +376,45 @@ async def create_tradesafe_transaction(
     logger.info(f"Tokens created - Buyer: {buyer_token}, Seller: {seller_token}")
     
     # TradeSafe API expects amount in RANDS (NOT cents)
-    # Example from docs: value: 10000.00 means R10,000.00
     amount_rands = float(amount)
     
-    # Map fee allocation - using correct enum values
-    fee_map = {
+    # Calculate TrustTrade 2% platform fee
+    trusttrade_fee = round(amount_rands * (PLATFORM_FEE_PERCENT / 100), 2)
+    seller_payout = round(amount_rands - trusttrade_fee, 2)
+    
+    logger.info(f"=== FEE CALCULATION ===")
+    logger.info(f"Item Amount: R{amount_rands}")
+    logger.info(f"TrustTrade Fee ({PLATFORM_FEE_PERCENT}%): R{trusttrade_fee}")
+    logger.info(f"Seller Payout: R{seller_payout}")
+    
+    # Map TradeSafe processing fee allocation
+    # This determines who pays TradeSafe's processing fees (EFT/Card fees)
+    tradesafe_fee_map = {
         "buyer": "BUYER",
         "seller": "SELLER", 
         "split": "BUYER_SELLER",
         "50_50": "BUYER_SELLER"
     }
-    mapped_fee_allocation = fee_map.get(fee_allocation.lower(), "SELLER")
+    mapped_tradesafe_fee = tradesafe_fee_map.get(fee_allocation.lower(), "SELLER")
     
-    # GraphQL mutation for creating a transaction - using correct type names
+    # Map TrustTrade agent fee allocation
+    # This determines who pays the TrustTrade 2% platform fee
+    # SELLER_AGENT means seller pays the agent fee (deducted from seller's payout)
+    # BUYER_AGENT means buyer pays the agent fee (added to buyer's payment)
+    # BUYER_SELLER_AGENT means split between buyer and seller
+    agent_fee_map = {
+        "buyer": "BUYER_AGENT",
+        "seller": "SELLER_AGENT", 
+        "split": "BUYER_SELLER_AGENT",
+        "50_50": "BUYER_SELLER_AGENT"
+    }
+    mapped_agent_fee = agent_fee_map.get(agent_fee_allocation.lower(), "SELLER_AGENT")
+    
+    logger.info(f"=== FEE ALLOCATION MAPPING ===")
+    logger.info(f"TradeSafe Processing Fee: {mapped_tradesafe_fee}")
+    logger.info(f"TrustTrade Agent Fee: {mapped_agent_fee}")
+    
+    # GraphQL mutation for creating a transaction with AGENT
     mutation = """
     mutation transactionCreate($input: CreateTransactionInput!) {
         transactionCreate(input: $input) {
@@ -402,21 +435,33 @@ async def create_tradesafe_transaction(
             parties {
                 id
                 role
+                fee
+                feeType
+                feeAllocation
             }
             createdAt
         }
     }
     """
     
-    # Build variables with correct nested structure for relations
-    # Note: privacy uses "NONE" (not "PRIVATE")
+    # Build transaction with TrustTrade as AGENT
+    # The AGENT party receives the platform fee automatically when funds are released
+    #
+    # Fee structure:
+    # - feeAllocation on transaction level: determines who pays fees (including agent fee)
+    # - AGENT party with fee/feeType: TrustTrade's 2% platform margin
+    # - The AGENT is linked via email (our platform's registered email with TradeSafe)
+    #
+    # TrustTrade registered email with TradeSafe API
+    TRUSTTRADE_AGENT_EMAIL = "marnichroets@gmail.com"  # The email associated with TradeSafe API credentials
+    
     variables = {
         "input": {
             "title": title,
             "description": description,
             "industry": "GENERAL_GOODS_SERVICES",
             "currency": "ZAR",
-            "feeAllocation": mapped_fee_allocation,
+            "feeAllocation": mapped_agent_fee,  # Who pays fees (including agent fee)
             "reference": internal_reference,
             "parties": {
                 "create": [
@@ -427,6 +472,13 @@ async def create_tradesafe_transaction(
                     {
                         "role": "SELLER",
                         "token": seller_token
+                    },
+                    {
+                        "role": "AGENT",
+                        "email": TRUSTTRADE_AGENT_EMAIL,  # Agent linked via email, not token
+                        "fee": PLATFORM_FEE_PERCENT,  # 2% platform fee
+                        "feeType": "PERCENT",  # Fee is a percentage
+                        "feeAllocation": mapped_agent_fee  # Who pays the agent fee
                     }
                 ]
             },
@@ -445,6 +497,12 @@ async def create_tradesafe_transaction(
     }
     
     logger.info(f"=== TRANSACTION CREATE REQUEST ===")
+    logger.info(f"=== FIELDS SENT TO TRADESAFE ===")
+    logger.info(f"Transaction feeAllocation: {mapped_agent_fee}")
+    logger.info(f"AGENT fee: {PLATFORM_FEE_PERCENT}")
+    logger.info(f"AGENT feeType: PERCENT")
+    logger.info(f"AGENT feeAllocation: {mapped_agent_fee}")
+    logger.info(f"Allocation value: R{amount_rands}")
     logger.info(f"Variables: {variables}")
     
     result = await execute_graphql(mutation, variables)
@@ -465,6 +523,23 @@ async def create_tradesafe_transaction(
         logger.info(f"=== TRANSACTION CREATED SUCCESSFULLY ===")
         logger.info(f"Transaction ID: {tx['id']}")
         logger.info(f"State: {tx['state']}")
+        logger.info(f"Fee Allocation: {tx.get('feeAllocation')}")
+        
+        # Log party details including AGENT
+        for party in tx.get('parties', []):
+            logger.info(f"Party: {party.get('role')} - Fee: {party.get('fee')} ({party.get('feeType')}) - Allocation: {party.get('feeAllocation')}")
+        
+        # Add fee breakdown to response
+        tx['trusttrade_fee'] = trusttrade_fee
+        tx['seller_payout'] = seller_payout
+        tx['fee_breakdown'] = {
+            'item_amount': amount_rands,
+            'trusttrade_fee_percent': PLATFORM_FEE_PERCENT,
+            'trusttrade_fee_amount': trusttrade_fee,
+            'seller_receives': seller_payout,
+            'agent_fee_paid_by': agent_fee_allocation
+        }
+        
         return tx
     
     logger.error(f"=== UNEXPECTED TRANSACTION RESPONSE ===")

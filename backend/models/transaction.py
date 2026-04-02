@@ -31,7 +31,7 @@ class Transaction(BaseModel):
     item_price: float
     trusttrade_fee: Optional[float] = 0.0
     total: Optional[float] = None
-    fee_paid_by: str = "split"  # "buyer", "seller", or "split"
+    fee_allocation: str = "SELLER_AGENT"  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
     delivery_method: str = "courier"  # "courier", "bank_deposit", "digital"
     auto_release_days: int = 3
     payment_status: str = "Pending Seller Confirmation"
@@ -76,7 +76,7 @@ class TransactionCreate(BaseModel):
     item_condition: str
     known_issues: Optional[str] = "None"
     item_price: float
-    fee_paid_by: str = "split"
+    fee_allocation: str = "SELLER_AGENT"  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
     delivery_method: str = "courier"
     buyer_details_confirmed: bool
     seller_details_confirmed: bool

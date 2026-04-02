@@ -95,6 +95,10 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     logger.info(f"Buyer: {transaction['buyer_name']} ({transaction['buyer_email']}) Mobile: {buyer_mobile}")
     logger.info(f"Seller: {transaction['seller_name']} ({transaction['seller_email']}) Mobile: {seller_mobile}")
     
+    # Use fee_allocation from request, or fall back to stored value, or default
+    fee_allocation = data.fee_allocation or transaction.get("fee_allocation", "SELLER_AGENT")
+    logger.info(f"Fee Allocation: {fee_allocation}")
+    
     # Create escrow transaction
     result = await create_tradesafe_transaction(
         internal_reference=data.transaction_id,
@@ -107,7 +111,7 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
         seller_email=transaction["seller_email"],
         buyer_mobile=buyer_mobile,
         seller_mobile=seller_mobile,
-        fee_allocation=data.fee_allocation
+        fee_allocation=fee_allocation
     )
     
     if not result or "error" in result:

@@ -399,7 +399,7 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "item_price": item_price,
         "trusttrade_fee": trusttrade_fee,
         "total": total,
-        "fee_paid_by": transaction_data.fee_paid_by,
+        "fee_allocation": transaction_data.fee_allocation,  # TrustTrade fee allocation
         "delivery_method": delivery_method,
         "auto_release_days": auto_release_days,
         "payment_status": "Pending Seller Confirmation" if transaction_data.creator_role == "buyer" else "Pending Buyer Confirmation",

@@ -56,6 +56,7 @@ class Transaction(BaseModel):
     tradesafe_id: Optional[str] = None
     tradesafe_allocation_id: Optional[str] = None
     tradesafe_state: Optional[str] = None
+    tradesafe_fee_allocation: Optional[str] = None  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
     funds_received_at: Optional[str] = None
     delivery_started_at: Optional[str] = None
     delivery_confirmed_at: Optional[str] = None
@@ -123,7 +124,7 @@ class PaymentConfirmation(BaseModel):
 class TradeSafeTransactionCreate(BaseModel):
     """Request model for creating TradeSafe transaction"""
     transaction_id: str
-    fee_allocation: str = "split"
+    fee_allocation: str = "SELLER_AGENT"  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
 
 
 class TradeSafeDeliveryAction(BaseModel):

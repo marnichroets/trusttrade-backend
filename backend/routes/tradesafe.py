@@ -134,6 +134,7 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
             "tradesafe_id": tradesafe_id,
             "tradesafe_allocation_id": allocation_id,
             "tradesafe_state": result.get("state", "CREATED"),
+            "tradesafe_fee_allocation": result.get("fee_allocation", data.fee_allocation),  # Store fee allocation
             "payment_status": "Awaiting Payment",
             "timeline": timeline
         }}

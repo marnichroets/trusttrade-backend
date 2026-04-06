@@ -1033,13 +1033,75 @@ function TransactionDetail() {
 
         {canSellerConfirm && (
           <Card className="p-6 bg-orange-50 border-orange-200">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Seller Confirmation Required</h3>
-            <p className="text-sm text-slate-600 mb-4">
-              Please review the transaction details carefully. Confirming will generate the escrow agreement and move the transaction forward.
-            </p>
-            <Button onClick={handleSellerConfirm} disabled={sellerConfirming} data-testid="seller-confirm-btn">
-              {sellerConfirming ? 'Confirming...' : 'Confirm Transaction Details'}
-            </Button>
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-orange-100 rounded-full">
+                <FileText className="w-6 h-6 text-orange-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Confirm Fee Agreement</h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  Please review the transaction details and TrustTrade fee structure below. By confirming, you agree to the 2% platform fee and the escrow terms.
+                </p>
+                
+                {/* Fee Breakdown */}
+                <div className="bg-white rounded-lg p-4 mb-4 border border-orange-200">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Fee Summary</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Item Price:</span>
+                      <span className="font-medium">R {transaction.item_price?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">TrustTrade Fee (2%):</span>
+                      <span className="font-medium">R {(transaction.item_price * 0.02)?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Fee Paid By:</span>
+                      <Badge className="bg-blue-100 text-blue-700">{getFeePayerLabel(transaction.fee_allocation)}</Badge>
+                    </div>
+                    <div className="border-t border-slate-200 pt-2 mt-2">
+                      <div className="flex justify-between">
+                        <span className="font-semibold text-slate-700">You will receive:</span>
+                        <span className="font-bold text-emerald-600">
+                          R {(transaction.fee_allocation === 'SELLER_AGENT' 
+                            ? transaction.item_price * 0.98 
+                            : transaction.fee_allocation === 'SPLIT_AGENT'
+                              ? transaction.item_price * 0.99
+                              : transaction.item_price
+                          )?.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-2 mb-4 p-3 bg-amber-100 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-amber-800">
+                    <strong>Important:</strong> Payment will only be enabled after you confirm this fee agreement. Once confirmed, you cannot change the fee structure.
+                  </p>
+                </div>
+                
+                <Button 
+                  onClick={handleSellerConfirm} 
+                  disabled={sellerConfirming} 
+                  className="bg-orange-600 hover:bg-orange-700"
+                  data-testid="seller-confirm-btn"
+                >
+                  {sellerConfirming ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Confirming...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Confirm Fee Agreement
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </Card>
         )}
 

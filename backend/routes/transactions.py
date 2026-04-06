@@ -421,26 +421,36 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     base_url = settings.FRONTEND_URL
     
     # Send transaction created emails
-    await send_transaction_created_email(
-        to_email=buyer_email,
-        to_name=buyer_name,
-        share_code=share_code,
-        item_description=transaction_data.item_description,
-        amount=item_price,
-        other_party_name=seller_name,
-        role="Buyer",
-        base_url=base_url
-    )
-    await send_transaction_created_email(
-        to_email=seller_email,
-        to_name=seller_name,
-        share_code=share_code,
-        item_description=transaction_data.item_description,
-        amount=item_price,
-        other_party_name=buyer_name,
-        role="Seller",
-        base_url=base_url
-    )
+    # Only send if email addresses are valid (not empty/phone-only invites)
+    if buyer_email and '@' in buyer_email:
+        email_result = await send_transaction_created_email(
+            to_email=buyer_email,
+            to_name=buyer_name,
+            share_code=share_code,
+            item_description=transaction_data.item_description,
+            amount=item_price,
+            other_party_name=seller_name,
+            role="Buyer",
+            base_url=base_url
+        )
+        logger.info(f"Buyer email send result: {email_result} to {buyer_email}")
+    else:
+        logger.info(f"Skipping buyer email - no valid email address (phone invite): {buyer_email}")
+    
+    if seller_email and '@' in seller_email:
+        email_result = await send_transaction_created_email(
+            to_email=seller_email,
+            to_name=seller_name,
+            share_code=share_code,
+            item_description=transaction_data.item_description,
+            amount=item_price,
+            other_party_name=buyer_name,
+            role="Seller",
+            base_url=base_url
+        )
+        logger.info(f"Seller email send result: {email_result} to {seller_email}")
+    else:
+        logger.info(f"Skipping seller email - no valid email address (phone invite): {seller_email}")
     
     # If recipient was invited via phone, also send SMS
     if recipient_type == "phone" and recipient_phone:
@@ -571,7 +581,7 @@ async def update_transaction_photos(request: Request, transaction_id: str, photo
 
 @router.post("/transactions/{transaction_id}/seller-confirm")
 async def seller_confirm_transaction(request: Request, transaction_id: str, confirmation: SellerConfirmation):
-    """Seller confirms transaction details"""
+    """Seller confirms transaction details and fee agreement"""
     db = get_database()
     
     user = await get_user_from_token(request, db)
@@ -584,16 +594,27 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
         raise HTTPException(status_code=404, detail="Transaction not found")
     
     # Only seller can confirm
-    if transaction.get("seller_email") != user.email:
+    seller_email = transaction.get("seller_email", "").lower()
+    user_email = user.email.lower() if user.email else ""
+    
+    if seller_email != user_email:
+        logger.warning(f"Non-seller tried to confirm: user={user_email}, seller={seller_email}")
         raise HTTPException(status_code=403, detail="Only seller can confirm transaction")
     
+    if transaction.get("seller_confirmed"):
+        logger.info(f"Transaction {transaction_id} already confirmed by seller")
+        return {"message": "Transaction already confirmed", "already_confirmed": True}
+    
     if confirmation.confirmed:
+        logger.info(f"Seller {user_email} confirming fee agreement for transaction {transaction_id}")
+        
         # Update timeline
         timeline = transaction.get("timeline", [])
         timeline.append({
-            "status": "Seller Confirmed",
+            "status": "Seller Confirmed Fee Agreement",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "by": user.name
+            "by": user.name,
+            "details": f"Fee allocation: {transaction.get('fee_allocation', 'SELLER_AGENT')}"
         })
         
         # Generate escrow agreement PDF
@@ -602,6 +623,7 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
         
         try:
             generate_escrow_agreement_pdf(transaction, str(pdf_path))
+            logger.info(f"Generated escrow agreement PDF: {pdf_filename}")
         except Exception as e:
             logger.error(f"PDF generation failed: {str(e)}")
         
@@ -616,7 +638,13 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
             }}
         )
         
-        return {"message": "Transaction confirmed", "agreement_pdf": pdf_filename if pdf_path.exists() else None}
+        logger.info(f"Transaction {transaction_id} status changed: PENDING -> CONFIRMED (Ready for Payment)")
+        
+        return {
+            "message": "Fee agreement confirmed", 
+            "agreement_pdf": pdf_filename if pdf_path.exists() else None,
+            "status": "Ready for Payment"
+        }
     
     return {"message": "Confirmation cancelled"}
 

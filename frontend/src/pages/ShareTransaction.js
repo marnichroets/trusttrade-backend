@@ -32,8 +32,8 @@ function ShareTransaction() {
         setUser(null);
       }
 
-      // Get transaction preview (public endpoint - use raw axios)
-      const txnRes = await axios.get(`${API_URL}/share/${shareCode}`);
+      // Get transaction preview (public endpoint - use raw axios with /api prefix)
+      const txnRes = await axios.get(`${API_URL}/api/share/${shareCode}`);
       setTransaction(txnRes.data);
     } catch (error) {
       console.error('Failed to fetch transaction:', error);

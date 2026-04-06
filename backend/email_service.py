@@ -67,6 +67,11 @@ async def send_email(
     """
     Send a transactional email via Postmark.
     """
+    # Validate email address before attempting to send
+    if not to_email or not to_email.strip() or '@' not in to_email:
+        logger.warning(f"Invalid or empty email address, skipping: '{to_email}' for subject: {subject}")
+        return False
+    
     client = get_postmark_client()
     
     if not client:

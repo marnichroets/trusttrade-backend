@@ -53,7 +53,7 @@ function LandingPage() {
       <nav className="bg-white sticky top-0 z-50 border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-14 md:h-16 object-contain" />
+            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-20 md:h-24 object-contain" />
             <div className="flex items-center gap-4">
               <Button variant="ghost" onClick={handleLogin} className="text-slate-700 hover:text-blue-600 font-medium">
                 Log In

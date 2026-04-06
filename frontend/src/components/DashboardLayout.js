@@ -42,7 +42,7 @@ function DashboardLayout({ children, user }) {
               <img 
                 src="/trusttrade-logo.png" 
                 alt="TrustTrade" 
-                className="h-14 md:h-16 object-contain"
+                className="h-20 md:h-24 object-contain"
               />
             </div>
             <div className="flex items-center gap-4">

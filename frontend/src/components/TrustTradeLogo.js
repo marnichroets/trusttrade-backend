@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom';
 // TrustTrade Logo Component - Use the actual brand logo everywhere
 export function TrustTradeLogo({ variant = 'default', size = 'md', linkTo = '/', showText = false, clickable = true }) {
   const sizes = {
-    xs: { height: 20 },
-    sm: { height: 28 },
-    md: { height: 36 },
-    lg: { height: 48 },
-    xl: { height: 64 },
-    xxl: { height: 80 }
+    xs: { height: 28 },
+    sm: { height: 40 },
+    md: { height: 56 },
+    lg: { height: 72 },
+    xl: { height: 96 },
+    xxl: { height: 120 }
   };
   
   const { height } = sizes[size] || sizes.md;

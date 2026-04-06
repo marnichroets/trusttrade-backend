@@ -9,6 +9,7 @@ import shutil
 import random
 import string
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List
@@ -44,6 +45,26 @@ from tradesafe_service import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Transactions"])
+
+
+def calculate_money(item_price: float, fee_percent: float = 2.0) -> dict:
+    """
+    Calculate all money values using Decimal for precision.
+    Returns values as floats with exactly 2 decimal places.
+    """
+    price = Decimal(str(item_price))
+    fee_rate = Decimal(str(fee_percent)) / Decimal("100")
+    
+    trusttrade_fee = (price * fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    total = (price + trusttrade_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    seller_receives = (price - trusttrade_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    
+    return {
+        "item_price": float(price),
+        "trusttrade_fee": float(trusttrade_fee),
+        "total": float(total),
+        "seller_receives": float(seller_receives)
+    }
 
 
 def generate_share_code() -> str:
@@ -305,10 +326,11 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
             detail=f"Maximum transaction amount is R{settings.MAXIMUM_TRANSACTION_AMOUNT:,.0f}. Please contact support for larger transactions."
         )
     
-    # Calculate fees (2% platform fee)
-    item_price = transaction_data.item_price
-    trusttrade_fee = round(item_price * (settings.PLATFORM_FEE_PERCENT / 100), 2)
-    total = round(item_price + trusttrade_fee, 2)
+    # Calculate fees using precise Decimal math (2% platform fee)
+    money = calculate_money(transaction_data.item_price, settings.PLATFORM_FEE_PERCENT)
+    item_price = money["item_price"]
+    trusttrade_fee = money["trusttrade_fee"]
+    total = money["total"]
     
     transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
     
@@ -399,6 +421,7 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "item_price": item_price,
         "trusttrade_fee": trusttrade_fee,
         "total": total,
+        "seller_receives": money["seller_receives"],  # Pre-calculated for frontend
         "fee_allocation": transaction_data.fee_allocation,  # TrustTrade fee allocation
         "delivery_method": delivery_method,
         "auto_release_days": auto_release_days,
@@ -724,8 +747,9 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
             }}
         )
         
-        # Calculate net amount after fee
-        net_amount = transaction["item_price"] - (transaction["item_price"] * 0.02)
+        # Calculate net amount after fee using Decimal precision
+        money = calculate_money(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
+        net_amount = money["seller_receives"]
         
         # Send funds released email
         await send_funds_released_email(

@@ -1053,7 +1053,7 @@ function TransactionDetail() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">TrustTrade Fee (2%):</span>
-                      <span className="font-medium">R {(transaction.item_price * 0.02)?.toFixed(2)}</span>
+                      <span className="font-medium">R {transaction.trusttrade_fee?.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">Fee Paid By:</span>
@@ -1063,12 +1063,7 @@ function TransactionDetail() {
                       <div className="flex justify-between">
                         <span className="font-semibold text-slate-700">You will receive:</span>
                         <span className="font-bold text-emerald-600">
-                          R {(transaction.fee_allocation === 'SELLER_AGENT' 
-                            ? transaction.item_price * 0.98 
-                            : transaction.fee_allocation === 'SPLIT_AGENT'
-                              ? transaction.item_price * 0.99
-                              : transaction.item_price
-                          )?.toFixed(2)}
+                          R {(transaction.seller_receives ?? (transaction.item_price - transaction.trusttrade_fee))?.toFixed(2)}
                         </span>
                       </div>
                     </div>

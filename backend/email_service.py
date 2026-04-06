@@ -67,15 +67,17 @@ async def send_email(
     """
     Send a transactional email via Postmark.
     """
+    logger.info(f"EMAIL_ATTEMPT: to={to_email}, subject={subject}")
+    
     # Validate email address before attempting to send
     if not to_email or not to_email.strip() or '@' not in to_email:
-        logger.warning(f"Invalid or empty email address, skipping: '{to_email}' for subject: {subject}")
+        logger.info(f"EMAIL_SKIPPED: invalid/empty address '{to_email}'")
         return False
     
     client = get_postmark_client()
     
     if not client:
-        logger.warning(f"Postmark not configured. Would send email to {to_email}: {subject}")
+        logger.info(f"EMAIL_SKIPPED: Postmark not configured for {to_email}")
         return False
     
     try:
@@ -94,11 +96,11 @@ async def send_email(
             MessageStream="outbound"
         )
         
-        logger.info(f"Email sent successfully to {to_email}: {subject} (ID: {response.get('MessageID', 'unknown')})")
+        logger.info(f"EMAIL_SENT: to={to_email}, id={response.get('MessageID', 'unknown')}")
         return True
         
     except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {e}")
+        logger.error(f"EMAIL_FAILED: to={to_email}, error={str(e)}")
         return False
 
 

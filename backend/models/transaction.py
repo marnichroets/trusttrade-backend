@@ -31,6 +31,7 @@ class Transaction(BaseModel):
     item_price: float
     trusttrade_fee: Optional[float] = 0.0
     total: Optional[float] = None
+    seller_receives: Optional[float] = None  # Pre-calculated payout after fee
     fee_allocation: str = "SELLER_AGENT"  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
     delivery_method: str = "courier"  # "courier", "bank_deposit", "digital"
     auto_release_days: int = 3

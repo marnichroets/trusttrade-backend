@@ -5,6 +5,7 @@ Handles TradeSafe escrow creation, payment, delivery, and webhooks
 
 import os
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request
 
@@ -30,9 +31,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tradesafe", tags=["TradeSafe"])
 
 
+def calculate_seller_receives(item_price: float, fee_percent: float = 2.0) -> float:
+    """Calculate seller payout using Decimal precision."""
+    price = Decimal(str(item_price))
+    fee_rate = Decimal(str(fee_percent)) / Decimal("100")
+    fee = (price * fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return float((price - fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
 @router.post("/create-transaction")
 async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCreate):
-    """Create TrustTrade escrow transaction after both parties confirm."""
+    """Create TrustTrade escrow transaction after seller confirms fee agreement."""
     db = get_database()
     
     user = await get_user_from_token(request, db)
@@ -48,6 +57,14 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
+    # CRITICAL: Block payment if seller has not confirmed fee agreement
+    if not transaction.get("seller_confirmed"):
+        logger.warning(f"PAYMENT_BLOCKED: seller_confirmed=False for {data.transaction_id}")
+        raise HTTPException(
+            status_code=400, 
+            detail="Payment blocked: Seller must confirm the fee agreement before escrow can be created."
+        )
+    
     # Verify user is part of this transaction
     is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
     is_seller = transaction.get("seller_email") == user.email or transaction.get("seller_user_id") == user.user_id
@@ -55,8 +72,9 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     if not is_buyer and not is_seller and not user.is_admin:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Check if already linked to escrow
+    # Check if already linked to escrow (prevent duplicate)
     if transaction.get("tradesafe_id"):
+        logger.info(f"Escrow already exists for {data.transaction_id}: {transaction['tradesafe_id']}")
         return {
             "tradesafe_id": transaction["tradesafe_id"],
             "status": "already_created",
@@ -172,6 +190,14 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
+    # CRITICAL: Block payment if seller has not confirmed fee agreement
+    if not transaction.get("seller_confirmed"):
+        logger.warning(f"PAYMENT_BLOCKED: seller_confirmed=False for {transaction_id}")
+        raise HTTPException(
+            status_code=400,
+            detail="Payment blocked: Seller must confirm the fee agreement before payment can proceed."
+        )
+    
     tradesafe_id = transaction.get("tradesafe_id")
     tradesafe_allocation_id = transaction.get("tradesafe_allocation_id")
     
@@ -217,7 +243,7 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
     
     # Check if transaction is already paid
     if payment_info.get("already_paid"):
-        print(f"=== PAY FLOW: Transaction already paid ===")
+        print("=== PAY FLOW: Transaction already paid ===")
         # Update local DB state to match TradeSafe
         await db.transactions.update_one(
             {"transaction_id": transaction_id},
@@ -248,7 +274,7 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
     )
     
     logger.info(f"=== PAYMENT URL: {payment_link} ===")
-    print(f"=== PAY FLOW END (success) ===")
+    print("=== PAY FLOW END (success) ===")
     
     return {
         "transaction_id": transaction_id,
@@ -393,8 +419,8 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     if not result:
         raise HTTPException(status_code=500, detail="Failed to accept delivery on TradeSafe")
     
-    # Calculate net amount
-    net_amount = transaction["item_price"] * (1 - settings.PLATFORM_FEE_PERCENT / 100)
+    # Calculate net amount using Decimal precision
+    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
     
     # Update timeline
     timeline = transaction.get("timeline", [])
@@ -555,7 +581,8 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
     if not result:
         logger.warning("TradeSafe accept_delivery failed, updating local state anyway")
     
-    net_amount = transaction["item_price"] * (1 - settings.PLATFORM_FEE_PERCENT / 100)
+    # Calculate net amount using Decimal precision
+    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
     
     timeline = transaction.get("timeline", [])
     timeline.append({

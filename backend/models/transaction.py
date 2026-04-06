@@ -62,7 +62,7 @@ class Transaction(BaseModel):
     delivery_started_at: Optional[str] = None
     delivery_confirmed_at: Optional[str] = None
     released_at: Optional[str] = None
-    created_at: str
+    created_at: Optional[str] = None  # Made optional for legacy records
 
 
 class TransactionCreate(BaseModel):

@@ -497,6 +497,8 @@ async def list_transactions(request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    logger.info(f"LIST_TRANSACTIONS: user={user.email}, is_admin={user.is_admin}")
+    
     # Admin sees all
     if user.is_admin:
         query = {}
@@ -522,17 +524,63 @@ async def list_transactions(request: Request):
         
         query = {"$or": or_conditions}
     
-    # Optimize query with projection for list view
-    projection = {
-        "_id": 0,
-        "transaction_id": 1, "share_code": 1, "item_description": 1, "item_price": 1,
-        "payment_status": 1, "release_status": 1, "transaction_state": 1, "tradesafe_state": 1,
-        "created_at": 1, "buyer_name": 1, "buyer_email": 1, "seller_name": 1, "seller_email": 1,
-        "buyer_user_id": 1, "seller_user_id": 1, "delivery_method": 1, "has_dispute": 1,
-        "buyer_confirmed": 1, "seller_confirmed": 1, "tradesafe_id": 1
-    }
-    transactions = await db.transactions.find(query, projection).sort("created_at", -1).to_list(1000)
-    return [Transaction(**t) for t in transactions]
+    try:
+        # Optimize query with projection for list view
+        projection = {
+            "_id": 0,
+            "transaction_id": 1, "share_code": 1, "item_description": 1, "item_price": 1,
+            "payment_status": 1, "release_status": 1, "transaction_state": 1, "tradesafe_state": 1,
+            "created_at": 1, "buyer_name": 1, "buyer_email": 1, "seller_name": 1, "seller_email": 1,
+            "buyer_user_id": 1, "seller_user_id": 1, "delivery_method": 1, "has_dispute": 1,
+            "buyer_confirmed": 1, "seller_confirmed": 1, "tradesafe_id": 1,
+            "trusttrade_fee": 1, "total": 1, "seller_receives": 1
+        }
+        raw_transactions = await db.transactions.find(query, projection).sort("created_at", -1).to_list(1000)
+        
+        logger.info(f"LIST_TRANSACTIONS: fetched {len(raw_transactions)} records")
+        
+        # Defensive processing - handle missing/malformed records
+        valid_transactions = []
+        skipped_count = 0
+        
+        for t in raw_transactions:
+            try:
+                # Provide safe defaults for missing required fields
+                t.setdefault("created_at", "1970-01-01T00:00:00Z")  # Fallback for sorting
+                t.setdefault("item_description", "Unknown item")
+                t.setdefault("buyer_name", "Unknown")
+                t.setdefault("buyer_email", "")
+                t.setdefault("seller_name", "Unknown")
+                t.setdefault("seller_email", "")
+                t.setdefault("item_price", 0.0)
+                t.setdefault("payment_status", "Unknown")
+                t.setdefault("release_status", "Unknown")
+                
+                # Ensure numeric fields are floats (not Decimal)
+                if t.get("item_price") is not None:
+                    t["item_price"] = float(t["item_price"])
+                if t.get("trusttrade_fee") is not None:
+                    t["trusttrade_fee"] = float(t["trusttrade_fee"])
+                if t.get("total") is not None:
+                    t["total"] = float(t["total"])
+                if t.get("seller_receives") is not None:
+                    t["seller_receives"] = float(t["seller_receives"])
+                
+                valid_transactions.append(Transaction(**t))
+            except Exception as e:
+                skipped_count += 1
+                logger.warning(f"LIST_TRANSACTIONS_SKIP: id={t.get('transaction_id', 'unknown')}, error={str(e)}")
+        
+        if skipped_count > 0:
+            logger.warning(f"LIST_TRANSACTIONS: skipped {skipped_count} malformed records")
+        
+        return valid_transactions
+        
+    except Exception as e:
+        logger.error(f"LIST_TRANSACTIONS_ERROR: user={user.email}, error={str(e)}")
+        import traceback
+        logger.error(f"LIST_TRANSACTIONS_TRACEBACK: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Failed to load transactions")
 
 
 @router.get("/transactions/{transaction_id}", response_model=Transaction)

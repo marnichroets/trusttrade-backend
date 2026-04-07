@@ -1,10 +1,13 @@
 """
-STEP 1: Imports only - No routers, middleware, lifespan, or background jobs
+TrustTrade API - Main Application Entry Point
+Production-ready FastAPI application for escrow transactions in South Africa
+
+NOTE: Background jobs are DISABLED for launch stability.
+To re-enable, uncomment the background_jobs section in lifespan().
 """
 
 import os
 import sys
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -18,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from core.config import settings
 from core.database import get_database, close_database, create_indexes
 
-# Import all routers (but do NOT include them yet)
+# Import all routers
 from routes.auth import router as auth_router
 from routes.transactions import router as transactions_router
 from routes.tradesafe import router as tradesafe_router
@@ -37,7 +40,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# STEP 3: Add lifespan (NO background jobs)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler - startup and shutdown"""
@@ -56,6 +58,14 @@ async def lifespan(app: FastAPI):
                  settings.VERIFICATION_PATH, settings.DISPUTES_PATH, settings.PDFS_PATH]:
         Path(path).mkdir(parents=True, exist_ok=True)
     
+    # BACKGROUND JOBS DISABLED FOR LAUNCH
+    # To re-enable, uncomment the following:
+    # import asyncio
+    # import tradesafe_service
+    # from background_jobs import start_background_jobs
+    # background_task = asyncio.create_task(start_background_jobs(db, tradesafe_service, interval_minutes=3))
+    # logger.info("Background jobs started")
+    
     logger.info("=== TrustTrade API Ready ===")
     
     yield
@@ -66,20 +76,19 @@ async def lifespan(app: FastAPI):
     logger.info("=== TrustTrade API Shutdown Complete ===")
 
 
-# FastAPI app with lifespan
+# FastAPI app
 app = FastAPI(
     title="TrustTrade API",
+    description="Secure escrow platform for peer-to-peer transactions in South Africa",
     version="2.0.0",
     lifespan=lifespan
 )
 
-# STEP 2: Add CORS middleware
-cors_origins = settings.CORS_ORIGINS
-
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=cors_origins,
+    allow_origins=settings.CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -87,32 +96,23 @@ app.add_middleware(
 
 @app.get("/ping")
 def ping():
-    return {"status": "ok", "step": "4_auth_router"}
+    return {"status": "ok"}
 
 
-# STEP 4.1: Add auth_router ONLY
+# Include all routers
 app.include_router(auth_router)
-
-# STEP 4.2: Add users_router
 app.include_router(users_router)
-
-# STEP 4.3: Add transactions_router
 app.include_router(transactions_router)
-
-# STEP 4.4: Add tradesafe_router
 app.include_router(tradesafe_router)
-
-# STEP 4.5: Add share_router
 app.include_router(share_router)
-
-# STEP 4.6: Add disputes_router
 app.include_router(disputes_router)
-
-# STEP 4.7: Add admin_router
 app.include_router(admin_router)
-
-# STEP 4.8: Add monitoring_router
 app.include_router(monitoring_router)
-
-# STEP 4.9: Add webhooks_router
 app.include_router(webhooks_router)
+
+# Mount static files for uploads
+try:
+    Path(settings.UPLOAD_BASE_PATH).mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_BASE_PATH), name="uploads")
+except Exception as e:
+    logger.warning(f"Could not mount uploads directory: {e}")

@@ -52,8 +52,8 @@ function LandingPage() {
       {/* Navigation */}
       <nav className="bg-white sticky top-0 z-50 border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-20 md:h-24 object-contain" />
+          <div className="flex justify-between items-center h-24 md:h-28">
+            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-16 md:h-20 lg:h-24 object-contain" />
             <div className="flex items-center gap-4">
               <Button variant="ghost" onClick={handleLogin} className="text-slate-700 hover:text-blue-600 font-medium">
                 Log In
@@ -69,8 +69,8 @@ function LandingPage() {
       {/* Hero */}
       <section className="bg-gradient-to-b from-blue-50 to-white py-24 px-4">
         <div className="max-w-7xl mx-auto text-center">
-          <div className="bg-white rounded-3xl p-8 inline-block shadow-xl mb-8 border border-slate-100">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-32 md:h-40 object-contain" />
+          <div className="inline-block mb-8">
+            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-40 md:h-48 lg:h-56 object-contain" />
           </div>
           <h1 className="text-5xl md:text-6xl font-bold text-slate-900 mb-6">TrustTrade</h1>
           <p className="text-2xl text-blue-600 font-semibold mb-4">Secure Escrow Protection for South Africa</p>

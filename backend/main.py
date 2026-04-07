@@ -116,15 +116,15 @@ app.add_middleware(
 )
 
 # Include all routers
-app.include_router(auth_router)
-app.include_router(transactions_router)
-app.include_router(tradesafe_router)
-app.include_router(share_router)
-app.include_router(disputes_router)
-app.include_router(users_router)
-app.include_router(admin_router)
-app.include_router(monitoring_router)
-app.include_router(webhooks_router)
+# app.include_router(auth_router)
+# app.include_router(transactions_router)
+# app.include_router(tradesafe_router)
+# app.include_router(share_router)
+# app.include_router(disputes_router)
+# app.include_router(users_router)
+# app.include_router(admin_router)
+# app.include_router(monitoring_router)
+# app.include_router(webhooks_router)
 
 # Mount static files for uploads
 try:

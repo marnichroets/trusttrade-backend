@@ -36,13 +36,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Minimal FastAPI app - NO middleware, NO lifespan, NO routers
+# Minimal FastAPI app - NO lifespan, NO routers
 app = FastAPI(
     title="TrustTrade API",
     version="2.0.0"
 )
 
+# STEP 2: Add CORS middleware
+cors_origins = settings.CORS_ORIGINS
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.get("/ping")
 def ping():
-    return {"status": "ok", "step": "1_imports_only"}
+    return {"status": "ok", "step": "2_cors_added"}

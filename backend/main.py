@@ -36,10 +36,41 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Minimal FastAPI app - NO lifespan, NO routers
+
+# STEP 3: Add lifespan (NO background jobs)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan handler - startup and shutdown"""
+    logger.info("=== TrustTrade API Starting ===")
+    
+    # Get database connection and create indexes
+    db = get_database()
+    try:
+        await create_indexes(db)
+        logger.info("Database indexes created/verified")
+    except Exception as e:
+        logger.error(f"Failed to create indexes: {e}")
+    
+    # Create upload directories
+    for path in [settings.UPLOAD_BASE_PATH, settings.PHOTOS_PATH, 
+                 settings.VERIFICATION_PATH, settings.DISPUTES_PATH, settings.PDFS_PATH]:
+        Path(path).mkdir(parents=True, exist_ok=True)
+    
+    logger.info("=== TrustTrade API Ready ===")
+    
+    yield
+    
+    # Shutdown
+    logger.info("=== TrustTrade API Shutting Down ===")
+    await close_database()
+    logger.info("=== TrustTrade API Shutdown Complete ===")
+
+
+# FastAPI app with lifespan
 app = FastAPI(
     title="TrustTrade API",
-    version="2.0.0"
+    version="2.0.0",
+    lifespan=lifespan
 )
 
 # STEP 2: Add CORS middleware

@@ -96,6 +96,12 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+
+@app.get("/ping")
+async def ping():
+    return {"status": "ok"}
+
+
 # Add CORS middleware
 # Origins are read from CORS_ORIGINS environment variable
 # For production deployment, set CORS_ORIGINS to your frontend domain(s)

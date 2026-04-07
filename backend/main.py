@@ -87,4 +87,32 @@ app.add_middleware(
 
 @app.get("/ping")
 def ping():
-    return {"status": "ok", "step": "2_cors_added"}
+    return {"status": "ok", "step": "4_auth_router"}
+
+
+# STEP 4.1: Add auth_router ONLY
+app.include_router(auth_router)
+
+# STEP 4.2: Add users_router
+app.include_router(users_router)
+
+# STEP 4.3: Add transactions_router
+app.include_router(transactions_router)
+
+# STEP 4.4: Add tradesafe_router
+app.include_router(tradesafe_router)
+
+# STEP 4.5: Add share_router
+app.include_router(share_router)
+
+# STEP 4.6: Add disputes_router
+app.include_router(disputes_router)
+
+# STEP 4.7: Add admin_router
+app.include_router(admin_router)
+
+# STEP 4.8: Add monitoring_router
+app.include_router(monitoring_router)
+
+# STEP 4.9: Add webhooks_router
+app.include_router(webhooks_router)

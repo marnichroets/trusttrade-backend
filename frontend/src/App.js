@@ -25,6 +25,10 @@ import PhoneVerification from './pages/PhoneVerification';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentCancelled from './pages/PaymentCancelled';
 import BankingSettings from './pages/BankingSettings';
+import PrivacyPage from './pages/PrivacyPage';
+import TermsPage from './pages/TermsPage';
+import EscrowPage from './pages/EscrowPage';
+import DisputesPage from './pages/DisputesPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -40,7 +44,11 @@ function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
-      <Route path="/terms" element={<TermsAndConditions />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/escrow" element={<EscrowPage />} />
+      <Route path="/disputes" element={<DisputesPage />} />
+      <Route path="/terms-legacy" element={<TermsAndConditions />} />
       <Route path="/t/:shareCode" element={<ShareTransaction />} />
       <Route path="/payment-success" element={<PaymentSuccess />} />
       <Route path="/payment-cancelled" element={<PaymentCancelled />} />
@@ -52,7 +60,7 @@ function AppRouter() {
       <Route path="/transactions/new" element={<ProtectedRoute><NewTransaction /></ProtectedRoute>} />
       <Route path="/transactions" element={<ProtectedRoute><TransactionsList /></ProtectedRoute>} />
       <Route path="/transactions/:transactionId" element={<ProtectedRoute><TransactionDetail /></ProtectedRoute>} />
-      <Route path="/disputes" element={<ProtectedRoute><Disputes /></ProtectedRoute>} />
+      <Route path="/disputes-dashboard" element={<ProtectedRoute><Disputes /></ProtectedRoute>} />
       
       {/* Admin Routes */}
       <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />

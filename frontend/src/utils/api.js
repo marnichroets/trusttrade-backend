@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+// Support both env var names for flexibility (Railway uses REACT_APP_API_URL)
+const API_URL = process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL;
 
 console.log('[API] Initializing with base URL:', API_URL);
 

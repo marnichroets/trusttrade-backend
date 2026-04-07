@@ -205,6 +205,13 @@ function LandingPage() {
               <h4 className="text-sm font-semibold text-slate-900 mb-4">Links</h4>
               <ul className="space-y-2">
                 <li><button onClick={scrollToHowItWorks} className="text-slate-500 hover:text-blue-600 text-sm">How It Works</button></li>
+                <li><a href="/escrow" className="text-slate-500 hover:text-blue-600 text-sm">Escrow Protection</a></li>
+                <li><a href="/disputes" className="text-slate-500 hover:text-blue-600 text-sm">Dispute Resolution</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-slate-900 mb-4">Legal</h4>
+              <ul className="space-y-2">
                 <li><a href="/terms" className="text-slate-500 hover:text-blue-600 text-sm">Terms of Service</a></li>
                 <li><a href="/privacy" className="text-slate-500 hover:text-blue-600 text-sm">Privacy Policy</a></li>
               </ul>

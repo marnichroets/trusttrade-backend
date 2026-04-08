@@ -225,9 +225,7 @@ function LandingPage() {
             <p className="text-slate-500 text-sm">© 2026 TrustTrade South Africa. All rights reserved.</p>
           </div>
         </div>
-      </footer>
-    </div>
-  );
-}
+    );
+};
 
 export default LandingPage;

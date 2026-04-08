@@ -34,9 +34,9 @@ export function TrustTradeLogo({ variant = 'default', size = 'md', linkTo = '/',
 }
 
 // Logo URL for emails (hosted publicly)
-export const EMAIL_LOGO_URL = "https://customer-assets.emergentagent.com/job_trust-trade-pay/artifacts/g0wqdpup_TrustTrade%20Logo.png";
+export const EMAIL_LOGO_URL = "https://trusttradesa.co.za/trusttrade-logo.png";
 
 // Fallback URL for emails in case the primary doesn't work
-export const EMAIL_LOGO_URL_FALLBACK = "https://trust-trade-pay.preview.emergentagent.com/trusttrade-logo.png";
+export const EMAIL_LOGO_URL_FALLBACK = "https://trusttradesa.co.za/trusttrade-logo.png";
 
 export default TrustTradeLogo;

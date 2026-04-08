@@ -1,8 +1,8 @@
-import { BrowserRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider } from './context/AuthContext';
 import LandingPage from './pages/LandingPage';
-import AuthCallback from './pages/AuthCallback';
+import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import NewTransaction from './pages/NewTransaction';
 import TransactionsList from './pages/TransactionsList';
@@ -16,7 +16,6 @@ import AdminTransactionDetail from './pages/AdminTransactionDetail';
 import AdminDisputeDetail from './pages/AdminDisputeDetail';
 import AdminUserDetail from './pages/AdminUserDetail';
 import AdminMonitoring from './pages/AdminMonitoring';
-import TermsAndConditions from './pages/TermsAndConditions';
 import ShareTransaction from './pages/ShareTransaction';
 import UserProfile from './pages/UserProfile';
 import LiveActivity from './pages/LiveActivity';
@@ -29,30 +28,23 @@ import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import EscrowPage from './pages/EscrowPage';
 import DisputesPage from './pages/DisputesPage';
+import RefundPage from './pages/RefundPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
 function AppRouter() {
-  const location = useLocation();
-  
-  // CRITICAL: Check URL fragment synchronously during render to prevent race conditions
-  // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-  if (location.hash?.includes('session_id=')) {
-    return <AuthCallback />;
-  }
-  
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<LoginPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/escrow" element={<EscrowPage />} />
       <Route path="/disputes" element={<DisputesPage />} />
-      <Route path="/terms-legacy" element={<TermsAndConditions />} />
+      <Route path="/refund" element={<RefundPage />} />
       <Route path="/t/:shareCode" element={<ShareTransaction />} />
       <Route path="/payment-success" element={<PaymentSuccess />} />
       <Route path="/payment-cancelled" element={<PaymentCancelled />} />
-      {/* Payment redirect URLs */}
       <Route path="/transaction/success" element={<PaymentSuccess />} />
       <Route path="/transaction/failed" element={<PaymentCancelled />} />
       <Route path="/transaction/cancelled" element={<PaymentCancelled />} />

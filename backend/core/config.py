@@ -48,9 +48,9 @@ class Settings:
     ADMIN_EMAIL: str = os.environ.get('ADMIN_EMAIL', '')  # Primary admin email
     
     # Platform Constants
-    MINIMUM_TRANSACTION_AMOUNT: float = 500.0  # R500 minimum
+    MINIMUM_TRANSACTION_AMOUNT: float = 100.0  # R100 minimum
     MAXIMUM_TRANSACTION_AMOUNT: float = 500000.0  # R500,000 maximum
-    PAYOUT_THRESHOLD: float = 500.0  # R500 payout threshold
+    PAYOUT_THRESHOLD: float = 100.0  # R100 payout threshold
     PLATFORM_FEE_PERCENT: float = 2.0  # 2% platform fee
     
     # Upload Paths

@@ -30,8 +30,7 @@ function LandingPage() {
   }, []);
 
   const handleLogin = () => {
-    // Redirect to Emergent Auth with current origin as callback
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(window.location.origin)}`;
+    navigate('/login');
   };
 
   const scrollToHowItWorks = () => {
@@ -214,6 +213,7 @@ function LandingPage() {
               <ul className="space-y-2">
                 <li><a href="/terms" className="text-slate-500 hover:text-blue-600 text-sm">Terms of Service</a></li>
                 <li><a href="/privacy" className="text-slate-500 hover:text-blue-600 text-sm">Privacy Policy</a></li>
+                <li><a href="/refund" className="text-slate-500 hover:text-blue-600 text-sm">Refund Policy</a></li>
               </ul>
             </div>
             <div>

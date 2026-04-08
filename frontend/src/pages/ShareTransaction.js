@@ -46,8 +46,7 @@ function ShareTransaction() {
   const handleLogin = () => {
     // Store the share code to redirect back after login
     sessionStorage.setItem('pendingShareCode', shareCode);
-    const redirectUrl = window.location.origin;
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    navigate('/login');
   };
 
   const handleJoinTransaction = async () => {

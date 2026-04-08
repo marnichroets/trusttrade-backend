@@ -761,12 +761,12 @@ function TransactionDetail() {
   if (wrongAccount) {
     const handleLogout = async () => {
       try {
-        await api.post(`${API}/auth/logout`, {}, { withCredentials: true });
-        // Redirect to login with the transaction link preserved
-        window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(window.location.href)}`;
+        await api.post('/auth/logout', {}, { withCredentials: true });
+        localStorage.removeItem('session_token');
+        window.location.href = '/login';
       } catch (error) {
         console.error('Logout failed:', error);
-        window.location.href = '/';
+        window.location.href = '/login';
       }
     };
 

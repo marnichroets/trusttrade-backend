@@ -9,6 +9,7 @@ import shutil
 import random
 import string
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List
@@ -44,6 +45,26 @@ from tradesafe_service import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Transactions"])
+
+
+def calculate_money(item_price: float, fee_percent: float = 2.0) -> dict:
+    """
+    Calculate all money values using Decimal for precision.
+    Returns values as floats with exactly 2 decimal places.
+    """
+    price = Decimal(str(item_price))
+    fee_rate = Decimal(str(fee_percent)) / Decimal("100")
+    
+    trusttrade_fee = (price * fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    total = (price + trusttrade_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    seller_receives = (price - trusttrade_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    
+    return {
+        "item_price": float(price),
+        "trusttrade_fee": float(trusttrade_fee),
+        "total": float(total),
+        "seller_receives": float(seller_receives)
+    }
 
 
 def generate_share_code() -> str:
@@ -305,10 +326,11 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
             detail=f"Maximum transaction amount is R{settings.MAXIMUM_TRANSACTION_AMOUNT:,.0f}. Please contact support for larger transactions."
         )
     
-    # Calculate fees (2% platform fee)
-    item_price = transaction_data.item_price
-    trusttrade_fee = round(item_price * (settings.PLATFORM_FEE_PERCENT / 100), 2)
-    total = round(item_price + trusttrade_fee, 2)
+    # Calculate fees using precise Decimal math (2% platform fee)
+    money = calculate_money(transaction_data.item_price, settings.PLATFORM_FEE_PERCENT)
+    item_price = money["item_price"]
+    trusttrade_fee = money["trusttrade_fee"]
+    total = money["total"]
     
     transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
     
@@ -399,7 +421,8 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "item_price": item_price,
         "trusttrade_fee": trusttrade_fee,
         "total": total,
-        "fee_paid_by": transaction_data.fee_paid_by,
+        "seller_receives": money["seller_receives"],  # Pre-calculated for frontend
+        "fee_allocation": transaction_data.fee_allocation,  # TrustTrade fee allocation
         "delivery_method": delivery_method,
         "auto_release_days": auto_release_days,
         "payment_status": "Pending Seller Confirmation" if transaction_data.creator_role == "buyer" else "Pending Buyer Confirmation",
@@ -421,26 +444,36 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     base_url = settings.FRONTEND_URL
     
     # Send transaction created emails
-    await send_transaction_created_email(
-        to_email=buyer_email,
-        to_name=buyer_name,
-        share_code=share_code,
-        item_description=transaction_data.item_description,
-        amount=item_price,
-        other_party_name=seller_name,
-        role="Buyer",
-        base_url=base_url
-    )
-    await send_transaction_created_email(
-        to_email=seller_email,
-        to_name=seller_name,
-        share_code=share_code,
-        item_description=transaction_data.item_description,
-        amount=item_price,
-        other_party_name=buyer_name,
-        role="Seller",
-        base_url=base_url
-    )
+    # Only send if email addresses are valid (not empty/phone-only invites)
+    if buyer_email and '@' in buyer_email:
+        email_result = await send_transaction_created_email(
+            to_email=buyer_email,
+            to_name=buyer_name,
+            share_code=share_code,
+            item_description=transaction_data.item_description,
+            amount=item_price,
+            other_party_name=seller_name,
+            role="Buyer",
+            base_url=base_url
+        )
+        logger.info(f"Buyer email send result: {email_result} to {buyer_email}")
+    else:
+        logger.info(f"Skipping buyer email - no valid email address (phone invite): {buyer_email}")
+    
+    if seller_email and '@' in seller_email:
+        email_result = await send_transaction_created_email(
+            to_email=seller_email,
+            to_name=seller_name,
+            share_code=share_code,
+            item_description=transaction_data.item_description,
+            amount=item_price,
+            other_party_name=buyer_name,
+            role="Seller",
+            base_url=base_url
+        )
+        logger.info(f"Seller email send result: {email_result} to {seller_email}")
+    else:
+        logger.info(f"Skipping seller email - no valid email address (phone invite): {seller_email}")
     
     # If recipient was invited via phone, also send SMS
     if recipient_type == "phone" and recipient_phone:
@@ -463,6 +496,8 @@ async def list_transactions(request: Request):
     user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    logger.info(f"LIST_TRANSACTIONS: user={user.email}, is_admin={user.is_admin}")
     
     # Admin sees all
     if user.is_admin:
@@ -489,17 +524,63 @@ async def list_transactions(request: Request):
         
         query = {"$or": or_conditions}
     
-    # Optimize query with projection for list view
-    projection = {
-        "_id": 0,
-        "transaction_id": 1, "share_code": 1, "item_description": 1, "item_price": 1,
-        "payment_status": 1, "release_status": 1, "transaction_state": 1, "tradesafe_state": 1,
-        "created_at": 1, "buyer_name": 1, "buyer_email": 1, "seller_name": 1, "seller_email": 1,
-        "buyer_user_id": 1, "seller_user_id": 1, "delivery_method": 1, "has_dispute": 1,
-        "buyer_confirmed": 1, "seller_confirmed": 1, "tradesafe_id": 1
-    }
-    transactions = await db.transactions.find(query, projection).sort("created_at", -1).to_list(1000)
-    return [Transaction(**t) for t in transactions]
+    try:
+        # Optimize query with projection for list view
+        projection = {
+            "_id": 0,
+            "transaction_id": 1, "share_code": 1, "item_description": 1, "item_price": 1,
+            "payment_status": 1, "release_status": 1, "transaction_state": 1, "tradesafe_state": 1,
+            "created_at": 1, "buyer_name": 1, "buyer_email": 1, "seller_name": 1, "seller_email": 1,
+            "buyer_user_id": 1, "seller_user_id": 1, "delivery_method": 1, "has_dispute": 1,
+            "buyer_confirmed": 1, "seller_confirmed": 1, "tradesafe_id": 1,
+            "trusttrade_fee": 1, "total": 1, "seller_receives": 1
+        }
+        raw_transactions = await db.transactions.find(query, projection).sort("created_at", -1).to_list(1000)
+        
+        logger.info(f"LIST_TRANSACTIONS: fetched {len(raw_transactions)} records")
+        
+        # Defensive processing - handle missing/malformed records
+        valid_transactions = []
+        skipped_count = 0
+        
+        for t in raw_transactions:
+            try:
+                # Provide safe defaults for missing required fields
+                t.setdefault("created_at", "1970-01-01T00:00:00Z")  # Fallback for sorting
+                t.setdefault("item_description", "Unknown item")
+                t.setdefault("buyer_name", "Unknown")
+                t.setdefault("buyer_email", "")
+                t.setdefault("seller_name", "Unknown")
+                t.setdefault("seller_email", "")
+                t.setdefault("item_price", 0.0)
+                t.setdefault("payment_status", "Unknown")
+                t.setdefault("release_status", "Unknown")
+                
+                # Ensure numeric fields are floats (not Decimal)
+                if t.get("item_price") is not None:
+                    t["item_price"] = float(t["item_price"])
+                if t.get("trusttrade_fee") is not None:
+                    t["trusttrade_fee"] = float(t["trusttrade_fee"])
+                if t.get("total") is not None:
+                    t["total"] = float(t["total"])
+                if t.get("seller_receives") is not None:
+                    t["seller_receives"] = float(t["seller_receives"])
+                
+                valid_transactions.append(Transaction(**t))
+            except Exception as e:
+                skipped_count += 1
+                logger.warning(f"LIST_TRANSACTIONS_SKIP: id={t.get('transaction_id', 'unknown')}, error={str(e)}")
+        
+        if skipped_count > 0:
+            logger.warning(f"LIST_TRANSACTIONS: skipped {skipped_count} malformed records")
+        
+        return valid_transactions
+        
+    except Exception as e:
+        logger.error(f"LIST_TRANSACTIONS_ERROR: user={user.email}, error={str(e)}")
+        import traceback
+        logger.error(f"LIST_TRANSACTIONS_TRACEBACK: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Failed to load transactions")
 
 
 @router.get("/transactions/{transaction_id}", response_model=Transaction)
@@ -571,7 +652,7 @@ async def update_transaction_photos(request: Request, transaction_id: str, photo
 
 @router.post("/transactions/{transaction_id}/seller-confirm")
 async def seller_confirm_transaction(request: Request, transaction_id: str, confirmation: SellerConfirmation):
-    """Seller confirms transaction details"""
+    """Seller confirms transaction details and fee agreement"""
     db = get_database()
     
     user = await get_user_from_token(request, db)
@@ -584,16 +665,27 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
         raise HTTPException(status_code=404, detail="Transaction not found")
     
     # Only seller can confirm
-    if transaction.get("seller_email") != user.email:
+    seller_email = transaction.get("seller_email", "").lower()
+    user_email = user.email.lower() if user.email else ""
+    
+    if seller_email != user_email:
+        logger.warning(f"Non-seller tried to confirm: user={user_email}, seller={seller_email}")
         raise HTTPException(status_code=403, detail="Only seller can confirm transaction")
     
+    if transaction.get("seller_confirmed"):
+        logger.info(f"Transaction {transaction_id} already confirmed by seller")
+        return {"message": "Transaction already confirmed", "already_confirmed": True}
+    
     if confirmation.confirmed:
+        logger.info(f"Seller {user_email} confirming fee agreement for transaction {transaction_id}")
+        
         # Update timeline
         timeline = transaction.get("timeline", [])
         timeline.append({
-            "status": "Seller Confirmed",
+            "status": "Seller Confirmed Fee Agreement",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "by": user.name
+            "by": user.name,
+            "details": f"Fee allocation: {transaction.get('fee_allocation', 'SELLER_AGENT')}"
         })
         
         # Generate escrow agreement PDF
@@ -602,6 +694,7 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
         
         try:
             generate_escrow_agreement_pdf(transaction, str(pdf_path))
+            logger.info(f"Generated escrow agreement PDF: {pdf_filename}")
         except Exception as e:
             logger.error(f"PDF generation failed: {str(e)}")
         
@@ -616,7 +709,13 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
             }}
         )
         
-        return {"message": "Transaction confirmed", "agreement_pdf": pdf_filename if pdf_path.exists() else None}
+        logger.info(f"Transaction {transaction_id} status changed: PENDING -> CONFIRMED (Ready for Payment)")
+        
+        return {
+            "message": "Fee agreement confirmed", 
+            "agreement_pdf": pdf_filename if pdf_path.exists() else None,
+            "status": "Ready for Payment"
+        }
     
     return {"message": "Confirmation cancelled"}
 
@@ -696,8 +795,9 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
             }}
         )
         
-        # Calculate net amount after fee
-        net_amount = transaction["item_price"] - (transaction["item_price"] * 0.02)
+        # Calculate net amount after fee using Decimal precision
+        money = calculate_money(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
+        net_amount = money["seller_receives"]
         
         # Send funds released email
         await send_funds_released_email(

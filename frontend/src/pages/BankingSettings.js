@@ -5,12 +5,9 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { CreditCard, Building2, User, Hash, ShieldCheck, AlertCircle, ArrowLeft, CheckCircle, Lock } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 // South African banks
 const SA_BANKS = [
@@ -32,6 +29,7 @@ function BankingSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [bankingDetailsAdded, setBankingDetailsAdded] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
   const [bankingDetails, setBankingDetails] = useState({
     bank_name: '',
     account_holder: '',
@@ -47,7 +45,7 @@ function BankingSettings() {
 
   const fetchUserData = async () => {
     try {
-      const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const userRes = await api.get('/auth/me');
       setUser(userRes.data);
       setBankingDetailsAdded(userRes.data.banking_details_added || false);
       
@@ -89,12 +87,18 @@ function BankingSettings() {
       return;
     }
 
+    // Show confirmation step
+    setShowConfirmation(true);
+  };
+
+  const handleConfirmSubmit = async () => {
     setSaving(true);
     try {
       // Send to TradeSafe API - banking details are NOT stored in TrustTrade database
-      await axios.post(`${API}/tradesafe/banking-details`, bankingDetails, { withCredentials: true });
+      await api.post('/tradesafe/banking-details', bankingDetails);
       toast.success('Banking details saved securely');
       setBankingDetailsAdded(true);
+      setShowConfirmation(false);
       
       // Redirect to dashboard after short delay
       setTimeout(() => {
@@ -147,6 +151,84 @@ function BankingSettings() {
             <Button onClick={() => navigate('/dashboard')} className="bg-[#1a2942] hover:bg-[#243751]">
               Back to Dashboard
             </Button>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Confirmation step
+  if (showConfirmation) {
+    return (
+      <DashboardLayout user={user}>
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => setShowConfirmation(false)}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Confirm Banking Details</h1>
+              <p className="text-slate-600">Please verify your information</p>
+            </div>
+          </div>
+
+          <Card className="p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <AlertCircle className="w-6 h-6 text-amber-500" />
+              <p className="text-sm text-slate-600">Please verify all details are correct before submitting. Incorrect details may delay your payouts.</p>
+            </div>
+
+            <div className="space-y-4 bg-slate-50 rounded-lg p-6 mb-6">
+              <div className="flex justify-between py-2 border-b border-slate-200">
+                <span className="text-slate-600">Bank Name</span>
+                <span className="font-semibold text-slate-900">{bankingDetails.bank_name}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-slate-200">
+                <span className="text-slate-600">Account Holder</span>
+                <span className="font-semibold text-slate-900">{bankingDetails.account_holder}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-slate-200">
+                <span className="text-slate-600">Account Number</span>
+                <span className="font-semibold text-slate-900 font-mono">{bankingDetails.account_number}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-slate-200">
+                <span className="text-slate-600">Branch Code</span>
+                <span className="font-semibold text-slate-900">{bankingDetails.branch_code}</span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="text-slate-600">Account Type</span>
+                <span className="font-semibold text-slate-900 capitalize">{bankingDetails.account_type}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowConfirmation(false)}
+                className="flex-1"
+                disabled={saving}
+              >
+                Edit Details
+              </Button>
+              <Button 
+                onClick={handleConfirmSubmit}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Confirm & Submit
+                  </>
+                )}
+              </Button>
+            </div>
           </Card>
         </div>
       </DashboardLayout>

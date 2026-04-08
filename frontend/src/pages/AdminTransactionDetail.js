@@ -6,7 +6,7 @@ import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { AdminNavbar, Breadcrumbs } from '../components/AdminNavbar';
-import axios from 'axios';
+import api, { API_URL } from '../utils/api';
 import { toast } from 'sonner';
 import { 
   ArrowLeft, User, Mail, Phone, CreditCard, Calendar, Clock, 
@@ -14,8 +14,7 @@ import {
   AlertTriangle, Loader2, Image as ImageIcon, Ban
 } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+const BACKEND_URL = API_URL.replace('/api', '');
 
 // TrustTrade Color System
 const COLORS = {
@@ -65,8 +64,8 @@ function AdminTransactionDetail() {
   const fetchData = async () => {
     try {
       const [userRes, txnRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/admin/transaction/${transactionId}`, { withCredentials: true })
+        api.get('/auth/me'),
+        api.get(`/admin/transaction/${transactionId}`)
       ]);
       
       if (!userRes.data.is_admin) {
@@ -103,21 +102,21 @@ function AdminTransactionDetail() {
       
       switch (action) {
         case 'release_funds':
-          endpoint = `${API}/admin/transactions/${transactionId}/release`;
+          endpoint = `/admin/transactions/${transactionId}/release`;
           data.notes = adminNote;
           break;
         case 'refund_buyer':
-          endpoint = `${API}/admin/transactions/${transactionId}/refund`;
+          endpoint = `/admin/transactions/${transactionId}/refund`;
           data.reason = adminNote || 'Admin refund';
           break;
         case 'suspend_buyer':
-          endpoint = `${API}/admin/users/${buyer?.user_id}/suspend`;
+          endpoint = `/admin/users/${buyer?.user_id}/suspend`;
           break;
         case 'suspend_seller':
-          endpoint = `${API}/admin/users/${seller?.user_id}/suspend`;
+          endpoint = `/admin/users/${seller?.user_id}/suspend`;
           break;
         case 'add_note':
-          endpoint = `${API}/admin/transactions/${transactionId}/notes`;
+          endpoint = `/admin/transactions/${transactionId}/notes`;
           data = { notes: adminNote };
           break;
         default:
@@ -125,7 +124,7 @@ function AdminTransactionDetail() {
           return;
       }
       
-      await axios.post(endpoint, data, { withCredentials: true });
+      await api.post(endpoint, data);
       toast.success(`Action completed: ${action.replace('_', ' ')}`);
       setAdminNote('');
       fetchData();
@@ -153,9 +152,11 @@ function AdminTransactionDetail() {
 
   const handleLogout = async () => {
     try {
-      await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+      await api.post('/auth/logout', {});
+      localStorage.removeItem('session_token');
       navigate('/');
     } catch (error) {
+      localStorage.removeItem('session_token');
       navigate('/');
     }
   };

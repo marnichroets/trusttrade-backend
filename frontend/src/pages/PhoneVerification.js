@@ -4,12 +4,9 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { Phone, Shield, CheckCircle, ArrowRight, Loader2, RefreshCw } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 function PhoneVerification() {
   const [step, setStep] = useState('phone'); // 'phone', 'otp', 'success'
@@ -36,7 +33,7 @@ function PhoneVerification() {
 
   const checkVerificationStatus = async () => {
     try {
-      const response = await axios.get(`${API}/auth/phone/status`, { withCredentials: true });
+      const response = await api.get('/auth/phone/status');
       setVerificationStatus(response.data);
       
       if (response.data.phone_verified) {
@@ -77,11 +74,7 @@ function PhoneVerification() {
 
     setLoading(true);
     try {
-      const response = await axios.post(
-        `${API}/auth/phone/submit`,
-        { phone },
-        { withCredentials: true }
-      );
+      const response = await api.post('/auth/phone/submit', { phone });
 
       toast.success('Verification code sent!');
       setPhone(response.data.phone);
@@ -129,11 +122,7 @@ function PhoneVerification() {
 
     setLoading(true);
     try {
-      await axios.post(
-        `${API}/auth/phone/verify`,
-        { phone, otp_code: otpCode },
-        { withCredentials: true }
-      );
+      await api.post('/auth/phone/verify', { phone, otp_code: otpCode });
 
       toast.success('Phone number verified!');
       setStep('success');
@@ -152,11 +141,7 @@ function PhoneVerification() {
 
     setLoading(true);
     try {
-      await axios.post(
-        `${API}/auth/phone/resend`,
-        { phone },
-        { withCredentials: true }
-      );
+      await api.post('/auth/phone/resend', { phone });
 
       toast.success('New verification code sent!');
       setResendCooldown(60);

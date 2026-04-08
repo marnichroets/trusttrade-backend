@@ -10,12 +10,25 @@ import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, ExternalLink, Shield, Loader2, Phone, Lock, RefreshCw } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+
+function parseErrorMessage(error) {
+  const detail = error.response?.data?.detail;
+  if (!detail) return 'An error occurred';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
+  }
+  if (typeof detail === 'object') {
+    return detail.msg || detail.message || JSON.stringify(detail);
+  }
+  return 'An error occurred';
+}
 
 function TransactionDetail() {
   const [user, setUser] = useState(null);
@@ -65,7 +78,7 @@ function TransactionDetail() {
   const fetchData = async () => {
     try {
       // First get user info
-      const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
       setUser(userRes.data);
       
       // Pre-fill phone if user has one
@@ -74,7 +87,7 @@ function TransactionDetail() {
       }
       
       // Then try to get transaction
-      const transactionRes = await axios.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
+      const transactionRes = await api.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
       setTransaction(transactionRes.data);
       setNeedsPhoneVerification(false);
     } catch (error) {
@@ -89,7 +102,7 @@ function TransactionDetail() {
         
         // Still try to get user info for pre-filling
         try {
-          const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+          const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
           setUser(userRes.data);
           if (userRes.data.phone) {
             setPhoneNumber(userRes.data.phone);
@@ -103,7 +116,7 @@ function TransactionDetail() {
         const expectedEmail = match ? match[1] : 'the invited account';
         
         try {
-          const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+          const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
           setUser(userRes.data);
           setWrongAccount({
             expected: expectedEmail,
@@ -136,7 +149,7 @@ function TransactionDetail() {
 
     setSendingOtp(true);
     try {
-      await axios.post(
+      await api.post(
         `${API}/phone/send-otp`,
         { phone_number: phoneNumber },
         { withCredentials: true }
@@ -147,7 +160,7 @@ function TransactionDetail() {
       toast.success('Verification code sent to your phone');
     } catch (error) {
       console.error('Failed to send OTP:', error);
-      toast.error(error.response?.data?.detail || 'Failed to send verification code');
+      toast.error(parseErrorMessage(error) || 'Failed to send verification code');
     } finally {
       setSendingOtp(false);
     }
@@ -163,7 +176,7 @@ function TransactionDetail() {
     setVerifyingOtp(true);
     try {
       // First verify the OTP
-      await axios.post(
+      await api.post(
         `${API}/phone/verify-otp`,
         { phone_number: phoneNumber, otp_code: otpCode },
         { withCredentials: true }
@@ -172,13 +185,13 @@ function TransactionDetail() {
       toast.success('Phone verified successfully!');
       
       // Now try to fetch the transaction again - should work now
-      const transactionRes = await axios.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
+      const transactionRes = await api.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
       setTransaction(transactionRes.data);
       setNeedsPhoneVerification(false);
       setVerificationError(null);
       
       // Update user state with verified phone
-      const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
       setUser(userRes.data);
       
       toast.success('You have joined the transaction!');
@@ -205,7 +218,7 @@ function TransactionDetail() {
 
     setSellerConfirming(true);
     try {
-      await axios.post(
+      await api.post(
         `${API}/transactions/${transactionId}/seller-confirm`,
         { confirmed: true },
         { withCredentials: true }
@@ -215,7 +228,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to confirm:', error);
-      toast.error(error.response?.data?.detail || 'Failed to confirm transaction');
+      toast.error(parseErrorMessage(error) || 'Failed to confirm transaction');
     } finally {
       setSellerConfirming(false);
     }
@@ -228,7 +241,7 @@ function TransactionDetail() {
 
     setConfirming(true);
     try {
-      await axios.patch(
+      await api.patch(
         `${API}/transactions/${transactionId}/delivery`,
         { delivery_confirmed: true },
         { withCredentials: true }
@@ -238,7 +251,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to confirm delivery:', error);
-      toast.error(error.response?.data?.detail || 'Failed to confirm delivery');
+      toast.error(parseErrorMessage(error) || 'Failed to confirm delivery');
     } finally {
       setConfirming(false);
     }
@@ -246,7 +259,7 @@ function TransactionDetail() {
 
   const handleDownloadPDF = async () => {
     try {
-      const response = await axios.get(
+      const response = await api.get(
         `${API}/transactions/${transactionId}/agreement-pdf`,
         { withCredentials: true, responseType: 'blob' }
       );
@@ -283,7 +296,7 @@ function TransactionDetail() {
     toast.info('Creating escrow...');
     
     try {
-      const response = await axios.post(
+      const response = await api.post(
         `${API}/tradesafe/create-transaction`,
         { 
           transaction_id: transactionId,
@@ -297,7 +310,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to create escrow:', error);
-      const errorMessage = error.response?.data?.detail || 'Failed to create escrow. Please try again.';
+      const errorMessage = parseErrorMessage(error) || 'Failed to create escrow. Please try again.';
       toast.error(errorMessage);
       alert('Error: ' + errorMessage); // Fallback alert for mobile
     } finally {
@@ -325,13 +338,26 @@ function TransactionDetail() {
     
     try {
       console.log('Calling payment-url API with method:', selectedPaymentMethod);
-      const response = await axios.get(
+      const response = await api.get(
         `${API}/tradesafe/payment-url/${transactionId}?payment_method=${selectedPaymentMethod}`,
         { withCredentials: true }
       );
 
       console.log('Payment URL response:', response.data);
       setPaymentInfo(response.data);
+      
+      // Check if transaction is already paid
+      if (response.data.already_paid) {
+        console.log('Transaction already paid:', response.data.state);
+        toast.success('This transaction has already been paid.');
+        // Update local transaction state to reflect payment
+        setTransaction(prev => ({
+          ...prev,
+          tradesafe_state: response.data.state,
+          status: 'paid'
+        }));
+        return;
+      }
       
       if (response.data.payment_link) {
         // Open payment link in new tab
@@ -350,7 +376,7 @@ function TransactionDetail() {
       } else {
         // No payment link - show EFT bank details message
         setPaymentInfo(response.data);
-        toast.info('Payment deposit created. For sandbox testing, bank details will be shown for EFT payment. In production, you will be redirected to the payment page.');
+        toast.info('Payment deposit created. For EFT payment, please use the bank details provided. In production, you will be redirected to the payment page.');
       }
     } catch (error) {
       console.error('Failed to get payment link:', error);
@@ -370,7 +396,7 @@ function TransactionDetail() {
 
     setStartingDelivery(true);
     try {
-      await axios.post(
+      await api.post(
         `${API}/tradesafe/start-delivery/${transactionId}`,
         {},
         { withCredentials: true }
@@ -380,7 +406,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to start delivery:', error);
-      toast.error(error.response?.data?.detail || 'Failed to start delivery. Please try again.');
+      toast.error(parseErrorMessage(error) || 'Failed to start delivery. Please try again.');
     } finally {
       setStartingDelivery(false);
     }
@@ -394,7 +420,7 @@ function TransactionDetail() {
 
     setStartingDelivery(true);
     try {
-      await axios.post(
+      await api.post(
         `${API}/tradesafe/manual-start-delivery/${transactionId}`,
         {},
         { withCredentials: true }
@@ -404,7 +430,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed manual start delivery:', error);
-      toast.error(error.response?.data?.detail || 'Failed to start delivery.');
+      toast.error(parseErrorMessage(error) || 'Failed to start delivery.');
     } finally {
       setStartingDelivery(false);
     }
@@ -418,7 +444,7 @@ function TransactionDetail() {
 
     setAcceptingDelivery(true);
     try {
-      const response = await axios.post(
+      const response = await api.post(
         `${API}/tradesafe/accept-delivery/${transactionId}`,
         {},
         { withCredentials: true }
@@ -428,7 +454,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to accept delivery:', error);
-      toast.error(error.response?.data?.detail || 'Failed to confirm delivery. Please try again.');
+      toast.error(parseErrorMessage(error) || 'Failed to confirm delivery. Please try again.');
     } finally {
       setAcceptingDelivery(false);
     }
@@ -442,7 +468,7 @@ function TransactionDetail() {
 
     setAcceptingDelivery(true);
     try {
-      const response = await axios.post(
+      const response = await api.post(
         `${API}/tradesafe/manual-accept-delivery/${transactionId}`,
         {},
         { withCredentials: true }
@@ -452,7 +478,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed manual accept delivery:', error);
-      toast.error(error.response?.data?.detail || 'Failed to confirm delivery.');
+      toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.');
     } finally {
       setAcceptingDelivery(false);
     }
@@ -466,7 +492,7 @@ function TransactionDetail() {
 
     setSubmittingRating(true);
     try {
-      await axios.post(
+      await api.post(
         `${API}/transactions/${transactionId}/rate`,
         { rating, review: review.trim() || null },
         { withCredentials: true }
@@ -476,7 +502,7 @@ function TransactionDetail() {
       fetchData();
     } catch (error) {
       console.error('Failed to submit rating:', error);
-      toast.error(error.response?.data?.detail || 'Failed to submit rating');
+      toast.error(parseErrorMessage(error) || 'Failed to submit rating');
     } finally {
       setSubmittingRating(false);
     }
@@ -735,12 +761,12 @@ function TransactionDetail() {
   if (wrongAccount) {
     const handleLogout = async () => {
       try {
-        await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
-        // Redirect to login with the transaction link preserved
-        window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(window.location.href)}`;
+        await api.post('/auth/logout', {}, { withCredentials: true });
+        localStorage.removeItem('session_token');
+        window.location.href = '/login';
       } catch (error) {
         console.error('Logout failed:', error);
-        window.location.href = '/';
+        window.location.href = '/login';
       }
     };
 
@@ -1007,13 +1033,70 @@ function TransactionDetail() {
 
         {canSellerConfirm && (
           <Card className="p-6 bg-orange-50 border-orange-200">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Seller Confirmation Required</h3>
-            <p className="text-sm text-slate-600 mb-4">
-              Please review the transaction details carefully. Confirming will generate the escrow agreement and move the transaction forward.
-            </p>
-            <Button onClick={handleSellerConfirm} disabled={sellerConfirming} data-testid="seller-confirm-btn">
-              {sellerConfirming ? 'Confirming...' : 'Confirm Transaction Details'}
-            </Button>
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-orange-100 rounded-full">
+                <FileText className="w-6 h-6 text-orange-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Confirm Fee Agreement</h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  Please review the transaction details and TrustTrade fee structure below. By confirming, you agree to the 2% platform fee and the escrow terms.
+                </p>
+                
+                {/* Fee Breakdown */}
+                <div className="bg-white rounded-lg p-4 mb-4 border border-orange-200">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Fee Summary</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Item Price:</span>
+                      <span className="font-medium">R {transaction.item_price?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">TrustTrade Fee (2%):</span>
+                      <span className="font-medium">R {transaction.trusttrade_fee?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Fee Paid By:</span>
+                      <Badge className="bg-blue-100 text-blue-700">{getFeePayerLabel(transaction.fee_allocation)}</Badge>
+                    </div>
+                    <div className="border-t border-slate-200 pt-2 mt-2">
+                      <div className="flex justify-between">
+                        <span className="font-semibold text-slate-700">You will receive:</span>
+                        <span className="font-bold text-emerald-600">
+                          R {(transaction.seller_receives ?? (transaction.item_price - transaction.trusttrade_fee))?.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-2 mb-4 p-3 bg-amber-100 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-amber-800">
+                    <strong>Important:</strong> Payment will only be enabled after you confirm this fee agreement. Once confirmed, you cannot change the fee structure.
+                  </p>
+                </div>
+                
+                <Button 
+                  onClick={handleSellerConfirm} 
+                  disabled={sellerConfirming} 
+                  className="bg-orange-600 hover:bg-orange-700"
+                  data-testid="seller-confirm-btn"
+                >
+                  {sellerConfirming ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Confirming...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Confirm Fee Agreement
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </Card>
         )}
 

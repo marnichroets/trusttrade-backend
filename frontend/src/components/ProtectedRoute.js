@@ -24,9 +24,9 @@ function ProtectedRoute({ children }) {
     // Don't redirect multiple times
     if (hasRedirected.current) return;
     
-    console.log('[PROTECTED_ROUTE_REDIRECT] Not authenticated, redirecting to /');
+    console.log('[PROTECTED_ROUTE_REDIRECT] Not authenticated, redirecting to /login');
     hasRedirected.current = true;
-    navigate('/', { replace: true });
+    navigate('/login', { replace: true });
   }, [loading, isAuthenticated, hasLocalAuth, navigate]);
 
   // Show loading spinner while auth is being checked
@@ -51,3 +51,4 @@ function ProtectedRoute({ children }) {
 }
 
 export default ProtectedRoute;
+

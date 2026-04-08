@@ -6,12 +6,10 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Badge } from '../components/ui/badge';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { ShieldCheck, Upload, Camera, Phone, CheckCircle, AlertCircle, Loader2, ArrowLeft, FileText, X, Eye } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 function IdentityVerification() {
@@ -102,11 +100,11 @@ function IdentityVerification() {
 
   const fetchData = async () => {
     try {
-      const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const userRes = await api.get('/auth/me');
       setUser(userRes.data);
       
       // Get verification status
-      const statusRes = await axios.get(`${API}/verification/status`, { withCredentials: true });
+      const statusRes = await api.get('/verification/status');
       setVerificationStatus(statusRes.data);
       
       // Set step based on verification status
@@ -135,8 +133,7 @@ function IdentityVerification() {
       const formData = new FormData();
       formData.append('file', idFile);
 
-      await axios.post(`${API}/verification/id`, formData, {
-        withCredentials: true,
+      await api.post('/verification/id', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -169,8 +166,7 @@ function IdentityVerification() {
       const formData = new FormData();
       formData.append('file', selfieFile);
 
-      await axios.post(`${API}/verification/selfie`, formData, {
-        withCredentials: true,
+      await api.post('/verification/selfie', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (progressEvent) => {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -199,10 +195,7 @@ function IdentityVerification() {
 
     setSubmitting(true);
     try {
-      await axios.post(`${API}/verification/phone/send-otp`, 
-        { phone_number: phoneNumber },
-        { withCredentials: true }
-      );
+      await api.post('/verification/phone/send-otp', { phone_number: phoneNumber });
 
       toast.success('OTP sent to your phone');
       setOtpSent(true);
@@ -222,10 +215,7 @@ function IdentityVerification() {
 
     setSubmitting(true);
     try {
-      await axios.post(`${API}/verification/phone/verify-otp`, 
-        { phone_number: phoneNumber, otp },
-        { withCredentials: true }
-      );
+      await api.post('/verification/phone/verify-otp', { phone_number: phoneNumber, otp });
 
       toast.success('Phone verified successfully! You are now a Verified User.');
       setStep(4);

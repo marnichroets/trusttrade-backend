@@ -4,15 +4,12 @@ import { AdminNavbar, Breadcrumbs } from '../components/AdminNavbar';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { 
   Users, FileText, AlertCircle, RefreshCw, DollarSign, 
   ShieldCheck, ChevronRight, TrendingUp, Clock
 } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 const COLORS = {
   primary: '#3b82f6',  // Blue
@@ -52,11 +49,11 @@ function AdminDashboard() {
   const fetchData = async () => {
     try {
       const [userRes, statsRes, txnRes, usersRes, disputesRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/admin/stats`, { withCredentials: true }),
-        axios.get(`${API}/admin/transactions`, { withCredentials: true }),
-        axios.get(`${API}/admin/users`, { withCredentials: true }),
-        axios.get(`${API}/admin/disputes`, { withCredentials: true })
+        api.get('/auth/me'),
+        api.get('/admin/stats'),
+        api.get('/admin/transactions'),
+        api.get('/admin/users'),
+        api.get('/admin/disputes')
       ]);
       
       if (!userRes.data.is_admin) {
@@ -80,9 +77,11 @@ function AdminDashboard() {
 
   const handleLogout = async () => {
     try {
-      await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+      await api.post('/auth/logout', {});
+      localStorage.removeItem('session_token');
       navigate('/');
     } catch (error) {
+      localStorage.removeItem('session_token');
       navigate('/');
     }
   };

@@ -6,12 +6,9 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { ArrowLeft, Star, Shield, ShieldCheck, Award, CheckCircle, AlertTriangle, TrendingUp, Package, User as UserIcon, Flag, HelpCircle } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 function UserProfile() {
   const [user, setUser] = useState(null);
@@ -28,12 +25,12 @@ function UserProfile() {
   const fetchData = async () => {
     try {
       // Get current logged in user
-      const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const userRes = await api.get('/auth/me');
       setUser(userRes.data);
 
       // Get profile user (could be self or another user)
       const targetUserId = userId || userRes.data.user_id;
-      const profileRes = await axios.get(`${API}/users/${targetUserId}/profile`, { withCredentials: true });
+      const profileRes = await api.get(`/users/${targetUserId}/profile`);
       setProfileUser(profileRes.data);
     } catch (error) {
       console.error('Failed to fetch profile:', error);

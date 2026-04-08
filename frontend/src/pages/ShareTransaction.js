@@ -3,12 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import api, { API_URL } from '../utils/api';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { ShieldCheck, Package, User, ArrowRight, Copy, CheckCircle, Loader2, Clock } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 function ShareTransaction() {
   const [transaction, setTransaction] = useState(null);
@@ -27,15 +25,15 @@ function ShareTransaction() {
     try {
       // Try to get user (may not be logged in)
       try {
-        const userRes = await axios.get(`${API}/auth/me`, { withCredentials: true });
+        const userRes = await api.get('/auth/me');
         setUser(userRes.data);
       } catch (e) {
         // Not logged in
         setUser(null);
       }
 
-      // Get transaction preview
-      const txnRes = await axios.get(`${API}/share/${shareCode}`);
+      // Get transaction preview (public endpoint - use raw axios with /api prefix)
+      const txnRes = await axios.get(`${API_URL}/api/share/${shareCode}`);
       setTransaction(txnRes.data);
     } catch (error) {
       console.error('Failed to fetch transaction:', error);
@@ -48,8 +46,7 @@ function ShareTransaction() {
   const handleLogin = () => {
     // Store the share code to redirect back after login
     sessionStorage.setItem('pendingShareCode', shareCode);
-    const redirectUrl = window.location.origin;
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    navigate('/login');
   };
 
   const handleJoinTransaction = async () => {
@@ -60,11 +57,7 @@ function ShareTransaction() {
 
     setJoining(true);
     try {
-      const response = await axios.post(
-        `${API}/share/${shareCode}/join`,
-        {},
-        { withCredentials: true }
-      );
+      const response = await api.post(`/share/${shareCode}/join`, {});
       
       toast.success('Successfully joined transaction!');
       navigate(`/transactions/${response.data.transaction_id}`);

@@ -1,11 +1,8 @@
 import { useState } from 'react';
 import { Button } from './ui/button';
 import { X, Upload, Image as ImageIcon } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 function PhotoUploader({ photos, setPhotos, minPhotos = 1, maxPhotos = 5, required = true, evidenceMode = false }) {
   const [uploading, setUploading] = useState(false);
@@ -26,8 +23,7 @@ function PhotoUploader({ photos, setPhotos, minPhotos = 1, maxPhotos = 5, requir
         formData.append('file', file);
 
         const endpoint = evidenceMode ? '/upload/dispute-evidence' : '/upload/photo';
-        const response = await axios.post(`${API}${endpoint}`, formData, {
-          withCredentials: true,
+        const response = await api.post(endpoint, formData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
 

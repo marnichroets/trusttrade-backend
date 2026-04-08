@@ -7,7 +7,7 @@ import { Badge } from '../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { 
   Activity, AlertTriangle, CheckCircle, XCircle, Clock, 
@@ -15,8 +15,6 @@ import {
   AlertOctagon, RotateCcw, Send, Edit, Eye, Shield,
   Loader2, ChevronRight, ExternalLink, Bell, BellOff
 } from 'lucide-react';
-
-const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 export default function AdminMonitoring() {
   const navigate = useNavigate();
@@ -44,11 +42,11 @@ export default function AdminMonitoring() {
       setRefreshing(true);
       
       const [dashboardRes, webhooksRes, emailsRes, actionsRes, alertsRes] = await Promise.all([
-        axios.get(`${API_URL}/api/admin/monitoring/dashboard`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/admin/monitoring/webhook-events?limit=100`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/admin/monitoring/email-logs?limit=100`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/admin/monitoring/actions?limit=50`, { withCredentials: true }),
-        axios.get(`${API_URL}/api/admin/alerts?hours=24&limit=50`, { withCredentials: true })
+        api.get('/admin/monitoring/dashboard'),
+        api.get('/admin/monitoring/webhook-events?limit=100'),
+        api.get('/admin/monitoring/email-logs?limit=100'),
+        api.get('/admin/monitoring/actions?limit=50'),
+        api.get('/admin/alerts?hours=24&limit=50')
       ]);
       
       setDashboard(dashboardRes.data);
@@ -92,7 +90,7 @@ export default function AdminMonitoring() {
   const handleRetryWebhook = async (eventId) => {
     try {
       setActionLoading(true);
-      await axios.post(`${API_URL}/api/admin/monitoring/retry-webhook/${eventId}`, {}, { withCredentials: true });
+      await api.post(`/admin/monitoring/retry-webhook/${eventId}`, {});
       toast.success('Webhook retry initiated');
       fetchDashboardData();
     } catch (error) {
@@ -105,7 +103,7 @@ export default function AdminMonitoring() {
   const handleResendEmail = async (transactionId, emailType) => {
     try {
       setActionLoading(true);
-      await axios.post(`${API_URL}/api/admin/monitoring/resend-email/${transactionId}/${emailType}`, {}, { withCredentials: true });
+      await api.post(`/admin/monitoring/resend-email/${transactionId}/${emailType}`, {});
       toast.success('Email resent successfully');
       fetchDashboardData();
     } catch (error) {
@@ -120,10 +118,9 @@ export default function AdminMonitoring() {
     
     try {
       setActionLoading(true);
-      await axios.post(
-        `${API_URL}/api/admin/monitoring/update-transaction-status/${selectedTransaction.transaction_id}`,
-        { new_state: newStatus, reason: statusReason || 'Admin manual override' },
-        { withCredentials: true }
+      await api.post(
+        `/admin/monitoring/update-transaction-status/${selectedTransaction.transaction_id}`,
+        { new_state: newStatus, reason: statusReason || 'Admin manual override' }
       );
       toast.success('Transaction status updated');
       setShowStatusModal(false);
@@ -141,7 +138,7 @@ export default function AdminMonitoring() {
   const handleResolveAlert = async (alertId) => {
     try {
       setActionLoading(true);
-      await axios.post(`${API_URL}/api/admin/alerts/${alertId}/resolve`, {}, { withCredentials: true });
+      await api.post(`/admin/alerts/${alertId}/resolve`, {});
       toast.success('Alert resolved');
       fetchDashboardData();
     } catch (error) {
@@ -154,7 +151,7 @@ export default function AdminMonitoring() {
   const handleTestAlert = async () => {
     try {
       setActionLoading(true);
-      await axios.post(`${API_URL}/api/admin/alerts/test`, {}, { withCredentials: true });
+      await api.post('/admin/alerts/test', {});
       toast.success('Test alert sent! Check your email.');
       fetchDashboardData();
     } catch (error) {

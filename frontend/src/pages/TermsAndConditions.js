@@ -4,11 +4,9 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Checkbox } from '../components/ui/checkbox';
 import { ShieldCheck } from 'lucide-react';
+import api, { API_URL } from '../utils/api';
 import axios from 'axios';
 import { toast } from 'sonner';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 function TermsAndConditions() {
   const [termsContent, setTermsContent] = useState('');
@@ -31,8 +29,8 @@ function TermsAndConditions() {
         return;
       }
       
-      // Otherwise try to fetch from API
-      const response = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      // Otherwise try to fetch from API (authenticated)
+      const response = await api.get('/auth/me');
       setUser(response.data);
     } catch (error) {
       // Not authenticated, that's okay for terms page
@@ -42,7 +40,8 @@ function TermsAndConditions() {
 
   const fetchTerms = async () => {
     try {
-      const response = await axios.get(`${API}/terms`);
+      // Public endpoint - use raw axios
+      const response = await axios.get(`${API_URL}/terms`);
       setTermsContent(response.data.content);
     } catch (error) {
       console.error('Failed to fetch terms:', error);
@@ -63,11 +62,7 @@ function TermsAndConditions() {
 
     setLoading(true);
     try {
-      await axios.post(
-        `${API}/users/accept-terms`,
-        { accepted: true },
-        { withCredentials: true }
-      );
+      await api.post('/users/accept-terms', { accepted: true });
       toast.success('Terms accepted');
       navigate('/dashboard');
     } catch (error) {

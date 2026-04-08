@@ -6,7 +6,7 @@ import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { AdminNavbar, Breadcrumbs } from '../components/AdminNavbar';
-import axios from 'axios';
+import api, { API_URL } from '../utils/api';
 import { toast } from 'sonner';
 import { 
   ArrowLeft, User, Mail, Phone, Calendar, Clock, 
@@ -14,8 +14,7 @@ import {
   AlertTriangle, Loader2, Image as ImageIcon, MessageSquare, HelpCircle
 } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+const BACKEND_URL = API_URL.replace('/api', '');
 
 const COLORS = {
   primary: '#1a2942',
@@ -59,8 +58,8 @@ function AdminDisputeDetail() {
   const fetchData = async () => {
     try {
       const [userRes, disputeRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/admin/dispute/${disputeId}`, { withCredentials: true })
+        api.get('/auth/me'),
+        api.get(`/admin/dispute/${disputeId}`)
       ]);
       
       if (!userRes.data.is_admin) {
@@ -85,9 +84,11 @@ function AdminDisputeDetail() {
 
   const handleLogout = async () => {
     try {
-      await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+      await api.post('/auth/logout', {});
+      localStorage.removeItem('session_token');
       navigate('/');
     } catch (error) {
+      localStorage.removeItem('session_token');
       navigate('/');
     }
   };
@@ -108,34 +109,34 @@ function AdminDisputeDetail() {
       
       switch (action) {
         case 'release_to_seller':
-          endpoint = `${API}/admin/transactions/${transaction?.transaction_id}/release`;
+          endpoint = `/admin/transactions/${transaction?.transaction_id}/release`;
           data.notes = adminNote || 'Dispute resolved - funds released to seller';
           break;
         case 'full_refund':
-          endpoint = `${API}/admin/transactions/${transaction?.transaction_id}/refund`;
+          endpoint = `/admin/transactions/${transaction?.transaction_id}/refund`;
           data.reason = adminNote || 'Dispute resolved - full refund to buyer';
           break;
         case 'partial_refund':
-          endpoint = `${API}/admin/transactions/${transaction?.transaction_id}/partial-refund`;
+          endpoint = `/admin/transactions/${transaction?.transaction_id}/partial-refund`;
           data.reason = adminNote || 'Dispute resolved - partial refund';
           break;
         case 'request_buyer_info':
-          endpoint = `${API}/admin/disputes/${disputeId}`;
+          endpoint = `/admin/disputes/${disputeId}`;
           method = 'patch';
           data = { status: 'Awaiting Buyer Response', admin_notes: adminNote || 'Additional information requested from buyer' };
           break;
         case 'request_seller_info':
-          endpoint = `${API}/admin/disputes/${disputeId}`;
+          endpoint = `/admin/disputes/${disputeId}`;
           method = 'patch';
           data = { status: 'Awaiting Seller Response', admin_notes: adminNote || 'Additional information requested from seller' };
           break;
         case 'resolve_close':
-          endpoint = `${API}/admin/disputes/${disputeId}`;
+          endpoint = `/admin/disputes/${disputeId}`;
           method = 'patch';
           data = { status: 'Resolved', resolution: adminNote || 'Dispute resolved by admin', admin_notes: adminNote };
           break;
         case 'add_note':
-          endpoint = `${API}/admin/disputes/${disputeId}`;
+          endpoint = `/admin/disputes/${disputeId}`;
           method = 'patch';
           data = { admin_notes: adminNote };
           break;
@@ -145,9 +146,9 @@ function AdminDisputeDetail() {
       }
       
       if (method === 'patch') {
-        await axios.patch(endpoint, data, { withCredentials: true });
+        await api.patch(endpoint, data);
       } else {
-        await axios.post(endpoint, data, { withCredentials: true });
+        await api.post(endpoint, data);
       }
       
       toast.success(`Action completed: ${action.replace(/_/g, ' ')}`);

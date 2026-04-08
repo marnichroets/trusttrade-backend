@@ -6,15 +6,14 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
-import axios from 'axios';
+import api, { API_URL } from '../utils/api';
 import { toast } from 'sonner';
 import { 
   ArrowLeft, User, Mail, Phone, Calendar, Shield, CheckCircle, XCircle, 
   Download, FileText, Ban, Loader2, Image as ImageIcon
 } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+const BACKEND_URL = API_URL.replace('/api', '');
 
 const COLORS = {
   primary: '#1a2942',
@@ -48,8 +47,8 @@ function AdminUserDetail() {
   const fetchData = async () => {
     try {
       const [adminRes, userRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/admin/user/${userId}`, { withCredentials: true })
+        api.get('/auth/me'),
+        api.get(`/admin/user/${userId}`)
       ]);
       
       if (!adminRes.data.is_admin) {
@@ -73,9 +72,11 @@ function AdminUserDetail() {
 
   const handleLogout = async () => {
     try {
-      await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+      await api.post('/auth/logout', {});
+      localStorage.removeItem('session_token');
       navigate('/');
     } catch (error) {
+      localStorage.removeItem('session_token');
       navigate('/');
     }
   };
@@ -90,7 +91,7 @@ function AdminUserDetail() {
     setActionLoading(true);
     
     try {
-      let endpoint = `${API}/admin/users/${userId}`;
+      let endpoint = `/admin/users/${userId}`;
       let data = { admin_email: admin?.email, notes };
       
       switch (action) {
@@ -113,7 +114,7 @@ function AdminUserDetail() {
           return;
       }
       
-      await axios.post(endpoint, data, { withCredentials: true });
+      await api.post(endpoint, data);
       toast.success(`User ${action} completed`);
       setNotes('');
       fetchData();

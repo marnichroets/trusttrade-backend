@@ -8,6 +8,14 @@ import api from '../utils/api';
 import { Plus, FileText, Search } from 'lucide-react';
 import { Input } from '../components/ui/input';
 
+function formatCurrency(value) {
+  const number = Number(value);
+  if (value === null || value === undefined || isNaN(number)) {
+    return "R0.00";
+  }
+  return `R${number.toFixed(2)}`;
+}
+
 function TransactionsList() {
   const [user, setUser] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -165,9 +173,9 @@ function TransactionsList() {
                       <td className="py-4 max-w-xs truncate" title={transaction.item_description}>
                         {transaction.item_description}
                       </td>
-                      <td className="py-4 font-mono">R {transaction.item_price.toFixed(2)}</td>
-                      <td className="py-4 font-mono">R {transaction.trusttrade_fee.toFixed(2)}</td>
-                      <td className="py-4 font-mono font-semibold">R {transaction.total.toFixed(2)}</td>
+                      <td className="py-4 font-mono">{formatCurrency(transaction.item_price)}</td>
+                      <td className="py-4 font-mono">{formatCurrency(transaction.trusttrade_fee)}</td>
+                      <td className="py-4 font-mono font-semibold">{formatCurrency(transaction.total)}</td>
                       <td className="py-4">
                         <span className="inline-block">
                           <Badge className={getStatusBadge(transaction.payment_status)}>

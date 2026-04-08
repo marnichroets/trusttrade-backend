@@ -29,9 +29,10 @@ class Transaction(BaseModel):
     known_issues: Optional[str] = None
     item_photos: List[str] = []
     item_price: float
-    trusttrade_fee: float
-    total: float
-    fee_paid_by: str = "split"  # "buyer", "seller", or "split"
+    trusttrade_fee: Optional[float] = 0.0
+    total: Optional[float] = None
+    seller_receives: Optional[float] = None  # Pre-calculated payout after fee
+    fee_allocation: str = "SELLER_AGENT"  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
     delivery_method: str = "courier"  # "courier", "bank_deposit", "digital"
     auto_release_days: int = 3
     payment_status: str = "Pending Seller Confirmation"
@@ -56,11 +57,12 @@ class Transaction(BaseModel):
     tradesafe_id: Optional[str] = None
     tradesafe_allocation_id: Optional[str] = None
     tradesafe_state: Optional[str] = None
+    tradesafe_fee_allocation: Optional[str] = None  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
     funds_received_at: Optional[str] = None
     delivery_started_at: Optional[str] = None
     delivery_confirmed_at: Optional[str] = None
     released_at: Optional[str] = None
-    created_at: str
+    created_at: Optional[str] = None  # Made optional for legacy records
 
 
 class TransactionCreate(BaseModel):
@@ -75,7 +77,7 @@ class TransactionCreate(BaseModel):
     item_condition: str
     known_issues: Optional[str] = "None"
     item_price: float
-    fee_paid_by: str = "split"
+    fee_allocation: str = "SELLER_AGENT"  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
     delivery_method: str = "courier"
     buyer_details_confirmed: bool
     seller_details_confirmed: bool
@@ -123,7 +125,7 @@ class PaymentConfirmation(BaseModel):
 class TradeSafeTransactionCreate(BaseModel):
     """Request model for creating TradeSafe transaction"""
     transaction_id: str
-    fee_allocation: str = "split"
+    fee_allocation: str = "SELLER_AGENT"  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
 
 
 class TradeSafeDeliveryAction(BaseModel):

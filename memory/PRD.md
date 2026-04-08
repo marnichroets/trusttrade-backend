@@ -1,274 +1,99 @@
-# TrustTrade PRD
+# TrustTrade - Secure Escrow Platform for South Africa
 
-## Overview
-Professional escrow platform for peer-to-peer transactions in South Africa using TradeSafe payment gateway.
+## Original Problem Statement
+TrustTrade is a secure escrow payment platform for South African online marketplace transactions. The platform uses TradeSafe's escrow API to hold payments securely until delivery is confirmed.
 
-## Architecture (v2.0.0 - Refactored)
-
-### Backend Structure
-```
-/app/backend/
-├── main.py                 # FastAPI application entry point
-├── server.py               # Thin wrapper for uvicorn compatibility
-├── server.py.backup        # Original 4900+ line monolith backup
-├── core/                   # Configuration, database, security
-│   ├── config.py           # Environment-based configuration
-│   ├── database.py         # MongoDB connection management
-│   └── security.py         # Authentication utilities
-├── models/                 # Pydantic models
-│   ├── user.py             # User, Session, Profile models
-│   ├── transaction.py      # Transaction, TradeSafe models
-│   ├── dispute.py          # Dispute models
-│   └── common.py           # Shared models (Risk, Admin requests)
-├── routes/                 # API route handlers
-│   ├── auth.py             # Authentication, phone verification
-│   ├── transactions.py     # Transaction CRUD, file uploads
-│   ├── tradesafe.py        # TradeSafe escrow integration
-│   ├── share.py            # Share link functionality
-│   ├── disputes.py         # Dispute management
-│   ├── users.py            # User profiles, verification, wallet
-│   ├── admin.py            # Admin dashboard, user/transaction management
-│   ├── monitoring.py       # System health monitoring
-│   └── webhooks.py         # TradeSafe webhooks, alerts
-├── services/               # Existing business logic
-│   ├── email_service.py    # Postmark email integration
-│   ├── sms_service.py      # SMS Messenger integration
-│   ├── tradesafe_service.py # TradeSafe API client
-│   ├── webhook_handler.py  # Webhook processing
-│   ├── alert_service.py    # Critical alert system
-│   ├── background_jobs.py  # Payment verification jobs
-│   └── pdf_generator.py    # Escrow agreement PDFs
-└── .env.example            # Environment variable template
-```
-
-## Core Features
-- Transaction Link System - Unique shareable links for every transaction
-- TradeSafe Integration - Full payment gateway integration with escrow (PRODUCTION)
-- User Ratings and Reviews - 1-5 star rating system
-- Trust Badge System - Silver, Gold, Verified badges
-- Identity Verification - ID upload, selfie, phone verification
-- Live Transaction Activity Board - Platform-wide stats
-- Scam Detection System - Automatic flagging
-- Delivery Confirmation - Buyer confirms before funds release
-- Auto-Release Timer - Based on delivery method
-- Report User Feature - Suspicious behavior reporting
-- User Profiles - Public profiles with Trust Score
-
-## TradeSafe Happy Path Flow
-1. **Transaction Created** → Both parties notified (email + SMS)
-2. **Buyer Pays** → FUNDS_RECEIVED → Seller notified (email + SMS)
-3. **Seller Dispatches** → INITIATED → Buyer notified (email + SMS)
-4. **Buyer Confirms** → FUNDS_RELEASED → Seller notified (email + SMS)
-
-## Changelog
-
-### 2026-03-24: P0 Login Bug Fix - Auth State Management (Final)
-**Fixed critical login bug where users were stuck in redirect loops after Google OAuth:**
-
-1. **Root Cause:** Multiple useEffects and missing guards caused race conditions and redirect loops between AuthContext state updates and ProtectedRoute navigation.
-
-2. **Solution - Clean Single-Execution Pattern:**
-   - `AuthContext.js`: Added `initialized` useRef to ensure auth initialization runs ONCE. Synchronous state init from localStorage.
-   - `ProtectedRoute.js`: Added `hasRedirected` useRef to prevent redirect loops. `hasLocalAuth` fallback check.
-   - `AuthCallback.js`: Added `hasProcessed` useRef with empty dependency array to run ONCE.
-   - `DashboardLayout.js`: Updated to use AuthContext `logout()` instead of direct localStorage manipulation.
-
-3. **Console Logs Added:**
-   - `[AUTH_STATE_INITIALIZED]` - On context initialization
-   - `[TOKEN_PRESENT]` - When token received
-   - `[NAVIGATE_CALLED]` - Before navigation
-   - `[PROTECTED_ROUTE_RENDERED]` - On protected route render
-   - `[LOGIN_CALLED]` / `[LOGIN_COMPLETE]` - Login flow
-   - `[LOGOUT_CALLED]` / `[LOGOUT_COMPLETE]` - Logout flow
-
-4. **Testing Results (iteration_16.json):**
-   - 10/10 tests passed (3 backend + 7 frontend)
-   - Login works on first attempt
-   - Refresh dashboard auth persists
-   - Logout works correctly
-   - No redirect loops
-
-### 2026-03-24: Backend Refactoring (v2.0.0)
-**Major refactoring from monolithic server.py (4900+ lines) to modular production structure:**
-
-1. **New Directory Structure:**
-   - `core/` - Configuration (config.py), database (database.py), security (security.py)
-   - `models/` - Pydantic models for user, transaction, dispute, common
-   - `routes/` - 9 route files for auth, transactions, tradesafe, share, disputes, users, admin, monitoring, webhooks
-
-2. **New Entry Point:**
-   - `main.py` - FastAPI application with lifespan handler, CORS, and all routers
-   - `server.py` - Thin wrapper for uvicorn compatibility (server:app)
-   - `server.py.backup` - Original monolith preserved
-
-3. **Environment Configuration:**
-   - `.env.example` - Template with all required environment variables
-   - All credentials from environment variables (no hardcoding)
-
-4. **Testing Results:**
-   - 20/20 backend tests passed
-   - API version 2.0.0 confirms refactored code running
-   - All existing functionality preserved
-
-### 2026-03-24: White & Blue Color Scheme Update (Session 14 - Part 4)
-**Implemented:**
-
-1. **Landing Page - White & Blue Theme:**
-   - White navbar with blue Sign Up button
-   - Light blue gradient hero section
-   - Logo in white card container for blending
-   - Blue accent text and stats
-   - Light blue "How It Works" section
-   - White features section
-   - Blue gradient CTA section
-   - White footer
-
-2. **Admin Navbar - White & Blue:**
-   - White background with blue accent badge
-   - Blue active state highlighting
-   - Blue hover states
-
-3. **Admin Dashboard - Blue Accents:**
-   - Blue primary color
-   - Blue info color
-
-4. **Admin Monitoring - Blue Theme:**
-   - Blue loading spinner
-   - Blue health status colors
-   - Blue accents throughout
-
-### 2026-03-24: Critical Alert System & Logo Integration (Session 14 - Part 3)
-**Implemented:**
-
-1. **Critical Alert System** (`/app/backend/alert_service.py`)
-   - Email alerts via Postmark for critical issues
-   - Alert types: failed webhooks, failed emails, stuck transactions, payment not synced
-   - Rate limiting (max 1 alert per issue type per transaction every 10 min)
-   - All alerts stored in `alerts` collection
-   - Alert resolve functionality for admin
-
-2. **Alert Endpoints:**
-   - `GET /api/admin/alerts` - Get alerts with stats
-   - `POST /api/admin/alerts/{id}/resolve` - Resolve alert
-   - `POST /api/admin/alerts/test` - Send test alert
-
-3. **Admin Monitoring Dashboard - Alerts Tab:**
-   - Active alerts counter with badge
-   - Critical alerts highlighted in red
-   - Resolve button for each alert
-   - Email sent indicator
-   - Alert statistics (unresolved, total 24h)
-
-4. **TrustTrade Logo Integration (EVERYWHERE):**
-   - Landing page navbar
-   - Landing page hero section
-   - Landing page footer
-   - Admin navbar
-   - Admin dashboard header
-   - Admin monitoring page header
-   - Dashboard layout header
-   - Share transaction page
-   - All email templates
-
-5. **Database Query Optimizations:**
-   - Added projections to list endpoints (users, transactions, disputes)
-   - Reduced data transfer for admin list views
-   - Limited reports to 500 items
-
-### 2026-03-24: Admin Monitoring Dashboard (Session 14 - Part 2)
-**Implemented:**
-- Real-time system monitoring dashboard at `/admin/monitoring`
-- Health status banner (healthy/warning/critical)
-- 6 key metric cards
-- Auto-refresh every 15 seconds
-- 5 tabs: Overview, Alerts, Webhooks, Emails, Stuck Transactions, Actions
-- Manual admin actions (retry webhook, resend email, update status)
-
-### 2026-03-24: Production Reliability Upgrade (Session 14 - Part 1)
-**Implemented:**
-- Webhook handler with strict idempotency
-- Email deduplication
-- Transaction state machine
-- Background jobs (payment verification, auto-release, health check)
-
-## Architecture
-
-### Backend
-- **Framework**: FastAPI
-- **Database**: MongoDB (motor async driver)
-- **Main file**: `/app/backend/server.py` (4900+ lines - needs refactoring)
-- **Alert Service**: `/app/backend/alert_service.py`
-- **Webhook Handler**: `/app/backend/webhook_handler.py`
-- **State Machine**: `/app/backend/transaction_state.py`
-- **Background Jobs**: `/app/backend/background_jobs.py`
-
-### Frontend
-- **Framework**: React
-- **Styling**: Tailwind CSS + Shadcn UI
-- **Logo**: `/app/frontend/public/trusttrade-logo.png`
-
-### Integrations
-- **Email**: Postmark (PRODUCTION)
-- **Payments**: TradeSafe (PRODUCTION)
-- **SMS**: Zoom Connect (SMS Messenger API)
+## Tech Stack
+- **Frontend**: React, Tailwind CSS, Shadcn UI
+- **Backend**: FastAPI, Pydantic, Motor (MongoDB async)
+- **Database**: MongoDB
+- **Payments**: TradeSafe Escrow API (GraphQL)
 - **Auth**: Emergent-managed Google OAuth
 
-## Key Admin Routes
-- `/admin` - Dashboard overview
-- `/admin/monitoring` - Real-time system monitoring
-- `/admin/transactions` - All transactions
-- `/admin/users` - All users
-- `/admin/disputes` - All disputes
+## Session: 2026-04-06 - Launch Preparation
 
-## Key API Endpoints
-- `/api/tradesafe-webhook` - Production-ready webhook handler
-- `/api/admin/monitoring/dashboard` - System health metrics
-- `/api/admin/alerts` - Alert management
-- `/api/admin/alerts/{id}/resolve` - Resolve alert
-- `/api/admin/alerts/test` - Test alert
+### 6 Critical Launch Fixes - ALL VERIFIED ✅
 
-## Database Collections
-- `transactions` - Transaction data
-- `users` - User accounts
-- `disputes` - Dispute records
-- `webhook_events` - Webhook log (idempotency)
-- `email_logs` - Email attempts
-- `alerts` - System alerts
-- `admin_actions` - Admin audit trail
+#### 1. SHARE LINK (CRITICAL) ✅
+- **Root Cause**: Frontend `ShareTransaction.js` was calling `${API_URL}/share/` missing `/api` prefix
+- **Fix**: Changed to `${API_URL}/api/share/${shareCode}`
+- **File**: `/app/frontend/src/pages/ShareTransaction.js` line 36
+- **Status**: PASS - Works logged in, logged out (public), and after refresh
 
-## Deployment Readiness
-- ✅ All environment variables externalized
-- ✅ Logo using local path (not hardcoded URL)
-- ✅ Database queries optimized with projections
-- ✅ Rate limiting on alerts
-- ✅ Admin access control on all admin endpoints
-- ✅ CORS configured
-- ✅ Static files served correctly
+#### 2. EMAIL RELIABILITY (CRITICAL) ✅
+- **Root Cause**: Empty/invalid emails (from phone invites) were passed to Postmark causing silent failures
+- **Fix**: Added email validation + 4 specific log states
+- **File**: `/app/backend/email_service.py` lines 60-104
+- **Logging Added**:
+  - `EMAIL_ATTEMPT` - when email send starts
+  - `EMAIL_SKIPPED` - when email is invalid/empty
+  - `EMAIL_SENT` - on successful send
+  - `EMAIL_FAILED` - on send failure with error
+- **Status**: PASS
 
-## Prioritized Backlog
+#### 3. SELLER CONFIRMATION (CRITICAL) ✅
+- **Root Cause**: Payment endpoints did not enforce seller_confirmed check
+- **Fix**: Added seller_confirmed check to both `/create-transaction` and `/payment-url` endpoints
+- **Files**: `/app/backend/routes/tradesafe.py` lines 60-66, 193-199
+- **Behavior**: Returns 400 "Payment blocked: Seller must confirm the fee agreement" if seller_confirmed=false
+- **Status**: PASS - Payment only available after seller confirms
 
-### P0 (Critical) - COMPLETED
-- [x] Webhook idempotency
-- [x] Email deduplication
-- [x] Fallback payment verification
-- [x] State machine enforcement
-- [x] Admin monitoring dashboard
-- [x] Critical alert system with email notifications
-- [x] TrustTrade logo everywhere
-- [x] Backend refactoring (v2.0.0)
-- [x] **Login bug fix - Auth state management with token-based auth**
+#### 4. MONEY PRECISION (CRITICAL) ✅
+- **Root Cause**: Float calculations like `item_price * 0.02` cause precision errors
+- **Fix**: Created `calculate_money()` function using Python Decimal with ROUND_HALF_UP
+- **Files**: 
+  - `/app/backend/routes/transactions.py` lines 50-67 (calculate_money function)
+  - `/app/backend/routes/tradesafe.py` lines 37-42 (calculate_seller_receives function)
+  - `/app/backend/models/transaction.py` line 35 (seller_receives field)
+- **Values**: item_price, trusttrade_fee, total, seller_receives all with exactly 2 decimals
+- **Frontend**: Now uses backend-calculated values, no recalculation
+- **Status**: PASS - R500.00 displays correctly
 
-### P1 (High Priority)
-- [ ] Admin Manual Actions wiring (Retry Webhook, Resend Email)
-- [ ] AI Scam Detection Enhancement
+#### 5. PAYMENT FLOW SAFETY ✅
+- **Root Cause**: Potential for duplicate escrow creation
+- **Fix**: Added check for existing tradesafe_id before creating new escrow
+- **File**: `/app/backend/routes/tradesafe.py` lines 76-82
+- **Behavior**: Returns `{"status": "already_created"}` for duplicate attempts
+- **Status**: PASS - No duplicate payments
 
-### P2 (Medium Priority)
-- [ ] In-App Chat feature
-- [ ] Enhanced dispute resolution flow
-- [ ] Push notifications
-- [ ] Robust Pre-Login Auth Check on landing page
-- [ ] Verify logo size adjustments
+#### 6. USER CLARITY ✅
+- **Root Cause**: Status values were unclear
+- **Fix**: Clear payment_status values throughout flow
+- **Values**:
+  - `Pending Seller Confirmation` - waiting for seller to confirm fee
+  - `Ready for Payment` - after seller confirms
+  - `Awaiting Payment` - after escrow created
+  - `Paid` / `Funds Received` - payment received
+  - `Delivery in Progress` - item dispatched
+  - `Released` / `Completed` - funds released to seller
+- **Status**: PASS - Clear status badges with color coding
 
-### P3 (Low Priority)
-- [ ] Mobile app
-- [ ] Multi-language support
+### Test Results
+- **Backend**: 100% (19/19 tests passed)
+- **Frontend**: 100% (all UI elements verified)
+- **Test File**: `/app/backend/tests/test_launch_fixes.py`
+- **Test Report**: `/app/test_reports/iteration_19.json`
+
+### Files Changed
+1. `/app/frontend/src/pages/ShareTransaction.js` - API path fix
+2. `/app/backend/email_service.py` - Email validation + logging
+3. `/app/backend/routes/tradesafe.py` - Payment blocking + Decimal precision
+4. `/app/backend/routes/transactions.py` - calculate_money() function
+5. `/app/backend/models/transaction.py` - seller_receives field
+6. `/app/frontend/src/pages/TransactionDetail.js` - Use backend values
+
+### Known Minor Issue
+- Some old transactions missing `created_at` field may cause 500 on `/api/transactions` list
+- Only affects old/corrupted data, not new transactions
+- **Priority**: LOW
+
+## Key Technical Notes
+- **TradeSafe Agent**: 2% fee via AGENT profile
+- **Domain**: Use `www.trusttradesa.co.za` for all redirects
+- **Minimum Transaction**: R500
+- **Maximum Transaction**: R500,000
+
+## Upcoming Tasks (P1) - DO NOT TOUCH YET
+- Create new `main.py` entry point
+- Admin Manual Actions UI
+- AI Scam Detection Enhancement

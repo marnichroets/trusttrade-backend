@@ -24,7 +24,7 @@ class Settings:
     CORS_ORIGINS: List[str] = os.environ.get('CORS_ORIGINS', '*').split(',')
     
     # Frontend URL for email links
-    FRONTEND_URL: str = os.environ.get('FRONTEND_URL', 'https://trusttradesa.co.za')
+    FRONTEND_URL: str = os.environ.get('FRONTEND_URL', 'https://www.trusttradesa.co.za')
     
     # TradeSafe Integration
     TRADESAFE_CLIENT_ID: str = os.environ.get('TRADESAFE_CLIENT_ID', '')
@@ -48,9 +48,9 @@ class Settings:
     ADMIN_EMAIL: str = os.environ.get('ADMIN_EMAIL', '')  # Primary admin email
     
     # Platform Constants
-    MINIMUM_TRANSACTION_AMOUNT: float = 500.0  # R500 minimum
+    MINIMUM_TRANSACTION_AMOUNT: float = 100.0  # R100 minimum
     MAXIMUM_TRANSACTION_AMOUNT: float = 500000.0  # R500,000 maximum
-    PAYOUT_THRESHOLD: float = 500.0  # R500 payout threshold
+    PAYOUT_THRESHOLD: float = 100.0  # R100 payout threshold
     PLATFORM_FEE_PERCENT: float = 2.0  # 2% platform fee
     
     # Upload Paths

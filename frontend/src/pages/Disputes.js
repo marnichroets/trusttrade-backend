@@ -7,12 +7,22 @@ import { Badge } from '../components/ui/badge';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { AlertCircle, Plus } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+function parseErrorMessage(error) {
+  const detail = error.response?.data?.detail;
+  if (!detail) return 'An error occurred';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
+  }
+  if (typeof detail === 'object') {
+    return detail.msg || detail.message || JSON.stringify(detail);
+  }
+  return 'An error occurred';
+}
 
 function Disputes() {
   const [user, setUser] = useState(null);
@@ -23,6 +33,7 @@ function Disputes() {
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     transaction_id: '',
+    dispute_type: 'Other',
     description: ''
   });
   const navigate = useNavigate();
@@ -43,9 +54,9 @@ function Disputes() {
   const fetchData = async () => {
     try {
       const [userRes, disputesRes, transactionsRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/disputes`, { withCredentials: true }),
-        axios.get(`${API}/transactions`, { withCredentials: true })
+        api.get('/auth/me'),
+        api.get('/disputes'),
+        api.get('/transactions')
       ]);
 
       setUser(userRes.data);
@@ -69,19 +80,15 @@ function Disputes() {
 
     setSubmitting(true);
     try {
-      await axios.post(
-        `${API}/disputes`,
-        formData,
-        { withCredentials: true }
-      );
+      await api.post('/disputes', formData);
 
       toast.success('Dispute raised successfully');
-      setFormData({ transaction_id: '', description: '' });
+      setFormData({ transaction_id: '', dispute_type: 'Other', description: '' });
       setShowForm(false);
       fetchData(); // Refresh data
     } catch (error) {
       console.error('Failed to create dispute:', error);
-      toast.error(error.response?.data?.detail || 'Failed to create dispute');
+      toast.error(parseErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -145,6 +152,25 @@ function Disputes() {
                         {getTransactionLabel(txn)}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="dispute_type">Dispute Type *</Label>
+                <Select
+                  value={formData.dispute_type}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, dispute_type: value }))}
+                >
+                  <SelectTrigger id="dispute_type" data-testid="select-dispute-type">
+                    <SelectValue placeholder="Select dispute type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Item Not Received">Item Not Received</SelectItem>
+                    <SelectItem value="Item Not As Described">Item Not As Described</SelectItem>
+                    <SelectItem value="Damaged Item">Damaged Item</SelectItem>
+                    <SelectItem value="Payment Issue">Payment Issue</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

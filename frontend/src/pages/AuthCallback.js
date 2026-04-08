@@ -69,12 +69,25 @@ function AuthCallback() {
           picture: data.picture,
         };
 
-        // Call login() - this updates context AND localStorage
-        login(userData, token);
-        
-        // Verify localStorage was set
+        // Write to localStorage FIRST before anything else
+        localStorage.setItem('session_token', token);
+        localStorage.setItem('user_data', JSON.stringify(userData));
+
+        // Verify both values exist
         const storedToken = localStorage.getItem('session_token');
-        console.log('[AuthCallback] Verified localStorage token:', storedToken ? 'YES' : 'NO');
+        const storedUser = localStorage.getItem('user_data');
+        
+        if (!storedToken || !storedUser) {
+          console.error('[AuthCallback] localStorage write failed');
+          toast.error('Failed to save login session');
+          navigate('/', { replace: true });
+          return;
+        }
+
+        console.log('[AuthCallback] localStorage verified:', storedToken ? 'YES' : 'NO');
+
+        // Call login() to keep context in sync
+        login(userData, token);
 
         setStatus('Login successful!');
         toast.success(`Welcome, ${userData.name || userData.email}!`);
@@ -98,8 +111,8 @@ function AuthCallback() {
         console.log('[NAVIGATE_CALLED] destination:', destination);
         console.log('[AuthCallback] ========== END ==========');
         
-        // Navigate ONCE to dashboard
-        navigate(destination, { replace: true });
+        // Navigate using replace to prevent back-button issues
+        window.location.replace(destination);
 
       } catch (error) {
         console.error('[AuthCallback] Error:', error);

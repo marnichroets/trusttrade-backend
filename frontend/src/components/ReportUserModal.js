@@ -4,11 +4,8 @@ import { Textarea } from './ui/textarea';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { AlertTriangle, Flag, X } from 'lucide-react';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 const REPORT_REASONS = [
   { value: 'scam_attempt', label: 'Scam Attempt' },
@@ -40,15 +37,14 @@ function ReportUserModal({ isOpen, onClose, reportedUserId, reportedUserName, tr
 
     setSubmitting(true);
     try {
-      await axios.post(
-        `${API}/reports`,
+      await api.post(
+        '/reports',
         {
           reported_user_id: reportedUserId,
           reason,
           description: description.trim(),
           transaction_id: transactionId
-        },
-        { withCredentials: true }
+        }
       );
 
       toast.success('Report submitted successfully. Our team will review it.');

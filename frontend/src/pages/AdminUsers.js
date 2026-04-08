@@ -5,14 +5,11 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { 
   Users, Search, ChevronRight, CheckCircle, XCircle, Shield
 } from 'lucide-react';
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
 
 const COLORS = {
   primary: '#1a2942',
@@ -41,8 +38,8 @@ function AdminUsers() {
   const fetchData = async () => {
     try {
       const [userRes, usersRes] = await Promise.all([
-        axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/admin/users`, { withCredentials: true })
+        api.get('/auth/me'),
+        api.get('/admin/users')
       ]);
       
       if (!userRes.data.is_admin) {
@@ -64,9 +61,11 @@ function AdminUsers() {
 
   const handleLogout = async () => {
     try {
-      await axios.post(`${API}/auth/logout`, {}, { withCredentials: true });
+      await api.post('/auth/logout', {});
+      localStorage.removeItem('session_token');
       navigate('/');
     } catch (error) {
+      localStorage.removeItem('session_token');
       navigate('/');
     }
   };

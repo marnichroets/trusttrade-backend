@@ -67,10 +67,17 @@ async def send_email(
     """
     Send a transactional email via Postmark.
     """
+    logger.info(f"EMAIL_ATTEMPT: to={to_email}, subject={subject}")
+    
+    # Validate email address before attempting to send
+    if not to_email or not to_email.strip() or '@' not in to_email:
+        logger.info(f"EMAIL_SKIPPED: invalid/empty address '{to_email}'")
+        return False
+    
     client = get_postmark_client()
     
     if not client:
-        logger.warning(f"Postmark not configured. Would send email to {to_email}: {subject}")
+        logger.info(f"EMAIL_SKIPPED: Postmark not configured for {to_email}")
         return False
     
     try:
@@ -89,11 +96,11 @@ async def send_email(
             MessageStream="outbound"
         )
         
-        logger.info(f"Email sent successfully to {to_email}: {subject} (ID: {response.get('MessageID', 'unknown')})")
+        logger.info(f"EMAIL_SENT: to={to_email}, id={response.get('MessageID', 'unknown')}")
         return True
         
     except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {e}")
+        logger.error(f"EMAIL_FAILED: to={to_email}, error={str(e)}")
         return False
 
 
@@ -251,7 +258,7 @@ def get_base_email_template(
                                     &copy; 2026 TrustTrade South Africa
                                 </p>
                                 <p style="margin: 0 0 8px 0; font-size: 12px; color: {LABEL_GREY};">
-                                    <a href="https://trusttradesa.co.za" style="color: {BRAND_NAVY}; text-decoration: none;">trusttradesa.co.za</a>
+                                    <a href="https://www.trusttradesa.co.za" style="color: {BRAND_NAVY}; text-decoration: none;">trusttradesa.co.za</a>
                                 </p>
                                 <p style="margin: 0; font-size: 11px; color: {LABEL_GREY};">
                                     Secured by TrustTrade Escrow
@@ -348,7 +355,7 @@ def get_payment_received_email(
         intro_text=intro_text + processor_note,
         details=details,
         cta_text="View Transaction",
-        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
         show_how_it_works=False,
         status_badge="Payment Secured",
         status_color="#10b981"
@@ -398,7 +405,7 @@ def get_immediate_payment_secured_email(
         intro_text=intro_html + processor_note,
         details=details,
         cta_text="View Transaction",
-        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
         show_how_it_works=True,
         status_badge="Payment Secured",
         status_color="#10b981"
@@ -454,7 +461,7 @@ def get_delivery_started_email(
         intro_text=intro_text + processor_note,
         details=details,
         cta_text="Confirm Delivery",
-        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
         show_how_it_works=False,
         status_badge="On Its Way",
         status_color="#f59e0b"
@@ -492,7 +499,7 @@ def get_delivery_confirmed_email(
         intro_text=intro_text,
         details=details,
         cta_text="View Transaction",
-        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
         show_how_it_works=False,
         status_badge=status_text,
         status_color="#10b981"
@@ -535,7 +542,7 @@ def get_funds_released_email(
         intro_text=intro_text + processor_note,
         details=details,
         cta_text="View Transaction",
-        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
         show_how_it_works=False,
         status_badge="Funds Released",
         status_color="#10b981"
@@ -569,7 +576,7 @@ def get_dispute_opened_email(
         intro_text=intro_text,
         details=details,
         cta_text="View Dispute",
-        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
         show_how_it_works=False,
         status_badge="Action Required",
         status_color="#ef4444"
@@ -605,7 +612,7 @@ def get_dispute_resolved_email(
         intro_text=intro_text,
         details=details,
         cta_text="View Transaction",
-        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
         show_how_it_works=False,
         status_badge="Resolved",
         status_color="#10b981"
@@ -641,7 +648,7 @@ def get_refund_email(
         intro_text=intro_text,
         details=details,
         cta_text="View Transaction",
-        cta_link=f"https://trusttradesa.co.za/t/{share_code}",
+        cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
         show_how_it_works=False,
         status_badge="Refunded",
         status_color=BRAND_BLUE
@@ -689,7 +696,7 @@ def get_verification_status_email(
         intro_text=config["intro"],
         details=details,
         cta_text="View Account",
-        cta_link="https://trusttradesa.co.za/profile",
+        cta_link="https://www.trusttradesa.co.za/profile",
         show_how_it_works=False,
         status_badge=config["badge"],
         status_color=config["color"]

@@ -10,12 +10,22 @@ import { Card } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Checkbox } from '../components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
-import axios from 'axios';
+import api from '../utils/api';
 import { toast } from 'sonner';
 import { ArrowLeft, Calculator, UserCircle, Camera, AlertCircle } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+function parseErrorMessage(error) {
+  const detail = error.response?.data?.detail;
+  if (!detail) return 'An error occurred';
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
+  }
+  if (typeof detail === 'object') {
+    return detail.msg || detail.message || JSON.stringify(detail);
+  }
+  return 'An error occurred';
+}
 
 // Item categories for scam detection and reporting
 const ITEM_CATEGORIES = [
@@ -43,7 +53,7 @@ function NewTransaction() {
     item_condition: '',
     known_issues: '',
     item_price: '',
-    fee_paid_by: 'split',
+    fee_allocation: 'SELLER_AGENT',  // Who pays TrustTrade 2% fee
     delivery_method: 'courier'
   });
   const [confirmations, setConfirmations] = useState({
@@ -78,7 +88,7 @@ function NewTransaction() {
 
   const fetchUser = async () => {
     try {
-      const response = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      const response = await api.get('/auth/me');
       setUser(response.data);
     } catch (error) {
       console.error('Failed to fetch user:', error);
@@ -99,19 +109,31 @@ function NewTransaction() {
   };
 
   const itemPrice = parseFloat(formData.item_price) || 0;
-  const fee = (itemPrice * 0.02).toFixed(2);
-  const feeAmount = parseFloat(fee);
+  const trusttradeFee = itemPrice * 0.02;  // 2% TrustTrade fee
+  const processingFeeEstimate = itemPrice * 0.02;  // ~2% TradeSafe processing estimate
   
+  // Calculate totals based on fee allocation
   let buyerTotal = itemPrice;
-  let sellerTotal = itemPrice;
+  let sellerPayout = itemPrice;
+  let buyerFeeContribution = 0;
+  let sellerFeeContribution = 0;
   
-  if (formData.fee_paid_by === 'buyer') {
-    buyerTotal = itemPrice + feeAmount;
-  } else if (formData.fee_paid_by === 'seller') {
-    sellerTotal = itemPrice - feeAmount;
-  } else if (formData.fee_paid_by === 'split') {
-    buyerTotal = itemPrice + (feeAmount / 2);
-    sellerTotal = itemPrice - (feeAmount / 2);
+  if (formData.fee_allocation === 'BUYER_AGENT') {
+    // Buyer pays full TrustTrade fee
+    buyerFeeContribution = trusttradeFee;
+    buyerTotal = itemPrice + trusttradeFee + processingFeeEstimate;
+    sellerPayout = itemPrice;
+  } else if (formData.fee_allocation === 'SELLER_AGENT') {
+    // Seller pays full TrustTrade fee (deducted from payout)
+    sellerFeeContribution = trusttradeFee;
+    buyerTotal = itemPrice + processingFeeEstimate;
+    sellerPayout = itemPrice - trusttradeFee;
+  } else if (formData.fee_allocation === 'SPLIT_AGENT') {
+    // Split 50/50
+    buyerFeeContribution = trusttradeFee / 2;
+    sellerFeeContribution = trusttradeFee / 2;
+    buyerTotal = itemPrice + (trusttradeFee / 2) + processingFeeEstimate;
+    sellerPayout = itemPrice - (trusttradeFee / 2);
   }
 
   const handleSubmit = async (e) => {
@@ -173,8 +195,8 @@ function NewTransaction() {
     setLoading(true);
 
     try {
-      const transactionResponse = await axios.post(
-        `${API}/transactions`,
+      const transactionResponse = await api.post(
+        '/transactions',
         {
           creator_role: role,
           buyer_name: role === 'buyer' ? user.name : formData.buyer_name,
@@ -186,29 +208,28 @@ function NewTransaction() {
           item_condition: formData.item_condition,
           known_issues: formData.known_issues || 'None',
           item_price: itemPrice,
-          fee_paid_by: formData.fee_paid_by,
+          fee_allocation: formData.fee_allocation,  // TrustTrade fee allocation
           delivery_method: formData.delivery_method,
           buyer_details_confirmed: confirmations.buyer_details,
           seller_details_confirmed: confirmations.seller_details,
           item_accuracy_confirmed: confirmations.item_accuracy
-        },
-        { withCredentials: true }
+        }
       );
 
       const transactionId = transactionResponse.data.transaction_id;
 
       const photoFilenames = photos.map(p => p.filename);
-      await axios.patch(
-        `${API}/transactions/${transactionId}/photos`,
+      await api.patch(
+        `/transactions/${transactionId}/photos`,
         photoFilenames,
-        { withCredentials: true, headers: { 'Content-Type': 'application/json' } }
+        { headers: { 'Content-Type': 'application/json' } }
       );
 
       toast.success('Transaction created successfully!');
       navigate(`/transactions/${transactionId}`);
     } catch (error) {
       console.error('Failed to create transaction:', error);
-      toast.error(error.response?.data?.detail || 'Failed to create transaction');
+      toast.error(parseErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -393,21 +414,40 @@ function NewTransaction() {
                 <p className="text-xs text-slate-500 mt-1">Minimum: R500 | Maximum: R500,000</p>
               </div>
 
-              {/* Fee Allocation - Reordered */}
-              <div>
-                <Label htmlFor="fee_paid_by">Who Pays the Transaction Fee? *</Label>
-                <Select value={formData.fee_paid_by} onValueChange={(value) => setFormData(prev => ({ ...prev, fee_paid_by: value }))}>
-                  <SelectTrigger id="fee_paid_by" data-testid="fee-split-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="split">Split 50/50 — Recommended</SelectItem>
-                    <SelectItem value="buyer">Buyer Pays Fee</SelectItem>
-                    <SelectItem value="seller">Seller Pays Fee</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-amber-600 mt-2 font-medium">
-                  ⚠️ Escrow fee option must be agreed by both parties before payment.
+              {/* TrustTrade Fee Allocation */}
+              <div className="pt-4 border-t border-slate-200">
+                <Label className="text-base font-medium text-slate-900">Who should pay the TrustTrade fee?</Label>
+                <p className="text-sm text-slate-500 mb-3">This 2% fee covers secure escrow protection for your transaction.</p>
+                <RadioGroup 
+                  value={formData.fee_allocation} 
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, fee_allocation: value }))}
+                  className="space-y-2"
+                >
+                  <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${formData.fee_allocation === 'SELLER_AGENT' ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <RadioGroupItem value="SELLER_AGENT" id="fee-seller" data-testid="fee-seller-agent" />
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-900">Seller pays</span>
+                      <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Recommended</span>
+                      <p className="text-xs text-slate-500 mt-0.5">Deducted from seller's payout</p>
+                    </div>
+                  </label>
+                  <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${formData.fee_allocation === 'BUYER_AGENT' ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <RadioGroupItem value="BUYER_AGENT" id="fee-buyer" data-testid="fee-buyer-agent" />
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-900">Buyer pays</span>
+                      <p className="text-xs text-slate-500 mt-0.5">Added to buyer's total</p>
+                    </div>
+                  </label>
+                  <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${formData.fee_allocation === 'SPLIT_AGENT' ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <RadioGroupItem value="SPLIT_AGENT" id="fee-split" data-testid="fee-split-agent" />
+                    <div className="flex-1">
+                      <span className="font-medium text-slate-900">Split 50/50</span>
+                      <p className="text-xs text-slate-500 mt-0.5">Each party pays half</p>
+                    </div>
+                  </label>
+                </RadioGroup>
+                <p className="text-xs text-amber-600 mt-3 font-medium">
+                  ⚠️ Fee option must be agreed by both parties before payment.
                 </p>
               </div>
             </div>
@@ -427,7 +467,7 @@ function NewTransaction() {
             <Card className="p-6 bg-slate-50 border-slate-200">
               <div className="flex items-center gap-2 mb-4">
                 <Calculator className="w-5 h-5 text-primary" />
-                <h3 className="text-lg font-semibold text-slate-900">Price Breakdown</h3>
+                <h3 className="text-lg font-semibold text-slate-900">Payment Summary</h3>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
@@ -436,20 +476,46 @@ function NewTransaction() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-600">TrustTrade Fee (2%):</span>
-                  <span className="font-mono font-medium text-slate-900" data-testid="calc-fee">R {fee}</span>
+                  <span className="font-mono font-medium text-slate-900" data-testid="calc-trusttrade-fee">R {trusttradeFee.toFixed(2)}</span>
                 </div>
-                <div className="border-t border-slate-300 pt-3 space-y-2">
-                  <div className="flex justify-between">
-                    <span className="font-medium text-slate-700">Buyer Pays:</span>
-                    <span className="font-mono font-bold text-primary">R {buyerTotal.toFixed(2)}</span>
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-600">Processing Fee (est.):</span>
+                  <span className="font-mono font-medium text-slate-500" data-testid="calc-processing-fee">~R {processingFeeEstimate.toFixed(2)}</span>
+                </div>
+                
+                <div className="border-t border-slate-300 pt-3 space-y-3">
+                  {/* Buyer Total */}
+                  <div className="bg-white p-3 rounded-lg border border-slate-200">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-slate-700">Buyer Pays:</span>
+                      <span className="font-mono font-bold text-lg text-primary" data-testid="calc-buyer-total">R {buyerTotal.toFixed(2)}</span>
+                    </div>
+                    {formData.fee_allocation === 'BUYER_AGENT' && (
+                      <p className="text-xs text-slate-500 mt-1">Includes R {trusttradeFee.toFixed(2)} TrustTrade fee</p>
+                    )}
+                    {formData.fee_allocation === 'SPLIT_AGENT' && (
+                      <p className="text-xs text-slate-500 mt-1">Includes R {(trusttradeFee / 2).toFixed(2)} TrustTrade fee (50%)</p>
+                    )}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="font-medium text-slate-700">Seller Receives:</span>
-                    <span className="font-mono font-bold text-green-600">R {sellerTotal.toFixed(2)}</span>
+                  
+                  {/* Seller Payout */}
+                  <div className="bg-white p-3 rounded-lg border border-slate-200">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-slate-700">Seller Receives:</span>
+                      <span className="font-mono font-bold text-lg text-green-600" data-testid="calc-seller-payout">R {sellerPayout.toFixed(2)}</span>
+                    </div>
+                    {formData.fee_allocation === 'SELLER_AGENT' && (
+                      <p className="text-xs text-slate-500 mt-1">After R {trusttradeFee.toFixed(2)} TrustTrade fee deduction</p>
+                    )}
+                    {formData.fee_allocation === 'SPLIT_AGENT' && (
+                      <p className="text-xs text-slate-500 mt-1">After R {(trusttradeFee / 2).toFixed(2)} TrustTrade fee (50%)</p>
+                    )}
                   </div>
-                  {formData.fee_paid_by === 'split' && (
-                    <p className="text-xs text-slate-500 mt-2">Fee split 50/50: Each pays R {(feeAmount / 2).toFixed(2)}</p>
-                  )}
+                  
+                  {/* TrustTrade receives */}
+                  <div className="text-xs text-slate-500 text-center pt-2">
+                    TrustTrade receives: R {trusttradeFee.toFixed(2)} platform fee
+                  </div>
                 </div>
               </div>
             </Card>

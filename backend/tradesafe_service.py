@@ -30,10 +30,10 @@ TRADESAFE_ENV = os.environ.get('TRADESAFE_ENV', 'production')
 MINIMUM_TRANSACTION_AMOUNT = 500.0  # R500 minimum per user requirement
 PLATFORM_FEE_PERCENT = 2.0  # TrustTrade 2% agent fee
 
-# Redirect URLs after payment
-PAYMENT_SUCCESS_URL = "https://trusttradesa.co.za/transaction/success"
-PAYMENT_FAILURE_URL = "https://trusttradesa.co.za/transaction/failed"
-PAYMENT_CANCEL_URL = "https://trusttradesa.co.za/transaction/cancelled"
+# Redirect URLs after payment (from environment variables)
+PAYMENT_SUCCESS_URL = os.environ.get('PAYMENT_SUCCESS_URL', 'https://www.trusttradesa.co.za/transaction/success')
+PAYMENT_FAILURE_URL = os.environ.get('PAYMENT_FAILURE_URL', 'https://www.trusttradesa.co.za/transaction/failed')
+PAYMENT_CANCEL_URL = os.environ.get('PAYMENT_CANCEL_URL', 'https://www.trusttradesa.co.za/transaction/cancelled')
 
 # Payment methods allowed
 ALLOWED_PAYMENT_METHODS = ["EFT", "CARD", "OZOW"]
@@ -289,11 +289,10 @@ async def create_tradesafe_transaction(
     seller_email: str,
     buyer_mobile: str = None,
     seller_mobile: str = None,
-    fee_allocation: str = "SELLER",
-    agent_fee_allocation: str = "SELLER"
+    fee_allocation: str = "SELLER_AGENT"
 ) -> Optional[Dict[str, Any]]:
     """
-    Create a new escrow transaction.
+    Create a new escrow transaction with TrustTrade as AGENT to collect 2% platform fee.
     
     Args:
         internal_reference: TrustTrade internal transaction ID
@@ -306,17 +305,41 @@ async def create_tradesafe_transaction(
         seller_email: Seller's email
         buyer_mobile: Buyer's mobile number
         seller_mobile: Seller's mobile number
-        fee_allocation: Who pays fee - BUYER, SELLER, or 50_50
-        agent_fee_allocation: Who pays TrustTrade 2% fee - BUYER, SELLER, or 50_50
+        fee_allocation: Who pays fees - BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT (default: SELLER_AGENT)
+    
+    Fee Allocation Options:
+        - SELLER_AGENT: Seller pays TrustTrade 2% fee (deducted from payout)
+        - BUYER_AGENT: Buyer pays TrustTrade 2% fee (added to payment)
+        - SPLIT_AGENT: Split between buyer and seller
     
     Returns:
-        Transaction details or error dict on failure
+        Transaction details including fee_allocation or error dict on failure
     """
+    # Normalize and validate fee_allocation
+    VALID_FEE_ALLOCATIONS = {
+        'BUYER_AGENT': 'BUYER_AGENT',
+        'SELLER_AGENT': 'SELLER_AGENT',
+        'SPLIT_AGENT': 'BUYER_SELLER_AGENT',  # TradeSafe uses BUYER_SELLER_AGENT for split
+        'BUYER_SELLER_AGENT': 'BUYER_SELLER_AGENT',
+        # Legacy mappings for backwards compatibility
+        'buyer': 'BUYER_AGENT',
+        'seller': 'SELLER_AGENT',
+        'split': 'BUYER_SELLER_AGENT',
+    }
+    
+    normalized_fee_allocation = VALID_FEE_ALLOCATIONS.get(
+        fee_allocation.upper() if fee_allocation else 'SELLER_AGENT',
+        'SELLER_AGENT'  # Default
+    )
+    
     logger.info(f"=== CREATE TRANSACTION REQUEST ===")
     logger.info(f"Reference: {internal_reference}")
     logger.info(f"Amount: R{amount}")
     logger.info(f"Buyer: {buyer_name} ({buyer_email}) Mobile: {buyer_mobile}")
     logger.info(f"Seller: {seller_name} ({seller_email}) Mobile: {seller_mobile}")
+    logger.info(f"Fee Allocation (input): {fee_allocation}")
+    logger.info(f"Fee Allocation (normalized): {normalized_fee_allocation}")
+    logger.info(f"TrustTrade Platform Fee: {PLATFORM_FEE_PERCENT}%")
     
     # Validate minimum amount
     is_valid, error_msg = validate_minimum_transaction(amount)
@@ -369,19 +392,17 @@ async def create_tradesafe_transaction(
     logger.info(f"Tokens created - Buyer: {buyer_token}, Seller: {seller_token}")
     
     # TradeSafe API expects amount in RANDS (NOT cents)
-    # Example from docs: value: 10000.00 means R10,000.00
     amount_rands = float(amount)
     
-    # Map fee allocation - using correct enum values
-    fee_map = {
-        "buyer": "BUYER",
-        "seller": "SELLER", 
-        "split": "BUYER_SELLER",
-        "50_50": "BUYER_SELLER"
-    }
-    mapped_fee_allocation = fee_map.get(fee_allocation.lower(), "SELLER")
+    # Calculate TrustTrade 2% platform fee (estimate - actual depends on fee allocation)
+    trusttrade_fee = round(amount_rands * (PLATFORM_FEE_PERCENT / 100), 2)
     
-    # GraphQL mutation for creating a transaction - using correct type names
+    logger.info(f"=== FEE CALCULATION ===")
+    logger.info(f"Item Amount: R{amount_rands}")
+    logger.info(f"TrustTrade Fee ({PLATFORM_FEE_PERCENT}%): R{trusttrade_fee}")
+    logger.info(f"Fee Allocation: {normalized_fee_allocation}")
+    
+    # GraphQL mutation for creating a transaction with AGENT
     mutation = """
     mutation transactionCreate($input: CreateTransactionInput!) {
         transactionCreate(input: $input) {
@@ -402,21 +423,33 @@ async def create_tradesafe_transaction(
             parties {
                 id
                 role
+                fee
+                feeType
+                feeAllocation
             }
             createdAt
         }
     }
     """
     
-    # Build variables with correct nested structure for relations
-    # Note: privacy uses "NONE" (not "PRIVATE")
+    # Build transaction with TrustTrade as AGENT
+    # The AGENT party receives the platform fee automatically when funds are released
+    #
+    # Fee structure:
+    # - feeAllocation on transaction level: determines who pays fees (including agent fee)
+    # - AGENT party with fee/feeType: TrustTrade's 2% platform margin
+    # - The AGENT is linked via email (our platform's registered email with TradeSafe)
+    #
+    # TrustTrade registered email with TradeSafe API
+    TRUSTTRADE_AGENT_EMAIL = "marnichroets@gmail.com"  # The email associated with TradeSafe API credentials
+    
     variables = {
         "input": {
             "title": title,
             "description": description,
             "industry": "GENERAL_GOODS_SERVICES",
             "currency": "ZAR",
-            "feeAllocation": mapped_fee_allocation,
+            "feeAllocation": normalized_fee_allocation,  # Dynamic fee allocation
             "reference": internal_reference,
             "parties": {
                 "create": [
@@ -427,6 +460,13 @@ async def create_tradesafe_transaction(
                     {
                         "role": "SELLER",
                         "token": seller_token
+                    },
+                    {
+                        "role": "AGENT",
+                        "email": TRUSTTRADE_AGENT_EMAIL,  # Agent linked via email, not token
+                        "fee": PLATFORM_FEE_PERCENT,  # 2% platform fee
+                        "feeType": "PERCENT",  # Fee is a percentage
+                        "feeAllocation": normalized_fee_allocation  # Same as transaction level
                     }
                 ]
             },
@@ -445,6 +485,12 @@ async def create_tradesafe_transaction(
     }
     
     logger.info(f"=== TRANSACTION CREATE REQUEST ===")
+    logger.info(f"=== FIELDS SENT TO TRADESAFE ===")
+    logger.info(f"Transaction feeAllocation: {normalized_fee_allocation}")
+    logger.info(f"AGENT fee: {PLATFORM_FEE_PERCENT}")
+    logger.info(f"AGENT feeType: PERCENT")
+    logger.info(f"AGENT feeAllocation: {normalized_fee_allocation}")
+    logger.info(f"Allocation value: R{amount_rands}")
     logger.info(f"Variables: {variables}")
     
     result = await execute_graphql(mutation, variables)
@@ -465,6 +511,22 @@ async def create_tradesafe_transaction(
         logger.info(f"=== TRANSACTION CREATED SUCCESSFULLY ===")
         logger.info(f"Transaction ID: {tx['id']}")
         logger.info(f"State: {tx['state']}")
+        logger.info(f"Fee Allocation: {tx.get('feeAllocation')}")
+        
+        # Log party details including AGENT
+        for party in tx.get('parties', []):
+            logger.info(f"Party: {party.get('role')} - Fee: {party.get('fee')} ({party.get('feeType')}) - Allocation: {party.get('feeAllocation')}")
+        
+        # Add fee breakdown and allocation to response
+        tx['trusttrade_fee'] = trusttrade_fee
+        tx['fee_allocation'] = normalized_fee_allocation  # Store the fee allocation used
+        tx['fee_breakdown'] = {
+            'item_amount': amount_rands,
+            'trusttrade_fee_percent': PLATFORM_FEE_PERCENT,
+            'trusttrade_fee_amount': trusttrade_fee,
+            'fee_allocation': normalized_fee_allocation
+        }
+        
         return tx
     
     logger.error(f"=== UNEXPECTED TRANSACTION RESPONSE ===")
@@ -516,12 +578,20 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
         tradesafe_id: The TradeSafe transaction ID
         redirect_urls: Optional dict with success, failure, cancel URLs
     """
-    # Default redirect URLs
+    import traceback
+    
+    print(f"=== get_payment_link called ===")
+    print(f"tradesafe_id: {tradesafe_id}")
+    print(f"redirect_urls: {redirect_urls}")
+    print(f"TRADESAFE_ENV: {TRADESAFE_ENV}")
+    print(f"TRADESAFE_API_URL: {TRADESAFE_API_URL}")
+    
+    # Default redirect URLs (use environment variables)
     if not redirect_urls:
         redirect_urls = {
-            "success": "https://trusttradesa.co.za/transaction/success",
-            "failure": "https://trusttradesa.co.za/transaction/failed",
-            "cancel": "https://trusttradesa.co.za/transaction/cancelled"
+            "success": PAYMENT_SUCCESS_URL,
+            "failure": PAYMENT_FAILURE_URL,
+            "cancel": PAYMENT_CANCEL_URL
         }
     
     # First, get the transaction to check state and existing deposits
@@ -539,26 +609,54 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     }
     """
     
-    result = await execute_graphql(query, {"id": tradesafe_id})
-    logger.info(f"=== GET TRANSACTION FOR PAYMENT ===")
-    logger.info(f"Result: {result}")
+    try:
+        result = await execute_graphql(query, {"id": tradesafe_id})
+        print(f"=== GET TRANSACTION RAW RESPONSE ===")
+        print(f"Result: {result}")
+        logger.info(f"=== GET TRANSACTION FOR PAYMENT ===")
+        logger.info(f"Result: {result}")
+    except Exception as e:
+        print(f"=== ERROR fetching transaction ===")
+        print(f"Error: {str(e)}")
+        traceback.print_exc()
+        return None
     
     if not result or 'transaction' not in result:
         if result and 'errors' in result:
+            print(f"Transaction query errors: {result['errors']}")
             logger.error(f"Transaction query error: {result['errors']}")
+        print(f"Could not fetch transaction {tradesafe_id}")
         logger.error(f"Could not fetch transaction {tradesafe_id}")
         return None
     
     tx = result['transaction']
+    tx_state = tx.get('state')
+    print(f"Transaction state: {tx_state}")
     
-    # Check if there's already a deposit with payment link
+    # Check if transaction is already fully paid
+    PAID_STATES = ['FUNDS_DEPOSITED', 'FUNDS_RELEASED', 'COMPLETED', 'DELIVERED']
+    if tx_state in PAID_STATES:
+        print(f"=== Transaction already in {tx_state} state - no payment needed ===")
+        logger.info(f"Transaction {tradesafe_id} already in {tx_state} state")
+        return {
+            "tradesafe_id": tx['id'],
+            "state": tx_state,
+            "payment_link": None,
+            "payment_methods": ALLOWED_PAYMENT_METHODS,
+            "message": f"Transaction already paid. Current state: {tx_state}",
+            "already_paid": True
+        }
+    
+    # Check if there's already a deposit with payment link (for unpaid transactions)
     deposits = tx.get('deposits', [])
+    print(f"Existing deposits: {deposits}")
     for deposit in deposits:
         if deposit.get('paymentLink'):
+            print(f"Found existing payment link: {deposit['paymentLink']}")
             logger.info(f"Found existing payment link: {deposit['paymentLink']}")
             return {
                 "tradesafe_id": tx['id'],
-                "state": tx['state'],
+                "state": tx_state,
                 "payment_link": deposit['paymentLink'],
                 "payment_methods": ALLOWED_PAYMENT_METHODS
             }
@@ -589,11 +687,21 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
             "redirects": redirect_urls
         }
         
+        print(f"=== TRYING PAYMENT METHOD: {method} ===")
+        print(f"Request variables: {variables}")
         logger.info(f"=== TRYING PAYMENT METHOD: {method} ===")
-        result = await execute_graphql(mutation, variables)
+        
+        try:
+            result = await execute_graphql(mutation, variables)
+            print(f"Raw result for {method}: {result}")
+        except Exception as e:
+            print(f"Exception calling transactionDeposit with {method}: {str(e)}")
+            traceback.print_exc()
+            continue
         
         if result and 'errors' in result:
             error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
+            print(f"Method {method} failed with errors: {result['errors']}")
             logger.warning(f"Method {method} failed: {error_msg}")
             continue
         
@@ -602,6 +710,11 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
             last_deposit = deposit
             payment_link = deposit.get('paymentLink')
             
+            print(f"Deposit created with {method}:")
+            print(f"  deposit_id: {deposit.get('id')}")
+            print(f"  paymentLink: {payment_link}")
+            print(f"  value: {deposit.get('value')}")
+            print(f"  processingFee: {deposit.get('processingFee')}")
             logger.info(f"Deposit created with {method}: link={payment_link}, value={deposit.get('value')}")
             
             if payment_link:
@@ -620,6 +733,8 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     # If we got a deposit but no payment link (EFT case), return deposit info
     # The frontend will show bank details or instruct user
     if last_deposit:
+        print(f"=== Returning EFT deposit info (no payment link) ===")
+        print(f"last_deposit: {last_deposit}")
         logger.info(f"Returning EFT deposit info without payment link")
         return {
             "tradesafe_id": tradesafe_id,
@@ -633,6 +748,7 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
             "message": "Please use bank details for EFT payment. See transaction for bank account details."
         }
     
+    print("=== get_payment_link returning None - no deposit created ===")
     return None
 
 

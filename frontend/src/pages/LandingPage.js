@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowRight, CheckCircle, Users, Lock, Zap, Shield, Truck, CreditCard, UserCheck } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -8,26 +10,49 @@ const API = `${BACKEND_URL}/api`;
 
 function LandingPage() {
   const [stats, setStats] = useState({ total_transactions: 0, success_rate: 100 });
+  const { isAuthenticated, loading } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect to dashboard ONLY if backend-validated authenticated
+  useEffect(() => {
+    // Wait for auth validation to complete
+    if (loading) return;
+    
+    // Only redirect if truly authenticated (validated by backend)
+    if (isAuthenticated) {
+      console.log('[LANDING] Authenticated, redirecting to dashboard');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate]);
 
   useEffect(() => {
     axios.get(`${API}/public/stats`).then(res => setStats(res.data)).catch(() => {});
   }, []);
 
   const handleLogin = () => {
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(window.location.origin)}`;
+    navigate('/login');
   };
 
   const scrollToHowItWorks = () => {
     document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Show loading while auth is being validated
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
       <nav className="bg-white sticky top-0 z-50 border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-12 object-contain" />
+          <div className="flex justify-between items-center h-24 md:h-28">
+            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-16 md:h-20 lg:h-24 object-contain" />
             <div className="flex items-center gap-4">
               <Button variant="ghost" onClick={handleLogin} className="text-slate-700 hover:text-blue-600 font-medium">
                 Log In
@@ -43,8 +68,8 @@ function LandingPage() {
       {/* Hero */}
       <section className="bg-gradient-to-b from-blue-50 to-white py-24 px-4">
         <div className="max-w-7xl mx-auto text-center">
-          <div className="bg-white rounded-3xl p-8 inline-block shadow-xl mb-8 border border-slate-100">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-32 md:h-40 object-contain" />
+          <div className="inline-block mb-8">
+            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-40 md:h-48 lg:h-56 object-contain" />
           </div>
           <h1 className="text-5xl md:text-6xl font-bold text-slate-900 mb-6">TrustTrade</h1>
           <p className="text-2xl text-blue-600 font-semibold mb-4">Secure Escrow Protection for South Africa</p>
@@ -172,15 +197,23 @@ function LandingPage() {
         <div className="max-w-7xl mx-auto">
           <div className="grid md:grid-cols-4 gap-8 mb-8">
             <div className="md:col-span-2">
-              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-16 object-contain mb-4" />
+              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-20 md:h-24 object-contain mb-4" />
               <p className="text-slate-500">Secure Escrow Protection for South Africa</p>
             </div>
             <div>
               <h4 className="text-sm font-semibold text-slate-900 mb-4">Links</h4>
               <ul className="space-y-2">
                 <li><button onClick={scrollToHowItWorks} className="text-slate-500 hover:text-blue-600 text-sm">How It Works</button></li>
+                <li><a href="/escrow" className="text-slate-500 hover:text-blue-600 text-sm">Escrow Protection</a></li>
+                <li><a href="/disputes" className="text-slate-500 hover:text-blue-600 text-sm">Dispute Resolution</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-slate-900 mb-4">Legal</h4>
+              <ul className="space-y-2">
                 <li><a href="/terms" className="text-slate-500 hover:text-blue-600 text-sm">Terms of Service</a></li>
                 <li><a href="/privacy" className="text-slate-500 hover:text-blue-600 text-sm">Privacy Policy</a></li>
+                <li><a href="/refund" className="text-slate-500 hover:text-blue-600 text-sm">Refund Policy</a></li>
               </ul>
             </div>
             <div>

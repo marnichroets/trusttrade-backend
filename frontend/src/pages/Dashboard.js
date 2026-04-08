@@ -556,6 +556,41 @@ function Dashboard() {
           )}
         </Card>
       </div>
+      
+      {/* FAQ Section */}
+      <div className="mt-8">
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold text-slate-900 mb-6">Frequently Asked Questions</h3>
+          <div className="space-y-4">
+            <div className="border-b border-slate-100 pb-4">
+              <h4 className="font-medium text-slate-900 mb-2">How does TrustTrade work?</h4>
+              <p className="text-sm text-slate-600">Buyer pays into secure escrow → seller delivers → funds released. Simple and secure.</p>
+            </div>
+            <div className="border-b border-slate-100 pb-4">
+              <h4 className="font-medium text-slate-900 mb-2">Is my money safe?</h4>
+              <p className="text-sm text-slate-600">Yes, funds are held securely in escrow until both parties confirm the transaction is complete.</p>
+            </div>
+            <div className="border-b border-slate-100 pb-4">
+              <h4 className="font-medium text-slate-900 mb-2">What if something goes wrong?</h4>
+              <p className="text-sm text-slate-600">Our dispute system allows investigation before funds are released. Both parties can submit evidence.</p>
+            </div>
+            <div className="border-b border-slate-100 pb-4">
+              <h4 className="font-medium text-slate-900 mb-2">How long do transactions take?</h4>
+              <p className="text-sm text-slate-600">Depends on delivery method, typically 1–3 days for local deliveries. Funds release within 48 hours after confirmation.</p>
+            </div>
+            <div>
+              <h4 className="font-medium text-slate-900 mb-2">Are users verified?</h4>
+              <p className="text-sm text-slate-600">Yes, ID and phone verification provides trust badges. Verified users have higher credibility.</p>
+            </div>
+          </div>
+          <div className="mt-6 pt-4 border-t border-slate-100 flex gap-4 text-sm">
+            <a href="/terms" className="text-blue-600 hover:underline">Terms</a>
+            <a href="/privacy" className="text-blue-600 hover:underline">Privacy</a>
+            <a href="/refund" className="text-blue-600 hover:underline">Refund Policy</a>
+            <a href="/escrow" className="text-blue-600 hover:underline">How Escrow Works</a>
+          </div>
+        </Card>
+      </div>
     </DashboardLayout>
   );
 }

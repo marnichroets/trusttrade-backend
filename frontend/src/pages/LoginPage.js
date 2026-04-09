@@ -24,6 +24,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('[LOGIN] Submit started, isLogin:', isLogin);
     setLoading(true);
     
     try {
@@ -32,17 +33,31 @@ export default function LoginPage() {
         ? { email: form.email, password: form.password }
         : { email: form.email, password: form.password, name: form.name };
       
+      console.log('[LOGIN] Calling endpoint:', endpoint);
       const response = await api.post(endpoint, payload);
+      console.log('[LOGIN] Response received:', response.data?.email);
       
-      // Store token
-      localStorage.setItem('session_token', response.data.session_token);
+      // Store token and user data
+      const token = response.data.session_token;
+      const userData = {
+        user_id: response.data.user_id,
+        email: response.data.email,
+        name: response.data.name,
+        is_admin: response.data.is_admin || false,
+      };
+      
+      localStorage.setItem('session_token', token);
+      localStorage.setItem('user_data', JSON.stringify(userData));
+      console.log('[LOGIN] Token and user_data saved to localStorage');
       
       // Set user in context
-      setUser(response.data);
+      setUser(userData);
       
       toast.success(isLogin ? 'Welcome back!' : 'Account created successfully!');
+      console.log('[LOGIN] Redirecting to /dashboard');
       navigate('/dashboard');
     } catch (error) {
+      console.error('[LOGIN] Failed:', error.response?.status, error.response?.data);
       const message = error.response?.data?.detail || 'Authentication failed';
       toast.error(message);
     } finally {

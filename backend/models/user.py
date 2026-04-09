@@ -47,6 +47,12 @@ class User(BaseModel):
     total_earned: float = 0.0
     banking_details: Optional[dict] = None
     banking_details_verified: bool = False
+    # TradeSafe token - persistent per user
+    tradesafe_token_id: Optional[str] = None
+    tradesafe_token_reference: Optional[str] = None
+    banking_details_completed: bool = False
+    payout_interval: str = "IMMEDIATE"
+    refund_interval: str = "IMMEDIATE"
     created_at: Optional[str] = None
 
 
@@ -127,6 +133,8 @@ class BankingDetailsUpdate(BaseModel):
     account_number: str
     branch_code: str
     account_type: str = "savings"
+    id_number: Optional[str] = None
+    company_registration_number: Optional[str] = None
 
 
 class WalletResponse(BaseModel):

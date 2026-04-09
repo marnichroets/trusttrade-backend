@@ -815,3 +815,174 @@ async def get_pending_auto_releases(request: Request):
         })
     
     return result
+
+
+
+# ============ TRADESAFE TOKEN ADMIN ============
+
+@router.get("/tradesafe/token/{token_id}")
+async def admin_get_token_details(request: Request, token_id: str):
+    """Get TradeSafe token details (admin only)"""
+    from tradesafe_service import get_token_details
+    
+    db = get_database()
+    await require_admin(request, db)
+    
+    logger.info(f"Admin fetching token details: {token_id}")
+    
+    details = await get_token_details(token_id)
+    
+    if not details:
+        raise HTTPException(status_code=404, detail="Token not found")
+    
+    return {
+        "success": True,
+        "token": details
+    }
+
+
+@router.post("/tradesafe/token-withdraw")
+async def admin_request_withdrawal(request: Request):
+    """Request withdrawal from a token wallet (admin only)"""
+    from tradesafe_service import request_token_withdrawal
+    
+    db = get_database()
+    await require_admin(request, db)
+    
+    body = await request.json()
+    token_id = body.get("token_id")
+    value = body.get("value")  # In cents
+    
+    if not token_id or not value:
+        raise HTTPException(status_code=400, detail="token_id and value required")
+    
+    logger.info(f"Admin requesting withdrawal: {token_id}, {value} cents")
+    
+    result = await request_token_withdrawal(token_id, int(value))
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Withdrawal failed"))
+    
+    return result
+
+
+@router.post("/transactions/{transaction_id}/refund-simple")
+async def admin_simple_refund(request: Request, transaction_id: str):
+    """
+    Simple refund - updates local status only (admin only).
+    Use when TradeSafe refund is done separately.
+    """
+    db = get_database()
+    admin_user = await require_admin(request, db)
+    
+    body = await request.json()
+    reason = body.get("reason", "Admin initiated refund")
+    
+    # Get transaction
+    txn = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    tradesafe_id = txn.get("tradesafe_id")
+    if not tradesafe_id:
+        raise HTTPException(status_code=400, detail="Transaction not linked to TradeSafe")
+    
+    logger.info(f"Admin refund initiated for {transaction_id} by {admin_user.email}")
+    
+    # Note: In TradeSafe, refunds typically go through dispute resolution
+    # or the allocation's refund flow. For now, we update local state.
+    
+    # Update transaction status
+    timeline = txn.get("timeline", [])
+    timeline.append({
+        "status": "Refund Initiated",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "by": admin_user.name,
+        "details": reason
+    })
+    
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "payment_status": "Refunded",
+            "release_status": "Refunded",
+            "refund_reason": reason,
+            "refunded_at": datetime.now(timezone.utc).isoformat(),
+            "refunded_by": admin_user.email,
+            "timeline": timeline
+        }}
+    )
+    
+    # Log audit
+    await db.admin_audit_log.insert_one({
+        "action": "refund",
+        "transaction_id": transaction_id,
+        "admin_email": admin_user.email,
+        "reason": reason,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    
+    logger.info(f"Refund completed for {transaction_id}")
+    
+    return {
+        "success": True,
+        "transaction_id": transaction_id,
+        "status": "Refunded",
+        "message": "Refund initiated. Funds will be returned to buyer's token wallet."
+    }
+
+
+@router.post("/transactions/{transaction_id}/refund-withdraw")
+async def admin_refund_withdraw(request: Request, transaction_id: str):
+    """
+    Withdraw refunded funds from token wallet (admin only).
+    Use after refund when funds are sitting in the buyer's token.
+    """
+    from tradesafe_service import request_token_withdrawal
+    
+    db = get_database()
+    await require_admin(request, db)
+    
+    # Get transaction
+    txn = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    if txn.get("payment_status") != "Refunded":
+        raise HTTPException(status_code=400, detail="Transaction must be refunded first")
+    
+    # Get buyer's token
+    buyer_user_id = txn.get("buyer_user_id")
+    buyer = await db.users.find_one({"user_id": buyer_user_id}, {"_id": 0})
+    
+    if not buyer or not buyer.get("tradesafe_token_id"):
+        raise HTTPException(status_code=400, detail="Buyer has no token for withdrawal")
+    
+    # Amount in cents
+    amount_cents = int(txn.get("total", 0) * 100)
+    
+    if amount_cents <= 0:
+        raise HTTPException(status_code=400, detail="Invalid withdrawal amount")
+    
+    logger.info(f"Admin refund withdrawal: {transaction_id}, {amount_cents} cents")
+    
+    result = await request_token_withdrawal(buyer["tradesafe_token_id"], amount_cents)
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Withdrawal failed"))
+    
+    # Update transaction
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "refund_withdrawn": True,
+            "refund_withdrawn_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {
+        "success": True,
+        "transaction_id": transaction_id,
+        "amount_withdrawn": amount_cents / 100,
+        "new_balance": result.get("new_balance")
+    }

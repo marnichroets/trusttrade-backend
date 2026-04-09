@@ -234,17 +234,34 @@ async def get_or_create_user_token(
     name: str,
     email: str,
     mobile: str = "+27000000000",
-    reference: Optional[str] = None
+    reference: Optional[str] = None,
+    db = None,
+    user_id: str = None
 ) -> Optional[str]:
     """
     Get existing or create new user token.
     Returns the token ID.
     
-    Note: We always create new tokens because the tokens query doesn't support
-    filtering by email. Each transaction gets fresh tokens.
+    If user_id and db are provided, will check for and reuse existing token.
     """
     logger.info(f"=== GET OR CREATE TOKEN ===")
-    logger.info(f"Name: {name}, Email: {email}, Mobile: {mobile}")
+    logger.info(f"Name: {name}, Email: {email}, Mobile: {mobile}, User ID: {user_id}")
+    
+    # If we have db and user_id, try to reuse existing token
+    if db and user_id:
+        user_doc = await db.users.find_one({"user_id": user_id})
+        if user_doc and user_doc.get("tradesafe_token_id"):
+            token_id = user_doc["tradesafe_token_id"]
+            logger.info(f"REUSING existing token for {email}: {token_id}")
+            return token_id
+    
+    # Also check by email if we have db access
+    if db:
+        user_by_email = await db.users.find_one({"email": email.lower()})
+        if user_by_email and user_by_email.get("tradesafe_token_id"):
+            token_id = user_by_email["tradesafe_token_id"]
+            logger.info(f"REUSING existing token found by email {email}: {token_id}")
+            return token_id
     
     # Split name into given/family name
     name_parts = name.strip().split(' ', 1)
@@ -260,10 +277,8 @@ async def get_or_create_user_token(
         else:
             mobile = '+27' + mobile
     
-    # Note: We skip the lookup query as the API doesn't support email filtering
-    # Always create a new token for each party
-    
-    logger.info(f"Creating new token for {email}")
+    # Create a new token
+    logger.info(f"CREATING NEW token for {email}")
     token_data = await create_user_token(
         given_name=given_name,
         family_name=family_name,
@@ -272,7 +287,21 @@ async def get_or_create_user_token(
     )
     
     if token_data:
-        return token_data['id']
+        token_id = token_data['id']
+        
+        # Save to user record if we have db access
+        if db:
+            await db.users.update_one(
+                {"email": email.lower()},
+                {"$set": {
+                    "tradesafe_token_id": token_id,
+                    "tradesafe_token_reference": token_data.get('name', '')
+                }},
+                upsert=False  # Don't create user if doesn't exist
+            )
+            logger.info(f"Token {token_id} saved to user record for {email}")
+        
+        return token_id
     
     logger.error(f"=== FAILED TO CREATE TOKEN FOR {email} ===")
     return None
@@ -364,21 +393,27 @@ async def create_tradesafe_transaction(
         logger.error(f"Pre-flight validation failed: {error_msg}")
         return {"error": error_msg}
     
-    # Get or create tokens for buyer and seller
-    logger.info(f"Creating buyer token...")
+    # Import here to avoid circular dependency
+    from core.database import get_database
+    db = get_database()
+    
+    # Get or create tokens for buyer and seller (reuse from user records if available)
+    logger.info(f"Getting/creating buyer token...")
     buyer_token = await get_or_create_user_token(
         buyer_name, 
         buyer_email, 
         mobile=buyer_mobile or "+27000000000",
-        reference=f"buyer_{internal_reference}"
+        reference=f"buyer_{internal_reference}",
+        db=db
     )
     
-    logger.info(f"Creating seller token...")
+    logger.info(f"Getting/creating seller token...")
     seller_token = await get_or_create_user_token(
         seller_name, 
         seller_email, 
         mobile=seller_mobile or "+27000000000",
-        reference=f"seller_{internal_reference}"
+        reference=f"seller_{internal_reference}",
+        db=db
     )
     
     if not buyer_token:
@@ -954,4 +989,242 @@ async def update_user_banking_details(
         "success": True,
         "message": "Banking details submitted successfully"
     }
+
+
+async def update_token_banking_details(
+    token_id: str,
+    bank_name: str,
+    account_holder: str,
+    account_number: str,
+    branch_code: str,
+    account_type: str = "SAVINGS",
+    id_number: str = None,
+    payout_interval: str = "IMMEDIATE",
+    refund_interval: str = "IMMEDIATE"
+) -> Dict[str, Any]:
+    """
+    Update a TradeSafe token with banking details and payout settings.
+    Uses tokenUpdate mutation to attach banking and set payout/refund intervals.
+    """
+    logger.info(f"=== TOKEN UPDATE (BANKING) ===")
+    logger.info(f"Token ID: {token_id}")
+    logger.info(f"Bank: {bank_name}, Account: ***{account_number[-4:] if account_number else 'N/A'}")
+    logger.info(f"Payout: {payout_interval}, Refund: {refund_interval}")
+    
+    # Map account type
+    account_type_map = {
+        "savings": "SAVINGS",
+        "checking": "CHEQUE",
+        "cheque": "CHEQUE",
+        "current": "CHEQUE",
+        "SAVINGS": "SAVINGS",
+        "CHEQUE": "CHEQUE",
+    }
+    ts_account_type = account_type_map.get(account_type.lower() if account_type else "savings", "SAVINGS")
+    
+    mutation = """
+    mutation tokenUpdate($id: ID!, $input: TokenInput!) {
+        tokenUpdate(id: $id, input: $input) {
+            id
+            name
+            balance
+            settings {
+                payout {
+                    interval
+                }
+            }
+        }
+    }
+    """
+    
+    # Build the update payload
+    variables = {
+        "id": token_id,
+        "input": {
+            "settings": {
+                "payout": {
+                    "interval": payout_interval
+                }
+            },
+            "bankAccount": {
+                "bank": bank_name.upper().replace(" ", "_"),
+                "accountNumber": account_number,
+                "branchCode": branch_code,
+                "accountType": ts_account_type
+            }
+        }
+    }
+    
+    # Add ID number if provided
+    if id_number:
+        variables["input"]["user"] = {
+            "idNumber": id_number,
+            "idType": "NATIONAL",
+            "idCountry": "ZAF"
+        }
+    
+    logger.info(f"Calling tokenUpdate with variables: {variables}")
+    
+    result = await execute_graphql(mutation, variables)
+    
+    if result and 'errors' in result:
+        error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
+        logger.error(f"Token update failed: {error_msg}")
+        logger.error(f"Full errors: {result['errors']}")
+        return {"success": False, "error": error_msg}
+    
+    if result and 'tokenUpdate' in result:
+        logger.info(f"Token updated successfully: {result['tokenUpdate']}")
+        return {
+            "success": True,
+            "token_id": result['tokenUpdate'].get('id'),
+            "balance": result['tokenUpdate'].get('balance'),
+            "settings": result['tokenUpdate'].get('settings')
+        }
+    
+    logger.error(f"Unexpected response from tokenUpdate: {result}")
+    return {"success": False, "error": "Unexpected response"}
+
+
+async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Get details of a TradeSafe token including balance and settings.
+    """
+    logger.info(f"=== GET TOKEN DETAILS ===")
+    logger.info(f"Token ID: {token_id}")
+    
+    query = """
+    query token($id: ID!) {
+        token(id: $id) {
+            id
+            name
+            balance
+            user {
+                givenName
+                familyName
+                email
+                mobile
+            }
+            settings {
+                payout {
+                    interval
+                }
+            }
+        }
+    }
+    """
+    
+    variables = {"id": token_id}
+    result = await execute_graphql(query, variables)
+    
+    if result and 'token' in result:
+        logger.info(f"Token details: {result['token']}")
+        return result['token']
+    
+    logger.error(f"Failed to get token details: {result}")
+    return None
+
+
+async def request_token_withdrawal(token_id: str, amount_cents: int) -> Dict[str, Any]:
+    """
+    Request withdrawal from a token wallet.
+    Amount is in cents (e.g., R100 = 10000 cents).
+    """
+    logger.info(f"=== TOKEN WITHDRAWAL REQUEST ===")
+    logger.info(f"Token ID: {token_id}, Amount: {amount_cents} cents (R{amount_cents/100:.2f})")
+    
+    mutation = """
+    mutation tokenAccountWithdraw($id: ID!, $value: Int!) {
+        tokenAccountWithdraw(id: $id, value: $value) {
+            id
+            balance
+        }
+    }
+    """
+    
+    variables = {
+        "id": token_id,
+        "value": amount_cents
+    }
+    
+    result = await execute_graphql(mutation, variables)
+    
+    if result and 'errors' in result:
+        error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
+        logger.error(f"Withdrawal failed: {error_msg}")
+        return {"success": False, "error": error_msg}
+    
+    if result and 'tokenAccountWithdraw' in result:
+        logger.info(f"Withdrawal successful: {result['tokenAccountWithdraw']}")
+        return {
+            "success": True,
+            "token_id": result['tokenAccountWithdraw'].get('id'),
+            "new_balance": result['tokenAccountWithdraw'].get('balance')
+        }
+    
+    logger.error(f"Unexpected response from withdrawal: {result}")
+    return {"success": False, "error": "Unexpected response"}
+
+
+async def get_or_reuse_user_token(
+    db,
+    user_id: str,
+    name: str,
+    email: str,
+    mobile: str = "+27000000000"
+) -> Optional[str]:
+    """
+    Get existing token from user record or create new one.
+    This ensures ONE persistent token per user.
+    """
+    logger.info(f"=== GET OR REUSE USER TOKEN ===")
+    logger.info(f"User ID: {user_id}, Email: {email}")
+    
+    # Check if user already has a token
+    user_doc = await db.users.find_one({"user_id": user_id})
+    
+    if user_doc and user_doc.get("tradesafe_token_id"):
+        token_id = user_doc["tradesafe_token_id"]
+        logger.info(f"REUSING existing token: {token_id}")
+        return token_id
+    
+    # Create new token
+    logger.info(f"CREATING new token for user {user_id}")
+    
+    # Split name into given/family name
+    name_parts = name.strip().split(' ', 1)
+    given_name = name_parts[0] if name_parts else "User"
+    family_name = name_parts[1] if len(name_parts) > 1 else "User"
+    
+    # Ensure mobile is in +27 format
+    if mobile and not mobile.startswith('+'):
+        if mobile.startswith('0'):
+            mobile = '+27' + mobile[1:]
+        else:
+            mobile = '+27' + mobile
+    
+    token_data = await create_user_token(
+        given_name=given_name,
+        family_name=family_name,
+        email=email,
+        mobile=mobile
+    )
+    
+    if token_data and token_data.get('id'):
+        token_id = token_data['id']
+        logger.info(f"NEW token created: {token_id}")
+        
+        # Save to user record
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "tradesafe_token_id": token_id,
+                "tradesafe_token_reference": token_data.get('name', '')
+            }}
+        )
+        logger.info(f"Token saved to user record")
+        return token_id
+    
+    logger.error(f"Failed to create token for user {user_id}")
+    return None
 

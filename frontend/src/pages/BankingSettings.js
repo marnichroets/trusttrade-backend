@@ -35,7 +35,8 @@ function BankingSettings() {
     account_holder: '',
     account_number: '',
     branch_code: '',
-    account_type: 'savings'
+    account_type: 'savings',
+    id_number: ''
   });
   const navigate = useNavigate();
 
@@ -94,8 +95,11 @@ function BankingSettings() {
   const handleConfirmSubmit = async () => {
     setSaving(true);
     try {
-      // Send to TradeSafe API - banking details are NOT stored in TrustTrade database
-      await api.post('/tradesafe/banking-details', bankingDetails);
+      // Send to new banking details endpoint
+      console.log('[BANKING] Submitting banking details...');
+      const response = await api.post('/users/banking-details', bankingDetails);
+      console.log('[BANKING] Response:', response.data);
+      
       toast.success('Banking details saved securely');
       setBankingDetailsAdded(true);
       setShowConfirmation(false);
@@ -105,7 +109,7 @@ function BankingSettings() {
         navigate('/dashboard');
       }, 1500);
     } catch (error) {
-      console.error('Failed to save banking details:', error);
+      console.error('[BANKING] Failed to save banking details:', error);
       toast.error(error.response?.data?.detail || 'Failed to save banking details');
     } finally {
       setSaving(false);

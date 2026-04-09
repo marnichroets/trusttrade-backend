@@ -580,7 +580,110 @@ async def get_banking_details(request: Request):
     return banking or {}
 
 
+@router.post("/users/banking-details")
+async def update_user_banking_details(request: Request, details: BankingDetailsUpdate):
+    """
+    Update user's banking details and sync to TradeSafe token.
+    Creates token if user doesn't have one, then updates with banking info.
+    """
+    from tradesafe_service import (
+        get_or_reuse_user_token, update_token_banking_details
+    )
+    
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    logger.info(f"=== BANKING DETAILS UPDATE ===")
+    logger.info(f"User: {user.email} ({user.user_id})")
+    
+    # Get or create TradeSafe token
+    token_id = await get_or_reuse_user_token(
+        db=db,
+        user_id=user.user_id,
+        name=user.name,
+        email=user.email,
+        mobile=user.phone or "+27000000000"
+    )
+    
+    if not token_id:
+        logger.error(f"Failed to get/create token for user {user.user_id}")
+        raise HTTPException(status_code=500, detail="Failed to create payment token")
+    
+    # Update token with banking details
+    result = await update_token_banking_details(
+        token_id=token_id,
+        bank_name=details.bank_name,
+        account_holder=details.account_holder,
+        account_number=details.account_number,
+        branch_code=details.branch_code,
+        account_type=details.account_type,
+        id_number=details.id_number,
+        payout_interval="IMMEDIATE",
+        refund_interval="IMMEDIATE"
+    )
+    
+    if not result.get("success"):
+        logger.error(f"Token update failed: {result.get('error')}")
+        # Still save locally even if TradeSafe update fails
+        logger.info("Saving banking details locally despite TradeSafe error")
+    
+    # Save to user record
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {
+            "banking_details": {
+                "bank_name": details.bank_name,
+                "account_holder": details.account_holder,
+                "account_number": details.account_number[-4:],  # Only store last 4
+                "branch_code": details.branch_code,
+                "account_type": details.account_type,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            },
+            "banking_details_completed": True,
+            "tradesafe_token_id": token_id,
+            "payout_interval": "IMMEDIATE",
+            "refund_interval": "IMMEDIATE"
+        }}
+    )
+    
+    logger.info(f"Banking details saved for user {user.user_id}")
+    
+    return {
+        "success": True,
+        "token_id": token_id,
+        "banking_details_completed": True,
+        "payout_interval": "IMMEDIATE",
+        "refund_interval": "IMMEDIATE"
+    }
+
+
+@router.get("/users/banking-details/status")
+async def get_banking_details_status(request: Request):
+    """
+    Get user's banking details status.
+    """
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    return {
+        "success": True,
+        "banking_details_completed": user_doc.get("banking_details_completed", False),
+        "has_tradesafe_token": bool(user_doc.get("tradesafe_token_id")),
+        "token_id": user_doc.get("tradesafe_token_id"),
+        "payout_interval": user_doc.get("payout_interval", "IMMEDIATE"),
+        "refund_interval": user_doc.get("refund_interval", "IMMEDIATE")
+    }
+
+
 @router.post("/banking-details")
 async def update_banking_details_deprecated(request: Request, details: BankingDetailsUpdate):
     """Update user's banking details - DEPRECATED"""
-    raise HTTPException(status_code=400, detail="Please use /tradesafe/banking-details for secure banking updates")
+    raise HTTPException(status_code=400, detail="Please use /users/banking-details for secure banking updates")

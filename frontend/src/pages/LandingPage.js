@@ -220,12 +220,14 @@ function LandingPage() {
               <h4 className="text-sm font-semibold text-slate-900 mb-4">Contact</h4>
               <a href="mailto:support@trusttradesa.co.za" className="text-slate-500 hover:text-blue-600 text-sm">support@trusttradesa.co.za</a>
             </div>
-          </div>
+                    </div>
           <div className="border-t border-slate-200 pt-8 text-center">
             <p className="text-slate-500 text-sm">© 2026 TrustTrade South Africa. All rights reserved.</p>
           </div>
         </div>
-    );
-};
+      </footer>
+    </div>
+  );
+}
 
 export default LandingPage;

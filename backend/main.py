@@ -30,12 +30,20 @@ app = FastAPI(
     version="2.0.0"
 )
 
+origins = [
+    "https://trusttrade-frontend-v2-6odm5x7r0-marnichroets-9889s-projects.vercel.app",
+    "https://trusttradesa.co.za",
+    "https://www.trusttradesa.co.za",
+    "http://localhost:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=origins,
     allow_credentials=True,
-    allow_origins=settings.CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
+)
 )
 
 @app.get("/")

@@ -866,11 +866,16 @@ async def admin_request_withdrawal(request: Request):
     return result
 
 
-@router.post("/transactions/{transaction_id}/refund-simple")
-async def admin_simple_refund(request: Request, transaction_id: str):
+@router.post("/transactions/{transaction_id}/mark-refunded-local")
+async def admin_mark_refunded_local(request: Request, transaction_id: str):
     """
-    Simple refund - updates local status only (admin only).
-    Use when TradeSafe refund is done separately.
+    LOCAL STATUS UPDATE ONLY - Does NOT execute a TradeSafe refund.
+    
+    This endpoint only updates the TrustTrade database to mark a transaction as refunded.
+    Use this AFTER manually processing refund via TradeSafe dashboard.
+    
+    TODO: Implement real TradeSafe refund using allocationRefund mutation
+    when TradeSafe API access for refunds is confirmed.
     """
     db = get_database()
     admin_user = await require_admin(request, db)
@@ -887,18 +892,18 @@ async def admin_simple_refund(request: Request, transaction_id: str):
     if not tradesafe_id:
         raise HTTPException(status_code=400, detail="Transaction not linked to TradeSafe")
     
-    logger.info(f"Admin refund initiated for {transaction_id} by {admin_user.email}")
+    logger.info(f"[LOCAL ONLY] Admin marking transaction {transaction_id} as refunded by {admin_user.email}")
     
-    # Note: In TradeSafe, refunds typically go through dispute resolution
-    # or the allocation's refund flow. For now, we update local state.
+    # WARNING: This only updates local TrustTrade database state.
+    # It does NOT execute a refund on TradeSafe.
     
     # Update transaction status
     timeline = txn.get("timeline", [])
     timeline.append({
-        "status": "Refund Initiated",
+        "status": "Marked as Refunded (Local)",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "by": admin_user.name,
-        "details": reason
+        "details": f"{reason} - LOCAL STATUS UPDATE ONLY"
     })
     
     await db.transactions.update_one(
@@ -922,13 +927,13 @@ async def admin_simple_refund(request: Request, transaction_id: str):
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
     
-    logger.info(f"Refund completed for {transaction_id}")
+    logger.info(f"[LOCAL ONLY] Transaction {transaction_id} marked as refunded")
     
     return {
         "success": True,
         "transaction_id": transaction_id,
-        "status": "Refunded",
-        "message": "Refund initiated. Funds will be returned to buyer's token wallet."
+        "status": "Marked as Refunded (Local)",
+        "warning": "LOCAL STATUS UPDATE ONLY. This does NOT execute a TradeSafe refund. Use TradeSafe dashboard or implement allocationRefund mutation to actually refund funds."
     }
 
 

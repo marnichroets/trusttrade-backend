@@ -16,12 +16,44 @@ load_dotenv(ROOT_DIR / '.env')
 class Settings:
     """Application settings loaded from environment variables"""
     
+    # Environment (development, staging, production)
+    ENV: str = os.environ.get('ENV', 'development')
+    
     # Database
     MONGO_URL: str = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
     DB_NAME: str = os.environ.get('DB_NAME', 'trusttrade')
     
-    # CORS
-    CORS_ORIGINS: List[str] = os.environ.get('CORS_ORIGINS', '*').split(',')
+    # CORS with environment-aware defaults
+    @staticmethod
+    def _get_cors_origins() -> List[str]:
+        """Get CORS origins with intelligent defaults based on environment.
+        Strips whitespace from comma-separated values."""
+        cors_env = os.environ.get('CORS_ORIGINS', '').strip()
+        
+        # If explicitly set, use it (strip whitespace from each origin)
+        if cors_env and cors_env != '*':
+            return [origin.strip() for origin in cors_env.split(',') if origin.strip()]
+        
+        # Default wildcard for development only
+        if cors_env == '*':
+            return ['*']
+        
+        # Environment-based defaults
+        env = os.environ.get('ENV', 'development').lower()
+        
+        if env == 'production':
+            return ['https://trusttradesa.co.za']
+        elif env == 'staging':
+            return ['https://staging.trusttradesa.co.za', 'https://trusttradesa.co.za']
+        else:  # development
+            return [
+                'http://localhost:3000',
+                'http://localhost:5173',
+                'http://127.0.0.1:3000',
+                'http://127.0.0.1:5173'
+            ]
+    
+    CORS_ORIGINS: List[str] = _get_cors_origins()
     
     # Frontend URL for email links
     FRONTEND_URL: str = os.environ.get('FRONTEND_URL', 'https://www.trusttradesa.co.za')

@@ -1,99 +1,80 @@
-# TrustTrade - Secure Escrow Platform for South Africa
+# TrustTrade - Production-Ready Escrow Platform for South Africa
 
 ## Original Problem Statement
-TrustTrade is a secure escrow payment platform for South African online marketplace transactions. The platform uses TradeSafe's escrow API to hold payments securely until delivery is confirmed.
+Build a production-ready escrow payment platform for peer-to-peer transactions in South Africa using TradeSafe as the payment provider. The platform needed native JWT email/password authentication (no Emergent Auth), persistent TradeSafe token reuse per user, secure money calculations, and admin tooling for fund recovery.
 
-## Tech Stack
-- **Frontend**: React, Tailwind CSS, Shadcn UI
-- **Backend**: FastAPI, Pydantic, Motor (MongoDB async)
-- **Database**: MongoDB
-- **Payments**: TradeSafe Escrow API (GraphQL)
-- **Auth**: Emergent-managed Google OAuth
+## Core Requirements
+- Native Email/Password authentication using JWT
+- Persistent TradeSafe token reuse per user (one token per user, not per transaction)
+- Secure money calculations using Decimals/cents on backend
+- Explicit policy, FAQ, and banking detail submission pages
+- Admin endpoints for token management and fund recovery
 
-## Session: 2026-04-06 - Launch Preparation
+## Architecture
+```
+/app/
+├── backend/           # FastAPI + MongoDB
+│   ├── routes/        # auth.py, users.py, admin.py, transactions.py
+│   ├── models/        # user.py, transaction.py, dispute.py
+│   ├── tradesafe_service.py  # TradeSafe GraphQL integration
+│   └── main.py        # Entry point (background jobs disabled)
+└── frontend/          # React 18.2.0 + Tailwind
+    └── src/
+        ├── context/AuthContext.js  # JWT session management
+        ├── pages/                  # LoginPage, Dashboard, etc.
+        └── utils/api.js           # Axios with JWT interceptor
+```
 
-### 6 Critical Launch Fixes - ALL VERIFIED ✅
+## Key Technical Decisions
+- JWT tokens stored in localStorage with Bearer auth header
+- TradeSafe tokens saved per user in `users.tradesafe_token_id`
+- Money stored as cents (integers) in backend, formatted to Rands in frontend
+- Background jobs disabled to prevent 502 startup errors
 
-#### 1. SHARE LINK (CRITICAL) ✅
-- **Root Cause**: Frontend `ShareTransaction.js` was calling `${API_URL}/share/` missing `/api` prefix
-- **Fix**: Changed to `${API_URL}/api/share/${shareCode}`
-- **File**: `/app/frontend/src/pages/ShareTransaction.js` line 36
-- **Status**: PASS - Works logged in, logged out (public), and after refresh
+## What's Been Implemented (April 2026)
+- [x] Native JWT email/password auth (replaced Emergent Auth)
+- [x] Persistent TradeSafe token per user
+- [x] Banking details submission endpoint
+- [x] Admin token lookup endpoints (GET /api/admin/tradesafe/token/{id})
+- [x] Admin token withdrawal endpoint (POST /api/admin/tradesafe/token-withdraw)
+- [x] Local refund marking endpoint (mark-refunded-local)
+- [x] Fixed frontend auth redirect flow (LoginPage.js)
+- [x] Session persistence on page refresh
 
-#### 2. EMAIL RELIABILITY (CRITICAL) ✅
-- **Root Cause**: Empty/invalid emails (from phone invites) were passed to Postmark causing silent failures
-- **Fix**: Added email validation + 4 specific log states
-- **File**: `/app/backend/email_service.py` lines 60-104
-- **Logging Added**:
-  - `EMAIL_ATTEMPT` - when email send starts
-  - `EMAIL_SKIPPED` - when email is invalid/empty
-  - `EMAIL_SENT` - on successful send
-  - `EMAIL_FAILED` - on send failure with error
-- **Status**: PASS
+## Known Limitations
+- Real TradeSafe refund NOT implemented (only local DB update)
+- Background jobs commented out in main.py
+- Legacy tokens may have `valid: false` status requiring TradeSafe support
 
-#### 3. SELLER CONFIRMATION (CRITICAL) ✅
-- **Root Cause**: Payment endpoints did not enforce seller_confirmed check
-- **Fix**: Added seller_confirmed check to both `/create-transaction` and `/payment-url` endpoints
-- **Files**: `/app/backend/routes/tradesafe.py` lines 60-66, 193-199
-- **Behavior**: Returns 400 "Payment blocked: Seller must confirm the fee agreement" if seller_confirmed=false
-- **Status**: PASS - Payment only available after seller confirms
+## 3rd Party Integrations
+- TradeSafe (Escrow Payments) - Production API
+- Postmark (Emails)
+- SMS Messenger/Zoom Connect (OTP)
 
-#### 4. MONEY PRECISION (CRITICAL) ✅
-- **Root Cause**: Float calculations like `item_price * 0.02` cause precision errors
-- **Fix**: Created `calculate_money()` function using Python Decimal with ROUND_HALF_UP
-- **Files**: 
-  - `/app/backend/routes/transactions.py` lines 50-67 (calculate_money function)
-  - `/app/backend/routes/tradesafe.py` lines 37-42 (calculate_seller_receives function)
-  - `/app/backend/models/transaction.py` line 35 (seller_receives field)
-- **Values**: item_price, trusttrade_fee, total, seller_receives all with exactly 2 decimals
-- **Frontend**: Now uses backend-calculated values, no recalculation
-- **Status**: PASS - R500.00 displays correctly
+## P0/P1/P2 Priorities
 
-#### 5. PAYMENT FLOW SAFETY ✅
-- **Root Cause**: Potential for duplicate escrow creation
-- **Fix**: Added check for existing tradesafe_id before creating new escrow
-- **File**: `/app/backend/routes/tradesafe.py` lines 76-82
-- **Behavior**: Returns `{"status": "already_created"}` for duplicate attempts
-- **Status**: PASS - No duplicate payments
+### P0 (Critical) - COMPLETED
+- [x] Frontend auth redirect verification
+- [x] Token status report for legacy tokens
 
-#### 6. USER CLARITY ✅
-- **Root Cause**: Status values were unclear
-- **Fix**: Clear payment_status values throughout flow
-- **Values**:
-  - `Pending Seller Confirmation` - waiting for seller to confirm fee
-  - `Ready for Payment` - after seller confirms
-  - `Awaiting Payment` - after escrow created
-  - `Paid` / `Funds Received` - payment received
-  - `Delivery in Progress` - item dispatched
-  - `Released` / `Completed` - funds released to seller
-- **Status**: PASS - Clear status badges with color coding
+### P1 (High)
+- [ ] Implement real TradeSafe refund (allocationRefund mutation)
+- [ ] Attach banking details to legacy tokens for withdrawal
 
-### Test Results
-- **Backend**: 100% (19/19 tests passed)
-- **Frontend**: 100% (all UI elements verified)
-- **Test File**: `/app/backend/tests/test_launch_fixes.py`
-- **Test Report**: `/app/test_reports/iteration_19.json`
+### P2 (Medium)
+- [ ] Re-enable background jobs safely
+- [ ] AI Scam Detection enhancements
 
-### Files Changed
-1. `/app/frontend/src/pages/ShareTransaction.js` - API path fix
-2. `/app/backend/email_service.py` - Email validation + logging
-3. `/app/backend/routes/tradesafe.py` - Payment blocking + Decimal precision
-4. `/app/backend/routes/transactions.py` - calculate_money() function
-5. `/app/backend/models/transaction.py` - seller_receives field
-6. `/app/frontend/src/pages/TransactionDetail.js` - Use backend values
+### P3 (Future)
+- [ ] Push notifications
+- [ ] Mobile app
 
-### Known Minor Issue
-- Some old transactions missing `created_at` field may cause 500 on `/api/transactions` list
-- Only affects old/corrupted data, not new transactions
-- **Priority**: LOW
+## Test Credentials
+- Test User: testuser@example.com / Test@123
+- Admin: marnichr@gmail.com / Admin@123
 
-## Key Technical Notes
-- **TradeSafe Agent**: 2% fee via AGENT profile
-- **Domain**: Use `www.trusttradesa.co.za` for all redirects
-- **Minimum Transaction**: R500
-- **Maximum Transaction**: R500,000
-
-## Upcoming Tasks (P1) - DO NOT TOUCH YET
-- Create new `main.py` entry point
-- Admin Manual Actions UI
-- AI Scam Detection Enhancement
+## Legacy Token Status (Requires Recovery)
+| Token ID | Balance | Banking | Valid |
+|----------|---------|---------|-------|
+| 32sAJcSESxnxp7uvmZrjk | R4.93 | None | false |
+| 32sccVmYVj2HJftMu3AQh | R4.90 | None | false |

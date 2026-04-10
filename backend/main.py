@@ -32,6 +32,7 @@ app = FastAPI(
 
 origins = [
     "https://trusttrade-frontend-v2-6odm5x7r0-marnichroets-9889s-projects.vercel.app",
+    "https://trusttrade-frontend-v2.vercel.app",
     "https://trusttradesa.co.za",
     "https://www.trusttradesa.co.za",
     "http://localhost:3000",

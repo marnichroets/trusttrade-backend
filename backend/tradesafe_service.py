@@ -1088,7 +1088,8 @@ async def update_token_banking_details(
 
 async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
     """
-    Get details of a TradeSafe token including balance and settings.
+    Get details of a TradeSafe token including balance, banking info, and settings.
+    Returns comprehensive token information for admin review.
     """
     logger.info(f"=== GET TOKEN DETAILS ===")
     logger.info(f"Token ID: {token_id}")
@@ -1099,11 +1100,19 @@ async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
             id
             name
             balance
+            valid
             user {
                 givenName
                 familyName
                 email
                 mobile
+                idNumber
+            }
+            bankAccount {
+                bank
+                accountNumber
+                branchCode
+                accountType
             }
             settings {
                 payout {
@@ -1117,9 +1126,25 @@ async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
     variables = {"id": token_id}
     result = await execute_graphql(query, variables)
     
+    if result and 'errors' in result:
+        logger.error(f"GraphQL errors: {result['errors']}")
+        return None
+    
     if result and 'token' in result:
-        logger.info(f"Token details: {result['token']}")
-        return result['token']
+        token = result['token']
+        logger.info(f"Token details: {token}")
+        
+        # Add derived fields for admin convenience
+        has_banking = bool(token.get('bankAccount') and token['bankAccount'].get('accountNumber'))
+        balance_rands = (token.get('balance') or 0) / 100  # Convert cents to rands
+        
+        return {
+            **token,
+            'has_banking_details': has_banking,
+            'balance_rands': balance_rands,
+            'is_active': token.get('valid', True),  # 'valid' indicates if token is usable
+            'is_reusable': True  # Tokens are designed to be reusable per user
+        }
     
     logger.error(f"Failed to get token details: {result}")
     return None

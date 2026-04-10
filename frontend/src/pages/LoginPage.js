@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
@@ -11,8 +11,8 @@ import api from '../utils/api';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { setUser } = useAuth();
-  const [isLogin, setIsLogin] = useState(true);
+  const { login, isAuthenticated } = useAuth();
+  const [isLoginMode, setIsLoginMode] = useState(true);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   
@@ -22,14 +22,22 @@ export default function LoginPage() {
     name: ''
   });
 
+  // If already authenticated, redirect to dashboard
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('[LOGIN_PAGE] Already authenticated, redirecting to /dashboard');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('[LOGIN] Submit started, isLogin:', isLogin);
+    console.log('[LOGIN] Submit started, isLoginMode:', isLoginMode);
     setLoading(true);
     
     try {
-      const endpoint = isLogin ? '/auth/login' : '/auth/register';
-      const payload = isLogin 
+      const endpoint = isLoginMode ? '/auth/login' : '/auth/register';
+      const payload = isLoginMode 
         ? { email: form.email, password: form.password }
         : { email: form.email, password: form.password, name: form.name };
       
@@ -46,16 +54,13 @@ export default function LoginPage() {
         is_admin: response.data.is_admin || false,
       };
       
-      localStorage.setItem('session_token', token);
-      localStorage.setItem('user_data', JSON.stringify(userData));
-      console.log('[LOGIN] Token and user_data saved to localStorage');
+      // Use the login function from AuthContext - this sets BOTH user AND isAuthenticated
+      console.log('[LOGIN] Calling AuthContext login()');
+      login(userData, token);
       
-      // Set user in context
-      setUser(userData);
-      
-      toast.success(isLogin ? 'Welcome back!' : 'Account created successfully!');
+      toast.success(isLoginMode ? 'Welcome back!' : 'Account created successfully!');
       console.log('[LOGIN] Redirecting to /dashboard');
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (error) {
       console.error('[LOGIN] Failed:', error.response?.status, error.response?.data);
       const message = error.response?.data?.detail || 'Authentication failed';
@@ -77,15 +82,15 @@ export default function LoginPage() {
         
         <Card className="shadow-xl border-slate-200">
           <CardHeader className="text-center pb-2">
-            <CardTitle className="text-2xl">{isLogin ? 'Welcome Back' : 'Create Account'}</CardTitle>
+            <CardTitle className="text-2xl">{isLoginMode ? 'Welcome Back' : 'Create Account'}</CardTitle>
             <CardDescription>
-              {isLogin ? 'Sign in to your account' : 'Get started with TrustTrade'}
+              {isLoginMode ? 'Sign in to your account' : 'Get started with TrustTrade'}
             </CardDescription>
           </CardHeader>
           
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="space-y-4">
-              {!isLogin && (
+              {!isLoginMode && (
                 <div className="space-y-2">
                   <Label htmlFor="name">Full Name</Label>
                   <Input
@@ -94,7 +99,7 @@ export default function LoginPage() {
                     placeholder="John Smith"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required={!isLogin}
+                    required={!isLoginMode}
                     data-testid="register-name"
                   />
                 </div>
@@ -145,10 +150,10 @@ export default function LoginPage() {
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    {isLogin ? 'Signing in...' : 'Creating account...'}
+                    {isLoginMode ? 'Signing in...' : 'Creating account...'}
                   </>
                 ) : (
-                  isLogin ? 'Sign In' : 'Create Account'
+                  isLoginMode ? 'Sign In' : 'Create Account'
                 )}
               </Button>
             </form>
@@ -156,10 +161,10 @@ export default function LoginPage() {
             <div className="mt-6 text-center">
               <button
                 type="button"
-                onClick={() => setIsLogin(!isLogin)}
+                onClick={() => setIsLoginMode(!isLoginMode)}
                 className="text-sm text-blue-600 hover:text-blue-700"
               >
-                {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+                {isLoginMode ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
               </button>
             </div>
             

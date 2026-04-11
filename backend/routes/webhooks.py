@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request
 
-from core.database import get_database
+from core.database import get_database, db
 from core.security import get_user_from_token
 
 logger = logging.getLogger(__name__)
@@ -15,46 +15,18 @@ router = APIRouter(prefix="/api", tags=["Webhooks"])
 
 
 @router.post("/tradesafe-webhook")
-async def handle_tradesafe_webhook(request: Request):
-    """
-    Production-ready webhook handler for TradeSafe transaction state changes.
-    Features:
-    - Strict idempotency (duplicate webhooks ignored)
-    - All events logged for debugging
-    - Email deduplication (no duplicate emails)
-    - State machine enforcement
-    - Comprehensive error handling
-    """
-    db = get_database()
-    
-    from webhook_handler import process_webhook, log_webhook_event, generate_event_id
-    import email_service
-    import sms_service
-    
-    try:
-        payload = await request.json()
-    except Exception as e:
-        logger.error(f"Invalid webhook payload: {e}")
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-    
-    logger.info("=== TradeSafe Webhook Received ===")
-    logger.info("Payload: %s", payload)
-    
-    try:
-        result = await process_webhook(db, payload, email_service, sms_service)
-        logger.info(f"Webhook processing result: {result}")
-        return result
-        
-    except Exception as e:
-        logger.error(f"Webhook processing error: {e}")
-        
-        try:
-            event_id = generate_event_id(payload)
-            await log_webhook_event(db, event_id, "", payload, "failed", str(e))
-        except Exception:
-            pass
-        
-        return {"status": "error_logged", "message": str(e)}
+async def tradesafe_webhook(request: Request):
+    payload = await request.json()
+    print("[WEBHOOK] RECEIVED:", payload)
+    tradesafe_id = payload.get("data", {}).get("id")
+    # find transaction
+    txn = db.transactions.find_one({"tradesafe_id": tradesafe_id})
+    if txn:
+        db.transactions.update_one(
+            {"_id": txn["_id"]},
+            {"$set": {"status": "FUNDS_RECEIVED"}}
+        )
+        print("[WEBHOOK] UPDATED TXN")
 
 
 @router.get("/oauth/callback")

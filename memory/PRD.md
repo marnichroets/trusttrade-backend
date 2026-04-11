@@ -21,7 +21,7 @@ Build a production-ready escrow payment platform for peer-to-peer transactions i
 └── frontend/          # React 18.2.0 + Tailwind
     └── src/
         ├── context/AuthContext.js  # JWT session management
-        ├── pages/                  # LoginPage, Dashboard, BankingSettings, etc.
+        ├── pages/                  # LoginPage, Dashboard, BankingSettings, TransactionDetail, etc.
         └── utils/api.js           # Axios with JWT interceptor
 ```
 
@@ -31,23 +31,43 @@ Build a production-ready escrow payment platform for peer-to-peer transactions i
 - Money stored as cents (integers) in backend, formatted to Rands in frontend
 - Background jobs disabled to prevent 502 startup errors
 
+## Transaction State Flow (Fixed April 11, 2026)
+```
+CREATED → Pending Confirmation
+    ↓
+[Creator auto-confirms their side]
+    ↓
+Pending [Other Party] Confirmation
+    ↓
+[Other party clicks "Confirm Transaction Details"]
+    ↓
+Both Confirmed → Ready for Payment
+    ↓
+[Seller creates escrow]
+    ↓
+[Buyer sees payment methods & pays]
+    ↓
+Funds Secured → Delivery in Progress → Released
+```
+
 ## What's Been Implemented (April 2026)
 
 ### Authentication
 - [x] Native JWT email/password auth (replaced Emergent Auth)
-- [x] Login → AuthContext.login() → /dashboard redirect (verified working)
-- [x] Session persistence on page refresh (verified working)
+- [x] Login → AuthContext.login() → /dashboard redirect
+- [x] Session persistence on page refresh
 
 ### TradeSafe Integration
 - [x] Persistent TradeSafe token per user
-- [x] Banking details submission endpoint (POST /api/users/banking-details)
-- [x] Admin token lookup (GET /api/admin/tradesafe/token/{id})
-- [x] Admin token withdrawal endpoint
+- [x] Banking details submission endpoint
+- [x] Admin token lookup and withdrawal endpoints
 
 ### Beta Launch Fixes (April 11, 2026)
-- [x] Transaction limits updated: R100 min, R10,000 max (beta)
-- [x] Image upload logging for debugging failures
+- [x] Transaction limits: R100 min, R10,000 max
+- [x] Image upload logging for debugging
 - [x] Banking details read-only display after save
+- [x] Transaction confirmation flow: buyer and seller confirm endpoints
+- [x] Confirmation status UI with visual indicators
 
 ## Known Limitations
 - Real TradeSafe refund NOT implemented (only local DB update)
@@ -70,6 +90,7 @@ Build a production-ready escrow payment platform for peer-to-peer transactions i
 - [x] Frontend auth redirect verification
 - [x] Token status report for legacy tokens
 - [x] Beta transaction limits
+- [x] Transaction confirmation flow fix
 
 ### P1 (High)
 - [ ] Implement real TradeSafe refund (allocationRefund mutation)
@@ -85,7 +106,15 @@ Build a production-ready escrow payment platform for peer-to-peer transactions i
 
 ## Test Credentials
 - Test User: testuser@example.com / Test@123
+- Seller: seller@example.com / Seller@123
 - Admin: marnichr@gmail.com / Admin@123
+
+## API Endpoints for Transaction Flow
+- `POST /api/transactions` - Create transaction
+- `POST /api/transactions/{id}/buyer-confirm` - Buyer confirms
+- `POST /api/transactions/{id}/seller-confirm` - Seller confirms
+- `POST /api/tradesafe/create-transaction` - Create TradeSafe escrow
+- `POST /api/tradesafe/payment-link/{id}` - Get payment link
 
 ## Legacy Token Status (Requires Recovery)
 | Token ID | Balance | Banking | Valid |

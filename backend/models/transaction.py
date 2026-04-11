@@ -36,6 +36,8 @@ class Transaction(BaseModel):
     delivery_method: str = "courier"  # "courier", "bank_deposit", "digital"
     auto_release_days: int = 3
     payment_status: str = "Pending Seller Confirmation"
+    buyer_confirmed: bool = False
+    buyer_confirmed_at: Optional[str] = None
     seller_confirmed: bool = False
     seller_confirmed_at: Optional[str] = None
     delivery_confirmed: bool = False
@@ -107,6 +109,11 @@ class TransactionPreview(BaseModel):
 
 class SellerConfirmation(BaseModel):
     """Seller confirmation request"""
+    confirmed: bool
+
+
+class BuyerConfirmation(BaseModel):
+    """Buyer confirmation request"""
     confirmed: bool
 
 

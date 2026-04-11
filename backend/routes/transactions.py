@@ -200,7 +200,11 @@ async def upload_photo(request: Request, file: UploadFile = File(...)):
     
     user = await get_user_from_token(request, db)
     if not user:
+        logger.warning("[UPLOAD] Unauthorized upload attempt")
         raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    logger.info(f"[UPLOAD] Photo upload started by {user.email}")
+    logger.info(f"[UPLOAD] Filename: {file.filename}, Content-Type: {file.content_type}")
     
     # Validate file type
     allowed_extensions = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
@@ -212,7 +216,10 @@ async def upload_photo(request: Request, file: UploadFile = File(...)):
     ext_valid = file_ext in allowed_extensions
     mime_valid = content_type in allowed_mime_types
     
+    logger.info(f"[UPLOAD] Extension: {file_ext} (valid: {ext_valid}), MIME: {content_type} (valid: {mime_valid})")
+    
     if not ext_valid and not mime_valid:
+        logger.warning(f"[UPLOAD] Rejected: invalid file type - ext={file_ext}, mime={content_type}")
         raise HTTPException(status_code=400, detail="Only image files allowed (jpg, jpeg, png, webp)")
     
     # Use extension from filename, or derive from MIME type
@@ -227,16 +234,28 @@ async def upload_photo(request: Request, file: UploadFile = File(...)):
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
+    
+    logger.info(f"[UPLOAD] File size: {file_size} bytes ({file_size / 1024 / 1024:.2f} MB)")
+    
     if file_size > 5 * 1024 * 1024:
+        logger.warning(f"[UPLOAD] Rejected: file too large ({file_size} bytes)")
         raise HTTPException(status_code=400, detail="File size must be less than 5MB")
     
     # Generate unique filename
     unique_filename = f"{uuid.uuid4().hex}{file_ext}"
     file_path = Path(settings.PHOTOS_PATH) / unique_filename
     
+    # Ensure directory exists
+    Path(settings.PHOTOS_PATH).mkdir(parents=True, exist_ok=True)
+    
     # Save file
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        logger.info(f"[UPLOAD] Success: {unique_filename} saved to {file_path}")
+    except Exception as e:
+        logger.error(f"[UPLOAD] Failed to save file: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save file")
     
     return {"filename": unique_filename, "path": str(file_path)}
 
@@ -306,7 +325,13 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     # Check if seller has banking details
     if transaction_data.creator_role == "seller":
         user_doc = await db.users.find_one({"user_id": user.user_id})
-        if not user_doc or not user_doc.get("banking_details_added"):
+        # Accept either banking_details_added or banking_details_completed
+        has_banking = (
+            user_doc.get("banking_details_added") or 
+            user_doc.get("banking_details_completed") or
+            user_doc.get("banking_details")
+        )
+        if not user_doc or not has_banking:
             raise HTTPException(
                 status_code=400,
                 detail="Please add your banking details before creating a transaction as a seller. Go to Settings > Banking Details."

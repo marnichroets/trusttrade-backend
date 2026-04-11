@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import api from '../utils/api';
 import { toast } from 'sonner';
-import { CreditCard, Building2, User, Hash, ShieldCheck, AlertCircle, ArrowLeft, CheckCircle, Lock } from 'lucide-react';
+import { CreditCard, Building2, User, Hash, ShieldCheck, AlertCircle, ArrowLeft, CheckCircle, Lock, Mail } from 'lucide-react';
 
 // South African banks
 const SA_BANKS = [
@@ -28,7 +28,8 @@ function BankingSettings() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [bankingDetailsAdded, setBankingDetailsAdded] = useState(false);
+  const [bankingStatus, setBankingStatus] = useState(null);
+  const [savedBankingDetails, setSavedBankingDetails] = useState(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [bankingDetails, setBankingDetails] = useState({
     bank_name: '',
@@ -48,7 +49,18 @@ function BankingSettings() {
     try {
       const userRes = await api.get('/auth/me');
       setUser(userRes.data);
-      setBankingDetailsAdded(userRes.data.banking_details_added || false);
+      
+      // Fetch banking status
+      const statusRes = await api.get('/users/banking-details/status');
+      setBankingStatus(statusRes.data);
+      
+      // If banking details exist, get the saved details
+      if (statusRes.data.banking_details_completed) {
+        // The user object should have banking_details from /auth/me
+        if (userRes.data.banking_details) {
+          setSavedBankingDetails(userRes.data.banking_details);
+        }
+      }
       
       // Pre-fill account holder with user name
       setBankingDetails(prev => ({
@@ -101,13 +113,18 @@ function BankingSettings() {
       console.log('[BANKING] Response:', response.data);
       
       toast.success('Banking details saved securely');
-      setBankingDetailsAdded(true);
-      setShowConfirmation(false);
       
-      // Redirect to dashboard after short delay
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 1500);
+      // Update local state with saved details
+      setSavedBankingDetails({
+        bank_name: bankingDetails.bank_name,
+        account_holder: bankingDetails.account_holder,
+        account_number: bankingDetails.account_number.slice(-4),
+        branch_code: bankingDetails.branch_code,
+        account_type: bankingDetails.account_type,
+        updated_at: new Date().toISOString()
+      });
+      setBankingStatus({ banking_details_completed: true });
+      setShowConfirmation(false);
     } catch (error) {
       console.error('[BANKING] Failed to save banking details:', error);
       toast.error(error.response?.data?.detail || 'Failed to save banking details');
@@ -124,8 +141,131 @@ function BankingSettings() {
     );
   }
 
-  // If already added banking details, show success state
-  if (bankingDetailsAdded) {
+  // If banking details are saved, show the read-only view with details
+  if (bankingStatus?.banking_details_completed && savedBankingDetails) {
+    return (
+      <DashboardLayout user={user}>
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Banking Details</h1>
+              <p className="text-slate-600 dark:text-slate-400">Your payout account</p>
+            </div>
+          </div>
+
+          {/* Success Status */}
+          <Card className="p-6 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center">
+                <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-green-800 dark:text-green-200">Banking Details Verified</h3>
+                <p className="text-sm text-green-600 dark:text-green-400">Your payout account is set up</p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Saved Banking Details - Read Only */}
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-primary" />
+              Saved Banking Details
+            </h3>
+            
+            <div className="space-y-4 bg-slate-50 dark:bg-slate-800 rounded-lg p-6">
+              <div className="flex justify-between items-center py-2 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  Bank Name
+                </span>
+                <span className="font-semibold text-slate-900 dark:text-white">{savedBankingDetails.bank_name}</span>
+              </div>
+              
+              <div className="flex justify-between items-center py-2 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                  <User className="w-4 h-4" />
+                  Account Holder
+                </span>
+                <span className="font-semibold text-slate-900 dark:text-white">{savedBankingDetails.account_holder}</span>
+              </div>
+              
+              <div className="flex justify-between items-center py-2 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4" />
+                  Account Number
+                </span>
+                <span className="font-semibold text-slate-900 dark:text-white font-mono">
+                  ••••••{savedBankingDetails.account_number}
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center py-2 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                  <Hash className="w-4 h-4" />
+                  Branch Code
+                </span>
+                <span className="font-semibold text-slate-900 dark:text-white">{savedBankingDetails.branch_code}</span>
+              </div>
+              
+              <div className="flex justify-between items-center py-2">
+                <span className="text-slate-600 dark:text-slate-400">Account Type</span>
+                <span className="font-semibold text-slate-900 dark:text-white capitalize">{savedBankingDetails.account_type}</span>
+              </div>
+            </div>
+
+            {/* Last Updated */}
+            {savedBankingDetails.updated_at && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-4">
+                Last updated: {new Date(savedBankingDetails.updated_at).toLocaleDateString('en-ZA', { 
+                  year: 'numeric', month: 'long', day: 'numeric' 
+                })}
+              </p>
+            )}
+          </Card>
+
+          {/* Change Details Notice */}
+          <Card className="p-4 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800">
+            <div className="flex gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">Need to change your banking details?</p>
+                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                  For security reasons, banking details cannot be changed directly. Please contact our support team.
+                </p>
+                <a 
+                  href="mailto:support@trusttradesa.co.za?subject=Banking%20Details%20Change%20Request" 
+                  className="inline-flex items-center gap-2 mt-3 text-sm font-medium text-amber-800 dark:text-amber-200 hover:underline"
+                >
+                  <Mail className="w-4 h-4" />
+                  Contact Support
+                </a>
+              </div>
+            </div>
+          </Card>
+
+          {/* Security Note */}
+          <div className="flex items-start gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-lg">
+            <Lock className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Your full banking details are encrypted and stored securely with our payment processor. Only the last 4 digits of your account number are displayed for your security.
+            </p>
+          </div>
+
+          <Button onClick={() => navigate('/dashboard')} className="w-full bg-[#1a2942] hover:bg-[#243751]">
+            Back to Dashboard
+          </Button>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // If already submitted but no details fetched, show simple success state
+  if (bankingStatus?.banking_details_completed) {
     return (
       <DashboardLayout user={user}>
         <div className="max-w-2xl mx-auto space-y-6">

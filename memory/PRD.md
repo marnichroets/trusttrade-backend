@@ -21,7 +21,7 @@ Build a production-ready escrow payment platform for peer-to-peer transactions i
 └── frontend/          # React 18.2.0 + Tailwind
     └── src/
         ├── context/AuthContext.js  # JWT session management
-        ├── pages/                  # LoginPage, Dashboard, etc.
+        ├── pages/                  # LoginPage, Dashboard, BankingSettings, etc.
         └── utils/api.js           # Axios with JWT interceptor
 ```
 
@@ -32,30 +32,44 @@ Build a production-ready escrow payment platform for peer-to-peer transactions i
 - Background jobs disabled to prevent 502 startup errors
 
 ## What's Been Implemented (April 2026)
+
+### Authentication
 - [x] Native JWT email/password auth (replaced Emergent Auth)
+- [x] Login → AuthContext.login() → /dashboard redirect (verified working)
+- [x] Session persistence on page refresh (verified working)
+
+### TradeSafe Integration
 - [x] Persistent TradeSafe token per user
-- [x] Banking details submission endpoint
-- [x] Admin token lookup endpoints (GET /api/admin/tradesafe/token/{id})
-- [x] Admin token withdrawal endpoint (POST /api/admin/tradesafe/token-withdraw)
-- [x] Local refund marking endpoint (mark-refunded-local)
-- [x] Fixed frontend auth redirect flow (LoginPage.js)
-- [x] Session persistence on page refresh
+- [x] Banking details submission endpoint (POST /api/users/banking-details)
+- [x] Admin token lookup (GET /api/admin/tradesafe/token/{id})
+- [x] Admin token withdrawal endpoint
+
+### Beta Launch Fixes (April 11, 2026)
+- [x] Transaction limits updated: R100 min, R10,000 max (beta)
+- [x] Image upload logging for debugging failures
+- [x] Banking details read-only display after save
 
 ## Known Limitations
 - Real TradeSafe refund NOT implemented (only local DB update)
 - Background jobs commented out in main.py
-- Legacy tokens may have `valid: false` status requiring TradeSafe support
+- Legacy tokens have `valid: false` - requires TradeSafe support
 
 ## 3rd Party Integrations
 - TradeSafe (Escrow Payments) - Production API
 - Postmark (Emails)
 - SMS Messenger/Zoom Connect (OTP)
 
+## Beta Launch Limits
+- Minimum Transaction: R100
+- Maximum Transaction: R10,000
+- Image Upload: 5MB max, jpg/jpeg/png/webp/heic/heif
+
 ## P0/P1/P2 Priorities
 
 ### P0 (Critical) - COMPLETED
 - [x] Frontend auth redirect verification
 - [x] Token status report for legacy tokens
+- [x] Beta transaction limits
 
 ### P1 (High)
 - [ ] Implement real TradeSafe refund (allocationRefund mutation)
@@ -76,5 +90,7 @@ Build a production-ready escrow payment platform for peer-to-peer transactions i
 ## Legacy Token Status (Requires Recovery)
 | Token ID | Balance | Banking | Valid |
 |----------|---------|---------|-------|
-| 32sAJcSESxnxp7uvmZrjk | R4.93 | None | false |
-| 32sccVmYVj2HJftMu3AQh | R4.90 | None | false |
+| 32sAJcSESxnxp7uvmZrjk | R492.81 | None | false |
+| 32sccVmYVj2HJftMu3AQh | R489.94 | None | false |
+
+**Note**: These tokens use fake mobile (+2700000000) and have no banking details - both required for withdrawal.

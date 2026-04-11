@@ -171,13 +171,13 @@ function NewTransaction() {
       return;
     }
 
-    if (itemPrice < 500) {
-      toast.error('Minimum transaction amount is R500');
+    if (itemPrice < 100) {
+      toast.error('Minimum transaction amount is R100');
       return;
     }
 
-    if (itemPrice > 500000) {
-      toast.error('Maximum transaction amount is R500,000. Contact support for larger transactions.');
+    if (itemPrice > 10000) {
+      toast.error('Maximum transaction amount is R10,000 during beta. Contact support for larger transactions.');
       return;
     }
 
@@ -410,8 +410,8 @@ function NewTransaction() {
 
               <div>
                 <Label htmlFor="item_price">Item Price (R) *</Label>
-                <Input id="item_price" name="item_price" type="number" step="0.01" min="500" value={formData.item_price} onChange={handleChange} placeholder="500.00" required data-testid="item-price-input" />
-                <p className="text-xs text-slate-500 mt-1">Minimum: R500 | Maximum: R500,000</p>
+                <Input id="item_price" name="item_price" type="number" step="0.01" min="100" value={formData.item_price} onChange={handleChange} placeholder="100.00" required data-testid="item-price-input" />
+                <p className="text-xs text-slate-500 mt-1">Minimum: R100 | Maximum: R10,000 (beta)</p>
               </div>
 
               {/* TrustTrade Fee Allocation */}

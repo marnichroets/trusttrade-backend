@@ -79,9 +79,9 @@ class Settings:
     ADMIN_ALERT_EMAIL: str = os.environ.get('ADMIN_ALERT_EMAIL', '')
     ADMIN_EMAIL: str = os.environ.get('ADMIN_EMAIL', '')  # Primary admin email
     
-    # Platform Constants
-    MINIMUM_TRANSACTION_AMOUNT: float = 100.0  # R100 minimum
-    MAXIMUM_TRANSACTION_AMOUNT: float = 500000.0  # R500,000 maximum
+    # Platform Constants - Beta Launch Limits
+    MINIMUM_TRANSACTION_AMOUNT: float = 100.0  # R100 minimum (beta)
+    MAXIMUM_TRANSACTION_AMOUNT: float = 10000.0  # R10,000 maximum (beta)
     PAYOUT_THRESHOLD: float = 100.0  # R100 payout threshold
     PLATFORM_FEE_PERCENT: float = 2.0  # 2% platform fee
     

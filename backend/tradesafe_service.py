@@ -26,8 +26,8 @@ TRADESAFE_API_URL = os.environ.get('TRADESAFE_API_URL', 'https://api.tradesafe.c
 TRADESAFE_PAYMENT_URL = os.environ.get('TRADESAFE_PAYMENT_URL', 'https://pay.tradesafe.co.za')
 TRADESAFE_ENV = os.environ.get('TRADESAFE_ENV', 'production')
 
-# TrustTrade Platform Settings
-MINIMUM_TRANSACTION_AMOUNT = 500.0  # R500 minimum per user requirement
+# TrustTrade Platform Settings - Beta Launch Limits
+MINIMUM_TRANSACTION_AMOUNT = 100.0  # R100 minimum (beta)
 PLATFORM_FEE_PERCENT = 2.0  # TrustTrade 2% agent fee
 
 # Redirect URLs after payment (from environment variables)

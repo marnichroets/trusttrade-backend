@@ -310,6 +310,8 @@ function TransactionDetail() {
     }
     
     console.log('Create Escrow button clicked');
+    console.log('[ESCROW] create start - transaction_id:', transactionId);
+    console.log('[ESCROW] fee_allocation from transaction:', transaction.fee_allocation);
     
     if (!window.confirm('This will create a secure TrustTrade escrow. The buyer will then need to make payment. Proceed?')) {
       return;
@@ -318,22 +320,27 @@ function TransactionDetail() {
     setCreatingEscrow(true);
     toast.info('Creating escrow...');
     
+    const payload = { 
+      transaction_id: transactionId,
+      fee_allocation: transaction.fee_allocation || 'SELLER_AGENT'
+    };
+    console.log('[ESCROW] payload:', payload);
+    
     try {
       const response = await api.post(
         `${API}/tradesafe/create-transaction`,
-        { 
-          transaction_id: transactionId,
-          fee_allocation: transaction.fee_paid_by || 'split'
-        },
+        payload,
         { withCredentials: true }
       );
 
-      console.log('Escrow created:', response.data);
+      console.log('[ESCROW] success - TradeSafe response:', response.data);
       toast.success('TrustTrade escrow created! Buyer can now make payment.');
       fetchData();
     } catch (error) {
-      console.error('Failed to create escrow:', error);
-      const errorMessage = parseErrorMessage(error) || 'Failed to create escrow. Please try again.';
+      console.error('[ESCROW] failure:', error);
+      const errorDetail = error.response?.data?.detail;
+      const errorMessage = errorDetail || parseErrorMessage(error) || 'Failed to create escrow. Please try again.';
+      console.log('[ESCROW] failure exact reason:', errorMessage);
       toast.error(errorMessage);
       alert('Error: ' + errorMessage); // Fallback alert for mobile
     } finally {
@@ -915,12 +922,22 @@ function TransactionDetail() {
   const canConfirmDelivery = !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
   
   // Helper to display who pays the fee
-  const getFeePayerLabel = (feePayer) => {
-    switch(feePayer) {
-      case 'buyer': return 'Buyer pays fee';
-      case 'seller': return 'Seller pays fee';
-      case 'split': return 'Fee split 50/50';
-      default: return 'Fee split 50/50';
+  const getFeePayerLabel = (feeAllocation) => {
+    if (!feeAllocation) return 'Seller pays fee';
+    const normalized = feeAllocation.toUpperCase();
+    switch(normalized) {
+      case 'BUYER_AGENT':
+      case 'BUYER':
+        return 'Buyer pays fee';
+      case 'SELLER_AGENT':
+      case 'SELLER':
+        return 'Seller pays fee';
+      case 'SPLIT_AGENT':
+      case 'BUYER_SELLER_AGENT':
+      case 'SPLIT':
+        return 'Fee split 50/50';
+      default:
+        return 'Seller pays fee';
     }
   };
 
@@ -1781,7 +1798,7 @@ function TransactionDetail() {
                 <div className="flex justify-between text-sm items-center">
                   <span className="text-slate-600">Fee Paid By:</span>
                   <Badge className="bg-blue-100 text-blue-800" data-testid="fee-payer-badge">
-                    {getFeePayerLabel(transaction.fee_paid_by)}
+                    {getFeePayerLabel(transaction.fee_allocation)}
                   </Badge>
                 </div>
                 <div className="border-t border-slate-200 pt-3 flex justify-between">

@@ -248,7 +248,7 @@ async def get_or_create_user_token(
     logger.info(f"Name: {name}, Email: {email}, Mobile: {mobile}, User ID: {user_id}")
     
     # If we have db and user_id, try to reuse existing token
-    if db and user_id:
+    if db is not None and user_id:
         user_doc = await db.users.find_one({"user_id": user_id})
         if user_doc and user_doc.get("tradesafe_token_id"):
             token_id = user_doc["tradesafe_token_id"]
@@ -256,7 +256,7 @@ async def get_or_create_user_token(
             return token_id
     
     # Also check by email if we have db access
-    if db:
+    if db is not None:
         user_by_email = await db.users.find_one({"email": email.lower()})
         if user_by_email and user_by_email.get("tradesafe_token_id"):
             token_id = user_by_email["tradesafe_token_id"]
@@ -290,7 +290,7 @@ async def get_or_create_user_token(
         token_id = token_data['id']
         
         # Save to user record if we have db access
-        if db:
+        if db is not None:
             await db.users.update_one(
                 {"email": email.lower()},
                 {"$set": {

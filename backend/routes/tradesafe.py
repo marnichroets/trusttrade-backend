@@ -44,8 +44,12 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     """Create TrustTrade escrow transaction after seller confirms fee agreement."""
     db = get_database()
     
+    logger.info(f"[ESCROW] create start - transaction_id: {data.transaction_id}")
+    logger.info(f"[ESCROW] payload - fee_allocation: {data.fee_allocation}")
+    
     user = await get_user_from_token(request, db)
     if not user:
+        logger.warning("[ESCROW] failure exact reason: Not authenticated")
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     # Get the TrustTrade transaction
@@ -55,26 +59,38 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     )
     
     if not transaction:
+        logger.warning(f"[ESCROW] failure exact reason: Transaction not found - {data.transaction_id}")
         raise HTTPException(status_code=404, detail="Transaction not found")
     
     # CRITICAL: Block payment if seller has not confirmed fee agreement
     if not transaction.get("seller_confirmed"):
-        logger.warning(f"PAYMENT_BLOCKED: seller_confirmed=False for {data.transaction_id}")
+        logger.warning(f"[ESCROW] failure exact reason: seller_confirmed=False for {data.transaction_id}")
         raise HTTPException(
             status_code=400, 
             detail="Payment blocked: Seller must confirm the fee agreement before escrow can be created."
         )
+    
+    # CRITICAL: Block payment if buyer has not confirmed
+    if not transaction.get("buyer_confirmed"):
+        logger.warning(f"[ESCROW] failure exact reason: buyer_confirmed=False for {data.transaction_id}")
+        raise HTTPException(
+            status_code=400, 
+            detail="Payment blocked: Buyer must confirm the transaction details before escrow can be created."
+        )
+    
+    logger.info("[ESCROW] buyer confirmed: True, seller confirmed: True")
     
     # Verify user is part of this transaction
     is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
     is_seller = transaction.get("seller_email") == user.email or transaction.get("seller_user_id") == user.user_id
     
     if not is_buyer and not is_seller and not user.is_admin:
+        logger.warning(f"[ESCROW] failure exact reason: Access denied for {user.email}")
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Check if already linked to escrow (prevent duplicate)
     if transaction.get("tradesafe_id"):
-        logger.info(f"Escrow already exists for {data.transaction_id}: {transaction['tradesafe_id']}")
+        logger.info(f"[ESCROW] already exists for {data.transaction_id}: {transaction['tradesafe_id']}")
         return {
             "tradesafe_id": transaction["tradesafe_id"],
             "status": "already_created",
@@ -83,6 +99,7 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     
     # Validate minimum amount
     if transaction["item_price"] < settings.MINIMUM_TRANSACTION_AMOUNT:
+        logger.warning(f"[ESCROW] failure exact reason: Amount below minimum - R{transaction['item_price']}")
         raise HTTPException(
             status_code=400,
             detail=f"Minimum transaction amount is R{settings.MINIMUM_TRANSACTION_AMOUNT:.0f}"
@@ -115,9 +132,12 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     
     # Use fee_allocation from request, or fall back to stored value, or default
     fee_allocation = data.fee_allocation or transaction.get("fee_allocation", "SELLER_AGENT")
-    logger.info(f"Fee Allocation: {fee_allocation}")
+    logger.info(f"[ESCROW] Fee Allocation from request: {data.fee_allocation}")
+    logger.info(f"[ESCROW] Fee Allocation from DB: {transaction.get('fee_allocation')}")
+    logger.info(f"[ESCROW] Fee Allocation final: {fee_allocation}")
     
     # Create escrow transaction
+    logger.info("[ESCROW] calling TradeSafe API...")
     result = await create_tradesafe_transaction(
         internal_reference=data.transaction_id,
         title=f"TrustTrade - {transaction['item_description'][:50]}",
@@ -134,8 +154,11 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     
     if not result or "error" in result:
         error_msg = result.get("error", "Failed to create escrow. Please try again.") if result else "Failed to create escrow. Please try again."
-        logger.error(f"=== ESCROW CREATION FAILED: {error_msg} ===")
+        logger.error(f"[ESCROW] failure exact reason: {error_msg}")
         raise HTTPException(status_code=500, detail=error_msg)
+    
+    logger.info(f"[ESCROW] TradeSafe response: {result}")
+    logger.info(f"[ESCROW] success - TradeSafe ID: {result.get('id')}")
     
     # Store escrow ID and allocation ID
     tradesafe_id = result.get("id")

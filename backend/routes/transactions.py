@@ -22,7 +22,7 @@ from core.security import get_user_from_token, normalize_email, emails_match
 from models.user import User
 from models.transaction import (
     Transaction, TransactionCreate, TransactionUpdate,
-    SellerConfirmation, RatingSubmit, PaymentConfirmation,
+    SellerConfirmation, BuyerConfirmation, RatingSubmit, PaymentConfirmation,
     TradeSafeTransactionCreate
 )
 from models.common import RiskAssessment
@@ -451,7 +451,10 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "delivery_method": delivery_method,
         "auto_release_days": auto_release_days,
         "payment_status": "Pending Seller Confirmation" if transaction_data.creator_role == "buyer" else "Pending Buyer Confirmation",
-        "seller_confirmed": False,
+        "buyer_confirmed": transaction_data.creator_role == "buyer",  # Creator auto-confirms their side
+        "buyer_confirmed_at": datetime.now(timezone.utc).isoformat() if transaction_data.creator_role == "buyer" else None,
+        "seller_confirmed": transaction_data.creator_role == "seller",  # Creator auto-confirms their side
+        "seller_confirmed_at": datetime.now(timezone.utc).isoformat() if transaction_data.creator_role == "seller" else None,
         "delivery_confirmed": False,
         "release_status": "Not Released",
         "buyer_details_confirmed": transaction_data.buyer_details_confirmed,
@@ -698,48 +701,154 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
         raise HTTPException(status_code=403, detail="Only seller can confirm transaction")
     
     if transaction.get("seller_confirmed"):
-        logger.info(f"Transaction {transaction_id} already confirmed by seller")
+        logger.info(f"[TXN] Transaction {transaction_id} already confirmed by seller")
         return {"message": "Transaction already confirmed", "already_confirmed": True}
     
     if confirmation.confirmed:
-        logger.info(f"Seller {user_email} confirming fee agreement for transaction {transaction_id}")
+        logger.info(f"[TXN] seller confirmed - {user_email} confirming for transaction {transaction_id}")
         
         # Update timeline
         timeline = transaction.get("timeline", [])
         timeline.append({
-            "status": "Seller Confirmed Fee Agreement",
+            "status": "Seller Confirmed",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "by": user.name,
             "details": f"Fee allocation: {transaction.get('fee_allocation', 'SELLER_AGENT')}"
         })
         
-        # Generate escrow agreement PDF
-        pdf_filename = f"agreement_{transaction_id}.pdf"
-        pdf_path = Path(settings.PDFS_PATH) / pdf_filename
+        update_fields = {
+            "seller_confirmed": True,
+            "seller_confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "timeline": timeline
+        }
         
-        try:
-            generate_escrow_agreement_pdf(transaction, str(pdf_path))
-            logger.info(f"Generated escrow agreement PDF: {pdf_filename}")
-        except Exception as e:
-            logger.error(f"PDF generation failed: {str(e)}")
+        # Check if buyer has also confirmed (both parties confirmed)
+        buyer_confirmed = transaction.get("buyer_confirmed", False)
+        
+        if buyer_confirmed:
+            logger.info(f"[TXN] both confirmed - transaction {transaction_id} moving to READY_FOR_PAYMENT")
+            update_fields["payment_status"] = "Ready for Payment"
+            
+            # Generate escrow agreement PDF
+            pdf_filename = f"agreement_{transaction_id}.pdf"
+            pdf_path = Path(settings.PDFS_PATH) / pdf_filename
+            
+            try:
+                generate_escrow_agreement_pdf(transaction, str(pdf_path))
+                logger.info(f"Generated escrow agreement PDF: {pdf_filename}")
+                update_fields["agreement_pdf_path"] = pdf_filename
+            except Exception as e:
+                logger.error(f"PDF generation failed: {str(e)}")
+            
+            timeline.append({
+                "status": "Both Parties Confirmed - Ready for Payment",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "details": "Transaction is now ready for buyer to make payment"
+            })
+            update_fields["timeline"] = timeline
+        else:
+            logger.info("[TXN] seller confirmed, waiting for buyer confirmation")
+            update_fields["payment_status"] = "Pending Buyer Confirmation"
         
         await db.transactions.update_one(
             {"transaction_id": transaction_id},
-            {"$set": {
-                "seller_confirmed": True,
-                "seller_confirmed_at": datetime.now(timezone.utc).isoformat(),
-                "payment_status": "Ready for Payment",
-                "agreement_pdf_path": pdf_filename if pdf_path.exists() else None,
-                "timeline": timeline
-            }}
+            {"$set": update_fields}
         )
-        
-        logger.info(f"Transaction {transaction_id} status changed: PENDING -> CONFIRMED (Ready for Payment)")
         
         return {
             "message": "Fee agreement confirmed", 
-            "agreement_pdf": pdf_filename if pdf_path.exists() else None,
-            "status": "Ready for Payment"
+            "agreement_pdf": update_fields.get("agreement_pdf_path"),
+            "status": update_fields.get("payment_status", "Pending Buyer Confirmation"),
+            "both_confirmed": buyer_confirmed
+        }
+    
+    return {"message": "Confirmation cancelled"}
+
+
+@router.post("/transactions/{transaction_id}/buyer-confirm")
+async def buyer_confirm_transaction(request: Request, transaction_id: str, confirmation: BuyerConfirmation):
+    """Buyer confirms transaction details"""
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Only buyer can confirm
+    buyer_email = transaction.get("buyer_email", "").lower()
+    user_email = user.email.lower() if user.email else ""
+    
+    if buyer_email != user_email:
+        logger.warning(f"Non-buyer tried to confirm: user={user_email}, buyer={buyer_email}")
+        raise HTTPException(status_code=403, detail="Only buyer can confirm transaction")
+    
+    if transaction.get("buyer_confirmed"):
+        logger.info(f"[TXN] Transaction {transaction_id} already confirmed by buyer")
+        return {"message": "Transaction already confirmed", "already_confirmed": True}
+    
+    if confirmation.confirmed:
+        logger.info(f"[TXN] buyer confirmed - {user_email} confirming for transaction {transaction_id}")
+        
+        # Update timeline
+        timeline = transaction.get("timeline", [])
+        timeline.append({
+            "status": "Buyer Confirmed",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "by": user.name,
+            "details": "Buyer confirmed transaction details"
+        })
+        
+        update_fields = {
+            "buyer_confirmed": True,
+            "buyer_confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "timeline": timeline
+        }
+        
+        # Check if seller has also confirmed (both parties confirmed)
+        seller_confirmed = transaction.get("seller_confirmed", False)
+        
+        if seller_confirmed:
+            logger.info(f"[TXN] both confirmed - transaction {transaction_id} moving to READY_FOR_PAYMENT")
+            update_fields["payment_status"] = "Ready for Payment"
+            
+            # Generate escrow agreement PDF
+            pdf_filename = f"agreement_{transaction_id}.pdf"
+            pdf_path = Path(settings.PDFS_PATH) / pdf_filename
+            
+            try:
+                # Need to refetch with updated seller_confirmed for PDF
+                updated_txn = {**transaction, "buyer_confirmed": True, "seller_confirmed": True}
+                generate_escrow_agreement_pdf(updated_txn, str(pdf_path))
+                logger.info(f"Generated escrow agreement PDF: {pdf_filename}")
+                update_fields["agreement_pdf_path"] = pdf_filename
+            except Exception as e:
+                logger.error(f"PDF generation failed: {str(e)}")
+            
+            timeline.append({
+                "status": "Both Parties Confirmed - Ready for Payment",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "details": "Transaction is now ready for buyer to make payment"
+            })
+            update_fields["timeline"] = timeline
+        else:
+            logger.info("[TXN] buyer confirmed, waiting for seller confirmation")
+            update_fields["payment_status"] = "Pending Seller Confirmation"
+        
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": update_fields}
+        )
+        
+        return {
+            "message": "Transaction confirmed by buyer", 
+            "agreement_pdf": update_fields.get("agreement_pdf_path"),
+            "status": update_fields.get("payment_status", "Pending Seller Confirmation"),
+            "both_confirmed": seller_confirmed
         }
     
     return {"message": "Confirmation cancelled"}

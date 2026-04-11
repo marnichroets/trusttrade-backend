@@ -212,7 +212,7 @@ function TransactionDetail() {
   };
 
   const handleSellerConfirm = async () => {
-    if (!window.confirm('Are you sure you want to confirm these transaction details? This will generate the escrow agreement.')) {
+    if (!window.confirm('Are you sure you want to confirm these transaction details? This will enable the next step in the escrow process.')) {
       return;
     }
 
@@ -224,13 +224,36 @@ function TransactionDetail() {
         { withCredentials: true }
       );
 
-      toast.success('Transaction confirmed! Escrow agreement generated.');
+      toast.success('Transaction confirmed! Waiting for buyer to confirm.');
       fetchData();
     } catch (error) {
       console.error('Failed to confirm:', error);
       toast.error(parseErrorMessage(error) || 'Failed to confirm transaction');
     } finally {
       setSellerConfirming(false);
+    }
+  };
+
+  const handleBuyerConfirm = async () => {
+    if (!window.confirm('Are you sure you want to confirm these transaction details? This will enable the payment step once the seller also confirms.')) {
+      return;
+    }
+
+    setConfirming(true);
+    try {
+      await api.post(
+        `${API}/transactions/${transactionId}/buyer-confirm`,
+        { confirmed: true },
+        { withCredentials: true }
+      );
+
+      toast.success('Transaction confirmed! Waiting for seller to confirm.');
+      fetchData();
+    } catch (error) {
+      console.error('Failed to confirm:', error);
+      toast.error(parseErrorMessage(error) || 'Failed to confirm transaction');
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -846,12 +869,21 @@ function TransactionDetail() {
   const hasEscrow = !!transaction.tradesafe_id;
   const escrowState = transaction.tradesafe_state;
   
-  // Can create escrow: seller confirmed, no existing escrow link
-  const canCreateEscrow = isSeller && transaction.seller_confirmed && !hasEscrow && transaction.item_price >= 500;
+  // Confirmation states
+  const buyerConfirmed = transaction.buyer_confirmed;
+  const sellerConfirmed = transaction.seller_confirmed;
+  const bothConfirmed = buyerConfirmed && sellerConfirmed;
   
-  // Can make payment: escrow created, buyer ONLY, awaiting payment
+  // Can confirm: respective party hasn't confirmed yet
+  const canBuyerConfirm = isBuyer && !buyerConfirmed;
+  const canSellerConfirm = isSeller && !sellerConfirmed;
+  
+  // Can create escrow: both confirmed, no existing escrow, seller only
+  const canCreateEscrow = isSeller && bothConfirmed && !hasEscrow && transaction.item_price >= 100;
+  
+  // Can make payment: escrow created, buyer ONLY, awaiting payment, BOTH confirmed
   // Check both escrowState (CREATED/PENDING) and payment_status (Awaiting Payment)
-  const canMakePayment = hasEscrow && isBuyer && !isSeller && 
+  const canMakePayment = hasEscrow && isBuyer && !isSeller && bothConfirmed &&
     (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
   
   console.log('Payment Button Debug:', { hasEscrow, isBuyer, isSeller, escrowState, paymentStatus: transaction.payment_status, canMakePayment });
@@ -881,7 +913,6 @@ function TransactionDetail() {
   
   // Legacy flow (without escrow)
   const canConfirmDelivery = !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
-  const canSellerConfirm = isSeller && !transaction.seller_confirmed;
   
   // Helper to display who pays the fee
   const getFeePayerLabel = (feePayer) => {
@@ -1031,6 +1062,116 @@ function TransactionDetail() {
           )}
         </Card>
 
+        {/* Confirmation Status Card - Shows who has confirmed */}
+        {(!bothConfirmed) && (
+          <Card className="p-6 bg-slate-50 border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-slate-600" />
+              Confirmation Status
+            </h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200">
+                <div className="flex items-center gap-3">
+                  <User className="w-5 h-5 text-slate-500" />
+                  <span className="font-medium text-slate-700">Buyer ({transaction.buyer_name})</span>
+                </div>
+                {buyerConfirmed ? (
+                  <Badge className="bg-green-100 text-green-700">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Confirmed
+                  </Badge>
+                ) : (
+                  <Badge className="bg-amber-100 text-amber-700">Pending</Badge>
+                )}
+              </div>
+              <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200">
+                <div className="flex items-center gap-3">
+                  <User className="w-5 h-5 text-slate-500" />
+                  <span className="font-medium text-slate-700">Seller ({transaction.seller_name})</span>
+                </div>
+                {sellerConfirmed ? (
+                  <Badge className="bg-green-100 text-green-700">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Confirmed
+                  </Badge>
+                ) : (
+                  <Badge className="bg-amber-100 text-amber-700">Pending</Badge>
+                )}
+              </div>
+            </div>
+            <p className="text-sm text-slate-500 mt-4">
+              Both parties must confirm before payment can proceed.
+            </p>
+          </Card>
+        )}
+
+        {/* Buyer Confirm Card */}
+        {canBuyerConfirm && (
+          <Card className="p-6 bg-blue-50 border-blue-200">
+            <div className="flex items-start gap-4">
+              <div className="p-3 bg-blue-100 rounded-full">
+                <CheckCircle2 className="w-6 h-6 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Confirm Transaction Details</h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  Please review the transaction details below. By confirming, you agree to proceed with this purchase through TrustTrade's secure escrow service.
+                </p>
+                
+                {/* Transaction Summary */}
+                <div className="bg-white rounded-lg p-4 mb-4 border border-blue-200">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Transaction Summary</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Item:</span>
+                      <span className="font-medium text-slate-800 truncate max-w-48">{transaction.item_description}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Item Price:</span>
+                      <span className="font-medium">R {transaction.item_price?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Seller:</span>
+                      <span className="font-medium">{transaction.seller_name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-600">Delivery Method:</span>
+                      <span className="font-medium capitalize">{transaction.delivery_method}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-2 mb-4 p-3 bg-blue-100 rounded-lg">
+                  <Shield className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-blue-800">
+                    <strong>Protected:</strong> Your payment will be held securely in escrow until you confirm receipt of the item.
+                  </p>
+                </div>
+                
+                <Button 
+                  onClick={handleBuyerConfirm} 
+                  disabled={confirming} 
+                  className="bg-blue-600 hover:bg-blue-700"
+                  data-testid="buyer-confirm-btn"
+                >
+                  {confirming ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Confirming...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Confirm Transaction Details
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Seller Confirm Card */}
         {canSellerConfirm && (
           <Card className="p-6 bg-orange-50 border-orange-200">
             <div className="flex items-start gap-4">

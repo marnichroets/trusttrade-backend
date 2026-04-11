@@ -230,12 +230,13 @@ async def process_webhook(
     # Generate unique event ID
     event_id = generate_event_id(payload)
     
-    logger.info(f"Processing webhook event: {event_id}")
-    logger.info(f"Webhook payload: {json.dumps(payload, default=str)}")
+    logger.info("[WEBHOOK] === PROCESSING START ===")
+    logger.info(f"[WEBHOOK] Event ID: {event_id}")
+    logger.info(f"[WEBHOOK] Payload: {json.dumps(payload, default=str)}")
     
     # STEP 1: Check idempotency
     if await is_event_already_processed(db, event_id):
-        logger.info(f"Duplicate webhook detected, ignoring: {event_id}")
+        logger.info(f"[WEBHOOK] DUPLICATE - already processed: {event_id}")
         await log_webhook_event(db, event_id, "", payload, "duplicate", 
                                processing_notes="Webhook already processed")
         return {"status": "duplicate", "message": "Event already processed", "event_id": event_id}
@@ -243,12 +244,16 @@ async def process_webhook(
     # STEP 2: Extract webhook data
     tradesafe_id, new_state, reference = extract_webhook_data(payload)
     
+    logger.info(f"[WEBHOOK] Extracted - TradeSafe ID: {tradesafe_id}, State: {new_state}, Reference: {reference}")
+    
     if not tradesafe_id and not reference:
+        logger.warning("[WEBHOOK] IGNORED - missing transaction identifier")
         await log_webhook_event(db, event_id, "", payload, "ignored",
                                error_message="Missing transaction identifier")
         return {"status": "ignored", "reason": "missing identifier"}
     
     if not new_state:
+        logger.warning("[WEBHOOK] IGNORED - missing state in webhook")
         await log_webhook_event(db, event_id, "", payload, "ignored",
                                error_message="Missing state in webhook")
         return {"status": "ignored", "reason": "missing state"}
@@ -263,9 +268,11 @@ async def process_webhook(
             {"share_code": reference}
         ]
     
+    logger.info(f"[WEBHOOK] Looking up transaction with query: {query}")
     transaction = await db.transactions.find_one(query, {"_id": 0})
     
     if not transaction:
+        logger.warning(f"[WEBHOOK] IGNORED - transaction not found for {tradesafe_id or reference}")
         await log_webhook_event(db, event_id, reference or tradesafe_id, payload, "ignored",
                                error_message="Transaction not found")
         return {"status": "ignored", "reason": "transaction not found"}
@@ -273,11 +280,13 @@ async def process_webhook(
     transaction_id = transaction["transaction_id"]
     share_code = transaction.get("share_code", transaction_id)
     
+    logger.info(f"[WEBHOOK] Found transaction: {transaction_id} (share_code: {share_code})")
+    
     # STEP 4: Map TradeSafe state to our state
     current_state = transaction.get("transaction_state", "CREATED")
     mapped_state = map_tradesafe_state(new_state)
     
-    logger.info(f"State transition: {current_state} -> {mapped_state} (TradeSafe: {new_state})")
+    logger.info(f"[WEBHOOK] State transition: {current_state} -> {mapped_state} (TradeSafe: {new_state})")
     
     # STEP 5: Validate state transition
     if not is_valid_transition(current_state, mapped_state):
@@ -456,6 +465,7 @@ async def process_webhook(
         update_data["release_status"] = "Refunded"
     
     # STEP 8: Update the transaction
+    logger.info(f"[WEBHOOK] Updating transaction {transaction_id} with: payment_status={update_data.get('payment_status')}, state={mapped_state}")
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
         {"$set": update_data}
@@ -467,7 +477,10 @@ async def process_webhook(
         processing_notes=f"State changed to {mapped_state}. Notifications: {notifications_sent}"
     )
     
-    logger.info(f"Webhook processed: {transaction_id} - {current_state} -> {mapped_state}")
+    logger.info("[WEBHOOK] === PROCESSING COMPLETE ===")
+    logger.info(f"[WEBHOOK] Transaction: {transaction_id}")
+    logger.info(f"[WEBHOOK] State: {current_state} -> {mapped_state}")
+    logger.info(f"[WEBHOOK] Notifications sent: {notifications_sent}")
     
     return {
         "status": "processed",

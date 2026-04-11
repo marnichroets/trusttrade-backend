@@ -1,93 +1,53 @@
-# TrustTrade - Production-Ready Escrow Platform for South Africa
+# TrustTrade - Beta Launch Status
 
-## Original Problem Statement
-Build a production-ready escrow payment platform for peer-to-peer transactions in South Africa using TradeSafe as the payment provider.
+## Beta Readiness: ✅ READY
 
-## Architecture
-```
-/app/
-├── backend/           # FastAPI + MongoDB
-│   ├── routes/        # auth.py, users.py, admin.py, transactions.py, tradesafe.py, webhooks.py
-│   ├── tradesafe_service.py  # TradeSafe GraphQL integration
-│   └── webhook_handler.py    # Webhook processing logic
-└── frontend/          # React 18.2.0 + Tailwind
-    └── src/pages/TransactionDetail.js
-```
+### Core Features Working
+1. **Authentication**: JWT email/password login
+2. **Transaction Creation**: With buyer/seller confirmation
+3. **Escrow Creation**: TradeSafe integration
+4. **Fee Allocation**: BUYER_AGENT, SELLER_AGENT, SPLIT_AGENT
+5. **Payment Processing**: Via TradeSafe payment link
+6. **Status Sync**: Webhook + manual refresh
+7. **Email Notifications**: Postmark integrated
 
-## Transaction State Flow
+### Transaction Flow
 ```
-CREATED → Both Confirm → Ready for Payment
-    ↓
-[Seller creates escrow]
-    ↓
-Awaiting Payment → [Buyer pays via TradeSafe]
-    ↓
-Funds Secured (FUNDS_RECEIVED) → [Seller ships]
-    ↓
-Delivery in Progress → [Buyer confirms]
-    ↓
-Released (FUNDS_RELEASED)
+Created → Both Confirm → Escrow Created → Awaiting Payment
+    → [Buyer pays] → Payment Secured → [Delivery] → Completed
 ```
 
-## TradeSafe Status Mapping
-| TradeSafe State | TrustTrade Status |
-|-----------------|-------------------|
-| CREATED/PENDING | Awaiting Payment |
-| FUNDS_RECEIVED | Funds Secured |
-| INITIATED/SENT | Delivery in Progress |
-| DELIVERED | Awaiting Buyer Confirmation |
-| FUNDS_RELEASED | Released |
-
-## What's Been Implemented (April 2026)
-
-### Core Features
-- [x] Native JWT email/password auth
-- [x] Transaction confirmation flow (buyer + seller)
-- [x] TradeSafe escrow creation
-- [x] Fee allocation (BUYER_AGENT, SELLER_AGENT, SPLIT_AGENT)
-- [x] Payment status sync via API
-
-### Bug Fixes (April 11, 2026)
-- [x] Transaction limits: R100 min, R10,000 max
-- [x] Escrow creation (wrong field name fix)
-- [x] Fee allocation display fix
-- [x] Payment status sync - manual Refresh Status button
-
-## API Endpoints
-- `POST /api/tradesafe/create-transaction` - Create escrow
-- `POST /api/tradesafe/sync/{id}` - Force sync with TradeSafe
-- `GET /api/tradesafe/status/{id}` - Get current status
-- `POST /api/tradesafe-webhook` - Webhook receiver
-
-## Webhook Configuration
-TradeSafe webhook URL should be configured to:
+### Webhook Configuration (REQUIRED)
+Set in TradeSafe dashboard:
 ```
-https://your-domain.com/api/tradesafe-webhook
+Webhook URL: https://trusttradesa.co.za/api/tradesafe-webhook
+Events: All transaction state changes
 ```
 
-## Logging Prefixes
-- `[WEBHOOK]` - Webhook events
-- `[SYNC]` - Status sync events
-- `[ESCROW]` - Escrow creation events
-- `[TXN]` - Transaction confirmation events
+### Email Events
+| Event | Recipients | Status |
+|-------|------------|--------|
+| Transaction Created | Buyer, Seller | ✅ |
+| Payment Received | Buyer, Seller | ✅ |
+| Funds Released | Seller | ✅ |
 
-## P0/P1/P2 Priorities
+### Logging Prefixes
+- `[WEBHOOK]` - TradeSafe webhook events
+- `[SYNC]` - Manual status sync
+- `[ESCROW]` - Escrow creation
+- `[TXN]` - Transaction confirmation
 
-### P0 (Critical) - COMPLETED
-- [x] Transaction confirmation flow
-- [x] Escrow creation
-- [x] Fee allocation
-- [x] Payment status sync
+### Beta Limits
+- Min: R100
+- Max: R10,000
 
-### P1 (High)
-- [ ] Configure TradeSafe webhook URL
-- [ ] Real TradeSafe refund
-
-### P2 (Medium)
-- [ ] Email/SMS notifications
-- [ ] Re-enable background jobs
-
-## Test Credentials
-- Test User: testuser@example.com / Test@123
+### Test Accounts
+- Buyer: testuser@example.com / Test@123
 - Seller: seller@example.com / Seller@123
 - Admin: marnichr@gmail.com / Admin@123
+
+## Not Implemented (Out of Beta Scope)
+- SMS notifications
+- Google login
+- Real TradeSafe refunds
+- Push notifications

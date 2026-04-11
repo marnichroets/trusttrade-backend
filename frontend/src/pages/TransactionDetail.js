@@ -58,6 +58,8 @@ function TransactionDetail() {
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [verificationError, setVerificationError] = useState(null);
+  // Sync status state
+  const [syncing, setSyncing] = useState(false);
   // Wrong account state
   const [wrongAccount, setWrongAccount] = useState(null);
   const navigate = useNavigate();
@@ -298,6 +300,44 @@ function TransactionDetail() {
     } catch (error) {
       console.error('Failed to download PDF:', error);
       toast.error('Agreement not available yet');
+    }
+  };
+
+  // Sync status with TradeSafe (manual refresh)
+  const handleSyncStatus = async () => {
+    if (!transaction.tradesafe_id) {
+      toast.info('No escrow linked to sync');
+      fetchData();
+      return;
+    }
+
+    setSyncing(true);
+    console.log('[SYNC] Starting TradeSafe sync for', transactionId);
+    
+    try {
+      const response = await api.post(
+        `${API}/tradesafe/sync/${transactionId}`,
+        {},
+        { withCredentials: true }
+      );
+
+      console.log('[SYNC] Response:', response.data);
+      
+      if (response.data.state_changed) {
+        toast.success(`Status updated: ${response.data.new_payment_status}`);
+      } else {
+        toast.info('Status is up to date');
+      }
+      
+      // Refresh local data
+      fetchData();
+    } catch (error) {
+      console.error('[SYNC] Failed:', error);
+      toast.error(parseErrorMessage(error) || 'Failed to sync status');
+      // Still refresh local data
+      fetchData();
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -1030,11 +1070,16 @@ function TransactionDetail() {
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={fetchData}
+            onClick={handleSyncStatus}
+            disabled={syncing}
             data-testid="refresh-transaction-btn"
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh Status
+            {syncing ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4 mr-2" />
+            )}
+            {syncing ? 'Syncing...' : 'Refresh Status'}
           </Button>
         </div>
 

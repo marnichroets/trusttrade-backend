@@ -1,118 +1,93 @@
 # TrustTrade - Production-Ready Escrow Platform for South Africa
 
 ## Original Problem Statement
-Build a production-ready escrow payment platform for peer-to-peer transactions in South Africa using TradeSafe as the payment provider. The platform needed native JWT email/password authentication (no Emergent Auth), persistent TradeSafe token reuse per user, secure money calculations, and admin tooling for fund recovery.
-
-## Core Requirements
-- Native Email/Password authentication using JWT
-- Persistent TradeSafe token reuse per user (one token per user, not per transaction)
-- Secure money calculations using Decimals/cents on backend
-- Explicit policy, FAQ, and banking detail submission pages
-- Admin endpoints for token management and fund recovery
+Build a production-ready escrow payment platform for peer-to-peer transactions in South Africa using TradeSafe as the payment provider.
 
 ## Architecture
 ```
 /app/
 ├── backend/           # FastAPI + MongoDB
-│   ├── routes/        # auth.py, users.py, admin.py, transactions.py, tradesafe.py
-│   ├── models/        # user.py, transaction.py, dispute.py
+│   ├── routes/        # auth.py, users.py, admin.py, transactions.py, tradesafe.py, webhooks.py
 │   ├── tradesafe_service.py  # TradeSafe GraphQL integration
-│   └── main.py        # Entry point (background jobs disabled)
+│   └── webhook_handler.py    # Webhook processing logic
 └── frontend/          # React 18.2.0 + Tailwind
-    └── src/
-        ├── context/AuthContext.js  # JWT session management
-        ├── pages/                  # LoginPage, Dashboard, TransactionDetail, etc.
-        └── utils/api.js           # Axios with JWT interceptor
+    └── src/pages/TransactionDetail.js
 ```
 
 ## Transaction State Flow
 ```
-CREATED → Pending Confirmation
+CREATED → Both Confirm → Ready for Payment
     ↓
-[Creator auto-confirms their side]
+[Seller creates escrow]
     ↓
-Pending [Other Party] Confirmation
+Awaiting Payment → [Buyer pays via TradeSafe]
     ↓
-[Other party confirms]
+Funds Secured (FUNDS_RECEIVED) → [Seller ships]
     ↓
-Both Confirmed → Ready for Payment
+Delivery in Progress → [Buyer confirms]
     ↓
-[Seller creates TradeSafe escrow]
-    ↓
-Awaiting Payment → [Buyer pays]
-    ↓
-Funds Secured → Delivery in Progress → Released
+Released (FUNDS_RELEASED)
 ```
+
+## TradeSafe Status Mapping
+| TradeSafe State | TrustTrade Status |
+|-----------------|-------------------|
+| CREATED/PENDING | Awaiting Payment |
+| FUNDS_RECEIVED | Funds Secured |
+| INITIATED/SENT | Delivery in Progress |
+| DELIVERED | Awaiting Buyer Confirmation |
+| FUNDS_RELEASED | Released |
 
 ## What's Been Implemented (April 2026)
 
-### Authentication
+### Core Features
 - [x] Native JWT email/password auth
-- [x] Login → AuthContext.login() → /dashboard redirect
-- [x] Session persistence on page refresh
-
-### Transaction Flow
-- [x] Buyer/Seller confirmation endpoints
-- [x] Both parties must confirm before escrow
-- [x] Fee allocation: BUYER_AGENT, SELLER_AGENT, SPLIT_AGENT
-- [x] Escrow creation with TradeSafe API
+- [x] Transaction confirmation flow (buyer + seller)
+- [x] TradeSafe escrow creation
+- [x] Fee allocation (BUYER_AGENT, SELLER_AGENT, SPLIT_AGENT)
+- [x] Payment status sync via API
 
 ### Bug Fixes (April 11, 2026)
-- [x] Transaction limits: R100 min, R10,000 max (beta)
-- [x] Transaction confirmation flow fix
-- [x] Escrow creation fix (wrong field name, db check syntax)
-- [x] Fee allocation display fix (uppercase handling)
+- [x] Transaction limits: R100 min, R10,000 max
+- [x] Escrow creation (wrong field name fix)
+- [x] Fee allocation display fix
+- [x] Payment status sync - manual Refresh Status button
 
-## Known Limitations
-- Real TradeSafe refund NOT implemented (only local DB update)
-- Background jobs commented out in main.py
-- Legacy tokens have `valid: false` - requires TradeSafe support
+## API Endpoints
+- `POST /api/tradesafe/create-transaction` - Create escrow
+- `POST /api/tradesafe/sync/{id}` - Force sync with TradeSafe
+- `GET /api/tradesafe/status/{id}` - Get current status
+- `POST /api/tradesafe-webhook` - Webhook receiver
 
-## 3rd Party Integrations
-- TradeSafe (Escrow Payments) - Production API
-- Postmark (Emails)
-- SMS Messenger/Zoom Connect (OTP)
+## Webhook Configuration
+TradeSafe webhook URL should be configured to:
+```
+https://your-domain.com/api/tradesafe-webhook
+```
 
-## Beta Launch Limits
-- Minimum Transaction: R100
-- Maximum Transaction: R10,000
-- Image Upload: 5MB max
+## Logging Prefixes
+- `[WEBHOOK]` - Webhook events
+- `[SYNC]` - Status sync events
+- `[ESCROW]` - Escrow creation events
+- `[TXN]` - Transaction confirmation events
 
 ## P0/P1/P2 Priorities
 
 ### P0 (Critical) - COMPLETED
-- [x] Frontend auth redirect
 - [x] Transaction confirmation flow
 - [x] Escrow creation
-- [x] Fee allocation saving/display
+- [x] Fee allocation
+- [x] Payment status sync
 
 ### P1 (High)
-- [ ] Real TradeSafe refund (allocationRefund mutation)
-- [ ] Legacy token fund recovery
+- [ ] Configure TradeSafe webhook URL
+- [ ] Real TradeSafe refund
 
 ### P2 (Medium)
+- [ ] Email/SMS notifications
 - [ ] Re-enable background jobs
-- [ ] Email notifications
-- [ ] SMS notifications
-- [ ] AI Scam Detection
-
-### P3 (Future)
-- [ ] Push notifications
-- [ ] Mobile app
 
 ## Test Credentials
 - Test User: testuser@example.com / Test@123
 - Seller: seller@example.com / Seller@123
 - Admin: marnichr@gmail.com / Admin@123
-
-## API Endpoints
-- `POST /api/transactions` - Create transaction
-- `POST /api/transactions/{id}/buyer-confirm` - Buyer confirms
-- `POST /api/transactions/{id}/seller-confirm` - Seller confirms
-- `POST /api/tradesafe/create-transaction` - Create TradeSafe escrow
-- `GET /api/tradesafe/payment-url/{id}` - Get payment link
-
-## Logging
-Transaction flow logs use prefixes:
-- `[TXN]` - Transaction confirmation events
-- `[ESCROW]` - Escrow creation events

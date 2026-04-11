@@ -34,19 +34,26 @@ async def handle_tradesafe_webhook(request: Request):
     try:
         payload = await request.json()
     except Exception as e:
-        logger.error(f"Invalid webhook payload: {e}")
+        logger.error(f"[WEBHOOK] Invalid JSON payload: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
     
-    logger.info("=== TradeSafe Webhook Received ===")
-    logger.info("Payload: %s", payload)
+    logger.info("[WEBHOOK] === TradeSafe Webhook Received ===")
+    logger.info(f"[WEBHOOK] Payload: {payload}")
+    
+    # Extract key info for logging
+    event_type = payload.get("event", payload.get("type", "unknown"))
+    transaction_id = payload.get("transaction", {}).get("id") or payload.get("transactionId")
+    state = payload.get("transaction", {}).get("state") or payload.get("state")
+    
+    logger.info(f"[WEBHOOK] Event: {event_type}, TradeSafe ID: {transaction_id}, State: {state}")
     
     try:
         result = await process_webhook(db, payload, email_service, sms_service)
-        logger.info(f"Webhook processing result: {result}")
+        logger.info(f"[WEBHOOK] Processing result: {result}")
         return result
         
     except Exception as e:
-        logger.error(f"Webhook processing error: {e}")
+        logger.error(f"[WEBHOOK] Processing error: {e}")
         
         try:
             event_id = generate_event_id(payload)

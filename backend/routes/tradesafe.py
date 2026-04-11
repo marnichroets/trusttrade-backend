@@ -669,8 +669,9 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
 
 
 @router.get("/transaction-status/{transaction_id}")
+@router.get("/status/{transaction_id}")
 async def get_tradesafe_status(request: Request, transaction_id: str):
-    """Get current TradeSafe status for a transaction."""
+    """Get current TradeSafe status for a transaction and sync if needed."""
     db = get_database()
     
     user = await get_user_from_token(request, db)
@@ -689,19 +690,41 @@ async def get_tradesafe_status(request: Request, transaction_id: str):
             "message": "Transaction not linked to TradeSafe"
         }
     
+    logger.info(f"[SYNC] Fetching TradeSafe status for {transaction_id} (TS: {tradesafe_id})")
+    
     # Get latest status from TradeSafe
     ts_transaction = await get_tradesafe_transaction(tradesafe_id)
     
     if ts_transaction:
         current_state = ts_transaction.get("state")
+        old_state = transaction.get("tradesafe_state")
+        old_payment_status = transaction.get("payment_status")
+        new_payment_status = map_tradesafe_state_to_status(current_state)
+        
+        logger.info(f"[SYNC] TradeSafe state: {current_state}")
+        logger.info(f"[SYNC] Old state: {old_state}, Old payment_status: {old_payment_status}")
+        logger.info(f"[SYNC] New payment_status: {new_payment_status}")
+        
+        state_changed = current_state != old_state
         
         # Update local state if changed
-        if current_state != transaction.get("tradesafe_state"):
+        if state_changed:
+            logger.info(f"[SYNC] State changed! Updating {transaction_id}: {old_state} -> {current_state}")
+            
+            timeline = transaction.get("timeline", [])
+            timeline.append({
+                "status": f"Status synced: {new_payment_status}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "details": f"TradeSafe state: {current_state} (manual sync)"
+            })
+            
             await db.transactions.update_one(
                 {"transaction_id": transaction_id},
                 {"$set": {
                     "tradesafe_state": current_state,
-                    "payment_status": map_tradesafe_state_to_status(current_state)
+                    "payment_status": new_payment_status,
+                    "timeline": timeline,
+                    "last_synced_at": datetime.now(timezone.utc).isoformat()
                 }}
             )
         
@@ -709,16 +732,104 @@ async def get_tradesafe_status(request: Request, transaction_id: str):
             "linked": True,
             "tradesafe_id": tradesafe_id,
             "state": current_state,
-            "status": map_tradesafe_state_to_status(current_state),
-            "allocations": ts_transaction.get("allocations", [])
+            "status": new_payment_status,
+            "allocations": ts_transaction.get("allocations", []),
+            "state_changed": state_changed,
+            "previous_state": old_state,
+            "synced": True
         }
     
+    logger.warning(f"[SYNC] Could not fetch TradeSafe transaction {tradesafe_id}")
     return {
         "linked": True,
         "tradesafe_id": tradesafe_id,
         "state": transaction.get("tradesafe_state"),
         "status": transaction.get("payment_status"),
-        "error": "Could not fetch latest status from TradeSafe"
+        "error": "Could not fetch latest status from TradeSafe",
+        "synced": False
+    }
+
+
+@router.post("/sync/{transaction_id}")
+async def sync_tradesafe_status(request: Request, transaction_id: str):
+    """
+    Force sync TradeSafe status to local database.
+    Use this when webhook was missed and payment status needs reconciliation.
+    """
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    tradesafe_id = transaction.get("tradesafe_id")
+    if not tradesafe_id:
+        raise HTTPException(status_code=400, detail="Transaction not linked to TradeSafe escrow")
+    
+    logger.info(f"[SYNC] Force sync requested for {transaction_id} (TS: {tradesafe_id})")
+    
+    # Get latest status from TradeSafe
+    ts_transaction = await get_tradesafe_transaction(tradesafe_id)
+    
+    if not ts_transaction:
+        logger.error(f"[SYNC] Failed to fetch TradeSafe transaction {tradesafe_id}")
+        raise HTTPException(status_code=500, detail="Could not fetch status from TradeSafe")
+    
+    current_state = ts_transaction.get("state")
+    old_state = transaction.get("tradesafe_state")
+    old_payment_status = transaction.get("payment_status")
+    new_payment_status = map_tradesafe_state_to_status(current_state)
+    
+    logger.info(f"[SYNC] TradeSafe response - State: {current_state}")
+    logger.info(f"[SYNC] Current DB - State: {old_state}, Payment Status: {old_payment_status}")
+    logger.info(f"[SYNC] Mapping - {current_state} -> {new_payment_status}")
+    
+    state_changed = current_state != old_state or new_payment_status != old_payment_status
+    
+    # Always update to ensure consistency
+    timeline = transaction.get("timeline", [])
+    if state_changed:
+        timeline.append({
+            "status": f"Payment status synced: {new_payment_status}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "details": f"TradeSafe state changed: {old_state or 'N/A'} -> {current_state} (manual sync)"
+        })
+    
+    update_fields = {
+        "tradesafe_state": current_state,
+        "payment_status": new_payment_status,
+        "timeline": timeline,
+        "last_synced_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # If funds received, also update release_status
+    if current_state in ["FUNDS_RECEIVED", "INITIATED", "SENT"]:
+        update_fields["release_status"] = "In Escrow"
+    elif current_state == "FUNDS_RELEASED":
+        update_fields["release_status"] = "Released"
+    
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": update_fields}
+    )
+    
+    logger.info(f"[SYNC] Updated {transaction_id}: payment_status={new_payment_status}, state={current_state}")
+    
+    return {
+        "success": True,
+        "transaction_id": transaction_id,
+        "tradesafe_id": tradesafe_id,
+        "previous_state": old_state,
+        "current_state": current_state,
+        "previous_payment_status": old_payment_status,
+        "new_payment_status": new_payment_status,
+        "state_changed": state_changed,
+        "message": f"Status synced: {new_payment_status}" if state_changed else "Status already up to date"
     }
 
 

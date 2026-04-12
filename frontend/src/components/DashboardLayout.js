@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { ShieldCheck, LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings, User, Activity } from 'lucide-react';
+import { LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings, User, Activity, Shield } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
@@ -34,28 +34,32 @@ function DashboardLayout({ children, user }) {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Top Navigation Bar */}
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+      {/* Top Navigation Bar - Compact */}
+      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-24 md:h-28">
-            <div className="flex items-center">
-              <img 
-                src="/trusttrade-logo.png" 
-                alt="TrustTrade" 
-                className="h-16 md:h-20 lg:h-24 object-contain"
-              />
-            </div>
-            <div className="flex items-center gap-4">
-              <NavLink to="/profile" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                {user?.picture && (
+          <div className="flex justify-between items-center h-14">
+            {/* Logo - Clean text-based */}
+            <NavLink to="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <Shield className="w-6 h-6 text-slate-900" />
+              <span className="text-lg font-bold text-slate-900">TrustTrade</span>
+            </NavLink>
+            
+            {/* User Info + Logout */}
+            <div className="flex items-center gap-3">
+              <NavLink to="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                {user?.picture ? (
                   <img
                     src={user.picture}
                     alt={user.name}
-                    className="w-8 h-8 rounded-full border-2 border-slate-200"
+                    className="w-8 h-8 rounded-full border border-slate-200"
                   />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center">
+                    <User className="w-4 h-4 text-slate-600" />
+                  </div>
                 )}
                 <div className="hidden sm:block text-right">
-                  <p className="text-sm font-medium text-slate-900" data-testid="user-name">{user?.name}</p>
+                  <p className="text-sm font-medium text-slate-900 leading-tight" data-testid="user-name">{user?.name}</p>
                   <p className="text-xs text-slate-500">{user?.email}</p>
                 </div>
               </NavLink>
@@ -64,7 +68,7 @@ function DashboardLayout({ children, user }) {
                 size="sm"
                 onClick={handleLogout}
                 data-testid="logout-btn"
-                className="text-slate-600 hover:text-slate-900"
+                className="text-slate-500 hover:text-slate-900 h-8 w-8 p-0"
               >
                 <LogOut className="w-4 h-4" />
               </Button>
@@ -73,28 +77,28 @@ function DashboardLayout({ children, user }) {
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex gap-8">
-          {/* Sidebar Navigation */}
-          <aside className="hidden lg:block w-64 flex-shrink-0">
-            <nav className="bg-white rounded-xl border border-slate-200 p-4 sticky top-24">
-              <ul className="space-y-2">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex gap-6">
+          {/* Sidebar Navigation - Compact */}
+          <aside className="hidden lg:block w-56 flex-shrink-0">
+            <nav className="bg-white rounded-lg border border-slate-200 p-3 sticky top-20">
+              <ul className="space-y-1">
                 {navItems.map((item) => (
                   <li key={item.path}>
                     <NavLink
                       to={item.path}
                       data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                       className={({ isActive }) =>
-                        `flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        `flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                           isActive
-                            ? 'bg-primary text-white'
+                            ? 'bg-slate-900 text-white'
                             : item.highlight
-                            ? 'bg-primary/5 text-primary hover:bg-primary/10'
+                            ? 'bg-blue-50 text-blue-700 hover:bg-blue-100'
                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`
                       }
                     >
-                      <item.icon className="w-5 h-5" />
+                      <item.icon className="w-4 h-4" />
                       {item.label}
                     </NavLink>
                   </li>
@@ -105,20 +109,20 @@ function DashboardLayout({ children, user }) {
 
           {/* Mobile Navigation - Bottom Bar */}
           <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50">
-            <div className="flex justify-around items-center h-16">
+            <div className="flex justify-around items-center h-14">
               {navItems.slice(0, 4).map((item) => (
                 <NavLink
                   key={item.path}
                   to={item.path}
                   data-testid={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                   className={({ isActive }) =>
-                    `flex flex-col items-center justify-center gap-1 px-3 py-2 ${
-                      isActive ? 'text-primary' : 'text-slate-400'
+                    `flex flex-col items-center justify-center gap-0.5 px-3 py-1.5 ${
+                      isActive ? 'text-blue-600' : 'text-slate-400'
                     }`
                   }
                 >
                   <item.icon className="w-5 h-5" />
-                  <span className="text-xs">{item.label.split(' ')[0]}</span>
+                  <span className="text-[10px] font-medium">{item.label.split(' ')[0]}</span>
                 </NavLink>
               ))}
             </div>

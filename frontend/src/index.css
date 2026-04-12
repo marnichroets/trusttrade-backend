@@ -1,58 +1,106 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* TrustTrade Color System */
+/* TrustTrade Premium Design System */
 :root {
-    --tt-primary: #1a2942;
-    --tt-green: #2ecc71;
+    /* Primary - Deep Navy (Trust + Authority) */
+    --tt-primary: #0f172a;
+    --tt-primary-light: #1e293b;
+    
+    /* Accent - Confident Blue */
+    --tt-blue: #2563eb;
+    --tt-blue-light: #3b82f6;
+    --tt-blue-dark: #1d4ed8;
+    
+    /* Success - Money Green */
+    --tt-green: #059669;
+    --tt-green-light: #10b981;
+    
+    /* Neutrals - Clean Gray Scale */
+    --tt-gray-50: #f8fafc;
+    --tt-gray-100: #f1f5f9;
+    --tt-gray-200: #e2e8f0;
+    --tt-gray-300: #cbd5e1;
+    --tt-gray-400: #94a3b8;
+    --tt-gray-500: #64748b;
+    --tt-gray-600: #475569;
+    --tt-gray-700: #334155;
+    --tt-gray-800: #1e293b;
+    --tt-gray-900: #0f172a;
+    
+    /* Status Colors */
+    --tt-error: #dc2626;
+    --tt-warning: #d97706;
+    --tt-info: #0284c7;
+    
+    /* Backgrounds */
     --tt-background: #ffffff;
-    --tt-section: #f8f9fa;
-    --tt-text: #212529;
-    --tt-subtext: #6c757d;
-    --tt-border: #dee2e6;
-    --tt-error: #e74c3c;
-    --tt-warning: #f39c12;
-    --tt-info: #3498db;
+    --tt-section: #f8fafc;
 }
 
 body {
     margin: 0;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-        sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background-color: var(--tt-background);
-    color: var(--tt-text);
+    color: var(--tt-gray-900);
+    line-height: 1.5;
 }
 
 code {
-    font-family: 'JetBrains Mono', source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+    font-family: 'JetBrains Mono', monospace;
 }
 
 h1, h2, h3, h4, h5, h6 {
-    font-family: 'Manrope', sans-serif;
-    color: var(--tt-text);
+    font-family: 'Inter', sans-serif;
+    font-weight: 700;
+    color: var(--tt-gray-900);
+    letter-spacing: -0.025em;
 }
 
-/* Utility classes for TrustTrade colors */
-.tt-bg-primary { background-color: var(--tt-primary); }
-.tt-bg-green { background-color: var(--tt-green); }
-.tt-bg-section { background-color: var(--tt-section); }
-.tt-bg-error { background-color: var(--tt-error); }
-.tt-bg-warning { background-color: var(--tt-warning); }
-.tt-bg-info { background-color: var(--tt-info); }
+/* Premium Card Shadows */
+.shadow-premium {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+}
+.shadow-premium-md {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+.shadow-premium-lg {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
 
-.tt-text-primary { color: var(--tt-primary); }
-.tt-text-green { color: var(--tt-green); }
-.tt-text-subtext { color: var(--tt-subtext); }
-.tt-text-error { color: var(--tt-error); }
-.tt-text-warning { color: var(--tt-warning); }
+/* Trust Badge Styles */
+.trust-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--tt-gray-50);
+    border: 1px solid var(--tt-gray-200);
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--tt-gray-700);
+}
 
-.tt-border { border-color: var(--tt-border); }
+/* Escrow Status Indicator */
+.escrow-secured {
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    color: white;
+}
+
+/* Premium Button Hover */
+.btn-premium {
+    transition: all 0.2s ease;
+}
+.btn-premium:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px -2px rgb(37 99 235 / 0.4);
+}
 
 @layer base {
     :root {
@@ -62,22 +110,22 @@ h1, h2, h3, h4, h5, h6 {
         --card-foreground: 222 47% 11%;
         --popover: 0 0% 100%;
         --popover-foreground: 222 47% 11%;
-        --primary: 215 50% 18%;
+        --primary: 222 47% 11%;
         --primary-foreground: 0 0% 100%;
         --secondary: 210 40% 96%;
         --secondary-foreground: 222 47% 11%;
         --muted: 210 40% 98%;
         --muted-foreground: 215 16% 47%;
-        --accent: 222 80% 96%;
-        --accent-foreground: 215 50% 18%;
-        --destructive: 4 74% 57%;
+        --accent: 217 91% 60%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 0 84% 60%;
         --destructive-foreground: 0 0% 98%;
         --border: 214 32% 91%;
         --input: 214 32% 91%;
-        --ring: 215 50% 18%;
-        --success: 145 63% 49%;
-        --warning: 36 100% 50%;
-        --radius: 0.75rem;
+        --ring: 217 91% 60%;
+        --success: 160 84% 39%;
+        --warning: 38 92% 50%;
+        --radius: 0.5rem;
     }
 }
 
@@ -90,34 +138,17 @@ h1, h2, h3, h4, h5, h6 {
     }
 }
 
-@layer base {
-    [data-debug-wrapper="true"] {
-        display: contents !important;
-    }
-
-    [data-debug-wrapper="true"] > * {
-        margin-left: inherit;
-        margin-right: inherit;
-        margin-top: inherit;
-        margin-bottom: inherit;
-        padding-left: inherit;
-        padding-right: inherit;
-        padding-top: inherit;
-        padding-bottom: inherit;
-        column-gap: inherit;
-        row-gap: inherit;
-        gap: inherit;
-        border-left-width: inherit;
-        border-right-width: inherit;
-        border-top-width: inherit;
-        border-bottom-width: inherit;
-        border-left-style: inherit;
-        border-right-style: inherit;
-        border-top-style: inherit;
-        border-bottom-style: inherit;
-        border-left-color: inherit;
-        border-right-color: inherit;
-        border-top-color: inherit;
-        border-bottom-color: inherit;
-    }
+/* Logo with transparent background support */
+.logo-clean {
+    mix-blend-mode: multiply;
 }
+
+/* Status badges with consistent styling */
+.status-secured { @apply bg-emerald-100 text-emerald-800 border border-emerald-200; }
+.status-pending { @apply bg-amber-100 text-amber-800 border border-amber-200; }
+.status-released { @apply bg-green-100 text-green-800 border border-green-200; }
+.status-warning { @apply bg-red-100 text-red-800 border border-red-200; }
+
+/* Tight spacing utilities */
+.space-tight > * + * { margin-top: 0.75rem; }
+.space-compact > * + * { margin-top: 0.5rem; }

@@ -12,7 +12,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group';
 import api from '../utils/api';
 import { toast } from 'sonner';
-import { ArrowLeft, Calculator, UserCircle, Camera, AlertCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, User, Camera, Shield, Lock, CheckCircle, Truck, Banknote, Zap, AlertTriangle } from 'lucide-react';
 
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;
@@ -27,13 +27,12 @@ function parseErrorMessage(error) {
   return 'An error occurred';
 }
 
-// Item categories for scam detection and reporting
 const ITEM_CATEGORIES = [
   { value: 'electronics', label: 'Electronics' },
   { value: 'vehicles', label: 'Vehicles' },
   { value: 'furniture', label: 'Furniture' },
-  { value: 'clothing', label: 'Clothing and Accessories' },
-  { value: 'sports', label: 'Sports and Outdoor' },
+  { value: 'clothing', label: 'Clothing & Accessories' },
+  { value: 'sports', label: 'Sports & Outdoor' },
   { value: 'services', label: 'Services' },
   { value: 'other', label: 'Other' }
 ];
@@ -41,7 +40,8 @@ const ITEM_CATEGORIES = [
 function NewTransaction() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [role, setRole] = useState('buyer');
+  const [step, setStep] = useState(1);
+  const [role, setRole] = useState('seller');
   const [photos, setPhotos] = useState([]);
   const [formData, setFormData] = useState({
     buyer_name: '',
@@ -53,7 +53,7 @@ function NewTransaction() {
     item_condition: '',
     known_issues: '',
     item_price: '',
-    fee_allocation: 'SELLER_AGENT',  // Who pays TrustTrade 2% fee
+    fee_allocation: 'SELLER_AGENT',
     delivery_method: 'courier'
   });
   const [confirmations, setConfirmations] = useState({
@@ -61,7 +61,6 @@ function NewTransaction() {
     seller_details: false,
     item_accuracy: false
   });
-  const [showConfirmationError, setShowConfirmationError] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -71,17 +70,9 @@ function NewTransaction() {
   useEffect(() => {
     if (user) {
       if (role === 'buyer') {
-        setFormData(prev => ({
-          ...prev,
-          buyer_name: user.name,
-          buyer_email: user.email
-        }));
+        setFormData(prev => ({ ...prev, buyer_name: user.name, buyer_email: user.email }));
       } else {
-        setFormData(prev => ({
-          ...prev,
-          seller_name: user.name,
-          seller_email: user.email
-        }));
+        setFormData(prev => ({ ...prev, seller_name: user.name, seller_email: user.email }));
       }
     }
   }, [role, user]);
@@ -101,131 +92,60 @@ function NewTransaction() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleConfirmationChange = (field, value) => {
-    setConfirmations(prev => ({ ...prev, [field]: value }));
-    if (value) {
-      setShowConfirmationError(false);
-    }
-  };
-
   const itemPrice = parseFloat(formData.item_price) || 0;
-  const trusttradeFee = itemPrice * 0.02;  // 2% TrustTrade fee
-  const processingFeeEstimate = itemPrice * 0.02;  // ~2% TradeSafe processing estimate
+  const trusttradeFee = Math.max(itemPrice * 0.015, 5); // 1.5% with R5 minimum
   
-  // Calculate totals based on fee allocation
-  let buyerTotal = itemPrice;
   let sellerPayout = itemPrice;
-  let buyerFeeContribution = 0;
-  let sellerFeeContribution = 0;
-  
-  if (formData.fee_allocation === 'BUYER_AGENT') {
-    // Buyer pays full TrustTrade fee
-    buyerFeeContribution = trusttradeFee;
-    buyerTotal = itemPrice + trusttradeFee + processingFeeEstimate;
-    sellerPayout = itemPrice;
-  } else if (formData.fee_allocation === 'SELLER_AGENT') {
-    // Seller pays full TrustTrade fee (deducted from payout)
-    sellerFeeContribution = trusttradeFee;
-    buyerTotal = itemPrice + processingFeeEstimate;
+  if (formData.fee_allocation === 'SELLER_AGENT') {
     sellerPayout = itemPrice - trusttradeFee;
   } else if (formData.fee_allocation === 'SPLIT_AGENT') {
-    // Split 50/50
-    buyerFeeContribution = trusttradeFee / 2;
-    sellerFeeContribution = trusttradeFee / 2;
-    buyerTotal = itemPrice + (trusttradeFee / 2) + processingFeeEstimate;
     sellerPayout = itemPrice - (trusttradeFee / 2);
   }
+
+  const canProceedStep1 = role && (
+    role === 'buyer' 
+      ? (formData.seller_name && formData.seller_email) 
+      : (formData.buyer_name && formData.buyer_email)
+  );
+
+  const canProceedStep2 = formData.item_description && formData.item_category && 
+                          formData.item_condition && itemPrice >= 100 && itemPrice <= 10000;
+
+  const canProceedStep3 = photos.length >= 1;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!role) {
-      toast.error('Please select your role');
-      return;
-    }
-
-    if (role === 'buyer') {
-      if (!formData.seller_name || !formData.seller_email) {
-        toast.error('Please fill in seller details');
-        return;
-      }
-    } else {
-      if (!formData.buyer_name || !formData.buyer_email) {
-        toast.error('Please fill in buyer details');
-        return;
-      }
-    }
-
-    if (!formData.item_description || !formData.item_condition || !formData.item_price) {
-      toast.error('Please fill in all item details');
-      return;
-    }
-
-    if (!formData.item_category) {
-      toast.error('Please select an item category');
-      return;
-    }
-
-    if (itemPrice <= 0) {
-      toast.error('Item price must be greater than 0');
-      return;
-    }
-
-    if (itemPrice < 100) {
-      toast.error('Minimum transaction amount is R100');
-      return;
-    }
-
-    if (itemPrice > 10000) {
-      toast.error('Maximum transaction amount is R10,000 during beta. Contact support for larger transactions.');
-      return;
-    }
-
-    if (photos.length < 1) {
-      toast.error('Please upload at least 1 photo');
-      return;
-    }
-
     if (!confirmations.buyer_details || !confirmations.seller_details || !confirmations.item_accuracy) {
-      setShowConfirmationError(true);
       toast.error('Please tick all confirmation checkboxes');
       return;
     }
 
     setLoading(true);
-
     try {
-      const transactionResponse = await api.post(
-        '/transactions',
-        {
-          creator_role: role,
-          buyer_name: role === 'buyer' ? user.name : formData.buyer_name,
-          buyer_email: role === 'buyer' ? user.email : formData.buyer_email,
-          seller_name: role === 'seller' ? user.name : formData.seller_name,
-          seller_email: role === 'seller' ? user.email : formData.seller_email,
-          item_description: formData.item_description,
-          item_category: formData.item_category,
-          item_condition: formData.item_condition,
-          known_issues: formData.known_issues || 'None',
-          item_price: itemPrice,
-          fee_allocation: formData.fee_allocation,  // TrustTrade fee allocation
-          delivery_method: formData.delivery_method,
-          buyer_details_confirmed: confirmations.buyer_details,
-          seller_details_confirmed: confirmations.seller_details,
-          item_accuracy_confirmed: confirmations.item_accuracy
-        }
-      );
+      const transactionResponse = await api.post('/transactions', {
+        creator_role: role,
+        buyer_name: role === 'buyer' ? user.name : formData.buyer_name,
+        buyer_email: role === 'buyer' ? user.email : formData.buyer_email,
+        seller_name: role === 'seller' ? user.name : formData.seller_name,
+        seller_email: role === 'seller' ? user.email : formData.seller_email,
+        item_description: formData.item_description,
+        item_category: formData.item_category,
+        item_condition: formData.item_condition,
+        known_issues: formData.known_issues || 'None',
+        item_price: itemPrice,
+        fee_allocation: formData.fee_allocation,
+        delivery_method: formData.delivery_method,
+        buyer_details_confirmed: confirmations.buyer_details,
+        seller_details_confirmed: confirmations.seller_details,
+        item_accuracy_confirmed: confirmations.item_accuracy
+      });
 
       const transactionId = transactionResponse.data.transaction_id;
-
       const photoFilenames = photos.map(p => p.filename);
-      await api.patch(
-        `/transactions/${transactionId}/photos`,
-        photoFilenames,
-        { headers: { 'Content-Type': 'application/json' } }
-      );
+      await api.patch(`/transactions/${transactionId}/photos`, photoFilenames, { headers: { 'Content-Type': 'application/json' } });
 
-      toast.success('Transaction created successfully!');
+      toast.success('Transaction created! Share the link with the other party.');
       navigate(`/transactions/${transactionId}`);
     } catch (error) {
       console.error('Failed to create transaction:', error);
@@ -238,354 +158,406 @@ function NewTransaction() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-3 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   return (
     <DashboardLayout user={user}>
-      <div className="max-w-4xl mx-auto">
-        <Button variant="ghost" onClick={() => navigate('/dashboard')} data-testid="back-to-dashboard-btn" className="mb-6">
-          <ArrowLeft className="w-4 h-4 mr-2" />Back to Dashboard
+      <div className="max-w-2xl mx-auto">
+        <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : navigate('/dashboard')} className="mb-4 text-sm h-8" data-testid="back-btn">
+          <ArrowLeft className="w-4 h-4 mr-1" />
+          {step > 1 ? 'Back' : 'Dashboard'}
         </Button>
 
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-900">New Transaction</h1>
-          <p className="text-slate-600 mt-2">Create a secure escrow transaction</p>
+        {/* Progress Steps */}
+        <div className="flex items-center justify-between mb-6">
+          {['Parties', 'Item Details', 'Photos', 'Confirm'].map((label, idx) => (
+            <div key={label} className="flex items-center">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                step > idx + 1 ? 'bg-emerald-600 text-white' :
+                step === idx + 1 ? 'bg-blue-600 text-white' : 
+                'bg-slate-100 text-slate-400'
+              }`}>
+                {step > idx + 1 ? <CheckCircle className="w-4 h-4" /> : idx + 1}
+              </div>
+              <span className={`hidden sm:block ml-2 text-sm ${step === idx + 1 ? 'font-medium text-slate-900' : 'text-slate-400'}`}>
+                {label}
+              </span>
+              {idx < 3 && <div className="w-8 sm:w-12 h-0.5 bg-slate-200 mx-2" />}
+            </div>
+          ))}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Your Role in This Transaction</h3>
-            <p className="text-sm text-slate-600 mb-4">Select your role. Your account details will automatically populate.</p>
-            <RadioGroup value={role} onValueChange={setRole}>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="buyer" id="buyer" data-testid="role-buyer" />
-                <Label htmlFor="buyer" className="cursor-pointer">I am the Buyer</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="seller" id="seller" data-testid="role-seller" />
-                <Label htmlFor="seller" className="cursor-pointer">I am the Seller</Label>
-              </div>
-            </RadioGroup>
-          </Card>
-
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <UserCircle className="w-5 h-5 text-primary" />Your Details
-            </h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <Label>Your Name</Label>
-                <Input value={user.name} disabled className="bg-slate-50" data-testid="your-name-input" />
-              </div>
-              <div>
-                <Label>Your Email</Label>
-                <Input value={user.email} disabled className="bg-slate-50" data-testid="your-email-input" />
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">Recipient Info</h3>
-            <p className="text-sm text-slate-500 mb-4">
-              Enter the recipient's email or phone number. They will receive a secure link to claim payment. No signup required for first-time users.
-            </p>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="other_name">{role === 'buyer' ? 'Seller' : 'Buyer'} Name *</Label>
-                <Input id="other_name" name={role === 'buyer' ? 'seller_name' : 'buyer_name'} value={role === 'buyer' ? formData.seller_name : formData.buyer_name} onChange={handleChange} placeholder="Enter name" required data-testid="other-name-input" />
-              </div>
-              <div>
-                <Label htmlFor="other_email">{role === 'buyer' ? 'Seller' : 'Buyer'} Email or Phone Number *</Label>
-                <Input id="other_email" name={role === 'buyer' ? 'seller_email' : 'buyer_email'} type="text" value={role === 'buyer' ? formData.seller_email : formData.buyer_email} onChange={handleChange} placeholder="email@example.com or +27..." required data-testid="other-email-input" />
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Payment / Delivery Method</h3>
-            <div className="space-y-3">
-              <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${formData.delivery_method === 'courier' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                <input
-                  type="radio"
-                  name="delivery_method"
-                  value="courier"
-                  checked={formData.delivery_method === 'courier'}
-                  onChange={(e) => setFormData(prev => ({ ...prev, delivery_method: e.target.value }))}
-                  className="mt-1"
-                />
-                <div>
-                  <p className="font-medium text-slate-900">Courier / Physical Delivery</p>
-                  <p className="text-sm text-slate-500">3-day auto-release after delivery confirmation</p>
-                </div>
-              </label>
-              
-              <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${formData.delivery_method === 'bank_deposit' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                <input
-                  type="radio"
-                  name="delivery_method"
-                  value="bank_deposit"
-                  checked={formData.delivery_method === 'bank_deposit'}
-                  onChange={(e) => setFormData(prev => ({ ...prev, delivery_method: e.target.value }))}
-                  className="mt-1"
-                />
-                <div>
-                  <p className="font-medium text-slate-900">Bank Deposit / Cash Collection</p>
-                  <p className="text-sm text-slate-500">2-day auto-release after payment confirmation</p>
-                </div>
-              </label>
-              
-              <label className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${formData.delivery_method === 'digital' ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                <input
-                  type="radio"
-                  name="delivery_method"
-                  value="digital"
-                  checked={formData.delivery_method === 'digital'}
-                  onChange={(e) => setFormData(prev => ({ ...prev, delivery_method: e.target.value }))}
-                  className="mt-1"
-                />
-                <div>
-                  <p className="font-medium text-slate-900">Digital Delivery / Link</p>
-                  <p className="text-sm text-slate-500">Immediate auto-release after confirmation</p>
-                </div>
-              </label>
-            </div>
-          </Card>
-
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Item Details</h3>
+        <form onSubmit={handleSubmit}>
+          {/* Step 1: Role & Other Party */}
+          {step === 1 && (
             <div className="space-y-4">
-              <div>
-                <Label htmlFor="item_description">Item Description *</Label>
-                <Textarea id="item_description" name="item_description" value={formData.item_description} onChange={handleChange} placeholder="Describe the item or service..." rows={4} required data-testid="item-description-input" />
-              </div>
-
-              {/* Item Category - NEW */}
-              <div>
-                <Label htmlFor="item_category">Item Category *</Label>
-                <Select value={formData.item_category} onValueChange={(value) => setFormData(prev => ({ ...prev, item_category: value }))}>
-                  <SelectTrigger id="item_category" data-testid="item-category-select">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ITEM_CATEGORIES.map(cat => (
-                      <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="item_condition">Item Condition *</Label>
-                <Select value={formData.item_condition} onValueChange={(value) => setFormData(prev => ({ ...prev, item_condition: value }))}>
-                  <SelectTrigger id="item_condition" data-testid="item-condition-select">
-                    <SelectValue placeholder="Select condition" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="New">New</SelectItem>
-                    <SelectItem value="Used">Used</SelectItem>
-                    <SelectItem value="Used - Minor Defects">Used - Minor Defects</SelectItem>
-                    <SelectItem value="Used - Major Defects">Used - Major Defects</SelectItem>
-                    <SelectItem value="Sold As-Is">Sold As-Is</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Known Issues - Now Optional */}
-              <div>
-                <Label htmlFor="known_issues">Known Issues / Defects (Optional)</Label>
-                <Textarea 
-                  id="known_issues" 
-                  name="known_issues" 
-                  value={formData.known_issues} 
-                  onChange={handleChange} 
-                  placeholder="None — leave blank if no known issues" 
-                  rows={2} 
-                  data-testid="known-issues-input" 
-                />
-                <p className="text-xs text-slate-500 mt-1">Leave blank if the item has no known issues or defects</p>
-              </div>
-
-              <div>
-                <Label htmlFor="item_price">Item Price (R) *</Label>
-                <Input id="item_price" name="item_price" type="number" step="0.01" min="100" value={formData.item_price} onChange={handleChange} placeholder="100.00" required data-testid="item-price-input" />
-                <p className="text-xs text-slate-500 mt-1">Minimum: R100 | Maximum: R10,000 (beta)</p>
-              </div>
-
-              {/* TrustTrade Fee Allocation */}
-              <div className="pt-4 border-t border-slate-200">
-                <Label className="text-base font-medium text-slate-900">Who should pay the TrustTrade fee?</Label>
-                <p className="text-sm text-slate-500 mb-3">This 2% fee covers secure escrow protection for your transaction.</p>
-                <RadioGroup 
-                  value={formData.fee_allocation} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, fee_allocation: value }))}
-                  className="space-y-2"
-                >
-                  <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${formData.fee_allocation === 'SELLER_AGENT' ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-slate-300'}`}>
-                    <RadioGroupItem value="SELLER_AGENT" id="fee-seller" data-testid="fee-seller-agent" />
-                    <div className="flex-1">
-                      <span className="font-medium text-slate-900">Seller pays</span>
-                      <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Recommended</span>
-                      <p className="text-xs text-slate-500 mt-0.5">Deducted from seller's payout</p>
-                    </div>
-                  </label>
-                  <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${formData.fee_allocation === 'BUYER_AGENT' ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-slate-300'}`}>
-                    <RadioGroupItem value="BUYER_AGENT" id="fee-buyer" data-testid="fee-buyer-agent" />
-                    <div className="flex-1">
-                      <span className="font-medium text-slate-900">Buyer pays</span>
-                      <p className="text-xs text-slate-500 mt-0.5">Added to buyer's total</p>
-                    </div>
-                  </label>
-                  <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${formData.fee_allocation === 'SPLIT_AGENT' ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-slate-300'}`}>
-                    <RadioGroupItem value="SPLIT_AGENT" id="fee-split" data-testid="fee-split-agent" />
-                    <div className="flex-1">
-                      <span className="font-medium text-slate-900">Split 50/50</span>
-                      <p className="text-xs text-slate-500 mt-0.5">Each party pays half</p>
-                    </div>
-                  </label>
-                </RadioGroup>
-                <p className="text-xs text-amber-600 mt-3 font-medium">
-                  ⚠️ Fee option must be agreed by both parties before payment.
-                </p>
-              </div>
-            </div>
-          </Card>
-
-          {/* Photo Upload - Improved */}
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-2 flex items-center gap-2">
-              <Camera className="w-5 h-5 text-primary" />
-              Upload Item Photos *
-            </h3>
-            <p className="text-sm text-slate-600 mb-4">Upload 1-5 clear photos of the item. Good photos build trust and prevent disputes.</p>
-            <PhotoUploader photos={photos} setPhotos={setPhotos} minPhotos={1} maxPhotos={5} required={true} />
-          </Card>
-
-          {itemPrice > 0 && (
-            <Card className="p-6 bg-slate-50 border-slate-200">
-              <div className="flex items-center gap-2 mb-4">
-                <Calculator className="w-5 h-5 text-primary" />
-                <h3 className="text-lg font-semibold text-slate-900">Payment Summary</h3>
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Item Price:</span>
-                  <span className="font-mono font-medium text-slate-900" data-testid="calc-item-price">R {itemPrice.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">TrustTrade Fee (2%):</span>
-                  <span className="font-mono font-medium text-slate-900" data-testid="calc-trusttrade-fee">R {trusttradeFee.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Processing Fee (est.):</span>
-                  <span className="font-mono font-medium text-slate-500" data-testid="calc-processing-fee">~R {processingFeeEstimate.toFixed(2)}</span>
-                </div>
+              <Card className="p-5">
+                <h2 className="text-lg font-semibold text-slate-900 mb-1">Who are you in this transaction?</h2>
+                <p className="text-sm text-slate-500 mb-4">Select your role. We'll auto-fill your details.</p>
                 
-                <div className="border-t border-slate-300 pt-3 space-y-3">
-                  {/* Buyer Total */}
-                  <div className="bg-white p-3 rounded-lg border border-slate-200">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium text-slate-700">Buyer Pays:</span>
-                      <span className="font-mono font-bold text-lg text-primary" data-testid="calc-buyer-total">R {buyerTotal.toFixed(2)}</span>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setRole('seller')}
+                    className={`p-4 rounded-lg border-2 text-left transition-all ${
+                      role === 'seller' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                    data-testid="role-seller"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Banknote className="w-4 h-4 text-emerald-600" />
+                      <span className="font-medium text-slate-900">I'm the Seller</span>
                     </div>
-                    {formData.fee_allocation === 'BUYER_AGENT' && (
-                      <p className="text-xs text-slate-500 mt-1">Includes R {trusttradeFee.toFixed(2)} TrustTrade fee</p>
-                    )}
-                    {formData.fee_allocation === 'SPLIT_AGENT' && (
-                      <p className="text-xs text-slate-500 mt-1">Includes R {(trusttradeFee / 2).toFixed(2)} TrustTrade fee (50%)</p>
-                    )}
-                  </div>
+                    <p className="text-xs text-slate-500">I'm selling an item and want to get paid securely</p>
+                  </button>
                   
-                  {/* Seller Payout */}
-                  <div className="bg-white p-3 rounded-lg border border-slate-200">
-                    <div className="flex justify-between items-center">
-                      <span className="font-medium text-slate-700">Seller Receives:</span>
-                      <span className="font-mono font-bold text-lg text-green-600" data-testid="calc-seller-payout">R {sellerPayout.toFixed(2)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setRole('buyer')}
+                    className={`p-4 rounded-lg border-2 text-left transition-all ${
+                      role === 'buyer' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                    data-testid="role-buyer"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Shield className="w-4 h-4 text-blue-600" />
+                      <span className="font-medium text-slate-900">I'm the Buyer</span>
                     </div>
-                    {formData.fee_allocation === 'SELLER_AGENT' && (
-                      <p className="text-xs text-slate-500 mt-1">After R {trusttradeFee.toFixed(2)} TrustTrade fee deduction</p>
-                    )}
-                    {formData.fee_allocation === 'SPLIT_AGENT' && (
-                      <p className="text-xs text-slate-500 mt-1">After R {(trusttradeFee / 2).toFixed(2)} TrustTrade fee (50%)</p>
-                    )}
+                    <p className="text-xs text-slate-500">I'm buying and want my payment protected</p>
+                  </button>
+                </div>
+
+                <div className="bg-slate-50 rounded-lg p-3 mb-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <User className="w-4 h-4 text-slate-600" />
+                    <span className="text-sm font-medium text-slate-700">Your Details</span>
                   </div>
-                  
-                  {/* TrustTrade receives */}
-                  <div className="text-xs text-slate-500 text-center pt-2">
-                    TrustTrade receives: R {trusttradeFee.toFixed(2)} platform fee
+                  <p className="text-sm text-slate-600">{user.name} • {user.email}</p>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-slate-900">{role === 'buyer' ? 'Seller' : 'Buyer'} Details</h3>
+                  <div>
+                    <Label className="text-xs text-slate-600">{role === 'buyer' ? 'Seller' : 'Buyer'} Name</Label>
+                    <Input
+                      name={role === 'buyer' ? 'seller_name' : 'buyer_name'}
+                      value={role === 'buyer' ? formData.seller_name : formData.buyer_name}
+                      onChange={handleChange}
+                      placeholder="Full name"
+                      className="h-10 mt-1"
+                      data-testid="other-name-input"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-slate-600">{role === 'buyer' ? 'Seller' : 'Buyer'} Email or Phone</Label>
+                    <Input
+                      name={role === 'buyer' ? 'seller_email' : 'buyer_email'}
+                      value={role === 'buyer' ? formData.seller_email : formData.buyer_email}
+                      onChange={handleChange}
+                      placeholder="email@example.com or +27..."
+                      className="h-10 mt-1"
+                      data-testid="other-email-input"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">They'll receive a secure link to join</p>
                   </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+
+              <Button
+                type="button"
+                onClick={() => setStep(2)}
+                disabled={!canProceedStep1}
+                className="w-full h-11 bg-blue-600 hover:bg-blue-700"
+              >
+                Continue <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
           )}
 
-          {/* Agreement Confirmation - Improved with error highlighting */}
-          <Card className={`p-6 border-2 transition-colors ${showConfirmationError && (!confirmations.buyer_details || !confirmations.seller_details || !confirmations.item_accuracy) ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-200'}`}>
-            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              {showConfirmationError && (!confirmations.buyer_details || !confirmations.seller_details || !confirmations.item_accuracy) && (
-                <AlertCircle className="w-5 h-5 text-red-500" />
-              )}
-              Agreement Confirmation *
-            </h3>
-            {showConfirmationError && (!confirmations.buyer_details || !confirmations.seller_details || !confirmations.item_accuracy) && (
-              <p className="text-sm text-red-600 mb-4 font-medium">Please tick all checkboxes to continue</p>
-            )}
+          {/* Step 2: Item Details */}
+          {step === 2 && (
             <div className="space-y-4">
-              <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${!confirmations.buyer_details && showConfirmationError ? 'bg-red-100' : 'hover:bg-blue-100'}`}>
-                <Checkbox 
-                  id="buyer-details" 
-                  checked={confirmations.buyer_details} 
-                  onCheckedChange={(checked) => handleConfirmationChange('buyer_details', checked)} 
-                  data-testid="confirm-buyer-details"
-                  className="mt-0.5"
-                />
-                <span className="text-sm text-slate-700">I confirm buyer details are accurate</span>
-              </label>
-              <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${!confirmations.seller_details && showConfirmationError ? 'bg-red-100' : 'hover:bg-blue-100'}`}>
-                <Checkbox 
-                  id="seller-details" 
-                  checked={confirmations.seller_details} 
-                  onCheckedChange={(checked) => handleConfirmationChange('seller_details', checked)} 
-                  data-testid="confirm-seller-details"
-                  className="mt-0.5"
-                />
-                <span className="text-sm text-slate-700">I confirm seller details are accurate</span>
-              </label>
-              <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${!confirmations.item_accuracy && showConfirmationError ? 'bg-red-100' : 'hover:bg-blue-100'}`}>
-                <Checkbox 
-                  id="item-accuracy" 
-                  checked={confirmations.item_accuracy} 
-                  onCheckedChange={(checked) => handleConfirmationChange('item_accuracy', checked)} 
-                  data-testid="confirm-item-accuracy"
-                  className="mt-0.5"
-                />
-                <span className="text-sm text-slate-700">I confirm all item details are accurate and understand false claims may result in account suspension</span>
-              </label>
-            </div>
-          </Card>
+              <Card className="p-5">
+                <h2 className="text-lg font-semibold text-slate-900 mb-4">What's being sold?</h2>
+                
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-xs text-slate-600">Item Description</Label>
+                    <Textarea
+                      name="item_description"
+                      value={formData.item_description}
+                      onChange={handleChange}
+                      placeholder="Describe the item in detail..."
+                      className="mt-1"
+                      rows={3}
+                      data-testid="item-description-input"
+                    />
+                  </div>
 
-          {/* Buttons - Improved styling */}
-          <div className="flex gap-3 pt-4">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => navigate('/dashboard')} 
-              data-testid="cancel-btn" 
-              className="flex-1 border-slate-300 text-slate-600 hover:bg-slate-100"
-            >
-              Cancel
-            </Button>
-            <Button 
-              type="submit" 
-              disabled={loading || itemPrice <= 0 || photos.length < 1} 
-              data-testid="create-transaction-btn" 
-              className="flex-1 bg-[#1a2942] hover:bg-[#243751] text-white font-semibold py-6"
-            >
-              {loading ? 'Creating...' : 'Create Transaction'}
-            </Button>
-          </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-slate-600">Category</Label>
+                      <Select value={formData.item_category} onValueChange={(v) => setFormData(p => ({ ...p, item_category: v }))}>
+                        <SelectTrigger className="mt-1 h-10" data-testid="item-category-select">
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ITEM_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-slate-600">Condition</Label>
+                      <Select value={formData.item_condition} onValueChange={(v) => setFormData(p => ({ ...p, item_condition: v }))}>
+                        <SelectTrigger className="mt-1 h-10" data-testid="item-condition-select">
+                          <SelectValue placeholder="Select..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="New">New</SelectItem>
+                          <SelectItem value="Used">Used</SelectItem>
+                          <SelectItem value="Used - Minor Defects">Used - Minor Defects</SelectItem>
+                          <SelectItem value="Used - Major Defects">Used - Major Defects</SelectItem>
+                          <SelectItem value="Sold As-Is">Sold As-Is</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-slate-600">Known Issues (optional)</Label>
+                    <Input
+                      name="known_issues"
+                      value={formData.known_issues}
+                      onChange={handleChange}
+                      placeholder="None — leave blank if no issues"
+                      className="h-10 mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <Label className="text-xs text-slate-600">Price (R)</Label>
+                    <Input
+                      name="item_price"
+                      type="number"
+                      min="100"
+                      max="10000"
+                      step="0.01"
+                      value={formData.item_price}
+                      onChange={handleChange}
+                      placeholder="0.00"
+                      className="h-10 mt-1 font-mono"
+                      data-testid="item-price-input"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">Min R100 • Max R10,000 (beta)</p>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Delivery Method */}
+              <Card className="p-5">
+                <h3 className="text-sm font-semibold text-slate-900 mb-3">Delivery Method</h3>
+                <div className="space-y-2">
+                  {[
+                    { value: 'courier', icon: Truck, label: 'Courier / Physical Delivery', desc: '3-day auto-release' },
+                    { value: 'bank_deposit', icon: Banknote, label: 'Bank Deposit / Cash', desc: '2-day auto-release' },
+                    { value: 'digital', icon: Zap, label: 'Digital / Instant', desc: 'Immediate release' },
+                  ].map(opt => (
+                    <label
+                      key={opt.value}
+                      className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        formData.delivery_method === opt.value ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="delivery_method"
+                        value={opt.value}
+                        checked={formData.delivery_method === opt.value}
+                        onChange={handleChange}
+                        className="sr-only"
+                      />
+                      <opt.icon className={`w-4 h-4 ${formData.delivery_method === opt.value ? 'text-blue-600' : 'text-slate-400'}`} />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-slate-900">{opt.label}</span>
+                        <span className="text-xs text-slate-500 ml-2">{opt.desc}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </Card>
+
+              {/* Fee Allocation */}
+              <Card className="p-5">
+                <h3 className="text-sm font-semibold text-slate-900 mb-1">Who pays the TrustTrade fee?</h3>
+                <p className="text-xs text-slate-500 mb-3">1.5% fee (min R5) covers escrow protection</p>
+                
+                <RadioGroup value={formData.fee_allocation} onValueChange={(v) => setFormData(p => ({ ...p, fee_allocation: v }))}>
+                  <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${formData.fee_allocation === 'SELLER_AGENT' ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
+                    <RadioGroupItem value="SELLER_AGENT" data-testid="fee-seller-agent" />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-slate-900">Seller pays</span>
+                      <span className="ml-2 text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">Recommended</span>
+                    </div>
+                  </label>
+                  <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${formData.fee_allocation === 'BUYER_AGENT' ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
+                    <RadioGroupItem value="BUYER_AGENT" data-testid="fee-buyer-agent" />
+                    <span className="text-sm font-medium text-slate-900">Buyer pays</span>
+                  </label>
+                  <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${formData.fee_allocation === 'SPLIT_AGENT' ? 'border-blue-600 bg-blue-50' : 'border-slate-200'}`}>
+                    <RadioGroupItem value="SPLIT_AGENT" data-testid="fee-split-agent" />
+                    <span className="text-sm font-medium text-slate-900">Split 50/50</span>
+                  </label>
+                </RadioGroup>
+              </Card>
+
+              {/* Price Summary - Sticky */}
+              {itemPrice >= 100 && (
+                <div className="bg-slate-900 text-white rounded-lg p-4">
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-slate-400">Item Price</span>
+                    <span className="font-mono">R {itemPrice.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-slate-400">TrustTrade Fee (1.5%, min R5)</span>
+                    <span className="font-mono">R {trusttradeFee.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between pt-2 border-t border-slate-700">
+                    <span className="font-medium">Seller Receives</span>
+                    <span className="font-mono font-bold text-emerald-400">R {sellerPayout.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+
+              <Button
+                type="button"
+                onClick={() => setStep(3)}
+                disabled={!canProceedStep2}
+                className="w-full h-11 bg-blue-600 hover:bg-blue-700"
+              >
+                Continue <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          )}
+
+          {/* Step 3: Photos */}
+          {step === 3 && (
+            <div className="space-y-4">
+              <Card className="p-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <Camera className="w-5 h-5 text-blue-600" />
+                  <h2 className="text-lg font-semibold text-slate-900">Add Photos</h2>
+                </div>
+                <p className="text-sm text-slate-500 mb-4">Upload 1-5 clear photos. Good photos build trust and prevent disputes.</p>
+                
+                <PhotoUploader photos={photos} setPhotos={setPhotos} minPhotos={1} maxPhotos={5} required={true} />
+              </Card>
+
+              <Button
+                type="button"
+                onClick={() => setStep(4)}
+                disabled={!canProceedStep3}
+                className="w-full h-11 bg-blue-600 hover:bg-blue-700"
+              >
+                Continue <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          )}
+
+          {/* Step 4: Confirm */}
+          {step === 4 && (
+            <div className="space-y-4">
+              {/* Summary Card */}
+              <Card className="p-5">
+                <h2 className="text-lg font-semibold text-slate-900 mb-4">Review & Confirm</h2>
+                
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <span className="text-slate-500">You are</span>
+                    <span className="font-medium text-slate-900 capitalize">{role}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <span className="text-slate-500">{role === 'buyer' ? 'Seller' : 'Buyer'}</span>
+                    <span className="font-medium text-slate-900">
+                      {role === 'buyer' ? formData.seller_name : formData.buyer_name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <span className="text-slate-500">Item</span>
+                    <span className="font-medium text-slate-900 truncate max-w-[200px]">{formData.item_description}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <span className="text-slate-500">Price</span>
+                    <span className="font-mono font-medium text-slate-900">R {itemPrice.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-slate-100">
+                    <span className="text-slate-500">Seller Receives</span>
+                    <span className="font-mono font-bold text-emerald-600">R {sellerPayout.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between py-2">
+                    <span className="text-slate-500">Photos</span>
+                    <span className="font-medium text-slate-900">{photos.length} uploaded</span>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Escrow Protection Notice */}
+              <div className="bg-blue-50 rounded-lg p-4 flex items-start gap-3">
+                <Shield className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-blue-900">Protected by TrustTrade Escrow</p>
+                  <p className="text-xs text-blue-700 mt-0.5">
+                    Funds held securely until buyer confirms receipt. Bank payout within 1-2 business days.
+                  </p>
+                </div>
+              </div>
+
+              {/* Confirmations */}
+              <Card className="p-5">
+                <h3 className="text-sm font-semibold text-slate-900 mb-3">Please confirm:</h3>
+                <div className="space-y-3">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <Checkbox 
+                      checked={confirmations.buyer_details}
+                      onCheckedChange={(c) => setConfirmations(p => ({ ...p, buyer_details: c }))}
+                      className="mt-0.5"
+                      data-testid="confirm-buyer-details"
+                    />
+                    <span className="text-sm text-slate-700">Buyer details are accurate</span>
+                  </label>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <Checkbox 
+                      checked={confirmations.seller_details}
+                      onCheckedChange={(c) => setConfirmations(p => ({ ...p, seller_details: c }))}
+                      className="mt-0.5"
+                      data-testid="confirm-seller-details"
+                    />
+                    <span className="text-sm text-slate-700">Seller details are accurate</span>
+                  </label>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <Checkbox 
+                      checked={confirmations.item_accuracy}
+                      onCheckedChange={(c) => setConfirmations(p => ({ ...p, item_accuracy: c }))}
+                      className="mt-0.5"
+                      data-testid="confirm-item-accuracy"
+                    />
+                    <span className="text-sm text-slate-700">Item details are accurate and complete</span>
+                  </label>
+                </div>
+              </Card>
+
+              <Button
+                type="submit"
+                disabled={loading || !confirmations.buyer_details || !confirmations.seller_details || !confirmations.item_accuracy}
+                className="w-full h-11 bg-emerald-600 hover:bg-emerald-700"
+                data-testid="create-transaction-btn"
+              >
+                {loading ? 'Creating...' : 'Create Secure Transaction'}
+              </Button>
+            </div>
+          )}
         </form>
       </div>
     </DashboardLayout>

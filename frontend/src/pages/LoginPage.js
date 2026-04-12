@@ -5,11 +5,10 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { Eye, EyeOff, Loader2, Shield, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Shield, AlertCircle, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../utils/api';
 
-// Google OAuth URL - REMINDER: DO NOT HARDCODE REDIRECT URLS
 const GOOGLE_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/google";
 
 export default function LoginPage() {
@@ -28,45 +27,31 @@ export default function LoginPage() {
     name: ''
   });
 
-  // Check for error from callback
   useEffect(() => {
     if (location.state?.error) {
       setAuthError(location.state.error);
       toast.error(location.state.error);
-      // Clear the state
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 
-  // If already authenticated, redirect to dashboard
   useEffect(() => {
     if (isAuthenticated) {
-      console.log('[LOGIN_PAGE] Already authenticated, redirecting to /dashboard');
       navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
   const handleGoogleLogin = () => {
-    console.log('[GOOGLE_AUTH] Starting Google login...');
     setGoogleLoading(true);
     setAuthError(null);
-    
-    // Build callback URL dynamically from current location
     const currentOrigin = window.location.origin;
     const callbackUrl = `${currentOrigin}/auth/callback`;
-    
-    console.log('[GOOGLE_AUTH] Callback URL:', callbackUrl);
-    
-    // Redirect to Google OAuth
     const authUrl = `${GOOGLE_AUTH_URL}?callback_url=${encodeURIComponent(callbackUrl)}`;
-    console.log('[GOOGLE_AUTH] Redirecting to:', authUrl);
-    
     window.location.href = authUrl;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('[LOGIN] Submit started, isLoginMode:', isLoginMode);
     setLoading(true);
     
     try {
@@ -75,11 +60,8 @@ export default function LoginPage() {
         ? { email: form.email, password: form.password }
         : { email: form.email, password: form.password, name: form.name };
       
-      console.log('[LOGIN] Calling endpoint:', endpoint);
       const response = await api.post(endpoint, payload);
-      console.log('[LOGIN] Response received:', response.data?.email);
       
-      // Store token and user data
       const token = response.data.session_token;
       const userData = {
         user_id: response.data.user_id,
@@ -88,15 +70,10 @@ export default function LoginPage() {
         is_admin: response.data.is_admin || false,
       };
       
-      // Use the login function from AuthContext - this sets BOTH user AND isAuthenticated
-      console.log('[LOGIN] Calling AuthContext login()');
       login(userData, token);
-      
       toast.success(isLoginMode ? 'Welcome back!' : 'Account created successfully!');
-      console.log('[LOGIN] Redirecting to /dashboard');
       navigate('/dashboard', { replace: true });
     } catch (error) {
-      console.error('[LOGIN] Failed:', error.response?.status, error.response?.data);
       const message = error.response?.data?.detail || 'Authentication failed';
       toast.error(message);
     } finally {
@@ -105,108 +82,31 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white flex items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <Link to="/">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-20 mx-auto mb-4" />
+        {/* Logo */}
+        <div className="text-center mb-6">
+          <Link to="/" className="inline-flex items-center gap-2 mb-2">
+            <Shield className="w-8 h-8 text-slate-900" />
+            <span className="text-2xl font-bold text-slate-900">TrustTrade</span>
           </Link>
-          <p className="text-slate-600">Secure Escrow for South Africa</p>
+          <p className="text-sm text-slate-500">Secure Escrow for South Africa</p>
         </div>
         
-        <Card className="shadow-xl border-slate-200">
-          <CardHeader className="text-center pb-2">
-            <CardTitle className="text-2xl">{isLoginMode ? 'Welcome Back' : 'Create Account'}</CardTitle>
-            <CardDescription>
-              {isLoginMode ? 'Sign in to your account' : 'Get started with TrustTrade'}
+        <Card className="shadow-premium-lg border-slate-200">
+          <CardHeader className="text-center pb-4 pt-6">
+            <CardTitle className="text-xl font-bold">{isLoginMode ? 'Welcome back' : 'Create account'}</CardTitle>
+            <CardDescription className="text-sm">
+              {isLoginMode ? 'Sign in to manage your transactions' : 'Get started with secure escrow'}
             </CardDescription>
           </CardHeader>
           
-          <CardContent className="pt-6">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {!isLoginMode && (
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    type="text"
-                    placeholder="John Smith"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required={!isLoginMode}
-                    data-testid="register-name"
-                  />
-                </div>
-              )}
-              
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  required
-                  data-testid="login-email"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                    required
-                    minLength={6}
-                    data-testid="login-password"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-              
-              <Button 
-                type="submit" 
-                className="w-full bg-blue-600 hover:bg-blue-700" 
-                disabled={loading}
-                data-testid="login-submit"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    {isLoginMode ? 'Signing in...' : 'Creating account...'}
-                  </>
-                ) : (
-                  isLoginMode ? 'Sign In' : 'Create Account'
-                )}
-              </Button>
-            </form>
-            
-            {/* Divider */}
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-slate-200" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-slate-500">Or continue with</span>
-              </div>
-            </div>
-            
-            {/* Google Sign-In Button */}
+          <CardContent className="pt-2 pb-6">
+            {/* Google Sign-In - First */}
             <Button
               type="button"
               variant="outline"
-              className="w-full border-slate-300 hover:bg-slate-50"
+              className="w-full border-slate-200 hover:bg-slate-50 h-11 mb-4"
               onClick={handleGoogleLogin}
               disabled={googleLoading}
               data-testid="google-login-btn"
@@ -224,37 +124,121 @@ export default function LoginPage() {
               Continue with Google
             </Button>
             
-            {/* Auth Error Display */}
+            {/* Divider */}
+            <div className="relative my-5">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-slate-200" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-white px-3 text-slate-400">or continue with email</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {!isLoginMode && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="name" className="text-sm font-medium text-slate-700">Full Name</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="John Smith"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    required={!isLoginMode}
+                    className="h-10"
+                    data-testid="register-name"
+                  />
+                </div>
+              )}
+              
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-sm font-medium text-slate-700">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  required
+                  className="h-10"
+                  data-testid="login-email"
+                />
+              </div>
+              
+              <div className="space-y-1.5">
+                <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    required
+                    minLength={6}
+                    className="h-10 pr-10"
+                    data-testid="login-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              
+              <Button 
+                type="submit" 
+                className="w-full bg-slate-900 hover:bg-slate-800 h-10" 
+                disabled={loading}
+                data-testid="login-submit"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    {isLoginMode ? 'Signing in...' : 'Creating account...'}
+                  </>
+                ) : (
+                  isLoginMode ? 'Sign In' : 'Create Account'
+                )}
+              </Button>
+            </form>
+            
+            {/* Auth Error */}
             {authError && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+              <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
                 <p className="text-sm text-red-700">{authError}</p>
               </div>
             )}
             
-            <div className="mt-6 text-center">
+            {/* Toggle Mode */}
+            <div className="mt-5 text-center">
               <button
                 type="button"
                 onClick={() => setIsLoginMode(!isLoginMode)}
-                className="text-sm text-blue-600 hover:text-blue-700"
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
               >
                 {isLoginMode ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
               </button>
             </div>
             
-            <div className="mt-6 pt-6 border-t border-slate-200">
-              <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
-                <Shield className="w-4 h-4" />
-                <span>Your data is protected with 256-bit encryption</span>
+            {/* Trust Footer */}
+            <div className="mt-5 pt-5 border-t border-slate-100">
+              <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
+                <Lock className="w-3.5 h-3.5" />
+                <span>Protected with 256-bit encryption</span>
               </div>
             </div>
           </CardContent>
         </Card>
         
-        <div className="mt-6 text-center text-sm text-slate-500">
-          <Link to="/terms" className="hover:text-blue-600">Terms</Link>
+        <div className="mt-5 text-center text-xs text-slate-400">
+          <Link to="/terms" className="hover:text-slate-600">Terms</Link>
           <span className="mx-2">•</span>
-          <Link to="/privacy" className="hover:text-blue-600">Privacy</Link>
+          <Link to="/privacy" className="hover:text-slate-600">Privacy</Link>
         </div>
       </div>
     </div>

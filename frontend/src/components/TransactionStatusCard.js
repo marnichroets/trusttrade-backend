@@ -1,18 +1,8 @@
-import { Shield, CheckCircle2, Truck, Clock, AlertTriangle, XCircle, CreditCard, DollarSign } from 'lucide-react';
+import { Shield, CheckCircle2, Truck, Clock, AlertTriangle, XCircle, CreditCard, Banknote, Lock, ArrowRight } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
 
-const COLORS = {
-  primary: '#1a2942',
-  green: '#2ecc71',
-  warning: '#f39c12',
-  error: '#e74c3c',
-  info: '#3498db',
-  subtext: '#6c757d',
-  section: '#f8f9fa'
-};
-
-// Main transaction status card - shows current state prominently
+// Main transaction status card - shows current state prominently with clear next action
 export function TransactionStatusCard({ transaction, userRole }) {
   const state = transaction.transaction_state || 
                 mapLegacyStatus(transaction.payment_status, transaction.tradesafe_state);
@@ -21,39 +11,38 @@ export function TransactionStatusCard({ transaction, userRole }) {
   const Icon = statusConfig.icon;
   
   return (
-    <Card 
-      className="p-6 border-2"
-      style={{ 
-        backgroundColor: statusConfig.bgColor,
-        borderColor: statusConfig.borderColor
-      }}
-    >
+    <Card className={`p-5 border-2 ${statusConfig.borderClass}`} style={{ backgroundColor: statusConfig.bgColor }}>
       <div className="flex items-start gap-4">
-        <div 
-          className="p-3 rounded-full"
-          style={{ backgroundColor: statusConfig.iconBg }}
-        >
-          <Icon className="w-8 h-8" style={{ color: statusConfig.iconColor }} />
+        <div className={`p-3 rounded-xl ${statusConfig.iconBgClass}`}>
+          <Icon className={`w-6 h-6 ${statusConfig.iconClass}`} />
         </div>
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
-            <h3 
-              className="text-xl font-bold"
-              style={{ color: statusConfig.textColor }}
-            >
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <h3 className={`text-lg font-bold ${statusConfig.titleClass}`}>
               {statusConfig.title}
             </h3>
-            <Badge style={{ backgroundColor: statusConfig.badgeColor, color: 'white' }}>
+            <Badge className={statusConfig.badgeClass}>
               {statusConfig.badge}
             </Badge>
           </div>
-          <p className="text-sm" style={{ color: statusConfig.descColor }}>
+          <p className="text-sm text-slate-600 mb-3">
             {statusConfig.description}
           </p>
-          {statusConfig.subtext && (
-            <p className="text-xs mt-3 p-3 rounded" style={{ backgroundColor: 'rgba(255,255,255,0.5)', color: COLORS.subtext }}>
-              {statusConfig.subtext}
-            </p>
+          
+          {/* Next Action - Most Important */}
+          {statusConfig.nextAction && (
+            <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-2">
+              <ArrowRight className="w-4 h-4 text-blue-600 flex-shrink-0" />
+              <span className="text-sm font-medium text-slate-800">{statusConfig.nextAction}</span>
+            </div>
+          )}
+          
+          {/* Escrow Protection Notice */}
+          {statusConfig.escrowNotice && (
+            <div className="mt-3 flex items-start gap-2 text-xs text-slate-500">
+              <Lock className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+              <span>{statusConfig.escrowNotice}</span>
+            </div>
           )}
         </div>
       </div>
@@ -62,16 +51,16 @@ export function TransactionStatusCard({ transaction, userRole }) {
 }
 
 function mapLegacyStatus(paymentStatus, tradesafeState) {
-  // Map old statuses to new state machine
   const ps = (paymentStatus || '').toLowerCase();
   const ts = (tradesafeState || '').toUpperCase();
   
-  if (ts === 'FUNDS_RELEASED' || ps.includes('completed')) return 'COMPLETED';
+  if (ts === 'FUNDS_RELEASED' || ps.includes('completed') || ps.includes('released')) return 'COMPLETED';
   if (ts === 'DELIVERED' || ps.includes('delivered')) return 'DELIVERED';
-  if (ts === 'INITIATED' || ps.includes('delivery') || ps.includes('dispatched')) return 'DELIVERY_IN_PROGRESS';
-  if (ts === 'FUNDS_RECEIVED' || ps.includes('escrow') || ps.includes('secured')) return 'PAYMENT_SECURED';
-  if (ps.includes('awaiting') || ts === 'CREATED') return 'AWAITING_PAYMENT';
-  if (ps.includes('pending')) return 'PENDING_CONFIRMATION';
+  if (ts === 'INITIATED' || ts === 'SENT' || ps.includes('delivery') || ps.includes('dispatched')) return 'DELIVERY_IN_PROGRESS';
+  if (ts === 'FUNDS_RECEIVED' || ps.includes('escrow') || ps.includes('secured') || ps === 'paid') return 'PAYMENT_SECURED';
+  if (ps.includes('awaiting') || ts === 'CREATED' || ts === 'PENDING') return 'AWAITING_PAYMENT';
+  if (ps.includes('ready')) return 'READY_FOR_PAYMENT';
+  if (ps.includes('pending') || ps.includes('confirmation')) return 'PENDING_CONFIRMATION';
   if (ps.includes('dispute')) return 'DISPUTED';
   if (ps.includes('cancel')) return 'CANCELLED';
   if (ps.includes('refund')) return 'REFUNDED';
@@ -88,144 +77,173 @@ function getStatusConfig(state, userRole, transaction) {
       icon: Clock,
       title: 'Transaction Created',
       badge: 'Pending',
-      description: 'Waiting for both parties to confirm the transaction details.',
-      bgColor: COLORS.section,
-      borderColor: COLORS.subtext,
-      iconBg: `${COLORS.subtext}20`,
-      iconColor: COLORS.subtext,
-      textColor: COLORS.primary,
-      descColor: COLORS.subtext,
-      badgeColor: COLORS.subtext
+      description: 'Waiting for both parties to review and confirm the transaction details.',
+      nextAction: isSeller ? 'Confirm the transaction details to proceed' : 'Waiting for seller to confirm',
+      bgColor: '#f8fafc',
+      borderClass: 'border-slate-200',
+      iconBgClass: 'bg-slate-100',
+      iconClass: 'text-slate-500',
+      titleClass: 'text-slate-800',
+      badgeClass: 'bg-slate-100 text-slate-600 border border-slate-200'
     },
     PENDING_CONFIRMATION: {
       icon: Clock,
       title: 'Awaiting Confirmation',
-      badge: 'Pending',
+      badge: 'Action Needed',
+      description: 'Both buyer and seller must confirm the transaction details before payment.',
+      nextAction: isSeller 
+        ? 'Review and confirm the fee agreement below'
+        : isBuyer 
+        ? 'Review and confirm the transaction details below' 
+        : 'Waiting for confirmations',
+      bgColor: '#fef9c3',
+      borderClass: 'border-amber-300',
+      iconBgClass: 'bg-amber-100',
+      iconClass: 'text-amber-600',
+      titleClass: 'text-amber-800',
+      badgeClass: 'bg-amber-100 text-amber-700 border border-amber-200'
+    },
+    READY_FOR_PAYMENT: {
+      icon: CreditCard,
+      title: 'Ready for Payment',
+      badge: 'Escrow Required',
       description: isSeller 
-        ? 'Please review and confirm the transaction details.' 
-        : 'Waiting for the seller to confirm.',
-      bgColor: `${COLORS.warning}10`,
-      borderColor: COLORS.warning,
-      iconBg: `${COLORS.warning}20`,
-      iconColor: COLORS.warning,
-      textColor: COLORS.primary,
-      descColor: COLORS.subtext,
-      badgeColor: COLORS.warning
+        ? 'Both parties confirmed. Create the escrow to enable buyer payment.'
+        : 'Waiting for seller to set up secure escrow payment.',
+      nextAction: isSeller 
+        ? 'Click "Create Escrow" to enable payment'
+        : 'Seller is setting up secure payment',
+      escrowNotice: 'Once escrow is created, buyer can pay via EFT, Card, or Instant EFT.',
+      bgColor: '#dbeafe',
+      borderClass: 'border-blue-300',
+      iconBgClass: 'bg-blue-100',
+      iconClass: 'text-blue-600',
+      titleClass: 'text-blue-800',
+      badgeClass: 'bg-blue-100 text-blue-700 border border-blue-200'
     },
     AWAITING_PAYMENT: {
       icon: CreditCard,
       title: 'Awaiting Payment',
-      badge: 'Payment Required',
+      badge: 'Pay Now',
       description: isBuyer 
-        ? 'Please complete payment to secure your purchase.' 
+        ? 'Escrow is ready. Complete payment to secure your purchase.' 
         : 'Waiting for the buyer to complete payment.',
-      bgColor: `${COLORS.info}10`,
-      borderColor: COLORS.info,
-      iconBg: `${COLORS.info}20`,
-      iconColor: COLORS.info,
-      textColor: COLORS.primary,
-      descColor: COLORS.subtext,
-      badgeColor: COLORS.info
+      nextAction: isBuyer 
+        ? 'Select a payment method and pay securely'
+        : 'Buyer is completing payment',
+      escrowNotice: 'Funds will be held securely until you confirm delivery.',
+      bgColor: '#dbeafe',
+      borderClass: 'border-blue-300',
+      iconBgClass: 'bg-blue-100',
+      iconClass: 'text-blue-600',
+      titleClass: 'text-blue-800',
+      badgeClass: 'bg-blue-100 text-blue-700 border border-blue-200'
     },
     PAYMENT_SECURED: {
       icon: Shield,
-      title: '✅ Payment Secured by TrustTrade',
-      badge: 'Funds Protected',
+      title: 'Funds Secured in Escrow',
+      badge: 'Protected',
       description: isBuyer 
-        ? 'Your payment is now safely held in escrow. The seller has been notified and can proceed with delivery.'
-        : 'Payment has been received and secured! Please deliver the item to the buyer.',
-      subtext: 'For security and compliance purposes, our regulated payment partner may also send a confirmation notification. This is expected and confirms that your funds are safely held.',
-      bgColor: `${COLORS.green}10`,
-      borderColor: COLORS.green,
-      iconBg: `${COLORS.green}20`,
-      iconColor: COLORS.green,
-      textColor: COLORS.green,
-      descColor: COLORS.primary,
-      badgeColor: COLORS.green
+        ? 'Your payment is safely held in escrow. Seller can now ship the item.'
+        : 'Payment received! Ship the item and mark as delivered.',
+      nextAction: isSeller 
+        ? 'Ship the item and click "Start Delivery"'
+        : 'Waiting for seller to ship',
+      escrowNotice: 'Funds only released when buyer confirms receipt. Bank payout: 1-2 business days.',
+      bgColor: '#d1fae5',
+      borderClass: 'border-emerald-300',
+      iconBgClass: 'bg-emerald-100',
+      iconClass: 'text-emerald-600',
+      titleClass: 'text-emerald-800',
+      badgeClass: 'bg-emerald-100 text-emerald-700 border border-emerald-200'
     },
     DELIVERY_IN_PROGRESS: {
       icon: Truck,
-      title: '🚚 Delivery in Progress',
-      badge: 'Item Dispatched',
+      title: 'Delivery in Progress',
+      badge: 'Shipped',
       description: isBuyer 
-        ? 'The seller has dispatched your item. Please confirm receipt once delivered.'
-        : 'Item dispatched. Waiting for buyer to confirm receipt.',
-      bgColor: `${COLORS.info}10`,
-      borderColor: COLORS.info,
-      iconBg: `${COLORS.info}20`,
-      iconColor: COLORS.info,
-      textColor: COLORS.primary,
-      descColor: COLORS.subtext,
-      badgeColor: COLORS.info
+        ? 'Item has been shipped. Confirm receipt once delivered.'
+        : 'Item shipped. Waiting for buyer to confirm receipt.',
+      nextAction: isBuyer 
+        ? 'Click "Confirm Receipt" once you receive the item'
+        : 'Waiting for buyer confirmation',
+      escrowNotice: 'Funds remain protected until buyer confirms delivery.',
+      bgColor: '#e0e7ff',
+      borderClass: 'border-indigo-300',
+      iconBgClass: 'bg-indigo-100',
+      iconClass: 'text-indigo-600',
+      titleClass: 'text-indigo-800',
+      badgeClass: 'bg-indigo-100 text-indigo-700 border border-indigo-200'
     },
     DELIVERED: {
       icon: CheckCircle2,
-      title: '📦 Item Delivered',
-      badge: 'Confirmed',
-      description: 'Delivery confirmed. Funds will be released to the seller.',
-      bgColor: `${COLORS.green}10`,
-      borderColor: COLORS.green,
-      iconBg: `${COLORS.green}20`,
-      iconColor: COLORS.green,
-      textColor: COLORS.primary,
-      descColor: COLORS.subtext,
-      badgeColor: COLORS.green
+      title: 'Delivery Confirmed',
+      badge: 'Complete',
+      description: 'Buyer confirmed receipt. Funds are being released.',
+      nextAction: isSeller ? 'Funds will arrive in 1-2 business days' : null,
+      escrowNotice: 'Bank payouts processed at 10:00 and 15:00 daily.',
+      bgColor: '#d1fae5',
+      borderClass: 'border-emerald-300',
+      iconBgClass: 'bg-emerald-100',
+      iconClass: 'text-emerald-600',
+      titleClass: 'text-emerald-800',
+      badgeClass: 'bg-emerald-100 text-emerald-700 border border-emerald-200'
     },
     COMPLETED: {
-      icon: DollarSign,
-      title: '💰 Transaction Complete',
+      icon: Banknote,
+      title: 'Transaction Complete',
       badge: 'Funds Released',
       description: isSeller 
-        ? 'Congratulations! Funds have been released to your account.'
+        ? 'Funds have been released to your bank account.'
         : 'Transaction complete. Thank you for using TrustTrade!',
-      bgColor: `${COLORS.green}10`,
-      borderColor: COLORS.green,
-      iconBg: `${COLORS.green}20`,
-      iconColor: COLORS.green,
-      textColor: COLORS.green,
-      descColor: COLORS.primary,
-      badgeColor: COLORS.green
+      escrowNotice: 'Thank you for trusting TrustTrade for your secure transaction.',
+      bgColor: '#d1fae5',
+      borderClass: 'border-green-300',
+      iconBgClass: 'bg-green-100',
+      iconClass: 'text-green-600',
+      titleClass: 'text-green-800',
+      badgeClass: 'bg-green-100 text-green-700 border border-green-200'
     },
     DISPUTED: {
       icon: AlertTriangle,
-      title: '⚠️ Dispute Opened',
+      title: 'Dispute Opened',
       badge: 'Under Review',
-      description: 'This transaction is under review by TrustTrade. We will resolve this as quickly as possible.',
-      bgColor: `${COLORS.warning}10`,
-      borderColor: COLORS.warning,
-      iconBg: `${COLORS.warning}20`,
-      iconColor: COLORS.warning,
-      textColor: COLORS.warning,
-      descColor: COLORS.primary,
-      badgeColor: COLORS.warning
+      description: 'This transaction is under review by TrustTrade support.',
+      nextAction: 'Our team will contact both parties within 24 hours',
+      escrowNotice: 'Funds remain protected while we investigate.',
+      bgColor: '#fef3c7',
+      borderClass: 'border-amber-400',
+      iconBgClass: 'bg-amber-100',
+      iconClass: 'text-amber-600',
+      titleClass: 'text-amber-800',
+      badgeClass: 'bg-amber-100 text-amber-700 border border-amber-200'
     },
     CANCELLED: {
       icon: XCircle,
       title: 'Transaction Cancelled',
       badge: 'Cancelled',
       description: 'This transaction has been cancelled.',
-      bgColor: `${COLORS.section}`,
-      borderColor: COLORS.subtext,
-      iconBg: `${COLORS.subtext}20`,
-      iconColor: COLORS.subtext,
-      textColor: COLORS.subtext,
-      descColor: COLORS.subtext,
-      badgeColor: COLORS.subtext
+      bgColor: '#f1f5f9',
+      borderClass: 'border-slate-300',
+      iconBgClass: 'bg-slate-100',
+      iconClass: 'text-slate-500',
+      titleClass: 'text-slate-600',
+      badgeClass: 'bg-slate-100 text-slate-600 border border-slate-200'
     },
     REFUNDED: {
-      icon: DollarSign,
+      icon: Banknote,
       title: 'Funds Refunded',
       badge: 'Refunded',
       description: isBuyer 
         ? 'Your funds have been refunded.'
         : 'Funds have been returned to the buyer.',
-      bgColor: `${COLORS.error}10`,
-      borderColor: COLORS.error,
-      iconBg: `${COLORS.error}20`,
-      iconColor: COLORS.error,
-      textColor: COLORS.error,
-      descColor: COLORS.primary,
-      badgeColor: COLORS.error
+      escrowNotice: 'Refund processed. Bank arrival: 1-2 business days.',
+      bgColor: '#fef2f2',
+      borderClass: 'border-red-200',
+      iconBgClass: 'bg-red-100',
+      iconClass: 'text-red-600',
+      titleClass: 'text-red-700',
+      badgeClass: 'bg-red-100 text-red-700 border border-red-200'
     }
   };
   

@@ -67,17 +67,21 @@ async def send_email(
     """
     Send a transactional email via Postmark.
     """
-    logger.info(f"EMAIL_ATTEMPT: to={to_email}, subject={subject}")
+    print(f"[EMAIL] Sending email to: {to_email}")
+    print(f"[EMAIL] Subject: {subject}")
+    logger.info(f"[EMAIL] Sending to: {to_email}, Subject: {subject}")
     
     # Validate email address before attempting to send
     if not to_email or not to_email.strip() or '@' not in to_email:
-        logger.info(f"EMAIL_SKIPPED: invalid/empty address '{to_email}'")
+        print(f"[EMAIL] SKIPPED - invalid/empty address: {to_email}")
+        logger.info(f"[EMAIL] SKIPPED: invalid/empty address '{to_email}'")
         return False
     
     client = get_postmark_client()
     
     if not client:
-        logger.info(f"EMAIL_SKIPPED: Postmark not configured for {to_email}")
+        print(f"[EMAIL] SKIPPED - Postmark not configured")
+        logger.info(f"[EMAIL] SKIPPED: Postmark not configured for {to_email}")
         return False
     
     try:
@@ -87,6 +91,7 @@ async def send_email(
             text_content = unescape(text_content)
             text_content = re.sub(r'\s+', ' ', text_content).strip()
         
+        print(f"[EMAIL] Calling Postmark API...")
         response = client.emails.send(
             From=f"{SENDER_NAME} <{SENDER_EMAIL}>",
             To=f"{to_name} <{to_email}>",
@@ -96,11 +101,14 @@ async def send_email(
             MessageStream="outbound"
         )
         
-        logger.info(f"EMAIL_SENT: to={to_email}, id={response.get('MessageID', 'unknown')}")
+        message_id = response.get('MessageID', 'unknown')
+        print(f"[EMAIL] SUCCESS! MessageID: {message_id}")
+        logger.info(f"[EMAIL] SUCCESS: to={to_email}, MessageID={message_id}")
         return True
         
     except Exception as e:
-        logger.error(f"EMAIL_FAILED: to={to_email}, error={str(e)}")
+        print(f"[EMAIL ERROR] {str(e)}")
+        logger.error(f"[EMAIL ERROR] to={to_email}, error={str(e)}")
         return False
 
 

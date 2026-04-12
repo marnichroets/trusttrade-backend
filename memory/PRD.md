@@ -1,53 +1,43 @@
-# TrustTrade - Beta Launch Status
+# TrustTrade - Beta Launch Ready
 
-## Beta Readiness: ✅ READY
+## Status: ✅ READY FOR BETA
 
 ### Core Features Working
 1. **Authentication**: JWT email/password login
-2. **Transaction Creation**: With buyer/seller confirmation
-3. **Escrow Creation**: TradeSafe integration
-4. **Fee Allocation**: BUYER_AGENT, SELLER_AGENT, SPLIT_AGENT
-5. **Payment Processing**: Via TradeSafe payment link
-6. **Status Sync**: Webhook + manual refresh
-7. **Email Notifications**: Postmark integrated
+2. **Transactions**: Create, confirm, escrow
+3. **Payments**: TradeSafe integration
+4. **Webhooks**: Auto-updates on payment
+5. **Emails**: Postmark integrated ✅
 
-### Transaction Flow
-```
-Created → Both Confirm → Escrow Created → Awaiting Payment
-    → [Buyer pays] → Payment Secured → [Delivery] → Completed
-```
+### Email System
+- **Provider**: Postmark
+- **Sender**: noreply@trusttradesa.co.za
+- **Test Endpoint**: `GET /api/test-email?to=email@example.com`
 
-### Webhook Configuration (REQUIRED)
+#### Email Events
+| Event | Recipients |
+|-------|------------|
+| Transaction Created | Buyer & Seller |
+| Payment Received | Buyer & Seller |
+| Funds Released | Seller |
+
+### Webhook Configuration
 Set in TradeSafe dashboard:
 ```
-Webhook URL: https://trusttradesa.co.za/api/tradesafe-webhook
-Events: All transaction state changes
+URL: https://trusttradesa.co.za/api/tradesafe-webhook
 ```
 
-### Email Events
-| Event | Recipients | Status |
-|-------|------------|--------|
-| Transaction Created | Buyer, Seller | ✅ |
-| Payment Received | Buyer, Seller | ✅ |
-| Funds Released | Seller | ✅ |
-
-### Logging Prefixes
-- `[WEBHOOK]` - TradeSafe webhook events
+### Logging
+- `[EMAIL]` - Email sending events
+- `[WEBHOOK]` - Webhook processing
 - `[SYNC]` - Manual status sync
 - `[ESCROW]` - Escrow creation
-- `[TXN]` - Transaction confirmation
-
-### Beta Limits
-- Min: R100
-- Max: R10,000
 
 ### Test Accounts
 - Buyer: testuser@example.com / Test@123
 - Seller: seller@example.com / Seller@123
 - Admin: marnichr@gmail.com / Admin@123
 
-## Not Implemented (Out of Beta Scope)
-- SMS notifications
-- Google login
-- Real TradeSafe refunds
-- Push notifications
+### Beta Limits
+- Min Transaction: R100
+- Max Transaction: R10,000

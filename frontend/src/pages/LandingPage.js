@@ -225,41 +225,41 @@ function LandingPage() {
       </section>
 
       {/* Why TrustTrade - Problem/Solution */}
-      <section className="py-16 px-4 bg-slate-900 text-white">
+      <section className="py-12 px-4 bg-slate-800 text-white">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-10">
-            <h2 className="text-2xl sm:text-3xl font-bold mb-2">Why South Africans Trust TrustTrade</h2>
-            <p className="text-slate-400">Built for the problems we actually face</p>
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold mb-2">Why South Africans Trust TrustTrade</h2>
+            <p className="text-slate-400 text-sm">Built for the problems we actually face</p>
           </div>
           
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-              <div className="w-10 h-10 bg-red-500/20 rounded-lg flex items-center justify-center mb-4">
-                <AlertTriangle className="w-5 h-5 text-red-400" />
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="bg-slate-700/50 rounded-xl p-5 border border-slate-600">
+              <div className="w-9 h-9 bg-red-500/20 rounded-lg flex items-center justify-center mb-3">
+                <AlertTriangle className="w-4 h-4 text-red-400" />
               </div>
-              <h3 className="text-base font-semibold mb-2">The Problem</h3>
-              <p className="text-sm text-slate-400">
-                You pay first, hope for the best. Seller disappears. You're left with nothing and no recourse.
+              <h3 className="text-sm font-semibold mb-1">The Problem</h3>
+              <p className="text-xs text-slate-400">
+                You pay first, hope for the best. Seller disappears. You're left with nothing.
               </p>
             </div>
             
-            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-              <div className="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center mb-4">
-                <Shield className="w-5 h-5 text-blue-400" />
+            <div className="bg-slate-700/50 rounded-xl p-5 border border-slate-600">
+              <div className="w-9 h-9 bg-blue-500/20 rounded-lg flex items-center justify-center mb-3">
+                <Shield className="w-4 h-4 text-blue-400" />
               </div>
-              <h3 className="text-base font-semibold mb-2">Our Solution</h3>
-              <p className="text-sm text-slate-400">
-                TrustTrade holds your money securely until you confirm you received what you paid for. Zero risk.
+              <h3 className="text-sm font-semibold mb-1">Our Solution</h3>
+              <p className="text-xs text-slate-400">
+                TrustTrade holds your money until you confirm you received what you paid for.
               </p>
             </div>
             
-            <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-              <div className="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center mb-4">
-                <CheckCircle className="w-5 h-5 text-emerald-400" />
+            <div className="bg-slate-700/50 rounded-xl p-5 border border-slate-600">
+              <div className="w-9 h-9 bg-emerald-500/20 rounded-lg flex items-center justify-center mb-3">
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
               </div>
-              <h3 className="text-base font-semibold mb-2">The Result</h3>
-              <p className="text-sm text-slate-400">
-                Both parties are protected. Buyers get what they paid for. Sellers get paid. Everyone wins.
+              <h3 className="text-sm font-semibold mb-1">The Result</h3>
+              <p className="text-xs text-slate-400">
+                Both parties are protected. Buyers get what they paid for. Sellers get paid.
               </p>
             </div>
           </div>

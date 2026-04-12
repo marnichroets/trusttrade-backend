@@ -45,10 +45,25 @@ export default function LoginPage() {
   const handleGoogleLogin = () => {
     setGoogleLoading(true);
     setAuthError(null);
-    const currentOrigin = window.location.origin;
-    const callbackUrl = `${currentOrigin}/auth/callback`;
-    const authUrl = `${GOOGLE_AUTH_URL}?callback_url=${encodeURIComponent(callbackUrl)}`;
-    window.location.href = authUrl;
+    
+    try {
+      const currentOrigin = window.location.origin;
+      const callbackUrl = `${currentOrigin}/auth/callback`;
+      const authUrl = `${GOOGLE_AUTH_URL}?callback_url=${encodeURIComponent(callbackUrl)}`;
+      
+      console.log('[GOOGLE_AUTH] Starting Google sign-in...');
+      console.log('[GOOGLE_AUTH] Callback URL:', callbackUrl);
+      
+      // Store current time to detect stale returns
+      sessionStorage.setItem('googleAuthStarted', Date.now().toString());
+      
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error('[GOOGLE_AUTH] Failed to start:', error);
+      setGoogleLoading(false);
+      setAuthError('Google sign-in failed. Please try again or sign in with email.');
+      toast.error('Google sign-in failed. Please try again or sign in with email.');
+    }
   };
 
   const handleSubmit = async (e) => {

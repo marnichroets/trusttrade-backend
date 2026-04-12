@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Eye, EyeOff, Loader2, Shield, AlertCircle, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../utils/api';
+import TrustLogo from '../components/TrustLogo';
 
 const GOOGLE_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/google";
 
@@ -86,9 +87,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-6">
-          <Link to="/" className="inline-flex items-center gap-2 mb-2">
-            <Shield className="w-8 h-8 text-slate-900" />
-            <span className="text-2xl font-bold text-slate-900">TrustTrade</span>
+          <Link to="/" className="inline-block mb-2">
+            <TrustLogo size="large" />
           </Link>
           <p className="text-sm text-slate-500">Secure Escrow for South Africa</p>
         </div>

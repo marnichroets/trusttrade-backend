@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ShieldCheck, ArrowRight, CheckCircle, Lock, Shield, CreditCard, UserCheck, AlertTriangle, Clock, Banknote, BadgeCheck } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useAuth } from '../context/AuthContext';
+import TrustLogo from '../components/TrustLogo';
 
 function LandingPage() {
   const { isAuthenticated, loading } = useAuth();
@@ -34,10 +35,7 @@ function LandingPage() {
       <nav className="bg-white sticky top-0 z-50 border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-2">
-              <Shield className="w-7 h-7 text-slate-900" />
-              <span className="text-xl font-bold text-slate-900">TrustTrade</span>
-            </div>
+            <TrustLogo size="default" />
             <div className="flex items-center gap-3">
               <Button variant="ghost" onClick={handleGetStarted} className="text-slate-600 hover:text-slate-900 font-medium text-sm" data-testid="nav-login-btn">
                 Log In
@@ -353,9 +351,8 @@ function LandingPage() {
         <div className="max-w-5xl mx-auto">
           <div className="grid sm:grid-cols-4 gap-8 mb-8">
             <div className="sm:col-span-2">
-              <div className="flex items-center gap-2 mb-3">
-                <Shield className="w-6 h-6 text-slate-900" />
-                <span className="text-lg font-bold text-slate-900">TrustTrade</span>
+              <div className="mb-3">
+                <TrustLogo size="default" />
               </div>
               <p className="text-sm text-slate-500 max-w-xs">
                 Secure escrow protection for online transactions in South Africa. Buy and sell without the scam risk.

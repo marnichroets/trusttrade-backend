@@ -4,6 +4,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import Timeline from '../components/Timeline';
 import { TransactionTimeline, AutoReleaseCountdown } from '../components/TransactionTimeline';
 import TransactionStatusCard from '../components/TransactionStatusCard';
+import StepProgressTracker from '../components/StepProgressTracker';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -12,7 +13,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
 import api from '../utils/api';
 import { toast } from 'sonner';
-import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, ExternalLink, Shield, Loader2, Phone, Lock, RefreshCw } from 'lucide-react';
+import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, ExternalLink, Shield, Loader2, Phone, Lock, RefreshCw, Clock, Banknote } from 'lucide-react';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -1025,348 +1026,215 @@ function TransactionDetail() {
 
   return (
     <DashboardLayout user={user}>
-      <div className="max-w-6xl mx-auto space-y-6">
-        <Button variant="ghost" onClick={() => navigate('/transactions')} data-testid="back-to-transactions-btn">
-          <ArrowLeft className="w-4 h-4 mr-2" />Back to Transactions
+      <div className="max-w-6xl mx-auto">
+        {/* Back Button */}
+        <Button variant="ghost" onClick={() => navigate('/transactions')} data-testid="back-to-transactions-btn" className="mb-4 text-sm h-8">
+          <ArrowLeft className="w-4 h-4 mr-1" />Back
         </Button>
 
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">Transaction Details</h1>
-            <p className="text-slate-600 mt-2 font-mono text-sm">{transaction.transaction_id}</p>
-          </div>
-          
-          {/* Share Link Card */}
-          {shareLink && (
-            <Card className="p-4 bg-primary/5 border-primary/20">
-              <div className="flex items-center gap-3">
-                <Share2 className="w-5 h-5 text-primary" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-slate-500 mb-1">Share this transaction</p>
-                  <p className="text-sm font-mono text-primary truncate">{transaction.share_code}</p>
-                </div>
-                <Button 
-                  size="sm" 
-                  variant={copied ? "default" : "outline"}
-                  onClick={handleCopyLink}
-                  data-testid="copy-share-link-btn"
-                  className="shrink-0"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-4 h-4 mr-1" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4 mr-1" />
-                      Copy Link
-                    </>
-                  )}
-                </Button>
-              </div>
+        {/* Two Column Layout */}
+        <div className="grid lg:grid-cols-3 gap-6">
+          {/* Main Content - Left 2 columns */}
+          <div className="lg:col-span-2 space-y-5">
+            
+            {/* Step Progress Tracker */}
+            <Card className="p-4">
+              <StepProgressTracker transaction={transaction} />
             </Card>
-          )}
-        </div>
 
-        {/* Risk Warning - Show if medium or high risk */}
-        {transaction.risk_level && transaction.risk_level !== 'low' && (
-          <Card className={`p-4 ${transaction.risk_level === 'high' ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-300'}`}>
-            <div className="flex items-start gap-3">
-              <AlertTriangle className={`w-5 h-5 ${transaction.risk_level === 'high' ? 'text-red-600' : 'text-amber-600'}`} />
-              <div>
-                <p className={`font-medium ${transaction.risk_level === 'high' ? 'text-red-900' : 'text-amber-900'}`}>
-                  {transaction.risk_level === 'high' ? 'High Risk Transaction' : 'Proceed with Caution'}
-                </p>
-                <p className={`text-sm mt-1 ${transaction.risk_level === 'high' ? 'text-red-700' : 'text-amber-700'}`}>
-                  Our system has flagged potential risks with this transaction. Please verify the other party's identity before proceeding.
-                </p>
+            {/* Transaction Status Card - Shows current state prominently */}
+            <TransactionStatusCard 
+              transaction={transaction} 
+              userRole={isBuyer ? 'buyer' : (isSeller ? 'seller' : 'viewer')} 
+            />
+
+            {/* Trust Layer Box */}
+            <div className="bg-slate-900 text-white rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <Shield className="w-5 h-5 text-emerald-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-semibold text-sm mb-2">TrustTrade Escrow Protection</h4>
+                  <ul className="space-y-1.5 text-xs text-slate-300">
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                      Funds are securely held in escrow
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                      Seller only gets paid after buyer confirms delivery
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+                      Bank payout within 1-2 business days after release
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
-          </Card>
-        )}
 
-        {/* NEW: Transaction Status Card - Shows current state prominently */}
-        <TransactionStatusCard 
-          transaction={transaction} 
-          userRole={isBuyer ? 'buyer' : (isSeller ? 'seller' : 'viewer')} 
-        />
-
-        {/* Refresh Button for real-time updates */}
-        <div className="flex justify-end">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleSyncStatus}
-            disabled={syncing}
-            data-testid="refresh-transaction-btn"
-          >
-            {syncing ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
+            {/* Risk Warning - Show if medium or high risk */}
+            {transaction.risk_level && transaction.risk_level !== 'low' && (
+              <Card className={`p-4 ${transaction.risk_level === 'high' ? 'bg-red-50 border-red-300' : 'bg-amber-50 border-amber-300'}`}>
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className={`w-5 h-5 ${transaction.risk_level === 'high' ? 'text-red-600' : 'text-amber-600'}`} />
+                  <div>
+                    <p className={`font-medium text-sm ${transaction.risk_level === 'high' ? 'text-red-900' : 'text-amber-900'}`}>
+                      {transaction.risk_level === 'high' ? 'High Risk Transaction' : 'Proceed with Caution'}
+                    </p>
+                    <p className={`text-xs mt-1 ${transaction.risk_level === 'high' ? 'text-red-700' : 'text-amber-700'}`}>
+                      Our system has flagged potential risks. Please verify the other party's identity.
+                    </p>
+                  </div>
+                </div>
+              </Card>
             )}
-            {syncing ? 'Syncing...' : 'Refresh Status'}
-          </Button>
-        </div>
 
-        <Card className="p-6">
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <p className="text-sm text-slate-600 mb-2">Payment Status</p>
-              <Badge className={`${getStatusBadge(transaction.payment_status)} text-base px-3 py-1`}>
-                {transaction.payment_status}
-              </Badge>
-            </div>
-            <div>
-              <p className="text-sm text-slate-600 mb-2">Release Status</p>
-              <Badge className={`${getReleaseStatusBadge(transaction.release_status)} text-base px-3 py-1`}>
-                {transaction.release_status}
-              </Badge>
-            </div>
-          </div>
-          
-          {/* Escrow Status */}
-          {hasEscrow && (
-            <div className="mt-4 pt-4 border-t border-slate-200">
-              <div className="flex items-center gap-2 mb-2">
-                <Shield className="w-4 h-4 text-emerald-600" />
-                <span className="text-sm font-medium text-slate-700">TrustTrade Escrow Protection</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge className={`${getEscrowStateBadge(escrowState).bg} ${getEscrowStateBadge(escrowState).text}`}>
-                  {getEscrowStateBadge(escrowState).label}
-                </Badge>
-                <span className="text-xs text-slate-500">Ref: {transaction.tradesafe_id?.slice(0, 8)}...</span>
-              </div>
-            </div>
-          )}
-          
-          {/* Release Schedule Info */}
-          {(transaction.payment_status === 'Paid' || transaction.release_status === 'Pending Release' || escrowState === 'FUNDS_RELEASED') && (
-            <div className="mt-4 pt-4 border-t border-slate-200 flex items-center gap-2 text-sm text-slate-500">
-              <div className="w-4 h-4 flex items-center justify-center">⏰</div>
-              <span>Funds are released in two batches daily: <strong className="text-slate-700">10:00</strong> and <strong className="text-slate-700">15:00</strong></span>
-            </div>
-          )}
-        </Card>
-
-        {/* Confirmation Status Card - Shows who has confirmed */}
-        {(!bothConfirmed) && (
-          <Card className="p-6 bg-slate-50 border-slate-200">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-slate-600" />
-              Confirmation Status
-            </h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200">
-                <div className="flex items-center gap-3">
-                  <User className="w-5 h-5 text-slate-500" />
-                  <span className="font-medium text-slate-700">Buyer ({transaction.buyer_name})</span>
+            {/* Confirmation Status Card - Shows who has confirmed */}
+            {(!bothConfirmed) && (
+              <Card className="p-5 bg-slate-50 border-slate-200">
+                <h3 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-slate-600" />
+                  Confirmation Status
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={`p-3 rounded-lg border ${buyerConfirmed ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <User className="w-4 h-4 text-slate-500" />
+                      <span className="text-xs font-medium text-slate-700">Buyer</span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-900 truncate">{transaction.buyer_name}</p>
+                    {buyerConfirmed ? (
+                      <Badge className="mt-2 bg-emerald-100 text-emerald-700 text-[10px]">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />Confirmed
+                      </Badge>
+                    ) : (
+                      <Badge className="mt-2 bg-amber-100 text-amber-700 text-[10px]">Pending</Badge>
+                    )}
+                  </div>
+                  <div className={`p-3 rounded-lg border ${sellerConfirmed ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <User className="w-4 h-4 text-slate-500" />
+                      <span className="text-xs font-medium text-slate-700">Seller</span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-900 truncate">{transaction.seller_name}</p>
+                    {sellerConfirmed ? (
+                      <Badge className="mt-2 bg-emerald-100 text-emerald-700 text-[10px]">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />Confirmed
+                      </Badge>
+                    ) : (
+                      <Badge className="mt-2 bg-amber-100 text-amber-700 text-[10px]">Pending</Badge>
+                    )}
+                  </div>
                 </div>
-                {buyerConfirmed ? (
-                  <Badge className="bg-green-100 text-green-700">
-                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                    Confirmed
-                  </Badge>
-                ) : (
-                  <Badge className="bg-amber-100 text-amber-700">Pending</Badge>
-                )}
-              </div>
-              <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200">
-                <div className="flex items-center gap-3">
-                  <User className="w-5 h-5 text-slate-500" />
-                  <span className="font-medium text-slate-700">Seller ({transaction.seller_name})</span>
-                </div>
-                {sellerConfirmed ? (
-                  <Badge className="bg-green-100 text-green-700">
-                    <CheckCircle2 className="w-3 h-3 mr-1" />
-                    Confirmed
-                  </Badge>
-                ) : (
-                  <Badge className="bg-amber-100 text-amber-700">Pending</Badge>
-                )}
-              </div>
-            </div>
-            <p className="text-sm text-slate-500 mt-4">
-              Both parties must confirm before payment can proceed.
-            </p>
-          </Card>
-        )}
+              </Card>
+            )}
 
         {/* Buyer Confirm Card */}
-        {canBuyerConfirm && (
-          <Card className="p-6 bg-blue-50 border-blue-200">
-            <div className="flex items-start gap-4">
-              <div className="p-3 bg-blue-100 rounded-full">
-                <CheckCircle2 className="w-6 h-6 text-blue-600" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Confirm Transaction Details</h3>
-                <p className="text-sm text-slate-600 mb-4">
-                  Please review the transaction details below. By confirming, you agree to proceed with this purchase through TrustTrade's secure escrow service.
-                </p>
-                
-                {/* Transaction Summary */}
-                <div className="bg-white rounded-lg p-4 mb-4 border border-blue-200">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Transaction Summary</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Item:</span>
-                      <span className="font-medium text-slate-800 truncate max-w-48">{transaction.item_description}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Item Price:</span>
-                      <span className="font-medium">R {transaction.item_price?.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Seller:</span>
-                      <span className="font-medium">{transaction.seller_name}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Delivery Method:</span>
-                      <span className="font-medium capitalize">{transaction.delivery_method}</span>
-                    </div>
+            {canBuyerConfirm && (
+              <Card className="p-5 bg-blue-50 border-blue-200">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <CheckCircle2 className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900 mb-1">Action Required: Confirm Details</h3>
+                    <p className="text-sm text-slate-600 mb-3">
+                      Review the transaction details and confirm to proceed with escrow protection.
+                    </p>
+                    <Button 
+                      onClick={handleBuyerConfirm} 
+                      disabled={confirming} 
+                      className="bg-blue-600 hover:bg-blue-700 h-10"
+                      data-testid="buyer-confirm-btn"
+                    >
+                      {confirming ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Confirming...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          Confirm Transaction
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
-                
-                <div className="flex items-start gap-2 mb-4 p-3 bg-blue-100 rounded-lg">
-                  <Shield className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-blue-800">
-                    <strong>Protected:</strong> Your payment will be held securely in escrow until you confirm receipt of the item.
-                  </p>
-                </div>
-                
-                <Button 
-                  onClick={handleBuyerConfirm} 
-                  disabled={confirming} 
-                  className="bg-blue-600 hover:bg-blue-700"
-                  data-testid="buyer-confirm-btn"
-                >
-                  {confirming ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Confirming...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Confirm Transaction Details
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </Card>
-        )}
+              </Card>
+            )}
 
-        {/* Seller Confirm Card */}
-        {canSellerConfirm && (
-          <Card className="p-6 bg-orange-50 border-orange-200">
-            <div className="flex items-start gap-4">
-              <div className="p-3 bg-orange-100 rounded-full">
-                <FileText className="w-6 h-6 text-orange-600" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Confirm Fee Agreement</h3>
-                <p className="text-sm text-slate-600 mb-4">
-                  Please review the transaction details and TrustTrade fee structure below. By confirming, you agree to the 1.5% platform fee (min R5) and the escrow terms.
-                </p>
-                
-                {/* Fee Breakdown */}
-                <div className="bg-white rounded-lg p-4 mb-4 border border-orange-200">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-3">Fee Summary</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Item Price:</span>
-                      <span className="font-medium">R {transaction.item_price?.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">TrustTrade Fee (1.5%):</span>
-                      <span className="font-medium">R {transaction.trusttrade_fee?.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-600">Fee Paid By:</span>
-                      <Badge className="bg-blue-100 text-blue-700">{getFeePayerLabel(transaction.fee_allocation)}</Badge>
-                    </div>
-                    <div className="border-t border-slate-200 pt-2 mt-2">
-                      <div className="flex justify-between">
-                        <span className="font-semibold text-slate-700">You will receive:</span>
-                        <span className="font-bold text-emerald-600">
-                          R {(transaction.seller_receives ?? (transaction.item_price - transaction.trusttrade_fee))?.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
+            {/* Seller Confirm Card */}
+            {canSellerConfirm && (
+              <Card className="p-5 bg-orange-50 border-orange-200">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-orange-100 rounded-lg">
+                    <FileText className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900 mb-1">Action Required: Confirm Fee Agreement</h3>
+                    <p className="text-sm text-slate-600 mb-2">
+                      1.5% TrustTrade fee (min R5). You'll receive R {(transaction.seller_receives ?? (transaction.item_price - transaction.trusttrade_fee))?.toFixed(2)}
+                    </p>
+                    <Button 
+                      onClick={handleSellerConfirm} 
+                      disabled={sellerConfirming} 
+                      className="bg-orange-600 hover:bg-orange-700 h-10"
+                      data-testid="seller-confirm-btn"
+                    >
+                      {sellerConfirming ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Confirming...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          Confirm Fee Agreement
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
-                
-                <div className="flex items-start gap-2 mb-4 p-3 bg-amber-100 rounded-lg">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-amber-800">
-                    <strong>Important:</strong> Payment will only be enabled after you confirm this fee agreement. Once confirmed, you cannot change the fee structure.
-                  </p>
-                </div>
-                
-                <Button 
-                  onClick={handleSellerConfirm} 
-                  disabled={sellerConfirming} 
-                  className="bg-orange-600 hover:bg-orange-700"
-                  data-testid="seller-confirm-btn"
-                >
-                  {sellerConfirming ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Confirming...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Confirm Fee Agreement
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </Card>
-        )}
+              </Card>
+            )}
 
-        {/* Create Escrow Card */}
-        {canCreateEscrow && (
-          <Card className="p-6 bg-emerald-50 border-emerald-200">
-            <div className="flex items-start gap-4">
-              <div className="p-3 bg-emerald-100 rounded-full">
-                <Shield className="w-6 h-6 text-emerald-600" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-emerald-900 mb-2">Create TrustTrade Escrow</h3>
-                <p className="text-sm text-emerald-800 mb-4">
-                  Both parties have confirmed. Create a secure TrustTrade escrow to protect this transaction. The buyer will then be able to make payment via EFT, Card, or Ozow.
-                </p>
-                <Button 
-                  type="button"
-                  onClick={handleCreateEscrow} 
-                  onTouchEnd={handleCreateEscrow}
-                  disabled={creatingEscrow}
-                  className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 touch-manipulation cursor-pointer"
-                  data-testid="create-escrow-btn"
-                  style={{ touchAction: 'manipulation' }}
-                >
-                  {creatingEscrow ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Creating Escrow...
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="w-4 h-4 mr-2" />
-                      Create TrustTrade Escrow
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </Card>
-        )}
+            {/* Create Escrow Card */}
+            {canCreateEscrow && (
+              <Card className="p-5 bg-emerald-50 border-emerald-200">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-emerald-100 rounded-lg">
+                    <Shield className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-emerald-900 mb-1">Action Required: Create Escrow</h3>
+                    <p className="text-sm text-emerald-700 mb-3">
+                      Both parties confirmed. Create escrow to enable secure payment.
+                    </p>
+                    <Button 
+                      type="button"
+                      onClick={handleCreateEscrow} 
+                      onTouchEnd={handleCreateEscrow}
+                      disabled={creatingEscrow}
+                      className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 h-10"
+                      data-testid="create-escrow-btn"
+                    >
+                      {creatingEscrow ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Creating Escrow...
+                        </>
+                      ) : (
+                        <>
+                          <Shield className="w-4 h-4 mr-2" />
+                          Create Escrow
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
 
         {/* Make Payment Card (Buyer) */}
         {canMakePayment && (
@@ -1747,53 +1615,29 @@ function TransactionDetail() {
 
         {/* Legacy: Status-specific guidance cards (without escrow) */}
         {!hasEscrow && transaction.seller_confirmed && transaction.payment_status === 'Ready for Payment' && (
-          <Card className="p-6 bg-blue-50 border-blue-200">
-            <h3 className="text-lg font-semibold text-blue-900 mb-2">Awaiting Payment</h3>
-            {isBuyer ? (
-              <p className="text-sm text-blue-800">
-                The seller has confirmed the transaction. Please make payment to the escrow account. Once payment is received, the seller will deliver the item.
-              </p>
-            ) : (
-              <p className="text-sm text-blue-800">
-                Waiting for the buyer to make payment to escrow. You will be notified when payment is received.
-              </p>
-            )}
+          <Card className="p-4 bg-blue-50 border-blue-200">
+            <h3 className="font-semibold text-blue-900 mb-1">Awaiting Payment</h3>
+            <p className="text-sm text-blue-800">
+              {isBuyer ? 'Make payment to the escrow account.' : 'Waiting for buyer payment.'}
+            </p>
           </Card>
         )}
 
         {!hasEscrow && transaction.payment_status === 'Paid' && !transaction.delivery_confirmed && (
-          <Card className="p-6 bg-amber-50 border-amber-200">
-            <h3 className="text-lg font-semibold text-amber-900 mb-2">Payment Received - Awaiting Delivery</h3>
-            {isSeller ? (
-              <p className="text-sm text-amber-800">
-                Payment has been received and is held in escrow. Please deliver the item to the buyer. Funds will be released once the buyer confirms delivery or automatically after 48 hours.
-              </p>
-            ) : (
-              <p className="text-sm text-amber-800">
-                Your payment is held securely in escrow. The seller has been notified to deliver the item. Once you receive it, confirm delivery below to release the funds.
-              </p>
-            )}
-            
-            {/* Auto-Release Timer */}
-            {transaction.auto_release_at && (
-              <div className="mt-4 p-3 bg-white/50 rounded-lg">
-                <p className="text-sm text-amber-900 font-medium">
-                  Auto-Release Timer Active
-                </p>
-                <p className="text-xs text-amber-700 mt-1">
-                  Funds will be automatically released to the seller at: {new Date(transaction.auto_release_at).toLocaleString('en-ZA')}
-                </p>
-              </div>
-            )}
+          <Card className="p-4 bg-amber-50 border-amber-200">
+            <h3 className="font-semibold text-amber-900 mb-1">Payment Received - Awaiting Delivery</h3>
+            <p className="text-sm text-amber-800">
+              {isSeller ? 'Deliver the item. Funds released after buyer confirms.' : 'Your payment is held in escrow. Confirm delivery once received.'}
+            </p>
           </Card>
         )}
 
         <Tabs defaultValue="overview">
           <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="agreement">Agreement</TabsTrigger>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="photos">Photos</TabsTrigger>
+            <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+            <TabsTrigger value="agreement" className="text-xs sm:text-sm">Agreement</TabsTrigger>
+            <TabsTrigger value="timeline" className="text-xs sm:text-sm">Timeline</TabsTrigger>
+            <TabsTrigger value="photos" className="text-xs sm:text-sm">Photos</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6 mt-6">
@@ -2090,13 +1934,140 @@ function TransactionDetail() {
         )}
 
         {!transaction.delivery_confirmed && transaction.seller_confirmed && (
-          <Card className="p-6">
-            <p className="text-sm text-slate-600 mb-3">Having issues with this transaction?</p>
-            <Button variant="outline" onClick={() => navigate('/disputes', { state: { transactionId: transaction.transaction_id } })}>
-              <FileText className="w-4 h-4 mr-2" />Raise a Dispute
-            </Button>
-          </Card>
-        )}
+              <Card className="p-4">
+                <p className="text-sm text-slate-600 mb-2">Having issues?</p>
+                <Button variant="outline" size="sm" onClick={() => navigate('/disputes', { state: { transactionId: transaction.transaction_id } })}>
+                  <FileText className="w-4 h-4 mr-1" />Raise Dispute
+                </Button>
+              </Card>
+            )}
+
+          </div>
+          {/* END Main Content Column */}
+
+          {/* Sticky Sidebar - Deal Summary */}
+          <div className="lg:col-span-1">
+            <div className="sticky top-20 space-y-4">
+              {/* Deal Summary Card */}
+              <Card className="p-5">
+                <h3 className="text-sm font-semibold text-slate-900 mb-3">Deal Summary</h3>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Item</p>
+                    <p className="font-medium text-slate-900 line-clamp-2">{transaction.item_description}</p>
+                  </div>
+                  {transaction.item_condition && (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Condition</p>
+                      <Badge className="bg-slate-100 text-slate-700 text-xs">{transaction.item_condition}</Badge>
+                    </div>
+                  )}
+                  <div className="pt-3 border-t border-slate-100">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-slate-500">Price</span>
+                      <span className="font-mono font-medium">R {transaction.item_price.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-slate-500">TrustTrade Fee</span>
+                      <span className="font-mono text-slate-600">R {transaction.trusttrade_fee.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-slate-100">
+                      <span className="font-medium text-slate-700">Seller Receives</span>
+                      <span className="font-mono font-bold text-emerald-600">
+                        R {(transaction.seller_receives ?? (transaction.item_price - transaction.trusttrade_fee))?.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Share Link */}
+              {shareLink && (
+                <Card className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-slate-500">Share Code</span>
+                    <Share2 className="w-3.5 h-3.5 text-slate-400" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-sm font-mono bg-slate-50 px-2 py-1 rounded truncate">{transaction.share_code}</code>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={handleCopyLink}
+                      data-testid="copy-share-link-btn"
+                      className="h-8 px-2"
+                    >
+                      {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                </Card>
+              )}
+
+              {/* Parties */}
+              <Card className="p-4">
+                <h4 className="text-xs font-medium text-slate-500 mb-3">PARTIES</h4>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                      <User className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate">{transaction.buyer_name}</p>
+                      <p className="text-xs text-slate-500">Buyer</p>
+                    </div>
+                    {buyerConfirmed && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                      <User className="w-4 h-4 text-orange-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate">{transaction.seller_name}</p>
+                      <p className="text-xs text-slate-500">Seller</p>
+                    </div>
+                    {sellerConfirmed && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                  </div>
+                </div>
+              </Card>
+
+              {/* Refresh Status */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleSyncStatus}
+                disabled={syncing}
+                className="w-full h-9"
+                data-testid="refresh-transaction-btn"
+              >
+                {syncing ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                {syncing ? 'Syncing...' : 'Refresh Status'}
+              </Button>
+
+              {/* Escrow Status Badge */}
+              {hasEscrow && (
+                <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Shield className="w-4 h-4 text-emerald-600" />
+                    <span className="text-xs font-medium text-emerald-800">Escrow Active</span>
+                  </div>
+                  <p className="text-xs text-emerald-600">
+                    Ref: {transaction.tradesafe_id?.slice(0, 12)}...
+                  </p>
+                  <Badge className={`mt-2 text-[10px] ${getEscrowStateBadge(escrowState).bg} ${getEscrowStateBadge(escrowState).text}`}>
+                    {getEscrowStateBadge(escrowState).label}
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* END Sticky Sidebar */}
+          
+        </div>
+        {/* END Two Column Layout */}
       </div>
     </DashboardLayout>
   );

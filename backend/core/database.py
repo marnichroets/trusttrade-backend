@@ -4,6 +4,7 @@ MongoDB connection management using Motor (async driver)
 """
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from pymongo import MongoClient
 from typing import Optional
 import logging
 
@@ -14,6 +15,23 @@ logger = logging.getLogger(__name__)
 # Global database client and instance
 _client: Optional[AsyncIOMotorClient] = None
 _db: Optional[AsyncIOMotorDatabase] = None
+
+# Synchronous PyMongo client and database for direct/synchronous access
+_sync_client: Optional[MongoClient] = None
+_sync_db = None
+
+
+def _get_sync_db():
+    """Get a synchronous PyMongo database instance."""
+    global _sync_client, _sync_db
+    if _sync_db is None:
+        _sync_client = MongoClient(settings.MONGO_URL)
+        _sync_db = _sync_client[settings.DB_NAME]
+    return _sync_db
+
+
+# Module-level synchronous db instance for direct import
+db = _get_sync_db()
 
 
 def get_database() -> AsyncIOMotorDatabase:

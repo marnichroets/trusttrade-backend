@@ -2,108 +2,124 @@
 
 ## Status: ✅ READY FOR REAL USERS
 
-### Phase 2 Complete: Core Product UX + Auth Flow (December 2025)
+---
 
-**Transaction Detail Page (Live Deal Tracker)**
+## Phase 5: Operations + Admin Complete (April 2025)
+
+### Critical Bug Fixes
+1. **Email Service**: Postmark integration VERIFIED WORKING
+   - Tested with actual API calls
+   - Key events: Transaction created, Payment received, Delivery confirmed, Funds released
+
+2. **SMS Service**: SMS Messenger integration VERIFIED WORKING
+   - Tested with actual API calls
+   - Key events: Payment secured, Buyer confirm delivery, Funds released
+
+3. **Google Sign-In**: Flow working
+   - Callback route: `/auth/callback`
+   - Backend endpoint: `POST /api/auth/google/callback`
+   - Added logging and error handling
+
+### Admin Dashboard (Complete)
+- **Overview**: Total Users, Transactions, Revenue, Pending Disputes, Pending Verification
+- **Manage Transactions**: View all, release funds, process refunds
+- **Manage Users**: Verify IDs, suspend accounts, view profiles
+- **Manage Disputes**: Review evidence, resolve conflicts, process refunds
+- **Navigation**: Dashboard, Monitoring, Transactions, Users, Disputes
+
+### Banking Details Reset
+- User can request reset: `POST /api/users/banking-details/request-reset`
+- Admin approves in dashboard
+- User re-enters banking details after approval
+
+### UI/UX Fixes
+- **Logo**: TrustTrade PNG cropped, no white background, h-12 in navbar
+- **Dashboard banner**: Blue shield icon (not green)
+- **Landing page**: "Why TrustTrade" section - lighter background (slate-800), reduced spacing (py-12)
+
+---
+
+## Phase 2: Core Product UX Complete
+
+### Transaction Detail Page (Live Deal Tracker)
 - 6-step progress tracker: Created → Confirmed → Paid → Secured → Delivered → Released
-- Clear status card with "What happens next" guidance
-- Trust Layer Box with 3 protection points:
-  - "Funds are securely held in escrow"
-  - "Seller only gets paid after buyer confirms delivery"
-  - "Bank payout within 1-2 business days after release"
-- Two-column layout with sticky sidebar:
-  - Deal Summary (Item, Price, Fee, Seller Receives)
-  - Share Code for easy sharing
-  - Parties with confirmation status
-- One clear primary action button per state
+- Status card with "What happens next" guidance
+- Trust Layer Box with 3 protection points
+- Sticky sidebar with deal summary
 
-**Logo Integration**
-- TrustLogo component using /trusttrade-logo-new.png
-- Size variants: small (h-10), default (h-12), large (h-14)
-- Used consistently across: Navbar, Landing, Login, Footer
-
-**Auth Flow Optimization**
-- Google Sign-In button first (recommended)
-- Clean "or continue with email" divider
-- Loading states on submit
-- Clear error messaging
+### Auth Flow
+- Google Sign-In first
+- Email/password form with validation
 - "Protected with 256-bit encryption" footer
 
 ---
 
-### Phase 1: UI/UX Overhaul (December 2025)
+## Phase 1: UI/UX Overhaul Complete
 
-**Landing Page**
-- Anti-scam focused headline: "Buy or sell online without getting scammed"
-- Trust indicators: 256-bit encryption, ID verified users, SA banks, 24hr support
+### Landing Page
+- Anti-scam headline: "Buy or sell online without getting scammed"
+- Trust indicators: 256-bit encryption, ID verified users, SA banks
 - 4-step escrow flow visualization
-- Mock transaction card showing escrow in action
 
-**Dashboard**
-- Escrow protection banner with payout times (10:00 & 15:00 daily)
-- Clear wallet breakdown: Available / In Escrow / Total Earned
-- Bank payout timing: "1-2 business days after release"
-- Compact stats grid (Active, Pending, Verified, In Escrow)
+### Dashboard
+- Escrow protection banner with payout times (10:00 & 15:00)
+- Wallet breakdown: Available / In Escrow / Total Earned
+- Quick actions for common tasks
 
-**New Transaction**
-- 4-step guided wizard: Parties → Item Details → Photos → Confirm
-- Role selection with clear descriptions (Buyer/Seller)
-- Live price summary with fee calculation
-- Delivery method options with auto-release times
+### New Transaction
+- 4-step wizard: Parties → Item Details → Photos → Confirm
+- Role selection, price summary, fee allocation
 
 ---
 
+## Technical Architecture
+
 ### Authentication
-1. **Email/Password**: Standard JWT login
-2. **Google Sign-In**: OAuth via Emergent Auth
-   - Endpoint: `POST /api/auth/google/callback`
-
-### Core Features
-- Transaction create, confirm, escrow, payment
-- Auto-refresh every 8 seconds for active transactions
-- Email notifications via Postmark
-- TradeSafe webhook integration
-
-### Fee Structure
-- **TrustTrade Fee**: 1.5% (minimum R5)
-- **Processing Fee**: Varies by method
-  - EFT: 0.86%
-  - Card: 2.88%
-  - Ozow: 1.73%
-
-### Transaction Flow
-```
-Created → Confirmed → Paid → Secured → Delivered → Released
-```
+- **Email/Password**: JWT tokens
+- **Google Sign-In**: Emergent OAuth integration
+- **Admin access**: is_admin flag in user document
 
 ### Key Endpoints
-- `POST /api/auth/login` - Email/password login
-- `POST /api/auth/google/callback` - Google OAuth
-- `POST /api/tradesafe/create-transaction` - Create escrow
-- `POST /api/tradesafe/sync/{id}` - Force sync status
-- `POST /api/tradesafe-webhook` - Webhook receiver
+```
+POST /api/auth/login
+POST /api/auth/google/callback
+POST /api/tradesafe/create-transaction
+POST /api/tradesafe/sync/{id}
+POST /api/tradesafe-webhook
+POST /api/users/banking-details/request-reset
+GET  /api/admin/stats
+GET  /api/admin/users
+GET  /api/admin/transactions
+GET  /api/admin/disputes
+```
+
+### Fee Structure
+- TrustTrade Fee: 1.5% (minimum R5)
+- Processing Fee: EFT 0.86%, Card 2.88%, Ozow 1.73%
+
+### Beta Limits
+- Min: R100, Max: R10,000
 
 ### Production Domains
 - www.trusttradesa.co.za
 - trusttradesa.co.za
-
-### Beta Limits
-- Min: R100
-- Max: R10,000
 
 ---
 
 ## Backlog
 
 ### P0 (Completed)
-- [x] Phase 1: Full UI/UX overhaul for beta launch
-- [x] Phase 2: Transaction Detail live deal tracker
-- [x] Phase 2: Logo integration (TrustTrade PNG)
-- [x] Phase 2: Auth flow optimization
+- [x] Full UI/UX overhaul
+- [x] Transaction Detail live deal tracker
+- [x] Logo integration (cropped PNG)
+- [x] Admin Dashboard
+- [x] Email/SMS verification
+- [x] Banking reset request flow
 
-### P1 (Ready to Implement)
+### P1 (Next)
 - [ ] Real TradeSafe refund (`allocationRefund` mutation)
-- [ ] Re-enable background jobs safely
+- [ ] Trust Score visibility in transaction creation
+- [ ] Dispute form improvements (evidence upload)
 
 ### P2 (Future)
 - [ ] AI Scam Detection enhancements

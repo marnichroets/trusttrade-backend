@@ -596,7 +596,7 @@ async def update_user_banking_details(request: Request, details: BankingDetailsU
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    logger.info(f"=== BANKING DETAILS UPDATE ===")
+    logger.info("=== BANKING DETAILS UPDATE ===")
     logger.info(f"User: {user.email} ({user.user_id})")
     
     # Get or create TradeSafe token
@@ -687,3 +687,80 @@ async def get_banking_details_status(request: Request):
 async def update_banking_details_deprecated(request: Request, details: BankingDetailsUpdate):
     """Update user's banking details - DEPRECATED"""
     raise HTTPException(status_code=400, detail="Please use /users/banking-details for secure banking updates")
+
+
+
+@router.post("/banking-details/request-reset")
+async def request_banking_reset(request: Request):
+    """
+    Request a banking details reset.
+    User must request this, admin must approve.
+    """
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Check if user has banking details
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    if not user_doc.get("banking_details_completed"):
+        raise HTTPException(status_code=400, detail="No banking details to reset")
+    
+    # Check for existing pending request
+    existing = await db.banking_reset_requests.find_one({
+        "user_id": user.user_id,
+        "status": "pending"
+    })
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="You already have a pending reset request")
+    
+    # Create reset request
+    request_id = f"brr_{uuid.uuid4().hex[:12]}"
+    
+    await db.banking_reset_requests.insert_one({
+        "request_id": request_id,
+        "user_id": user.user_id,
+        "user_email": user.email,
+        "user_name": user_doc.get("name"),
+        "reason": "User requested banking details reset",
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    logger.info(f"[BANKING_RESET] User {user.email} requested banking details reset: {request_id}")
+    
+    return {
+        "success": True,
+        "request_id": request_id,
+        "message": "Your request has been submitted. An admin will review it within 24 hours."
+    }
+
+
+@router.get("/banking-details/reset-status")
+async def get_banking_reset_status(request: Request):
+    """Get status of user's banking reset request"""
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    # Find most recent request
+    reset_request = await db.banking_reset_requests.find_one(
+        {"user_id": user.user_id},
+        sort=[("created_at", -1)]
+    )
+    
+    if not reset_request:
+        return {"has_request": False}
+    
+    return {
+        "has_request": True,
+        "request_id": reset_request.get("request_id"),
+        "status": reset_request.get("status"),
+        "created_at": reset_request.get("created_at"),
+        "approved_at": reset_request.get("approved_at")
+    }

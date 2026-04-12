@@ -121,7 +121,9 @@ function Dashboard() {
         {/* Escrow Protection Banner - Compact */}
         <div className="bg-slate-900 text-white rounded-lg px-4 py-3 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <Shield className="w-5 h-5 text-emerald-400" />
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Shield className="w-5 h-5 text-white" />
+            </div>
             <div>
               <p className="text-sm font-medium">All transactions protected by TrustTrade Escrow</p>
               <p className="text-xs text-slate-400">Funds only released when you confirm delivery</p>

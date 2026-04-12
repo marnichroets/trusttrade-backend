@@ -698,8 +698,10 @@ function TransactionDetail() {
     );
   }
 
-  // Show inline phone verification if needed
-  if (needsPhoneVerification) {
+  // Phone verification disabled for beta - skip straight to normal transaction view
+  // if (needsPhoneVerification) { ... }
+  const needsPhoneVerificationDisabled = false; // BETA: Phone verification hidden
+  if (needsPhoneVerificationDisabled) {
     return (
       <DashboardLayout user={user}>
         <div className="max-w-md mx-auto py-12 px-4">

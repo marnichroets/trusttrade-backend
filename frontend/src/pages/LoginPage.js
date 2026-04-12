@@ -49,11 +49,12 @@ export default function LoginPage() {
     
     try {
       // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-      const redirectUrl = window.location.origin + '/dashboard';
+      // Redirect to /auth/callback which handles the #session_id extraction
+      const redirectUrl = window.location.origin + '/auth/callback';
       const authUrl = `${EMERGENT_AUTH_URL}/?redirect=${encodeURIComponent(redirectUrl)}`;
       
       console.log('[GOOGLE_AUTH] Starting Google sign-in...');
-      console.log('[GOOGLE_AUTH] Redirect URL:', redirectUrl);
+      console.log('[GOOGLE_AUTH] Auth URL:', authUrl);
       
       window.location.href = authUrl;
     } catch (error) {

@@ -991,3 +991,48 @@ async def admin_refund_withdraw(request: Request, transaction_id: str):
         "amount_withdrawn": amount_cents / 100,
         "new_balance": result.get("new_balance")
     }
+
+
+
+# ============ EMAIL TEST ============
+
+@router.get("/test-email")
+async def test_email(request: Request, to: str = "marnichr@gmail.com"):
+    """
+    Send a test email to verify Postmark is working.
+    GET /api/admin/test-email?to=email@example.com
+    """
+    db = get_database()
+    await require_admin(request, db)
+    
+    logger.info(f"[EMAIL TEST] Sending test email to {to}")
+    print(f"[EMAIL TEST] Starting test email to {to}")
+    
+    try:
+        result = await send_email(
+            to_email=to,
+            to_name="Test Recipient",
+            subject="TrustTrade Email Test",
+            html_content="""
+            <div style="font-family: Arial, sans-serif; padding: 20px;">
+                <h1 style="color: #1a2942;">TrustTrade Email Test</h1>
+                <p>This is a test email from TrustTrade.</p>
+                <p>If you received this, the email system is working correctly!</p>
+                <p style="color: #666; font-size: 12px;">Sent at: """ + datetime.now(timezone.utc).isoformat() + """</p>
+            </div>
+            """
+        )
+        
+        if result:
+            logger.info(f"[EMAIL TEST] SUCCESS - sent to {to}")
+            print(f"[EMAIL TEST] SUCCESS - sent to {to}")
+            return {"success": True, "message": f"Test email sent to {to}", "recipient": to}
+        else:
+            logger.warning(f"[EMAIL TEST] FAILED - could not send to {to}")
+            print(f"[EMAIL TEST] FAILED - could not send to {to}")
+            return {"success": False, "message": "Email send returned False", "recipient": to}
+            
+    except Exception as e:
+        logger.error(f"[EMAIL TEST] ERROR: {str(e)}")
+        print(f"[EMAIL TEST] ERROR: {str(e)}")
+        return {"success": False, "error": str(e), "recipient": to}

@@ -1,93 +1,57 @@
-# TrustTrade - Production-Ready Escrow Platform for South Africa
+# TrustTrade - BETA LAUNCH READY
 
-## Original Problem Statement
-Build a production-ready escrow payment platform for peer-to-peer transactions in South Africa using TradeSafe as the payment provider.
-
-## Architecture
-```
-/app/
-├── backend/           # FastAPI + MongoDB
-│   ├── routes/        # auth.py, users.py, admin.py, transactions.py, tradesafe.py, webhooks.py
-│   ├── tradesafe_service.py  # TradeSafe GraphQL integration
-│   └── webhook_handler.py    # Webhook processing logic
-└── frontend/          # React 18.2.0 + Tailwind
-    └── src/pages/TransactionDetail.js
-```
-
-## Transaction State Flow
-```
-CREATED → Both Confirm → Ready for Payment
-    ↓
-[Seller creates escrow]
-    ↓
-Awaiting Payment → [Buyer pays via TradeSafe]
-    ↓
-Funds Secured (FUNDS_RECEIVED) → [Seller ships]
-    ↓
-Delivery in Progress → [Buyer confirms]
-    ↓
-Released (FUNDS_RELEASED)
-```
-
-## TradeSafe Status Mapping
-| TradeSafe State | TrustTrade Status |
-|-----------------|-------------------|
-| CREATED/PENDING | Awaiting Payment |
-| FUNDS_RECEIVED | Funds Secured |
-| INITIATED/SENT | Delivery in Progress |
-| DELIVERED | Awaiting Buyer Confirmation |
-| FUNDS_RELEASED | Released |
-
-## What's Been Implemented (April 2026)
+## Status: ✅ READY FOR REAL USERS
 
 ### Core Features
-- [x] Native JWT email/password auth
-- [x] Transaction confirmation flow (buyer + seller)
-- [x] TradeSafe escrow creation
-- [x] Fee allocation (BUYER_AGENT, SELLER_AGENT, SPLIT_AGENT)
-- [x] Payment status sync via API
+1. **Authentication**: JWT email/password
+2. **Transactions**: Create, confirm, escrow, payment, release
+3. **Auto-Refresh**: Every 8 seconds for active transactions
+4. **Emails**: Postmark with clear next-step instructions
+5. **Webhooks**: Auto-update on payment events
 
-### Bug Fixes (April 11, 2026)
-- [x] Transaction limits: R100 min, R10,000 max
-- [x] Escrow creation (wrong field name fix)
-- [x] Fee allocation display fix
-- [x] Payment status sync - manual Refresh Status button
+### Fee Structure
+- **TrustTrade Fee**: 1.5% (minimum R5)
+- **Processing Fee**: Varies by method
+  - EFT: 0.86%
+  - Card: 2.88%
+  - Ozow: 1.73%
 
-## API Endpoints
-- `POST /api/tradesafe/create-transaction` - Create escrow
-- `POST /api/tradesafe/sync/{id}` - Force sync with TradeSafe
-- `GET /api/tradesafe/status/{id}` - Get current status
-- `POST /api/tradesafe-webhook` - Webhook receiver
-
-## Webhook Configuration
-TradeSafe webhook URL should be configured to:
+### Fee Calculation Endpoint
 ```
-https://your-domain.com/api/tradesafe-webhook
+GET /api/tradesafe/calculate-fees?amount=200&fee_allocation=SELLER_AGENT
 ```
 
-## Logging Prefixes
-- `[WEBHOOK]` - Webhook events
-- `[SYNC]` - Status sync events
-- `[ESCROW]` - Escrow creation events
-- `[TXN]` - Transaction confirmation events
+Returns:
+- item_price
+- trusttrade_fee (1.5%, min R5)
+- processing_fee
+- total_fees
+- buyer_pays / seller_receives
+- payout_time: "1-2 business days"
 
-## P0/P1/P2 Priorities
+### Transaction Flow
+```
+Created → Confirm → Escrow → Payment → Secured → Release
+         (auto-refresh every 8s while active)
+```
 
-### P0 (Critical) - COMPLETED
-- [x] Transaction confirmation flow
-- [x] Escrow creation
-- [x] Fee allocation
-- [x] Payment status sync
+### Email Events
+| Event | What It Says |
+|-------|--------------|
+| Created | Next steps numbered 1-4 |
+| Payment | "Funds secured safely" + next steps |
+| Released | Payout breakdown + 1-2 business days |
 
-### P1 (High)
-- [ ] Configure TradeSafe webhook URL
-- [ ] Real TradeSafe refund
+### Webhook URL (Configure in TradeSafe)
+```
+https://trusttradesa.co.za/api/tradesafe-webhook
+```
 
-### P2 (Medium)
-- [ ] Email/SMS notifications
-- [ ] Re-enable background jobs
+### Test Endpoint
+```
+GET /api/test-email?to=your@email.com
+```
 
-## Test Credentials
-- Test User: testuser@example.com / Test@123
-- Seller: seller@example.com / Seller@123
-- Admin: marnichr@gmail.com / Admin@123
+### Beta Limits
+- Min: R100
+- Max: R10,000

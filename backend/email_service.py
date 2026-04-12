@@ -67,17 +67,21 @@ async def send_email(
     """
     Send a transactional email via Postmark.
     """
-    logger.info(f"EMAIL_ATTEMPT: to={to_email}, subject={subject}")
+    print(f"[EMAIL] Sending email to: {to_email}")
+    print(f"[EMAIL] Subject: {subject}")
+    logger.info(f"[EMAIL] Sending to: {to_email}, Subject: {subject}")
     
     # Validate email address before attempting to send
     if not to_email or not to_email.strip() or '@' not in to_email:
-        logger.info(f"EMAIL_SKIPPED: invalid/empty address '{to_email}'")
+        print(f"[EMAIL] SKIPPED - invalid/empty address: {to_email}")
+        logger.info(f"[EMAIL] SKIPPED: invalid/empty address '{to_email}'")
         return False
     
     client = get_postmark_client()
     
     if not client:
-        logger.info(f"EMAIL_SKIPPED: Postmark not configured for {to_email}")
+        print(f"[EMAIL] SKIPPED - Postmark not configured")
+        logger.info(f"[EMAIL] SKIPPED: Postmark not configured for {to_email}")
         return False
     
     try:
@@ -87,6 +91,7 @@ async def send_email(
             text_content = unescape(text_content)
             text_content = re.sub(r'\s+', ' ', text_content).strip()
         
+        print(f"[EMAIL] Calling Postmark API...")
         response = client.emails.send(
             From=f"{SENDER_NAME} <{SENDER_EMAIL}>",
             To=f"{to_name} <{to_email}>",
@@ -96,11 +101,14 @@ async def send_email(
             MessageStream="outbound"
         )
         
-        logger.info(f"EMAIL_SENT: to={to_email}, id={response.get('MessageID', 'unknown')}")
+        message_id = response.get('MessageID', 'unknown')
+        print(f"[EMAIL] SUCCESS! MessageID: {message_id}")
+        logger.info(f"[EMAIL] SUCCESS: to={to_email}, MessageID={message_id}")
         return True
         
     except Exception as e:
-        logger.error(f"EMAIL_FAILED: to={to_email}, error={str(e)}")
+        print(f"[EMAIL ERROR] {str(e)}")
+        logger.error(f"[EMAIL ERROR] to={to_email}, error={str(e)}")
         return False
 
 
@@ -290,16 +298,36 @@ def get_transaction_created_email(
 ) -> tuple[str, str]:
     """Generate transaction created email content"""
     
-    subject = f"{share_code} - New escrow transaction created"
+    subject = f"TrustTrade: New Transaction {share_code}"
     
-    intro_text = f"A new escrow transaction has been created. You are the <strong>{role}</strong> in this transaction."
+    if role.lower() == "buyer":
+        intro_text = f"""A new escrow transaction has been created for your purchase. You are the <strong>Buyer</strong>.
+        
+        <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
+            <strong>What happens next:</strong><br>
+            1. Review and confirm the transaction details<br>
+            2. Make payment through our secure escrow<br>
+            3. Receive your item<br>
+            4. Confirm delivery to release funds to seller
+        </div>"""
+    else:
+        intro_text = f"""A new escrow transaction has been created. You are the <strong>Seller</strong>.
+        
+        <div style="background: #fff3e0; padding: 12px; border-radius: 8px; margin: 16px 0;">
+            <strong>What happens next:</strong><br>
+            1. Review and confirm the transaction details<br>
+            2. Wait for buyer to make payment<br>
+            3. Ship the item once payment is secured<br>
+            4. Receive payout within 1-2 business days after buyer confirms
+        </div>"""
     
     details = {
         "Reference": share_code,
         "Item": item_description,
         "Amount": f"R {amount:,.2f}",
         "Other Party": other_party_name,
-        "Status": "Awaiting Payment" if role.lower() == "buyer" else "Awaiting Confirmation"
+        "Your Role": role.capitalize(),
+        "Status": "Awaiting Confirmation"
     }
     
     html_content = get_base_email_template(
@@ -309,7 +337,7 @@ def get_transaction_created_email(
         details=details,
         cta_text="View Transaction",
         cta_link=share_link,
-        show_how_it_works=True,
+        show_how_it_works=False,
         status_badge="New Transaction",
         status_color=BRAND_BLUE
     )
@@ -326,18 +354,34 @@ def get_payment_received_email(
 ) -> tuple[str, str]:
     """Generate payment received email content"""
     
-    subject = f"{share_code} — Payment Secured by TrustTrade"
+    subject = f"TrustTrade: Payment Secured - {share_code}"
     
     if role.lower() == "seller":
-        intro_text = "Great news! Payment has been received and is now secured in escrow. Please deliver the item to the buyer. Once they confirm delivery, the funds will be released to your account."
+        intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
+        
+        <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
+            <strong>What you need to do:</strong><br>
+            1. Ship/deliver the item to the buyer<br>
+            2. Mark as shipped in TrustTrade<br>
+            3. Wait for buyer to confirm receipt<br><br>
+            <strong>Payout:</strong> 1-2 business days after buyer confirms delivery
+        </div>"""
     else:
-        intro_text = "<strong>Your payment has been secured safely in TrustTrade Escrow.</strong><br><br>Your funds are protected until you confirm delivery."
+        intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
+        
+        <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
+            <strong>What happens next:</strong><br>
+            1. Seller will ship/deliver the item<br>
+            2. Inspect the item when you receive it<br>
+            3. Click "Confirm Delivery" to release funds to seller<br><br>
+            <strong>Your money is protected</strong> until you confirm delivery.
+        </div>"""
     
     # Add note about payment processor emails - prominent placement
     processor_note = """
     <div style='margin-top: 20px; padding: 16px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;'>
         <p style='font-size: 13px; color: #92400e; margin: 0; font-weight: 500;'>
-            <strong>Note:</strong> You may also receive a separate payment notification from our secure payment processor — this is completely normal and expected as part of our security process.
+            <strong>Note:</strong> You may also receive a separate notification from our payment processor — this is normal.
         </p>
     </div>
     """
@@ -517,29 +561,34 @@ def get_funds_released_email(
 ) -> tuple[str, str]:
     """Generate funds released email content"""
     
-    subject = f"{share_code} — Your funds have been released"
+    subject = f"TrustTrade: Funds Released - {share_code}"
     
-    intro_text = "Congratulations! Your funds have been released and will be deposited to your bank account during the next payout window (10:00 or 15:00 daily)."
+    fee_amount = amount - net_amount
     
-    # Add payment processor note
-    processor_note = """
-    <p style='font-size: 12px; color: #6c757d; margin-top: 16px; padding: 12px; background-color: #f8f9fa; border-radius: 6px;'>
-        <strong>Note:</strong> You may receive a separate notification from our secure payment processor — this is normal and part of our security process.
-    </p>
+    intro_text = f"""<strong style="color: #10b981;">Congratulations! Your funds have been released!</strong>
+    
+    <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <strong>Payout Details:</strong><br><br>
+        <table style="width: 100%;">
+            <tr><td>Item Amount:</td><td style="text-align: right;">R {amount:,.2f}</td></tr>
+            <tr><td>TrustTrade Fee (1.5%, min R5):</td><td style="text-align: right;">- R {fee_amount:,.2f}</td></tr>
+            <tr style="font-weight: bold; font-size: 16px;"><td>You Receive:</td><td style="text-align: right; color: #10b981;">R {net_amount:,.2f}</td></tr>
+        </table>
+    </div>
+    
+    <p><strong>Expected Deposit:</strong> Within 1-2 business days to your registered bank account.</p>
     """
     
     details = {
         "Reference": share_code,
         "Item": item_description,
-        "Total Amount": f"R {amount:,.2f}",
-        "TrustTrade Fee (2%)": f"R {(amount - net_amount):,.2f}",
-        "Amount Released": f"R {net_amount:,.2f}"
+        "Status": "Funds Released"
     }
     
     html_content = get_base_email_template(
         heading="Funds Released",
         greeting_name=recipient_name,
-        intro_text=intro_text + processor_note,
+        intro_text=intro_text,
         details=details,
         cta_text="View Transaction",
         cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",

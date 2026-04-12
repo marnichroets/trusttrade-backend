@@ -19,7 +19,7 @@ from tradesafe_service import (
     get_payment_link, start_delivery, accept_delivery,
     validate_minimum_transaction, calculate_fees,
     map_tradesafe_state_to_status, update_user_banking_details,
-    ALLOWED_PAYMENT_METHODS
+    ALLOWED_PAYMENT_METHODS, PLATFORM_FEE_PERCENT, MINIMUM_FEE_RANDS
 )
 from email_service import (
     send_delivery_started_email, send_funds_released_email,
@@ -31,12 +31,74 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tradesafe", tags=["TradeSafe"])
 
 
-def calculate_seller_receives(item_price: float, fee_percent: float = 2.0) -> float:
-    """Calculate seller payout using Decimal precision."""
+def calculate_seller_receives(item_price: float, fee_percent: float = 1.5) -> float:
+    """Calculate seller payout using Decimal precision with minimum fee."""
     price = Decimal(str(item_price))
     fee_rate = Decimal(str(fee_percent)) / Decimal("100")
-    fee = (price * fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    calculated_fee = (price * fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    # Apply minimum fee of R5
+    min_fee = Decimal("5.00")
+    fee = max(calculated_fee, min_fee)
     return float((price - fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+
+@router.get("/calculate-fees")
+async def get_fee_calculation(amount: float, fee_allocation: str = "SELLER_AGENT"):
+    """
+    Calculate and return fee breakdown for display before payment.
+    
+    Returns:
+        - item_price: Original item price
+        - trusttrade_fee: TrustTrade platform fee (1.5%, min R5)
+        - processing_fee: Estimated payment processing fee (~2.5%)
+        - total_fees: Combined fees
+        - buyer_pays: What buyer will pay
+        - seller_receives: What seller will receive after fees
+    """
+    if amount < 100:
+        raise HTTPException(status_code=400, detail="Minimum transaction amount is R100")
+    
+    # TrustTrade fee: 1.5% with R5 minimum
+    calculated_tt_fee = round(amount * (PLATFORM_FEE_PERCENT / 100), 2)
+    trusttrade_fee = max(calculated_tt_fee, MINIMUM_FEE_RANDS)
+    
+    # Payment processing fee estimate (~2.5%)
+    processing_fee = round(amount * 0.025, 2)
+    
+    total_fees = trusttrade_fee + processing_fee
+    
+    # Determine who pays based on fee_allocation
+    fee_alloc = fee_allocation.upper()
+    
+    if fee_alloc in ["BUYER_AGENT", "BUYER"]:
+        buyer_pays = amount + total_fees
+        seller_receives = amount
+        fee_paid_by = "Buyer"
+    elif fee_alloc in ["SELLER_AGENT", "SELLER"]:
+        buyer_pays = amount
+        seller_receives = amount - total_fees
+        fee_paid_by = "Seller"
+    else:  # SPLIT
+        buyer_pays = amount + (total_fees / 2)
+        seller_receives = amount - (total_fees / 2)
+        fee_paid_by = "Split 50/50"
+    
+    return {
+        "item_price": amount,
+        "trusttrade_fee": trusttrade_fee,
+        "trusttrade_fee_percent": PLATFORM_FEE_PERCENT,
+        "trusttrade_fee_minimum": MINIMUM_FEE_RANDS,
+        "processing_fee": processing_fee,
+        "processing_fee_percent": 2.5,
+        "total_fees": total_fees,
+        "fee_allocation": fee_alloc,
+        "fee_paid_by": fee_paid_by,
+        "buyer_pays": round(buyer_pays, 2),
+        "seller_receives": round(seller_receives, 2),
+        "payout_time": "1-2 business days after release"
+    }
+
 
 
 @router.post("/create-transaction")

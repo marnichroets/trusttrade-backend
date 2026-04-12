@@ -77,6 +77,33 @@ function TransactionDetail() {
     }
   }, [resendCooldown]);
 
+  // Auto-refresh every 8 seconds when transaction is in active state
+  useEffect(() => {
+    if (!transaction) return;
+    
+    // States that need auto-refresh (awaiting external actions)
+    const activeStates = [
+      'Awaiting Payment',
+      'Pending Seller Confirmation',
+      'Pending Buyer Confirmation',
+      'Ready for Payment',
+      'Funds Secured',
+      'Delivery in Progress',
+      'Awaiting Release'
+    ];
+    
+    const shouldAutoRefresh = activeStates.includes(transaction.payment_status);
+    
+    if (shouldAutoRefresh) {
+      const interval = setInterval(() => {
+        console.log('[AUTO-REFRESH] Refreshing transaction status...');
+        fetchData();
+      }, 8000); // 8 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [transaction?.payment_status, transactionId]);
+
   const fetchData = async () => {
     try {
       // First get user info
@@ -1243,7 +1270,7 @@ function TransactionDetail() {
               <div className="flex-1">
                 <h3 className="text-lg font-semibold text-slate-900 mb-2">Confirm Fee Agreement</h3>
                 <p className="text-sm text-slate-600 mb-4">
-                  Please review the transaction details and TrustTrade fee structure below. By confirming, you agree to the 2% platform fee and the escrow terms.
+                  Please review the transaction details and TrustTrade fee structure below. By confirming, you agree to the 1.5% platform fee (min R5) and the escrow terms.
                 </p>
                 
                 {/* Fee Breakdown */}
@@ -1255,7 +1282,7 @@ function TransactionDetail() {
                       <span className="font-medium">R {transaction.item_price?.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-600">TrustTrade Fee (2%):</span>
+                      <span className="text-slate-600">TrustTrade Fee (1.5%):</span>
                       <span className="font-medium">R {transaction.trusttrade_fee?.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
@@ -1458,8 +1485,8 @@ function TransactionDetail() {
                       <span className="font-medium text-slate-800">R {transaction.item_price?.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-600">TrustTrade Fee (2%):</span>
-                      <span className="font-medium text-slate-800">R {(transaction.item_price * 0.02)?.toFixed(2)}</span>
+                      <span className="text-slate-600">TrustTrade Fee (1.5%, min R5):</span>
+                      <span className="font-medium text-slate-800">R {Math.max(transaction.item_price * 0.015, 5)?.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-600">
@@ -1477,15 +1504,27 @@ function TransactionDetail() {
                     </div>
                     <div className="border-t border-slate-200 pt-3 mt-3">
                       <div className="flex justify-between items-center">
-                        <span className="font-semibold text-slate-900 text-base">Total:</span>
-                        <span className="font-bold text-lg text-slate-900">
-                          {selectedPaymentMethod === 'eft' && `R ${(transaction.item_price * 1.0286)?.toFixed(2)}`}
-                          {selectedPaymentMethod === 'card' && `R ${(transaction.item_price * 1.0488)?.toFixed(2)}`}
-                          {selectedPaymentMethod === 'ozow' && `R ${(transaction.item_price * 1.0373)?.toFixed(2)}`}
-                          {!selectedPaymentMethod && <span className="text-slate-400 text-base font-normal italic">Select method</span>}
+                        <span className="font-semibold text-slate-900 text-base">Total Amount:</span>
+                        <span className="font-bold text-lg text-green-700">
+                          {selectedPaymentMethod === 'eft' && `R ${(transaction.item_price + Math.max(transaction.item_price * 0.015, 5) + transaction.item_price * 0.0086)?.toFixed(2)}`}
+                          {selectedPaymentMethod === 'card' && `R ${(transaction.item_price + Math.max(transaction.item_price * 0.015, 5) + transaction.item_price * 0.0288)?.toFixed(2)}`}
+                          {selectedPaymentMethod === 'ozow' && `R ${(transaction.item_price + Math.max(transaction.item_price * 0.015, 5) + transaction.item_price * 0.0173)?.toFixed(2)}`}
+                          {!selectedPaymentMethod && <span className="text-slate-400 text-base font-normal italic">Select payment method</span>}
                         </span>
                       </div>
+                      {transaction.fee_allocation !== 'BUYER_AGENT' && (
+                        <p className="text-xs text-slate-500 mt-1">
+                          {transaction.fee_allocation === 'SELLER_AGENT' ? 'Fees deducted from seller payout' : 'Fees split between buyer and seller'}
+                        </p>
+                      )}
                     </div>
+                  </div>
+                  
+                  {/* Payout Info */}
+                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                    <p className="text-xs text-blue-800">
+                      <strong>Expected Payout:</strong> 1-2 business days after you confirm receipt of the item
+                    </p>
                   </div>
                 </div>
                 
@@ -1837,7 +1876,7 @@ function TransactionDetail() {
                   <span className="font-mono font-medium text-slate-900">R {transaction.item_price.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">TrustTrade Fee (2%):</span>
+                  <span className="text-slate-600">TrustTrade Fee (1.5%):</span>
                   <span className="font-mono font-medium text-slate-900">R {transaction.trusttrade_fee.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm items-center">

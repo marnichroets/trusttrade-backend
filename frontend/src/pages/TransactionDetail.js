@@ -1938,7 +1938,7 @@ function TransactionDetail() {
         {!transaction.delivery_confirmed && transaction.seller_confirmed && (
               <Card className="p-4">
                 <p className="text-sm text-slate-600 mb-2">Having issues?</p>
-                <Button variant="outline" size="sm" onClick={() => navigate('/disputes', { state: { transactionId: transaction.transaction_id } })}>
+                <Button variant="outline" size="sm" onClick={() => navigate('/disputes-dashboard', { state: { transactionId: transaction.transaction_id } })}>
                   <FileText className="w-4 h-4 mr-1" />Raise Dispute
                 </Button>
               </Card>

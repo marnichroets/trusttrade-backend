@@ -365,15 +365,15 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         buyer_name = user.name
         buyer_email = normalize_email(user.email)
         seller_user_id = None
-        seller_name = transaction_data.seller_name
-        seller_email = normalize_email(transaction_data.seller_email)
+        seller_name = transaction_data.seller_name or "Pending"
+        seller_email = normalize_email(transaction_data.seller_email) if transaction_data.seller_email else ""
     else:
         seller_user_id = user.user_id
         seller_name = user.name
         seller_email = normalize_email(user.email)
         buyer_user_id = None
-        buyer_name = transaction_data.buyer_name
-        buyer_email = normalize_email(transaction_data.buyer_email)
+        buyer_name = transaction_data.buyer_name or "Pending"
+        buyer_email = normalize_email(transaction_data.buyer_email) if transaction_data.buyer_email else ""
     
     # Detect if recipient_info is phone or email
     recipient_info = seller_email if transaction_data.creator_role == "buyer" else buyer_email

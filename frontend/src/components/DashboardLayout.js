@@ -24,7 +24,7 @@ function DashboardLayout({ children, user }) {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     { icon: Plus, label: 'New Transaction', path: '/transactions/new', highlight: true },
     { icon: FileText, label: 'My Transactions', path: '/transactions' },
-    { icon: AlertCircle, label: 'Disputes', path: '/disputes' },
+    { icon: AlertCircle, label: 'Disputes', path: '/disputes-dashboard' },
     { icon: Activity, label: 'Live Activity', path: '/activity' },
     { icon: User, label: 'My Profile', path: '/profile' },
   ];

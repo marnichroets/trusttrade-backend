@@ -352,7 +352,7 @@ function LandingPage() {
           <div className="grid sm:grid-cols-4 gap-8 mb-8">
             <div className="sm:col-span-2">
               <div className="mb-3">
-                <TrustLogo size="default" />
+                <TrustLogo size="small" />
               </div>
               <p className="text-sm text-slate-500 max-w-xs">
                 Secure escrow protection for online transactions in South Africa. Buy and sell without the scam risk.

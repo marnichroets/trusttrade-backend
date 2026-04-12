@@ -88,7 +88,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-6">
           <Link to="/" className="inline-block mb-2">
-            <TrustLogo size="large" />
+            <TrustLogo size="large" className="mx-auto" />
           </Link>
           <p className="text-sm text-slate-500">Secure Escrow for South Africa</p>
         </div>

@@ -28,7 +28,8 @@ TRADESAFE_ENV = os.environ.get('TRADESAFE_ENV', 'production')
 
 # TrustTrade Platform Settings - Beta Launch Limits
 MINIMUM_TRANSACTION_AMOUNT = 100.0  # R100 minimum (beta)
-PLATFORM_FEE_PERCENT = 2.0  # TrustTrade 2% agent fee
+PLATFORM_FEE_PERCENT = 1.5  # TrustTrade 1.5% agent fee
+MINIMUM_FEE_RANDS = 5.0  # Minimum fee R5
 
 # Redirect URLs after payment (from environment variables)
 PAYMENT_SUCCESS_URL = os.environ.get('PAYMENT_SUCCESS_URL', 'https://www.trusttradesa.co.za/transaction/success')
@@ -151,7 +152,7 @@ async def create_user_token(
     Note: 'reference' field is NOT supported in TokenInput
     """
     # Pre-flight validation with detailed logging
-    logger.info(f"=== TOKEN CREATION REQUEST ===")
+    logger.info("=== TOKEN CREATION REQUEST ===")
     logger.info(f"Given Name: {given_name}")
     logger.info(f"Family Name: {family_name}")
     logger.info(f"Email: {email}")
@@ -201,31 +202,31 @@ async def create_user_token(
         }
     }
     
-    logger.info(f"=== EXACT REQUEST PAYLOAD ===")
+    logger.info("=== EXACT REQUEST PAYLOAD ===")
     logger.info(f"Variables: {variables}")
     
     # Execute the GraphQL mutation
     result = await execute_graphql(mutation, variables)
     
-    logger.info(f"=== EXACT API RESPONSE ===")
+    logger.info("=== EXACT API RESPONSE ===")
     logger.info(f"Result: {result}")
     
     if result and 'errors' in result:
         error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
         debug_msg = result['errors'][0].get('extensions', {}).get('debugMessage', '') if result['errors'] else ''
-        logger.error(f"=== TOKEN CREATION FAILED ===")
+        logger.error("=== TOKEN CREATION FAILED ===")
         logger.error(f"Error message: {error_msg}")
         logger.error(f"Debug message: {debug_msg}")
         logger.error(f"Full errors: {result['errors']}")
         return None
     
     if result and 'tokenCreate' in result:
-        logger.info(f"=== TOKEN CREATION SUCCESS ===")
+        logger.info("=== TOKEN CREATION SUCCESS ===")
         logger.info(f"Token ID: {result['tokenCreate'].get('id')}")
         logger.info(f"Token Name: {result['tokenCreate'].get('name')}")
         return result['tokenCreate']
     
-    logger.error(f"=== UNEXPECTED RESPONSE ===")
+    logger.error("=== UNEXPECTED RESPONSE ===")
     logger.error(f"Token creation returned unexpected result for {email}: {result}")
     return None
 
@@ -244,7 +245,7 @@ async def get_or_create_user_token(
     
     If user_id and db are provided, will check for and reuse existing token.
     """
-    logger.info(f"=== GET OR CREATE TOKEN ===")
+    logger.info("=== GET OR CREATE TOKEN ===")
     logger.info(f"Name: {name}, Email: {email}, Mobile: {mobile}, User ID: {user_id}")
     
     # If we have db and user_id, try to reuse existing token
@@ -361,7 +362,7 @@ async def create_tradesafe_transaction(
         'SELLER_AGENT'  # Default
     )
     
-    logger.info(f"=== CREATE TRANSACTION REQUEST ===")
+    logger.info("=== CREATE TRANSACTION REQUEST ===")
     logger.info(f"Reference: {internal_reference}")
     logger.info(f"Amount: R{amount}")
     logger.info(f"Buyer: {buyer_name} ({buyer_email}) Mobile: {buyer_mobile}")
@@ -398,7 +399,7 @@ async def create_tradesafe_transaction(
     db = get_database()
     
     # Get or create tokens for buyer and seller (reuse from user records if available)
-    logger.info(f"Getting/creating buyer token...")
+    logger.info("Getting/creating buyer token...")
     buyer_token = await get_or_create_user_token(
         buyer_name, 
         buyer_email, 
@@ -407,7 +408,7 @@ async def create_tradesafe_transaction(
         db=db
     )
     
-    logger.info(f"Getting/creating seller token...")
+    logger.info("Getting/creating seller token...")
     seller_token = await get_or_create_user_token(
         seller_name, 
         seller_email, 
@@ -417,11 +418,11 @@ async def create_tradesafe_transaction(
     )
     
     if not buyer_token:
-        logger.error(f"=== BUYER TOKEN CREATION FAILED ===")
+        logger.error("=== BUYER TOKEN CREATION FAILED ===")
         return {"error": "Could not verify buyer details. Please check buyer information and try again."}
     
     if not seller_token:
-        logger.error(f"=== SELLER TOKEN CREATION FAILED ===")
+        logger.error("=== SELLER TOKEN CREATION FAILED ===")
         return {"error": "Could not verify seller details. Please check seller information and try again."}
     
     logger.info(f"Tokens created - Buyer: {buyer_token}, Seller: {seller_token}")
@@ -429,12 +430,14 @@ async def create_tradesafe_transaction(
     # TradeSafe API expects amount in RANDS (NOT cents)
     amount_rands = float(amount)
     
-    # Calculate TrustTrade 2% platform fee (estimate - actual depends on fee allocation)
-    trusttrade_fee = round(amount_rands * (PLATFORM_FEE_PERCENT / 100), 2)
+    # Calculate TrustTrade fee: 1.5% with R5 minimum
+    calculated_fee = round(amount_rands * (PLATFORM_FEE_PERCENT / 100), 2)
+    trusttrade_fee = max(calculated_fee, MINIMUM_FEE_RANDS)
     
-    logger.info(f"=== FEE CALCULATION ===")
+    logger.info("=== FEE CALCULATION ===")
     logger.info(f"Item Amount: R{amount_rands}")
-    logger.info(f"TrustTrade Fee ({PLATFORM_FEE_PERCENT}%): R{trusttrade_fee}")
+    logger.info(f"Calculated Fee ({PLATFORM_FEE_PERCENT}%): R{calculated_fee}")
+    logger.info(f"TrustTrade Fee (min R{MINIMUM_FEE_RANDS}): R{trusttrade_fee}")
     logger.info(f"Fee Allocation: {normalized_fee_allocation}")
     
     # GraphQL mutation for creating a transaction with AGENT
@@ -519,31 +522,31 @@ async def create_tradesafe_transaction(
         }
     }
     
-    logger.info(f"=== TRANSACTION CREATE REQUEST ===")
-    logger.info(f"=== FIELDS SENT TO TRADESAFE ===")
+    logger.info("=== TRANSACTION CREATE REQUEST ===")
+    logger.info("=== FIELDS SENT TO TRADESAFE ===")
     logger.info(f"Transaction feeAllocation: {normalized_fee_allocation}")
     logger.info(f"AGENT fee: {PLATFORM_FEE_PERCENT}")
-    logger.info(f"AGENT feeType: PERCENT")
+    logger.info("AGENT feeType: PERCENT")
     logger.info(f"AGENT feeAllocation: {normalized_fee_allocation}")
     logger.info(f"Allocation value: R{amount_rands}")
     logger.info(f"Variables: {variables}")
     
     result = await execute_graphql(mutation, variables)
     
-    logger.info(f"=== TRANSACTION CREATE RESPONSE ===")
+    logger.info("=== TRANSACTION CREATE RESPONSE ===")
     logger.info(f"Result: {result}")
     
     if result and 'errors' in result:
         error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
         debug_msg = result['errors'][0].get('extensions', {}).get('debugMessage', '') if result['errors'] else ''
-        logger.error(f"=== TRANSACTION CREATION FAILED ===")
+        logger.error("=== TRANSACTION CREATION FAILED ===")
         logger.error(f"Error: {error_msg}")
         logger.error(f"Debug: {debug_msg}")
         return {"error": f"Payment processing error: {error_msg}"}
     
     if result and 'transactionCreate' in result:
         tx = result['transactionCreate']
-        logger.info(f"=== TRANSACTION CREATED SUCCESSFULLY ===")
+        logger.info("=== TRANSACTION CREATED SUCCESSFULLY ===")
         logger.info(f"Transaction ID: {tx['id']}")
         logger.info(f"State: {tx['state']}")
         logger.info(f"Fee Allocation: {tx.get('feeAllocation')}")
@@ -564,7 +567,7 @@ async def create_tradesafe_transaction(
         
         return tx
     
-    logger.error(f"=== UNEXPECTED TRANSACTION RESPONSE ===")
+    logger.error("=== UNEXPECTED TRANSACTION RESPONSE ===")
     return {"error": "Failed to create transaction. Please try again."}
 
 
@@ -615,7 +618,7 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     """
     import traceback
     
-    print(f"=== get_payment_link called ===")
+    print("=== get_payment_link called ===")
     print(f"tradesafe_id: {tradesafe_id}")
     print(f"redirect_urls: {redirect_urls}")
     print(f"TRADESAFE_ENV: {TRADESAFE_ENV}")
@@ -646,12 +649,12 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     
     try:
         result = await execute_graphql(query, {"id": tradesafe_id})
-        print(f"=== GET TRANSACTION RAW RESPONSE ===")
+        print("=== GET TRANSACTION RAW RESPONSE ===")
         print(f"Result: {result}")
-        logger.info(f"=== GET TRANSACTION FOR PAYMENT ===")
+        logger.info("=== GET TRANSACTION FOR PAYMENT ===")
         logger.info(f"Result: {result}")
     except Exception as e:
-        print(f"=== ERROR fetching transaction ===")
+        print("=== ERROR fetching transaction ===")
         print(f"Error: {str(e)}")
         traceback.print_exc()
         return None
@@ -768,9 +771,9 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     # If we got a deposit but no payment link (EFT case), return deposit info
     # The frontend will show bank details or instruct user
     if last_deposit:
-        print(f"=== Returning EFT deposit info (no payment link) ===")
+        print("=== Returning EFT deposit info (no payment link) ===")
         print(f"last_deposit: {last_deposit}")
-        logger.info(f"Returning EFT deposit info without payment link")
+        logger.info("Returning EFT deposit info without payment link")
         return {
             "tradesafe_id": tradesafe_id,
             "state": "PENDING_PAYMENT",
@@ -885,8 +888,8 @@ def validate_minimum_transaction(amount: float) -> tuple:
 def calculate_fees(amount: float, fee_allocation: str = "split") -> Dict[str, float]:
     """
     Calculate fee breakdown for transaction display.
-    TrustTrade charges 2% agent fee.
-    TradeSafe also charges their fee (varies).
+    TrustTrade charges 1.5% agent fee (minimum R5).
+    TradeSafe also charges their payment processing fee.
     
     Args:
         amount: Transaction amount in ZAR
@@ -895,12 +898,14 @@ def calculate_fees(amount: float, fee_allocation: str = "split") -> Dict[str, fl
     Returns:
         Fee breakdown dictionary
     """
-    trusttrade_fee = round(amount * (PLATFORM_FEE_PERCENT / 100), 2)
+    # TrustTrade fee: 1.5% with R5 minimum
+    calculated_trusttrade = round(amount * (PLATFORM_FEE_PERCENT / 100), 2)
+    trusttrade_fee = max(calculated_trusttrade, MINIMUM_FEE_RANDS)
     
-    # Estimated TradeSafe fee (approximately 2.5-3% depending on payment method)
-    estimated_tradesafe_fee = round(amount * 0.025, 2)
+    # Estimated payment processing fee (approximately 2.5% for card payments)
+    processing_fee = round(amount * 0.025, 2)
     
-    total_fees = trusttrade_fee + estimated_tradesafe_fee
+    total_fees = trusttrade_fee + processing_fee
     
     if fee_allocation.lower() == "buyer":
         buyer_pays = total_fees
@@ -921,7 +926,7 @@ def calculate_fees(amount: float, fee_allocation: str = "split") -> Dict[str, fl
     return {
         "item_amount": amount,
         "trusttrade_fee": trusttrade_fee,
-        "estimated_payment_fee": estimated_tradesafe_fee,
+        "estimated_payment_fee": processing_fee,
         "total_fees": total_fees,
         "fee_allocation": fee_allocation,
         "buyer_pays_fees": round(buyer_pays, 2),
@@ -1006,7 +1011,7 @@ async def update_token_banking_details(
     Update a TradeSafe token with banking details and payout settings.
     Uses tokenUpdate mutation to attach banking and set payout/refund intervals.
     """
-    logger.info(f"=== TOKEN UPDATE (BANKING) ===")
+    logger.info("=== TOKEN UPDATE (BANKING) ===")
     logger.info(f"Token ID: {token_id}")
     logger.info(f"Bank: {bank_name}, Account: ***{account_number[-4:] if account_number else 'N/A'}")
     logger.info(f"Payout: {payout_interval}, Refund: {refund_interval}")
@@ -1091,7 +1096,7 @@ async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
     Get details of a TradeSafe token including balance, banking info, and settings.
     Returns comprehensive token information for admin review.
     """
-    logger.info(f"=== GET TOKEN DETAILS ===")
+    logger.info("=== GET TOKEN DETAILS ===")
     logger.info(f"Token ID: {token_id}")
     
     query = """
@@ -1155,7 +1160,7 @@ async def request_token_withdrawal(token_id: str, amount_cents: int) -> Dict[str
     Request withdrawal from a token wallet.
     Amount is in cents (e.g., R100 = 10000 cents).
     """
-    logger.info(f"=== TOKEN WITHDRAWAL REQUEST ===")
+    logger.info("=== TOKEN WITHDRAWAL REQUEST ===")
     logger.info(f"Token ID: {token_id}, Amount: {amount_cents} cents (R{amount_cents/100:.2f})")
     
     mutation = """
@@ -1202,7 +1207,7 @@ async def get_or_reuse_user_token(
     Get existing token from user record or create new one.
     This ensures ONE persistent token per user.
     """
-    logger.info(f"=== GET OR REUSE USER TOKEN ===")
+    logger.info("=== GET OR REUSE USER TOKEN ===")
     logger.info(f"User ID: {user_id}, Email: {email}")
     
     # Check if user already has a token
@@ -1247,7 +1252,7 @@ async def get_or_reuse_user_token(
                 "tradesafe_token_reference": token_data.get('name', '')
             }}
         )
-        logger.info(f"Token saved to user record")
+        logger.info("Token saved to user record")
         return token_id
     
     logger.error(f"Failed to create token for user {user_id}")

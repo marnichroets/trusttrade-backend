@@ -1,43 +1,57 @@
-# TrustTrade - Beta Launch Ready
+# TrustTrade - BETA LAUNCH READY
 
-## Status: ✅ READY FOR BETA
+## Status: ✅ READY FOR REAL USERS
 
-### Core Features Working
-1. **Authentication**: JWT email/password login
-2. **Transactions**: Create, confirm, escrow
-3. **Payments**: TradeSafe integration
-4. **Webhooks**: Auto-updates on payment
-5. **Emails**: Postmark integrated ✅
+### Core Features
+1. **Authentication**: JWT email/password
+2. **Transactions**: Create, confirm, escrow, payment, release
+3. **Auto-Refresh**: Every 8 seconds for active transactions
+4. **Emails**: Postmark with clear next-step instructions
+5. **Webhooks**: Auto-update on payment events
 
-### Email System
-- **Provider**: Postmark
-- **Sender**: noreply@trusttradesa.co.za
-- **Test Endpoint**: `GET /api/test-email?to=email@example.com`
+### Fee Structure
+- **TrustTrade Fee**: 1.5% (minimum R5)
+- **Processing Fee**: Varies by method
+  - EFT: 0.86%
+  - Card: 2.88%
+  - Ozow: 1.73%
 
-#### Email Events
-| Event | Recipients |
-|-------|------------|
-| Transaction Created | Buyer & Seller |
-| Payment Received | Buyer & Seller |
-| Funds Released | Seller |
-
-### Webhook Configuration
-Set in TradeSafe dashboard:
+### Fee Calculation Endpoint
 ```
-URL: https://trusttradesa.co.za/api/tradesafe-webhook
+GET /api/tradesafe/calculate-fees?amount=200&fee_allocation=SELLER_AGENT
 ```
 
-### Logging
-- `[EMAIL]` - Email sending events
-- `[WEBHOOK]` - Webhook processing
-- `[SYNC]` - Manual status sync
-- `[ESCROW]` - Escrow creation
+Returns:
+- item_price
+- trusttrade_fee (1.5%, min R5)
+- processing_fee
+- total_fees
+- buyer_pays / seller_receives
+- payout_time: "1-2 business days"
 
-### Test Accounts
-- Buyer: testuser@example.com / Test@123
-- Seller: seller@example.com / Seller@123
-- Admin: marnichr@gmail.com / Admin@123
+### Transaction Flow
+```
+Created → Confirm → Escrow → Payment → Secured → Release
+         (auto-refresh every 8s while active)
+```
+
+### Email Events
+| Event | What It Says |
+|-------|--------------|
+| Created | Next steps numbered 1-4 |
+| Payment | "Funds secured safely" + next steps |
+| Released | Payout breakdown + 1-2 business days |
+
+### Webhook URL (Configure in TradeSafe)
+```
+https://trusttradesa.co.za/api/tradesafe-webhook
+```
+
+### Test Endpoint
+```
+GET /api/test-email?to=your@email.com
+```
 
 ### Beta Limits
-- Min Transaction: R100
-- Max Transaction: R10,000
+- Min: R100
+- Max: R10,000

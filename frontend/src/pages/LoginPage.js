@@ -49,8 +49,8 @@ export default function LoginPage() {
     
     try {
       // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-      // Redirect to /auth/callback which handles the #session_id extraction
-      const redirectUrl = window.location.origin + '/auth/callback';
+      // Always use www.trusttradesa.co.za for consistency
+      const redirectUrl = 'https://www.trusttradesa.co.za/auth/callback';
       const authUrl = `${EMERGENT_AUTH_URL}/?redirect=${encodeURIComponent(redirectUrl)}`;
       
       console.log('[GOOGLE_AUTH] Starting Google sign-in...');

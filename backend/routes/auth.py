@@ -339,3 +339,128 @@ async def get_phone_verification_status(request: Request):
         "can_resend": can_send,
         "resend_cooldown_remaining": seconds_remaining
     }
+
+
+
+# ============ GOOGLE OAUTH ============
+
+class GoogleCallbackRequest(BaseModel):
+    session_id: str
+
+
+@router.post("/google/callback")
+async def google_auth_callback(request: Request, data: GoogleCallbackRequest):
+    """
+    Exchange Emergent Auth session_id for user data and session token.
+    Creates new user if not exists, or logs in existing user.
+    """
+    import httpx
+    
+    db = get_database()
+    session_id = data.session_id
+    
+    print(f"[GOOGLE_AUTH] Callback started, session_id: {session_id[:12]}...")
+    logger.info("[GOOGLE_AUTH] Callback started")
+    
+    try:
+        # Exchange session_id with Emergent Auth
+        print("[GOOGLE_AUTH] Calling Emergent Auth API...")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                headers={"X-Session-ID": session_id}
+            )
+        
+        if response.status_code != 200:
+            print(f"[GOOGLE_AUTH] Emergent Auth failed: {response.status_code} {response.text}")
+            logger.error(f"[GOOGLE_AUTH] Emergent Auth error: {response.status_code}")
+            raise HTTPException(status_code=401, detail="Invalid session. Please try again.")
+        
+        auth_data = response.json()
+        print(f"[GOOGLE_AUTH] Success! Email: {auth_data.get('email')}")
+        logger.info(f"[GOOGLE_AUTH] Got user data: {auth_data.get('email')}")
+        
+        email = auth_data.get("email", "").lower()
+        name = auth_data.get("name", "")
+        picture = auth_data.get("picture", "")
+        google_id = auth_data.get("id", "")
+        emergent_session_token = auth_data.get("session_token", "")
+        
+        if not email:
+            print("[GOOGLE_AUTH] No email in response")
+            raise HTTPException(status_code=400, detail="No email provided by Google")
+        
+        # Check if user exists
+        existing_user = await db.users.find_one({"email": email}, {"_id": 0})
+        
+        if existing_user:
+            # Update existing user
+            print(f"[GOOGLE_AUTH] Existing user found: {existing_user.get('user_id')}")
+            user_id = existing_user["user_id"]
+            
+            await db.users.update_one(
+                {"email": email},
+                {"$set": {
+                    "name": name or existing_user.get("name"),
+                    "picture": picture,
+                    "google_id": google_id,
+                    "last_login": datetime.now(timezone.utc).isoformat(),
+                    "auth_method": "google"
+                }}
+            )
+            is_admin = existing_user.get("is_admin", False)
+        else:
+            # Create new user
+            user_id = f"user_{uuid.uuid4().hex[:12]}"
+            print(f"[GOOGLE_AUTH] Creating new user: {user_id}")
+            
+            await db.users.insert_one({
+                "user_id": user_id,
+                "email": email,
+                "name": name,
+                "picture": picture,
+                "google_id": google_id,
+                "auth_method": "google",
+                "is_admin": False,
+                "verified": True,  # Google emails are verified
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "last_login": datetime.now(timezone.utc).isoformat()
+            })
+            is_admin = False
+        
+        # Generate session token (use Emergent's or generate our own)
+        session_token = emergent_session_token or secrets.token_urlsafe(32)
+        
+        # Store session
+        expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+        await db.user_sessions.update_one(
+            {"user_id": user_id},
+            {"$set": {
+                "session_token": session_token,
+                "expires_at": expires_at,
+                "created_at": datetime.now(timezone.utc),
+                "auth_method": "google"
+            }},
+            upsert=True
+        )
+        
+        print(f"[GOOGLE_AUTH] Login complete for {email}")
+        logger.info(f"[GOOGLE_AUTH] Login complete: {email}")
+        
+        return {
+            "user_id": user_id,
+            "email": email,
+            "name": name,
+            "picture": picture,
+            "is_admin": is_admin,
+            "session_token": session_token
+        }
+        
+    except httpx.RequestError as e:
+        print(f"[GOOGLE_AUTH] Network error: {str(e)}")
+        logger.error(f"[GOOGLE_AUTH] Network error: {str(e)}")
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
+    except Exception as e:
+        print(f"[GOOGLE_AUTH] Error: {str(e)}")
+        logger.error(f"[GOOGLE_AUTH] Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Authentication failed")

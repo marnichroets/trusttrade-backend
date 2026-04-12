@@ -5,23 +5,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import api from '../utils/api';
-import { Plus, FileText, AlertCircle, TrendingUp, ShieldCheck, Wallet, Users, Lock, Eye, EyeOff, CreditCard, ArrowRight, Clock, Shield } from 'lucide-react';
-
-// Helper to format currency with security (rounded for users)
-const formatSecureAmount = (amount, isAdmin = false) => {
-  if (isAdmin) {
-    return `R ${amount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  }
-  
-  // Round to nearest thousand for security
-  if (amount >= 1000000) {
-    return `R ${(amount / 1000000).toFixed(1)}M+`;
-  } else if (amount >= 1000) {
-    return `R ${Math.floor(amount / 1000)}k+`;
-  } else {
-    return `R ${Math.floor(amount / 100) * 100}+`;
-  }
-};
+import { Plus, FileText, AlertCircle, TrendingUp, ShieldCheck, Wallet, Lock, Eye, EyeOff, CreditCard, ArrowRight, Clock, Shield, Banknote, CheckCircle } from 'lucide-react';
 
 function Dashboard() {
   const [user, setUser] = useState(null);
@@ -54,7 +38,6 @@ function Dashboard() {
       setPlatformStats(statsRes.data);
       if (walletRes.data) setWalletData(walletRes.data);
 
-      // Fetch admin-only data if user is admin
       if (userRes.data.is_admin) {
         try {
           const [adminStatsRes, escrowDetailsRes] = await Promise.all([
@@ -80,14 +63,11 @@ function Dashboard() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-3 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
-  const pendingTransactions = transactions.filter(t => 
-    t.payment_status !== 'Released' && t.payment_status !== 'Cancelled'
-  );
   const activeTransactions = transactions.filter(t => 
     t.payment_status !== 'Released' && t.payment_status !== 'Cancelled' && t.payment_status !== 'Refunded'
   );
@@ -97,292 +77,171 @@ function Dashboard() {
   const pendingDisputes = disputes.filter(d => d.status === 'Pending');
   const recentTransactions = transactions.slice(0, 5);
 
-  // Calculate total escrow value
   const totalEscrowValue = transactions
     .filter(t => t.payment_status === 'Paid' || t.release_status === 'Not Released')
     .reduce((sum, t) => sum + (t.total || 0), 0);
 
   const getStatusBadge = (status) => {
     const variants = {
-      'Pending': 'bg-yellow-100 text-yellow-800',
-      'Pending Seller Confirmation': 'bg-orange-100 text-orange-800',
-      'Ready for Payment': 'bg-blue-100 text-blue-800',
-      'Paid': 'bg-green-100 text-green-800',
-      'Released': 'bg-green-100 text-green-800',
-      'Not Released': 'bg-slate-100 text-slate-600'
+      'Pending': 'bg-amber-100 text-amber-700 border-amber-200',
+      'Pending Seller Confirmation': 'bg-orange-100 text-orange-700 border-orange-200',
+      'Ready for Payment': 'bg-blue-100 text-blue-700 border-blue-200',
+      'Awaiting Payment': 'bg-blue-100 text-blue-700 border-blue-200',
+      'Paid': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      'Funds Secured': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      'Delivery in Progress': 'bg-purple-100 text-purple-700 border-purple-200',
+      'Released': 'bg-green-100 text-green-700 border-green-200',
+      'Completed': 'bg-green-100 text-green-700 border-green-200'
     };
-    return variants[status] || 'bg-slate-100 text-slate-600';
+    return variants[status] || 'bg-slate-100 text-slate-600 border-slate-200';
   };
 
   return (
     <DashboardLayout user={user}>
-      <div className="space-y-6">
+      <div className="space-y-5">
+        {/* Header */}
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900" data-testid="dashboard-title">Dashboard</h1>
-            <p className="text-slate-600 mt-2">Welcome back, {user?.name}</p>
+            <h1 className="text-2xl font-bold text-slate-900" data-testid="dashboard-title">Dashboard</h1>
+            <p className="text-sm text-slate-500 mt-1">Welcome back, {user?.name}</p>
           </div>
           {user?.is_admin && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowExactValues(!showExactValues)}
-              className="flex items-center gap-2"
+              className="text-xs h-8"
             >
-              {showExactValues ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              {showExactValues ? 'Hide Exact Values' : 'Show Exact Values'}
+              {showExactValues ? <EyeOff className="w-3 h-3 mr-1" /> : <Eye className="w-3 h-3 mr-1" />}
+              {showExactValues ? 'Hide Values' : 'Show Values'}
             </Button>
           )}
         </div>
 
-        {/* Protection Guaranteed Banner */}
-        <Card className="p-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                <Shield className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-lg">Protection Guaranteed</h3>
-                <p className="text-blue-100 text-sm">Every transaction is secured by TrustTrade escrow</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 bg-white/10 rounded-lg px-4 py-2">
-              <Clock className="w-4 h-4" />
-              <span className="text-sm">Funds released daily at <strong>10:00</strong> and <strong>15:00</strong></span>
+        {/* Escrow Protection Banner - Compact */}
+        <div className="bg-slate-900 text-white rounded-lg px-4 py-3 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <Shield className="w-5 h-5 text-emerald-400" />
+            <div>
+              <p className="text-sm font-medium">All transactions protected by TrustTrade Escrow</p>
+              <p className="text-xs text-slate-400">Funds only released when you confirm delivery</p>
             </div>
           </div>
-        </Card>
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <Clock className="w-3.5 h-3.5" />
+            <span>Payouts: <strong className="text-white">10:00</strong> & <strong className="text-white">15:00</strong> daily</span>
+          </div>
+        </div>
 
-        {/* Platform Stats - User View */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-primary" />
-              </div>
+        {/* Quick Stats - Compact Row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Card className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="w-4 h-4 text-blue-600" />
+              <span className="text-xs text-slate-500">Active</span>
             </div>
             <p className="text-2xl font-bold text-slate-900" data-testid="active-transactions">
               {platformStats?.active_transactions || activeTransactions.length}
             </p>
-            <p className="text-sm text-slate-500">Active Transactions</p>
           </Card>
 
-          <Card className="p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                <AlertCircle className="w-5 h-5 text-orange-600" />
-              </div>
+          <Card className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+              <span className="text-xs text-slate-500">Pending</span>
             </div>
             <p className="text-2xl font-bold text-slate-900" data-testid="pending-confirmations">
               {platformStats?.pending_confirmations || pendingConfirmations.length}
             </p>
-            <p className="text-sm text-slate-500">Pending Confirmations</p>
           </Card>
 
-          <Card className="p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                <ShieldCheck className="w-5 h-5 text-blue-600" />
-              </div>
+          <Card className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span className="text-xs text-slate-500">Verified</span>
             </div>
             <p className="text-2xl font-bold text-slate-900" data-testid="verified-users">
               {platformStats?.verified_users || 0}
             </p>
-            <p className="text-sm text-slate-500">Verified Users</p>
           </Card>
 
-          <Card className="p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                <Wallet className="w-5 h-5 text-green-600" />
-              </div>
+          <Card className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Lock className="w-4 h-4 text-slate-600" />
+              <span className="text-xs text-slate-500">In Escrow</span>
             </div>
-            <p className="text-2xl font-bold text-green-600" data-testid="total-escrow">
-              {formatSecureAmount(platformStats?.total_escrow_value || totalEscrowValue, user?.is_admin && showExactValues)}
-            </p>
-            <p className="text-sm text-slate-500 flex items-center gap-1">
-              Total Escrow Value
-              {!user?.is_admin && <Lock className="w-3 h-3" />}
+            <p className="text-2xl font-bold text-emerald-600" data-testid="total-escrow">
+              R {totalEscrowValue.toLocaleString('en-ZA', { minimumFractionDigits: 0 })}
             </p>
           </Card>
         </div>
 
-        {/* Admin-Only Section */}
-        {user?.is_admin && (
-          <Card className="p-6 bg-slate-50 border-slate-200">
-            <div className="flex items-center gap-2 mb-4">
-              <Lock className="w-5 h-5 text-slate-600" />
-              <h2 className="text-lg font-semibold text-slate-900">Admin View</h2>
-              <Badge className="bg-slate-200 text-slate-700">Confidential</Badge>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-4 mb-6">
-              <div className="bg-white rounded-lg p-4">
-                <p className="text-sm text-slate-500 mb-1">Total Escrow Value (All Time)</p>
-                <p className="text-xl font-bold text-slate-900">
-                  {formatSecureAmount(platformStats?.total_escrow_value || 0, showExactValues)}
-                </p>
-              </div>
-              <div className="bg-white rounded-lg p-4">
-                <p className="text-sm text-slate-500 mb-1">Total Users</p>
-                <p className="text-xl font-bold text-slate-900">{platformStats?.total_users || 0}</p>
-              </div>
-              <div className="bg-white rounded-lg p-4">
-                <p className="text-sm text-slate-500 mb-1">Open Disputes</p>
-                <p className="text-xl font-bold text-red-600">{platformStats?.pending_disputes || pendingDisputes.length}</p>
-              </div>
-            </div>
-
-            {/* Escrow Details per Transaction */}
-            {showExactValues && transactions.filter(t => t.payment_status === 'Paid').length > 0 && (
-              <div className="bg-white rounded-lg p-4">
-                <h3 className="font-medium text-slate-900 mb-3 flex items-center gap-2">
-                  <Wallet className="w-4 h-4" />
-                  Funds Currently in Escrow
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left border-b border-slate-200">
-                        <th className="pb-2 font-medium text-slate-600">Transaction</th>
-                        <th className="pb-2 font-medium text-slate-600">Buyer</th>
-                        <th className="pb-2 font-medium text-slate-600">Seller</th>
-                        <th className="pb-2 font-medium text-slate-600 text-right">Amount in Escrow</th>
-                        <th className="pb-2 font-medium text-slate-600 text-right">Payable to Seller</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {transactions
-                        .filter(t => t.payment_status === 'Paid')
-                        .map((t) => {
-                          const payableToSeller = t.fee_paid_by === 'seller' 
-                            ? t.item_price - t.trusttrade_fee 
-                            : t.fee_paid_by === 'split'
-                            ? t.item_price - (t.trusttrade_fee / 2)
-                            : t.item_price;
-                          
-                          return (
-                            <tr key={t.transaction_id} className="border-b border-slate-100">
-                              <td className="py-2 font-mono text-xs">{t.share_code || t.transaction_id.slice(-8)}</td>
-                              <td className="py-2">{t.buyer_name}</td>
-                              <td className="py-2">{t.seller_name}</td>
-                              <td className="py-2 text-right font-mono">R {t.total.toFixed(2)}</td>
-                              <td className="py-2 text-right font-mono text-green-600">R {payableToSeller.toFixed(2)}</td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="font-medium">
-                        <td colSpan="3" className="pt-3">Total</td>
-                        <td className="pt-3 text-right font-mono">
-                          R {transactions
-                            .filter(t => t.payment_status === 'Paid')
-                            .reduce((sum, t) => sum + t.total, 0)
-                            .toFixed(2)}
-                        </td>
-                        <td className="pt-3 text-right font-mono text-green-600">
-                          R {transactions
-                            .filter(t => t.payment_status === 'Paid')
-                            .reduce((sum, t) => {
-                              const payable = t.fee_paid_by === 'seller' 
-                                ? t.item_price - t.trusttrade_fee 
-                                : t.fee_paid_by === 'split'
-                                ? t.item_price - (t.trusttrade_fee / 2)
-                                : t.item_price;
-                              return sum + payable;
-                            }, 0)
-                            .toFixed(2)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-3 mt-4">
-              <Button variant="outline" size="sm" onClick={() => navigate('/admin')}>
-                Full Admin Dashboard
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => navigate('/activity')}>
-                Live Activity Board
-              </Button>
-            </div>
-          </Card>
-        )}
-
-        {/* Wallet Card - For Sellers */}
+        {/* Wallet Section - Clear Breakdown */}
         {walletData && (
-          <Card className="p-6 bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200">
+          <Card className="p-5 bg-gradient-to-br from-emerald-50 to-slate-50 border-emerald-200">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
-                  <Wallet className="w-5 h-5 text-emerald-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">My Wallet</h2>
-                  <p className="text-xs text-slate-500">TrustTrade secured funds</p>
-                </div>
+                <Wallet className="w-5 h-5 text-emerald-600" />
+                <span className="font-semibold text-slate-900">My Wallet</span>
               </div>
               <Button 
                 variant="outline" 
                 size="sm"
                 onClick={() => navigate('/settings/banking')}
-                className="flex items-center gap-1"
+                className="text-xs h-8"
               >
-                <CreditCard className="w-4 h-4" />
+                <CreditCard className="w-3 h-3 mr-1" />
                 Banking Details
               </Button>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-4 mb-4">
-              <div className="bg-white rounded-lg p-4">
-                <p className="text-sm text-slate-500 mb-1">Available Balance</p>
-                <p className="text-2xl font-bold text-emerald-600">
+            {/* Three Column Wallet */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="bg-white rounded-lg p-3 border border-slate-100">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-xs text-slate-500">Available</span>
+                </div>
+                <p className="text-xl font-bold text-emerald-600">
                   R {walletData.balance.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
                 </p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Ready for payout</p>
               </div>
-              <div className="bg-white rounded-lg p-4">
-                <p className="text-sm text-slate-500 mb-1">Pending (In Escrow)</p>
-                <p className="text-2xl font-bold text-orange-600">
+              
+              <div className="bg-white rounded-lg p-3 border border-slate-100">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Lock className="w-3.5 h-3.5 text-amber-600" />
+                  <span className="text-xs text-slate-500">In Escrow</span>
+                </div>
+                <p className="text-xl font-bold text-amber-600">
                   R {walletData.pending_balance.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
                 </p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Awaiting buyer confirmation</p>
               </div>
-              <div className="bg-white rounded-lg p-4">
-                <p className="text-sm text-slate-500 mb-1">Total Earned</p>
-                <p className="text-2xl font-bold text-slate-700">
+              
+              <div className="bg-white rounded-lg p-3 border border-slate-100">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <TrendingUp className="w-3.5 h-3.5 text-slate-600" />
+                  <span className="text-xs text-slate-500">Total Earned</span>
+                </div>
+                <p className="text-xl font-bold text-slate-700">
                   R {walletData.total_earned.toLocaleString('en-ZA', { minimumFractionDigits: 2 })}
                 </p>
+                <p className="text-[10px] text-slate-400 mt-0.5">All time</p>
               </div>
             </div>
 
-            {/* Payout Progress */}
-            <div className="bg-white rounded-lg p-4">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-slate-600">Payout Progress</span>
-                <span className="text-sm font-medium text-emerald-600">
-                  R {walletData.balance.toFixed(0)} / R {walletData.payout_threshold}
-                </span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-2 mb-2">
-                <div 
-                  className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(walletData.progress_percent, 100)}%` }}
-                />
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-slate-500">
-                  {walletData.can_payout 
-                    ? "Ready for payout!" 
-                    : `R ${walletData.remaining_to_payout.toFixed(0)} more to reach payout threshold`
-                  }
-                </span>
+            {/* Payout Info */}
+            <div className="bg-white rounded-lg p-3 border border-slate-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-400" />
+                  <span className="text-sm text-slate-600">Bank payout within <strong>1-2 business days</strong> after release</span>
+                </div>
                 {!walletData.banking_details_set && (
-                  <span className="text-xs text-orange-600 flex items-center gap-1">
+                  <span className="text-xs text-amber-600 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
-                    Add banking details to receive payouts
+                    Add banking details
                   </span>
                 )}
               </div>
@@ -390,26 +249,21 @@ function Dashboard() {
           </Card>
         )}
 
-        {/* Real-Time Escrow Status */}
+        {/* Active Escrow Transactions */}
         {activeTransactions.length > 0 && (
-          <Card className="p-6">
+          <Card className="p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Lock className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">Real-Time Escrow Status</h2>
-                  <p className="text-xs text-slate-500">Your active transactions in escrow</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-emerald-600">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                Live
+                <Lock className="w-4 h-4 text-blue-600" />
+                <span className="font-semibold text-slate-900">Active Escrow</span>
+                <span className="text-xs text-emerald-600 flex items-center gap-1 ml-2">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                  Live
+                </span>
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               {activeTransactions.slice(0, 5).map((t) => {
                 const isUserBuyer = t.buyer_user_id === user?.user_id;
                 const role = isUserBuyer ? 'Buyer' : 'Seller';
@@ -419,25 +273,28 @@ function Dashboard() {
                   <div 
                     key={t.transaction_id}
                     onClick={() => navigate(`/transactions/${t.transaction_id}`)}
-                    className="flex items-center justify-between p-4 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors"
+                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer transition-colors border border-slate-100"
                   >
                     <div className="flex items-center gap-3">
-                      <div className={`w-3 h-3 rounded-full ${
-                        t.payment_status === 'Paid' ? 'bg-emerald-500' : 
-                        t.payment_status === 'Ready for Payment' ? 'bg-blue-500' : 'bg-yellow-500'
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        t.payment_status === 'Paid' || t.payment_status === 'Funds Secured' ? 'bg-emerald-500' : 
+                        t.payment_status === 'Ready for Payment' || t.payment_status === 'Awaiting Payment' ? 'bg-blue-500' : 
+                        'bg-amber-500'
                       }`}></div>
                       <div>
-                        <p className="font-medium text-slate-900 text-sm">{t.item_description.slice(0, 40)}{t.item_description.length > 40 ? '...' : ''}</p>
+                        <p className="font-medium text-slate-900 text-sm leading-tight">
+                          {t.item_description.slice(0, 35)}{t.item_description.length > 35 ? '...' : ''}
+                        </p>
                         <p className="text-xs text-slate-500">
-                          {role} • with {otherParty} • {t.share_code}
+                          {role} • {otherParty} • <span className="font-mono">{t.share_code}</span>
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-mono font-semibold text-slate-900">R {t.item_price.toFixed(2)}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${getStatusBadge(t.payment_status)}`}>
+                      <p className="font-mono font-semibold text-slate-900 text-sm">R {t.item_price.toFixed(2)}</p>
+                      <Badge className={`text-[10px] px-1.5 py-0 ${getStatusBadge(t.payment_status)} border`}>
                         {t.payment_status}
-                      </span>
+                      </Badge>
                     </div>
                   </div>
                 );
@@ -449,81 +306,87 @@ function Dashboard() {
                 variant="ghost"
                 size="sm"
                 onClick={() => navigate('/transactions')}
-                className="w-full mt-3"
+                className="w-full mt-3 text-xs"
               >
-                View all {activeTransactions.length} active transactions
-                <ArrowRight className="w-4 h-4 ml-2" />
+                View all {activeTransactions.length} transactions
+                <ArrowRight className="w-3 h-3 ml-1" />
               </Button>
             )}
           </Card>
         )}
 
-        {/* Quick Actions */}
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold text-slate-900 mb-4">Quick Actions</h2>
-          <div className="flex flex-wrap gap-3">
+        {/* Quick Actions - Compact */}
+        <Card className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="font-semibold text-slate-900 text-sm">Quick Actions</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => navigate('/transactions/new')}
+              className="bg-blue-600 hover:bg-blue-700 h-9 text-sm"
               data-testid="quick-action-new-transaction"
-              className="hover:scale-[1.02] transition-all duration-200 active:scale-95"
             >
-              <Plus className="w-4 h-4 mr-2" />
+              <Plus className="w-4 h-4 mr-1" />
               New Transaction
             </Button>
             <Button
               variant="outline"
               onClick={() => navigate('/transactions')}
+              className="h-9 text-sm"
               data-testid="quick-action-view-transactions"
             >
-              <FileText className="w-4 h-4 mr-2" />
-              View All Transactions
+              <FileText className="w-4 h-4 mr-1" />
+              All Transactions
             </Button>
             <Button
               variant="outline"
               onClick={() => navigate('/disputes')}
+              className="h-9 text-sm"
               data-testid="quick-action-view-disputes"
             >
-              <AlertCircle className="w-4 h-4 mr-2" />
-              View Disputes
+              <AlertCircle className="w-4 h-4 mr-1" />
+              Disputes
             </Button>
           </div>
         </Card>
 
-        {/* Recent Transactions */}
-        <Card className="p-6">
+        {/* Recent Transactions Table */}
+        <Card className="p-5">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-slate-900">Recent Transactions</h2>
+            <span className="font-semibold text-slate-900">Recent Transactions</span>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => navigate('/transactions')}
+              className="text-xs h-7"
               data-testid="view-all-transactions-link"
             >
               View All
             </Button>
           </div>
+          
           {recentTransactions.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500 mb-4">No transactions yet</p>
+            <div className="text-center py-8">
+              <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500 text-sm mb-3">No transactions yet</p>
               <Button
                 onClick={() => navigate('/transactions/new')}
+                size="sm"
                 data-testid="empty-state-create-transaction"
               >
                 Create Your First Transaction
               </Button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto -mx-5 px-5">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left border-b border-slate-200">
-                    <th className="pb-3 font-medium text-slate-600">Reference</th>
-                    <th className="pb-3 font-medium text-slate-600">Buyer</th>
-                    <th className="pb-3 font-medium text-slate-600">Seller</th>
-                    <th className="pb-3 font-medium text-slate-600">Amount</th>
-                    <th className="pb-3 font-medium text-slate-600">Status</th>
-                    <th className="pb-3 font-medium text-slate-600">Date</th>
+                  <tr className="text-left border-b border-slate-100">
+                    <th className="pb-2 font-medium text-slate-500 text-xs">Ref</th>
+                    <th className="pb-2 font-medium text-slate-500 text-xs">Buyer</th>
+                    <th className="pb-2 font-medium text-slate-500 text-xs">Seller</th>
+                    <th className="pb-2 font-medium text-slate-500 text-xs text-right">Amount</th>
+                    <th className="pb-2 font-medium text-slate-500 text-xs">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -531,22 +394,17 @@ function Dashboard() {
                     <tr
                       key={transaction.transaction_id}
                       onClick={() => navigate(`/transactions/${transaction.transaction_id}`)}
-                      className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
+                      className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer"
                       data-testid={`transaction-row-${transaction.transaction_id}`}
                     >
-                      <td className="py-3 font-mono text-xs text-primary">{transaction.share_code || '-'}</td>
-                      <td className="py-3">{transaction.buyer_name}</td>
-                      <td className="py-3">{transaction.seller_name}</td>
-                      <td className="py-3 font-mono">R {transaction.item_price.toFixed(2)}</td>
-                      <td className="py-3">
-                        <span className="inline-block">
-                          <Badge className={getStatusBadge(transaction.payment_status)}>
-                            {transaction.payment_status}
-                          </Badge>
-                        </span>
-                      </td>
-                      <td className="py-3 text-slate-500">
-                        {new Date(transaction.created_at).toLocaleDateString()}
+                      <td className="py-2.5 font-mono text-xs text-blue-600">{transaction.share_code || '-'}</td>
+                      <td className="py-2.5 text-slate-700">{transaction.buyer_name}</td>
+                      <td className="py-2.5 text-slate-700">{transaction.seller_name}</td>
+                      <td className="py-2.5 text-right font-mono font-medium text-slate-900">R {transaction.item_price.toFixed(2)}</td>
+                      <td className="py-2.5">
+                        <Badge className={`text-[10px] px-1.5 py-0 ${getStatusBadge(transaction.payment_status)} border`}>
+                          {transaction.payment_status}
+                        </Badge>
                       </td>
                     </tr>
                   ))}
@@ -555,41 +413,76 @@ function Dashboard() {
             </div>
           )}
         </Card>
-      </div>
-      
-      {/* FAQ Section */}
-      <div className="mt-8">
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-6">Frequently Asked Questions</h3>
-          <div className="space-y-4">
-            <div className="border-b border-slate-100 pb-4">
-              <h4 className="font-medium text-slate-900 mb-2">How does TrustTrade work?</h4>
-              <p className="text-sm text-slate-600">Buyer pays into secure escrow → seller delivers → funds released. Simple and secure.</p>
+
+        {/* Escrow Explainer - Compact FAQ */}
+        <Card className="p-5 bg-slate-50 border-slate-200">
+          <h3 className="font-semibold text-slate-900 text-sm mb-3">How TrustTrade Escrow Protects You</h3>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div className="flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-slate-800">Funds held securely</p>
+                <p className="text-xs text-slate-500">Your money goes to escrow, not directly to seller</p>
+              </div>
             </div>
-            <div className="border-b border-slate-100 pb-4">
-              <h4 className="font-medium text-slate-900 mb-2">Is my money safe?</h4>
-              <p className="text-sm text-slate-600">Yes, funds are held securely in escrow until both parties confirm the transaction is complete.</p>
+            <div className="flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-slate-800">Released on confirmation</p>
+                <p className="text-xs text-slate-500">Seller gets paid only when you confirm receipt</p>
+              </div>
             </div>
-            <div className="border-b border-slate-100 pb-4">
-              <h4 className="font-medium text-slate-900 mb-2">What if something goes wrong?</h4>
-              <p className="text-sm text-slate-600">Our dispute system allows investigation before funds are released. Both parties can submit evidence.</p>
+            <div className="flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-slate-800">Dispute protection</p>
+                <p className="text-xs text-slate-500">Raise a dispute before release if something's wrong</p>
+              </div>
             </div>
-            <div className="border-b border-slate-100 pb-4">
-              <h4 className="font-medium text-slate-900 mb-2">How long do transactions take?</h4>
-              <p className="text-sm text-slate-600">Depends on delivery method, typically 1–3 days for local deliveries. Funds release within 48 hours after confirmation.</p>
+            <div className="flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-slate-800">Fast bank payout</p>
+                <p className="text-xs text-slate-500">Released at 10:00 & 15:00, arrives in 1-2 business days</p>
+              </div>
             </div>
-            <div>
-              <h4 className="font-medium text-slate-900 mb-2">Are users verified?</h4>
-              <p className="text-sm text-slate-600">Yes, ID and phone verification provides trust badges. Verified users have higher credibility.</p>
-            </div>
-          </div>
-          <div className="mt-6 pt-4 border-t border-slate-100 flex gap-4 text-sm">
-            <a href="/terms" className="text-blue-600 hover:underline">Terms</a>
-            <a href="/privacy" className="text-blue-600 hover:underline">Privacy</a>
-            <a href="/refund" className="text-blue-600 hover:underline">Refund Policy</a>
-            <a href="/escrow" className="text-blue-600 hover:underline">How Escrow Works</a>
           </div>
         </Card>
+
+        {/* Admin Section */}
+        {user?.is_admin && (
+          <Card className="p-5 bg-slate-100 border-slate-300">
+            <div className="flex items-center gap-2 mb-3">
+              <Lock className="w-4 h-4 text-slate-600" />
+              <span className="font-semibold text-slate-900 text-sm">Admin View</span>
+              <Badge className="bg-slate-200 text-slate-600 text-[10px]">Confidential</Badge>
+            </div>
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-xs text-slate-500">Total Escrow</p>
+                <p className="text-lg font-bold text-slate-900">
+                  R {(platformStats?.total_escrow_value || 0).toLocaleString()}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-xs text-slate-500">Total Users</p>
+                <p className="text-lg font-bold text-slate-900">{platformStats?.total_users || 0}</p>
+              </div>
+              <div className="bg-white rounded-lg p-3">
+                <p className="text-xs text-slate-500">Open Disputes</p>
+                <p className="text-lg font-bold text-red-600">{pendingDisputes.length}</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => navigate('/admin')} className="text-xs h-8">
+                Full Admin Dashboard
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate('/activity')} className="text-xs h-8">
+                Live Activity
+              </Button>
+            </div>
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   );

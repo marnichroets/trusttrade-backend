@@ -42,8 +42,10 @@ function AuthCallback() {
         setStatus('Authenticating...');
 
         // Exchange session_id for user data
+        // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+        console.log('[GOOGLE_AUTH] Exchanging session_id with backend...');
         const response = await axios.post(
-          `${API}/auth/session`,
+          `${API}/auth/google/callback`,
           { session_id: sessionId },
           { withCredentials: true }
         );

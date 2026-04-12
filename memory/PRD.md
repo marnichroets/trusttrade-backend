@@ -2,12 +2,18 @@
 
 ## Status: ✅ READY FOR REAL USERS
 
+### Authentication
+1. **Email/Password**: Standard JWT login
+2. **Google Sign-In**: OAuth via Emergent Auth
+   - Endpoint: `POST /api/auth/google/callback`
+   - Creates new user if email doesn't exist
+   - Logs in existing user if email exists
+
 ### Core Features
-1. **Authentication**: JWT email/password
-2. **Transactions**: Create, confirm, escrow, payment, release
-3. **Auto-Refresh**: Every 8 seconds for active transactions
-4. **Emails**: Postmark with clear next-step instructions
-5. **Webhooks**: Auto-update on payment events
+- Transaction create, confirm, escrow, payment
+- Auto-refresh every 8 seconds for active transactions
+- Email notifications via Postmark
+- TradeSafe webhook integration
 
 ### Fee Structure
 - **TrustTrade Fee**: 1.5% (minimum R5)
@@ -16,41 +22,26 @@
   - Card: 2.88%
   - Ozow: 1.73%
 
-### Fee Calculation Endpoint
-```
-GET /api/tradesafe/calculate-fees?amount=200&fee_allocation=SELLER_AGENT
-```
-
-Returns:
-- item_price
-- trusttrade_fee (1.5%, min R5)
-- processing_fee
-- total_fees
-- buyer_pays / seller_receives
-- payout_time: "1-2 business days"
-
 ### Transaction Flow
 ```
 Created → Confirm → Escrow → Payment → Secured → Release
-         (auto-refresh every 8s while active)
 ```
 
-### Email Events
-| Event | What It Says |
-|-------|--------------|
-| Created | Next steps numbered 1-4 |
-| Payment | "Funds secured safely" + next steps |
-| Released | Payout breakdown + 1-2 business days |
+### Key Endpoints
+- `POST /api/auth/login` - Email/password login
+- `POST /api/auth/google/callback` - Google OAuth
+- `POST /api/tradesafe/create-transaction` - Create escrow
+- `POST /api/tradesafe/sync/{id}` - Force sync status
+- `POST /api/tradesafe-webhook` - Webhook receiver
 
-### Webhook URL (Configure in TradeSafe)
-```
-https://trusttradesa.co.za/api/tradesafe-webhook
-```
+### Production Domains
+- www.trusttradesa.co.za
+- trusttradesa.co.za
 
-### Test Endpoint
-```
-GET /api/test-email?to=your@email.com
-```
+### Test Credentials
+- Buyer: testuser@example.com / Test@123
+- Seller: seller@example.com / Seller@123
+- Admin: marnichr@gmail.com / Admin@123
 
 ### Beta Limits
 - Min: R100

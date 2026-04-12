@@ -182,14 +182,13 @@ function PhoneVerification() {
                     type="tel"
                     value={phone}
                     onChange={handlePhoneChange}
-                    placeholder="082 123 4567"
-                    className="pl-12 text-lg"
+                    placeholder="0821234567 or 821234567"
+                    className="text-lg"
                     data-testid="phone-input"
                   />
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">+27</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  We'll send a 6-digit code to verify your number
+                  Enter your SA number (e.g. 0821234567). We'll add +27 automatically.
                 </p>
               </div>
 

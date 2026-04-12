@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider } from './context/AuthContext';
 import LandingPage from './pages/LandingPage';
@@ -34,6 +34,14 @@ import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
 function AppRouter() {
+  const location = useLocation();
+  
+  // CRITICAL: Check URL fragment for session_id synchronously (NOT in useEffect)
+  // This prevents race conditions by processing OAuth callback FIRST
+  if (location.hash?.includes('session_id=')) {
+    return <AuthCallback />;
+  }
+  
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />

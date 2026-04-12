@@ -25,16 +25,41 @@ function AuthCallback() {
     const processSession = async () => {
       try {
         console.log('[AuthCallback] ========== START ==========');
+        console.log('[AuthCallback] Full URL:', window.location.href);
+        console.log('[AuthCallback] Hash:', location.hash);
+        console.log('[AuthCallback] Search:', location.search);
         setStatus('Extracting session...');
         
+        // Try to get session_id from hash (normal flow)
+        let sessionId = null;
         const hash = location.hash;
-        const params = new URLSearchParams(hash.substring(1));
-        const sessionId = params.get('session_id');
+        if (hash) {
+          const params = new URLSearchParams(hash.substring(1));
+          sessionId = params.get('session_id');
+        }
+        
+        // Also check query params (some OAuth flows use this)
+        if (!sessionId) {
+          const searchParams = new URLSearchParams(location.search);
+          sessionId = searchParams.get('session_id');
+        }
+        
+        // Check for error in URL
+        const searchParams = new URLSearchParams(location.search);
+        const error = searchParams.get('error');
+        if (error) {
+          console.error('[AuthCallback] OAuth error:', error);
+          toast.error('Google sign-in failed. Please try again or sign in with email.');
+          navigate('/login', { replace: true, state: { error: 'Google sign-in failed. Please try again.' } });
+          return;
+        }
 
         if (!sessionId) {
           console.error('[AuthCallback] No session_id in URL');
-          toast.error('No session ID found');
-          navigate('/', { replace: true });
+          console.log('[AuthCallback] URL hash:', hash);
+          console.log('[AuthCallback] URL search:', location.search);
+          toast.error('Google sign-in failed. No session found.');
+          navigate('/login', { replace: true, state: { error: 'Google sign-in failed. Please try again.' } });
           return;
         }
 

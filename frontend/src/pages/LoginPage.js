@@ -10,7 +10,8 @@ import { toast } from 'sonner';
 import api from '../utils/api';
 import TrustLogo from '../components/TrustLogo';
 
-const GOOGLE_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/google";
+// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+const EMERGENT_AUTH_URL = "https://auth.emergentagent.com";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -47,15 +48,13 @@ export default function LoginPage() {
     setAuthError(null);
     
     try {
-      const currentOrigin = window.location.origin;
-      const callbackUrl = `${currentOrigin}/auth/callback`;
-      const authUrl = `${GOOGLE_AUTH_URL}?callback_url=${encodeURIComponent(callbackUrl)}`;
+      // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+      // Redirect to /auth/callback which handles the #session_id extraction
+      const redirectUrl = window.location.origin + '/auth/callback';
+      const authUrl = `${EMERGENT_AUTH_URL}/?redirect=${encodeURIComponent(redirectUrl)}`;
       
       console.log('[GOOGLE_AUTH] Starting Google sign-in...');
-      console.log('[GOOGLE_AUTH] Callback URL:', callbackUrl);
-      
-      // Store current time to detect stale returns
-      sessionStorage.setItem('googleAuthStarted', Date.now().toString());
+      console.log('[GOOGLE_AUTH] Auth URL:', authUrl);
       
       window.location.href = authUrl;
     } catch (error) {

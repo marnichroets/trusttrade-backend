@@ -33,6 +33,14 @@ export function AuthProvider({ children }) {
     if (initialized.current) return;
     initialized.current = true;
     
+    // CRITICAL: If returning from OAuth callback, skip the /me check.
+    // AuthCallback will exchange the session_id and establish the session first.
+    if (window.location.hash?.includes('session_id=')) {
+      console.log('[AUTH] Skipping /me check - OAuth callback in progress');
+      setLoading(false);
+      return;
+    }
+    
     const token = localStorage.getItem('session_token');
     console.log('[AUTH_STATE_INITIALIZED] token:', token ? 'YES' : 'NO', 'isAuthenticated:', !!(token && localStorage.getItem('user_data')));
     

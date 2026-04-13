@@ -1307,17 +1307,29 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
     
     token_result = await execute_graphql(query, {"id": token_id})
     
+    logger.info(f"[WITHDRAW] Token query response: {token_result}")
+    
     if token_result and 'errors' in token_result:
         error_msg = token_result['errors'][0].get('message', 'Unknown error')
+        debug_msg = token_result['errors'][0].get('extensions', {}).get('debugMessage', '')
         logger.error(f"[WITHDRAW] Failed to fetch token: {error_msg}")
-        return {"success": False, "error": f"Failed to fetch token: {error_msg}"}
+        logger.error(f"[WITHDRAW] Debug: {debug_msg}")
+        return {
+            "success": False, 
+            "error": f"Failed to fetch token: {error_msg}",
+            "debug_message": debug_msg,
+            "raw_response": token_result
+        }
     
     if not token_result or 'token' not in token_result:
         logger.error(f"[WITHDRAW] Token not found: {token_id}")
-        return {"success": False, "error": "Token not found"}
+        return {"success": False, "error": "Token not found", "raw_response": token_result}
     
     token_data = token_result['token']
     balance = token_data.get('balance') or 0
+    
+    logger.info(f"[WITHDRAW] Balance RAW from TradeSafe: {balance}")
+    
     has_mobile = bool(token_data.get('user') and token_data['user'].get('mobile'))
     has_banking = bool(token_data.get('bankAccount') and token_data['bankAccount'].get('accountNumber'))
     is_complete = has_mobile and has_banking
@@ -1331,12 +1343,17 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
             "success": False, 
             "error": "Token is not complete. Must have mobile number and banking details.",
             "has_mobile": has_mobile,
-            "has_banking": has_banking
+            "has_banking": has_banking,
+            "debug_message": f"mobile={has_mobile}, banking={has_banking}"
         }
     
     if balance <= 0:
         logger.error(f"[WITHDRAW] Token has no balance: {balance}")
-        return {"success": False, "error": "Token has no balance to withdraw"}
+        return {
+            "success": False, 
+            "error": "Token has no balance to withdraw",
+            "debug_message": f"balance={balance}"
+        }
     
     # Execute withdrawal mutation - TradeSafe requires BOTH token_id AND value
     # NOTE: tokenAccountWithdraw returns Boolean, NOT an object
@@ -1356,17 +1373,22 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
     
     result = await execute_graphql(mutation, {"id": token_id, "value": withdrawal_value_rands})
     
-    logger.info(f"[WITHDRAW] Raw response: {result}")
+    logger.info(f"[WITHDRAW] Full TradeSafe response: {result}")
     
     if result and 'errors' in result:
         error_msg = result['errors'][0].get('message', 'Unknown error')
         debug_msg = result['errors'][0].get('extensions', {}).get('debugMessage', '')
+        validation_errors = result['errors'][0].get('extensions', {}).get('validation', {})
         logger.error(f"[WITHDRAW] Withdrawal failed: {error_msg}")
-        logger.error(f"[WITHDRAW] Debug: {debug_msg}")
+        logger.error(f"[WITHDRAW] Debug message: {debug_msg}")
+        logger.error(f"[WITHDRAW] Validation errors: {validation_errors}")
+        logger.error(f"[WITHDRAW] Full error: {result['errors'][0]}")
         return {
             "success": False, 
             "error": error_msg,
-            "debug_message": debug_msg
+            "debug_message": debug_msg or str(validation_errors) if validation_errors else None,
+            "validation_errors": validation_errors,
+            "raw_response": result
         }
     
     # tokenAccountWithdraw returns Boolean (true/false), not an object
@@ -1388,7 +1410,17 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
             }
         else:
             logger.error(f"[WITHDRAW] TradeSafe returned false for withdrawal")
-            return {"success": False, "error": "Withdrawal rejected by TradeSafe"}
+            logger.error(f"[WITHDRAW] Full response: {result}")
+            return {
+                "success": False, 
+                "error": "Withdrawal rejected by TradeSafe",
+                "debug_message": "tokenAccountWithdraw returned false",
+                "raw_response": result
+            }
     
     logger.error(f"[WITHDRAW] Unexpected response: {result}")
-    return {"success": False, "error": "Unexpected response from TradeSafe"}
+    return {
+        "success": False, 
+        "error": "Unexpected response from TradeSafe",
+        "raw_response": result
+    }

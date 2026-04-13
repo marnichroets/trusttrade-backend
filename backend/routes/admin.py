@@ -1400,13 +1400,18 @@ async def withdraw_token(request: Request, data: TokenWithdrawRequest):
             }
         else:
             logger.warning("[WITHDRAW] FAILED - %s", result.get('error'))
+            logger.warning("[WITHDRAW] Debug message: %s", result.get('debug_message'))
+            logger.warning("[WITHDRAW] Raw response: %s", result.get('raw_response'))
             
-            # Determine appropriate status code
-            error_msg = result.get("error", "Unknown error")
-            if "not complete" in error_msg.lower() or "no balance" in error_msg.lower():
-                raise HTTPException(status_code=400, detail=error_msg)
-            
-            raise HTTPException(status_code=500, detail=error_msg)
+            # Return full error details to frontend (not via HTTPException to preserve structure)
+            return {
+                "success": False,
+                "error": result.get("error", "Unknown error"),
+                "debug_message": result.get("debug_message"),
+                "validation_errors": result.get("validation_errors"),
+                "raw_response": result.get("raw_response"),
+                "token": token
+            }
             
     except HTTPException:
         raise
@@ -1414,4 +1419,9 @@ async def withdraw_token(request: Request, data: TokenWithdrawRequest):
         logger.error("[WITHDRAW] Exception: %s", str(e))
         import traceback
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "success": False,
+            "error": str(e),
+            "debug_message": "Python exception in withdrawal endpoint",
+            "token": token
+        }

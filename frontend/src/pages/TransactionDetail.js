@@ -1794,9 +1794,9 @@ function TransactionDetail() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {transaction.item_photos.map((photo, index) => {
                     // Construct full URL for the photo
-                    const photoUrl = photo.startsWith('http') 
-                      ? photo 
-                      : `${BACKEND_URL}/uploads/photos/${photo}`;
+                    const photoUrl = photo.startsWith('http')
+                       ? photo
+                       : `${BASE_URL}/uploads/photos/${photo}`;
                     return (
                       <div 
                         key={index} 

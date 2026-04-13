@@ -138,10 +138,15 @@ async def login(data: LoginRequest, response: Response):
     
     email = normalize_email(data.email)
     
+    # Log ADMIN_EMAIL for debugging
+    logger.info(f"[LOGIN] Attempting login for: {email}")
+    logger.info(f"[LOGIN] ADMIN_EMAIL from settings: '{settings.ADMIN_EMAIL}'")
+    
     # Find user
     user_doc = await db.users.find_one({"email": email})
     
     if not user_doc:
+        logger.warning(f"[LOGIN] User not found: {email}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
     # Verify password
@@ -149,7 +154,26 @@ async def login(data: LoginRequest, response: Response):
         raise HTTPException(status_code=401, detail="Please use the registration form to create an account")
     
     if not verify_password(data.password, user_doc["password_hash"]):
+        logger.warning(f"[LOGIN] Invalid password for: {email}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # CRITICAL: Check and update admin status dynamically
+    # This ensures existing users get admin status if ADMIN_EMAIL is set later
+    should_be_admin = (email.lower() == settings.ADMIN_EMAIL.lower()) if settings.ADMIN_EMAIL else False
+    current_is_admin = user_doc.get("is_admin", False)
+    
+    logger.info(f"[LOGIN] Admin check - email: {email}, ADMIN_EMAIL: {settings.ADMIN_EMAIL}, should_be_admin: {should_be_admin}, current_is_admin: {current_is_admin}")
+    
+    if should_be_admin != current_is_admin:
+        # Update user's admin status in database
+        new_role = "admin" if should_be_admin else "buyer"
+        await db.users.update_one(
+            {"user_id": user_doc["user_id"]},
+            {"$set": {"is_admin": should_be_admin, "role": new_role}}
+        )
+        logger.info(f"[LOGIN] Updated admin status for {email}: is_admin={should_be_admin}, role={new_role}")
+        user_doc["is_admin"] = should_be_admin
+        user_doc["role"] = new_role
     
     # Create session
     session_token = generate_session_token()
@@ -173,7 +197,7 @@ async def login(data: LoginRequest, response: Response):
         max_age=7*24*60*60
     )
     
-    logger.info(f"User logged in: {email}")
+    logger.info(f"[LOGIN] User logged in successfully: {email}, is_admin: {user_doc.get('is_admin', False)}")
     
     # Return user data
     return {
@@ -189,7 +213,7 @@ async def login(data: LoginRequest, response: Response):
     }
 
 
-@router.get("/me", response_model=User)
+@router.get("/me")
 async def get_current_user(request: Request):
     """Get current authenticated user"""
     db = get_database()
@@ -198,6 +222,26 @@ async def get_current_user(request: Request):
         user = await get_user_from_token(request, db)
         if not user:
             raise HTTPException(status_code=401, detail="Not authenticated")
+        
+        # CRITICAL: Dynamically check and update admin status
+        # This ensures admin status is always current based on ADMIN_EMAIL
+        email = user.email.lower() if user.email else ""
+        admin_email = settings.ADMIN_EMAIL.lower() if settings.ADMIN_EMAIL else ""
+        should_be_admin = (email == admin_email) if admin_email else False
+        
+        logger.info(f"[AUTH_ME] User: {email}, ADMIN_EMAIL: {settings.ADMIN_EMAIL}, should_be_admin: {should_be_admin}, current_is_admin: {user.is_admin}")
+        
+        if should_be_admin != user.is_admin:
+            # Update user's admin status in database
+            new_role = "admin" if should_be_admin else user.role
+            await db.users.update_one(
+                {"user_id": user.user_id},
+                {"$set": {"is_admin": should_be_admin, "role": new_role}}
+            )
+            logger.info(f"[AUTH_ME] Updated admin status for {email}: is_admin={should_be_admin}, role={new_role}")
+            user.is_admin = should_be_admin
+            user.role = new_role
+        
         return user
     except HTTPException:
         raise

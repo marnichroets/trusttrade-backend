@@ -45,6 +45,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler - startup and shutdown"""
     logger.info("=== TrustTrade API Starting ===")
     
+    # Log critical configuration values
+    logger.info(f"[CONFIG] ADMIN_EMAIL: '{settings.ADMIN_EMAIL}'")
+    logger.info(f"[CONFIG] DB_NAME: '{settings.DB_NAME}'")
+    logger.info(f"[CONFIG] MONGO_URL configured: {'Yes' if settings.MONGO_URL else 'No'}")
+    
     # Get database connection and create indexes
     db = get_database()
     try:

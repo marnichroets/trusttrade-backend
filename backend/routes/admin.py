@@ -540,6 +540,21 @@ async def admin_update_dispute(request: Request, dispute_id: str, status_data: D
 
 # ============ STATISTICS ============
 
+@router.get("/config-check")
+async def check_admin_config(request: Request):
+    """Admin-only: Check current admin configuration"""
+    db = get_database()
+    admin = await require_admin(request, db)
+    
+    return {
+        "admin_email_configured": settings.ADMIN_EMAIL,
+        "db_name": settings.DB_NAME,
+        "current_user_email": admin.email,
+        "current_user_is_admin": admin.is_admin,
+        "message": "If ADMIN_EMAIL matches your email but is_admin is false, log out and log back in to sync admin status."
+    }
+
+
 @router.get("/stats")
 async def get_admin_stats(request: Request):
     """Get admin dashboard stats"""

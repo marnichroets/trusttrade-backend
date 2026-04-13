@@ -1160,19 +1160,24 @@ async def request_token_withdrawal(token_id: str, amount_cents: int) -> Dict[str
     Request withdrawal from a token wallet.
     Amount is in cents (e.g., R100 = 10000 cents).
     NOTE: tokenAccountWithdraw returns Boolean, not an object.
+    NOTE: TradeSafe expects value in RANDS (Float), not cents.
     """
     logger.info("=== TOKEN WITHDRAWAL REQUEST ===")
-    logger.info(f"Token ID: {token_id}, Amount: {amount_cents} cents (R{amount_cents/100:.2f})")
+    logger.info(f"Token ID: {token_id}, Amount: {amount_cents} cents")
+    
+    # Convert cents to rands (TradeSafe expects Float in rands)
+    amount_rands = amount_cents / 100.0
+    logger.info(f"Value sent: R{amount_rands:.2f}")
     
     mutation = """
-    mutation tokenAccountWithdraw($id: ID!, $value: Int!) {
+    mutation tokenAccountWithdraw($id: ID!, $value: Float!) {
         tokenAccountWithdraw(id: $id, value: $value)
     }
     """
     
     variables = {
         "id": token_id,
-        "value": amount_cents
+        "value": amount_rands
     }
     
     result = await execute_graphql(mutation, variables)
@@ -1333,21 +1338,23 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
         logger.error(f"[WITHDRAW] Token has no balance: {balance}")
         return {"success": False, "error": "Token has no balance to withdraw"}
     
-    # Execute withdrawal mutation - TradeSafe requires BOTH token_id AND value (in cents)
+    # Execute withdrawal mutation - TradeSafe requires BOTH token_id AND value
     # NOTE: tokenAccountWithdraw returns Boolean, NOT an object
+    # NOTE: value is in RANDS (Float), not cents (Int)
     mutation = """
-    mutation tokenAccountWithdraw($id: ID!, $value: Int!) {
+    mutation tokenAccountWithdraw($id: ID!, $value: Float!) {
         tokenAccountWithdraw(id: $id, value: $value)
     }
     """
     
-    # value must be in cents and > 0
-    withdrawal_value = int(balance)
+    # Convert cents to rands (TradeSafe expects Float in rands)
+    withdrawal_value_cents = int(balance)
+    withdrawal_value_rands = withdrawal_value_cents / 100.0
     
     logger.info(f"[WITHDRAW] Executing tokenAccountWithdraw for {token_id}")
-    logger.info(f"[WITHDRAW] Value sent: {withdrawal_value} cents (R{withdrawal_value/100:.2f})")
+    logger.info(f"[WITHDRAW] Value sent: R{withdrawal_value_rands:.2f}")
     
-    result = await execute_graphql(mutation, {"id": token_id, "value": withdrawal_value})
+    result = await execute_graphql(mutation, {"id": token_id, "value": withdrawal_value_rands})
     
     logger.info(f"[WITHDRAW] Raw response: {result}")
     
@@ -1368,18 +1375,15 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
         
         if withdrawal_success is True:
             # Withdrawal initiated - balance was captured before the call
-            withdrawn_amount = withdrawal_value
-            new_balance = 0  # Assume full withdrawal
-            
-            logger.info(f"[WITHDRAW] SUCCESS - Token: {token_id}, Withdrawn: R{withdrawn_amount/100:.2f}")
+            logger.info(f"[WITHDRAW] SUCCESS - Token: {token_id}, Withdrawn: R{withdrawal_value_rands:.2f}")
             
             return {
                 "success": True,
                 "token_id": token_id,
-                "amount_cents": withdrawn_amount,
-                "amount_rands": withdrawn_amount / 100,
-                "new_balance_cents": new_balance,
-                "new_balance_rands": new_balance / 100,
+                "amount_cents": withdrawal_value_cents,
+                "amount_rands": withdrawal_value_rands,
+                "new_balance_cents": 0,
+                "new_balance_rands": 0.0,
                 "message": "Withdrawal initiated successfully. Funds will reflect in 1-2 business days."
             }
         else:

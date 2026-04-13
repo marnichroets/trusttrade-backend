@@ -622,6 +622,31 @@ function AdminTokenRecovery() {
               <div className="p-4 rounded" style={{ backgroundColor: '#fef2f2' }}>
                 <p className="font-medium" style={{ color: COLORS.error }}>Withdrawal Failed</p>
                 <p className="mt-1">{withdrawResult.error}</p>
+                
+                {withdrawResult.debug_message && (
+                  <div className="mt-3 p-2 rounded" style={{ backgroundColor: '#fff' }}>
+                    <p className="text-sm font-medium" style={{ color: COLORS.text }}>Debug Info:</p>
+                    <p className="text-sm mt-1" style={{ color: COLORS.subtext }}>{withdrawResult.debug_message}</p>
+                  </div>
+                )}
+                
+                {withdrawResult.validation_errors && Object.keys(withdrawResult.validation_errors).length > 0 && (
+                  <div className="mt-3 p-2 rounded" style={{ backgroundColor: '#fff' }}>
+                    <p className="text-sm font-medium" style={{ color: COLORS.text }}>Validation Errors:</p>
+                    <pre className="text-xs mt-1 overflow-auto" style={{ color: COLORS.subtext }}>
+                      {JSON.stringify(withdrawResult.validation_errors, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                
+                {withdrawResult.raw_response && (
+                  <div className="mt-3 p-2 rounded" style={{ backgroundColor: '#fff' }}>
+                    <p className="text-sm font-medium" style={{ color: COLORS.text }}>Raw TradeSafe Response:</p>
+                    <pre className="text-xs mt-1 overflow-auto max-h-40" style={{ color: COLORS.subtext }}>
+                      {JSON.stringify(withdrawResult.raw_response, null, 2)}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
           </Card>

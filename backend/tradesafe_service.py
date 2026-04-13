@@ -1355,6 +1355,18 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
             "debug_message": f"balance={balance}"
         }
     
+    # Minimum withdrawal threshold: R10.00 (1000 cents) due to payout fees
+    MINIMUM_WITHDRAWAL_CENTS = 1000
+    if balance < MINIMUM_WITHDRAWAL_CENTS:
+        logger.error(f"[WITHDRAW] Balance below minimum: {balance} cents < {MINIMUM_WITHDRAWAL_CENTS} cents")
+        return {
+            "success": False,
+            "error": "Minimum withdrawal is R10.00 due to payout fees",
+            "debug_message": f"Balance R{balance/100:.2f} is below minimum R{MINIMUM_WITHDRAWAL_CENTS/100:.2f}",
+            "balance_cents": balance,
+            "minimum_cents": MINIMUM_WITHDRAWAL_CENTS
+        }
+    
     # Execute withdrawal mutation - TradeSafe requires BOTH token_id AND value
     # NOTE: tokenAccountWithdraw returns Boolean, NOT an object
     # NOTE: value is in RANDS (Float), not cents (Int)

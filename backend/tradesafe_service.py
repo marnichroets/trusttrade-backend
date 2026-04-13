@@ -1159,16 +1159,14 @@ async def request_token_withdrawal(token_id: str, amount_cents: int) -> Dict[str
     """
     Request withdrawal from a token wallet.
     Amount is in cents (e.g., R100 = 10000 cents).
+    NOTE: tokenAccountWithdraw returns Boolean, not an object.
     """
     logger.info("=== TOKEN WITHDRAWAL REQUEST ===")
     logger.info(f"Token ID: {token_id}, Amount: {amount_cents} cents (R{amount_cents/100:.2f})")
     
     mutation = """
     mutation tokenAccountWithdraw($id: ID!, $value: Int!) {
-        tokenAccountWithdraw(id: $id, value: $value) {
-            id
-            balance
-        }
+        tokenAccountWithdraw(id: $id, value: $value)
     }
     """
     
@@ -1184,13 +1182,19 @@ async def request_token_withdrawal(token_id: str, amount_cents: int) -> Dict[str
         logger.error(f"Withdrawal failed: {error_msg}")
         return {"success": False, "error": error_msg}
     
+    # tokenAccountWithdraw returns Boolean (true/false)
     if result and 'tokenAccountWithdraw' in result:
-        logger.info(f"Withdrawal successful: {result['tokenAccountWithdraw']}")
-        return {
-            "success": True,
-            "token_id": result['tokenAccountWithdraw'].get('id'),
-            "new_balance": result['tokenAccountWithdraw'].get('balance')
-        }
+        withdrawal_success = result['tokenAccountWithdraw']
+        logger.info(f"Withdrawal response: {withdrawal_success}")
+        
+        if withdrawal_success is True:
+            return {
+                "success": True,
+                "token_id": token_id,
+                "amount_withdrawn": amount_cents
+            }
+        else:
+            return {"success": False, "error": "Withdrawal rejected by TradeSafe"}
     
     logger.error(f"Unexpected response from withdrawal: {result}")
     return {"success": False, "error": "Unexpected response"}
@@ -1330,12 +1334,10 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
         return {"success": False, "error": "Token has no balance to withdraw"}
     
     # Execute withdrawal mutation - TradeSafe requires BOTH token_id AND value (in cents)
+    # NOTE: tokenAccountWithdraw returns Boolean, NOT an object
     mutation = """
     mutation tokenAccountWithdraw($id: ID!, $value: Int!) {
-        tokenAccountWithdraw(id: $id, value: $value) {
-            id
-            balance
-        }
+        tokenAccountWithdraw(id: $id, value: $value)
     }
     """
     
@@ -1346,6 +1348,8 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
     logger.info(f"[WITHDRAW] Value sent: {withdrawal_value} cents (R{withdrawal_value/100:.2f})")
     
     result = await execute_graphql(mutation, {"id": token_id, "value": withdrawal_value})
+    
+    logger.info(f"[WITHDRAW] Raw response: {result}")
     
     if result and 'errors' in result:
         error_msg = result['errors'][0].get('message', 'Unknown error')
@@ -1358,21 +1362,29 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
             "debug_message": debug_msg
         }
     
+    # tokenAccountWithdraw returns Boolean (true/false), not an object
     if result and 'tokenAccountWithdraw' in result:
-        new_balance = result['tokenAccountWithdraw'].get('balance', 0)
-        withdrawn_amount = withdrawal_value  # The amount we requested to withdraw
+        withdrawal_success = result['tokenAccountWithdraw']
         
-        logger.info(f"[WITHDRAW] SUCCESS - Token: {token_id}, Withdrawn: R{withdrawn_amount/100:.2f}, New Balance: {new_balance}")
-        
-        return {
-            "success": True,
-            "token_id": token_id,
-            "amount_cents": withdrawn_amount,
-            "amount_rands": withdrawn_amount / 100,
-            "new_balance_cents": new_balance,
-            "new_balance_rands": new_balance / 100,
-            "message": "Withdrawal initiated successfully. Funds will reflect in 1-2 business days."
-        }
+        if withdrawal_success is True:
+            # Withdrawal initiated - balance was captured before the call
+            withdrawn_amount = withdrawal_value
+            new_balance = 0  # Assume full withdrawal
+            
+            logger.info(f"[WITHDRAW] SUCCESS - Token: {token_id}, Withdrawn: R{withdrawn_amount/100:.2f}")
+            
+            return {
+                "success": True,
+                "token_id": token_id,
+                "amount_cents": withdrawn_amount,
+                "amount_rands": withdrawn_amount / 100,
+                "new_balance_cents": new_balance,
+                "new_balance_rands": new_balance / 100,
+                "message": "Withdrawal initiated successfully. Funds will reflect in 1-2 business days."
+            }
+        else:
+            logger.error(f"[WITHDRAW] TradeSafe returned false for withdrawal")
+            return {"success": False, "error": "Withdrawal rejected by TradeSafe"}
     
     logger.error(f"[WITHDRAW] Unexpected response: {result}")
     return {"success": False, "error": "Unexpected response from TradeSafe"}

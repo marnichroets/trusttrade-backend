@@ -32,6 +32,8 @@ function parseErrorMessage(error) {
 }
 
 function TransactionDetail() {
+  const API_BASE = process.env.REACT_APP_API_URL || '';
+  const BASE_URL = API_BASE.replace('/api', '');
   const [user, setUser] = useState(null);
   const [transaction, setTransaction] = useState(null);
   const [loading, setLoading] = useState(true);

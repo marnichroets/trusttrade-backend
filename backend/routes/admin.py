@@ -1331,3 +1331,74 @@ async def update_token_for_recovery(request: Request, data: TokenRecoveryUpdateR
             "error": str(e),
             "token": data.token
         }
+
+
+
+class TokenWithdrawRequest(BaseModel):
+    """Request to withdraw funds from TradeSafe token"""
+    token: str  # The TradeSafe token ID
+
+
+@router.post("/tradesafe/token-withdraw")
+async def withdraw_token(request: Request, data: TokenWithdrawRequest):
+    """
+    ADMIN ONLY: Withdraw full balance from a TradeSafe token.
+    
+    Prerequisites:
+    - Token must be complete (has mobile + banking)
+    - Token must have balance > 0
+    
+    This initiates a bank transfer. Funds typically arrive in 1-2 business days.
+    """
+    from tradesafe_service import withdraw_token_full_balance
+    from datetime import datetime, timezone
+    
+    db = get_database()
+    admin = await require_admin(request, db)
+    
+    logger.info("=" * 60)
+    logger.info("[WITHDRAW] === WITHDRAWAL REQUEST ===")
+    logger.info(f"[WITHDRAW] Admin: {admin.email}")
+    logger.info(f"[WITHDRAW] Token: {data.token}")
+    logger.info(f"[WITHDRAW] Timestamp: {datetime.now(timezone.utc).isoformat()}")
+    logger.info("=" * 60)
+    
+    try:
+        # Call the TradeSafe withdrawal service
+        result = await withdraw_token_full_balance(data.token)
+        
+        if result.get("success"):
+            logger.info("=" * 60)
+            logger.info(f"[WITHDRAW] SUCCESS")
+            logger.info(f"[WITHDRAW] Admin: {admin.email}")
+            logger.info(f"[WITHDRAW] Token: {data.token}")
+            logger.info(f"[WITHDRAW] Amount: R{result.get('amount_rands', 0):.2f}")
+            logger.info(f"[WITHDRAW] Timestamp: {datetime.now(timezone.utc).isoformat()}")
+            logger.info("=" * 60)
+            
+            return {
+                "success": True,
+                "message": result.get("message", "Withdrawal initiated"),
+                "token": data.token,
+                "amount_cents": result.get("amount_cents", 0),
+                "amount_rands": result.get("amount_rands", 0),
+                "new_balance_cents": result.get("new_balance_cents", 0),
+                "new_balance_rands": result.get("new_balance_rands", 0)
+            }
+        else:
+            logger.warning(f"[WITHDRAW] FAILED - {result.get('error')}")
+            
+            # Determine appropriate status code
+            error_msg = result.get("error", "Unknown error")
+            if "not complete" in error_msg.lower() or "no balance" in error_msg.lower():
+                raise HTTPException(status_code=400, detail=error_msg)
+            
+            raise HTTPException(status_code=500, detail=error_msg)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[WITHDRAW] Exception: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))

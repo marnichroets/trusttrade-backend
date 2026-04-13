@@ -1258,3 +1258,117 @@ async def get_or_reuse_user_token(
     logger.error(f"Failed to create token for user {user_id}")
     return None
 
+
+
+async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
+    """
+    Withdraw full balance from a TradeSafe token.
+    Uses tokenWithdraw mutation for complete withdrawal.
+    
+    Prerequisites:
+    - Token must be complete (has mobile + banking details)
+    - Token must have balance > 0
+    """
+    logger.info("=== FULL TOKEN WITHDRAWAL ===")
+    logger.info(f"Token ID: {token_id}")
+    
+    # First, get token details to validate
+    query = """
+    query token($id: ID!) {
+        token(id: $id) {
+            id
+            name
+            balance
+            valid
+            user {
+                givenName
+                familyName
+                email
+                mobile
+            }
+            bankAccount {
+                bank
+                accountNumber
+                branchCode
+                accountType
+            }
+        }
+    }
+    """
+    
+    token_result = await execute_graphql(query, {"id": token_id})
+    
+    if token_result and 'errors' in token_result:
+        error_msg = token_result['errors'][0].get('message', 'Unknown error')
+        logger.error(f"[WITHDRAW] Failed to fetch token: {error_msg}")
+        return {"success": False, "error": f"Failed to fetch token: {error_msg}"}
+    
+    if not token_result or 'token' not in token_result:
+        logger.error(f"[WITHDRAW] Token not found: {token_id}")
+        return {"success": False, "error": "Token not found"}
+    
+    token_data = token_result['token']
+    balance = token_data.get('balance') or 0
+    has_mobile = bool(token_data.get('user') and token_data['user'].get('mobile'))
+    has_banking = bool(token_data.get('bankAccount') and token_data['bankAccount'].get('accountNumber'))
+    is_complete = has_mobile and has_banking
+    
+    logger.info(f"[WITHDRAW] Token status - Balance: {balance} cents, Complete: {is_complete}, Has Mobile: {has_mobile}, Has Banking: {has_banking}")
+    
+    # Validation
+    if not is_complete:
+        logger.error(f"[WITHDRAW] Token not complete - mobile: {has_mobile}, banking: {has_banking}")
+        return {
+            "success": False, 
+            "error": "Token is not complete. Must have mobile number and banking details.",
+            "has_mobile": has_mobile,
+            "has_banking": has_banking
+        }
+    
+    if balance <= 0:
+        logger.error(f"[WITHDRAW] Token has no balance: {balance}")
+        return {"success": False, "error": "Token has no balance to withdraw"}
+    
+    # Execute withdrawal mutation
+    mutation = """
+    mutation tokenWithdraw($id: ID!) {
+        tokenWithdraw(id: $id) {
+            id
+            balance
+        }
+    }
+    """
+    
+    logger.info(f"[WITHDRAW] Executing tokenWithdraw for {token_id}, amount: {balance} cents (R{balance/100:.2f})")
+    
+    result = await execute_graphql(mutation, {"id": token_id})
+    
+    if result and 'errors' in result:
+        error_msg = result['errors'][0].get('message', 'Unknown error')
+        debug_msg = result['errors'][0].get('extensions', {}).get('debugMessage', '')
+        logger.error(f"[WITHDRAW] Withdrawal failed: {error_msg}")
+        logger.error(f"[WITHDRAW] Debug: {debug_msg}")
+        return {
+            "success": False, 
+            "error": error_msg,
+            "debug_message": debug_msg
+        }
+    
+    if result and 'tokenWithdraw' in result:
+        new_balance = result['tokenWithdraw'].get('balance', 0)
+        withdrawn_amount = balance  # Original balance before withdrawal
+        
+        logger.info(f"[WITHDRAW] SUCCESS - Token: {token_id}, Withdrawn: R{withdrawn_amount/100:.2f}, New Balance: {new_balance}")
+        
+        return {
+            "success": True,
+            "token_id": token_id,
+            "amount_cents": withdrawn_amount,
+            "amount_rands": withdrawn_amount / 100,
+            "new_balance_cents": new_balance,
+            "new_balance_rands": new_balance / 100,
+            "message": "Withdrawal initiated successfully. Funds will reflect in 1-2 business days."
+        }
+    
+    logger.error(f"[WITHDRAW] Unexpected response: {result}")
+    return {"success": False, "error": "Unexpected response from TradeSafe"}

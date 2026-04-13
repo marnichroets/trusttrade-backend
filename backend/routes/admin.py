@@ -856,9 +856,12 @@ async def admin_get_token_details(request: Request, token_id: str):
     }
 
 
-@router.post("/tradesafe/token-withdraw")
-async def admin_request_withdrawal(request: Request):
-    """Request withdrawal from a token wallet (admin only)"""
+@router.post("/tradesafe/token-withdraw-legacy")
+async def admin_request_withdrawal_legacy(request: Request):
+    """
+    DEPRECATED: Legacy withdrawal endpoint requiring explicit amount.
+    Use POST /api/admin/tradesafe/token-withdraw instead (only requires token).
+    """
     from tradesafe_service import request_token_withdrawal
     
     db = get_database()
@@ -871,7 +874,7 @@ async def admin_request_withdrawal(request: Request):
     if not token_id or not value:
         raise HTTPException(status_code=400, detail="token_id and value required")
     
-    logger.info(f"Admin requesting withdrawal: {token_id}, {value} cents")
+    logger.info(f"[LEGACY WITHDRAW] Admin requesting withdrawal: {token_id}, {value} cents")
     
     result = await request_token_withdrawal(token_id, int(value))
     
@@ -1344,7 +1347,12 @@ async def withdraw_token(request: Request, data: TokenWithdrawRequest):
     """
     ADMIN ONLY: Withdraw full balance from a TradeSafe token.
     
-    Prerequisites:
+    Request body:
+    {
+        "token": "TradeSafe-token-id"
+    }
+    
+    Prerequisites (validated in service layer):
     - Token must be complete (has mobile + banking)
     - Token must have balance > 0
     
@@ -1356,37 +1364,42 @@ async def withdraw_token(request: Request, data: TokenWithdrawRequest):
     db = get_database()
     admin = await require_admin(request, db)
     
+    # Validate token provided
+    if not data.token or not data.token.strip():
+        raise HTTPException(status_code=400, detail="token required")
+    
+    token = data.token.strip()
+    
     logger.info("=" * 60)
-    logger.info("[WITHDRAW] === WITHDRAWAL REQUEST ===")
-    logger.info(f"[WITHDRAW] Admin: {admin.email}")
-    logger.info(f"[WITHDRAW] Token: {data.token}")
-    logger.info(f"[WITHDRAW] Timestamp: {datetime.now(timezone.utc).isoformat()}")
+    logger.info("[WITHDRAW] Endpoint called by admin: %s", admin.email)
+    logger.info("[WITHDRAW] Token received from frontend: %s", token)
+    logger.info("[WITHDRAW] Timestamp: %s", datetime.now(timezone.utc).isoformat())
     logger.info("=" * 60)
     
     try:
-        # Call the TradeSafe withdrawal service
-        result = await withdraw_token_full_balance(data.token)
+        # Call the TradeSafe withdrawal service - amount logic handled in service
+        result = await withdraw_token_full_balance(token)
         
         if result.get("success"):
             logger.info("=" * 60)
-            logger.info(f"[WITHDRAW] SUCCESS")
-            logger.info(f"[WITHDRAW] Admin: {admin.email}")
-            logger.info(f"[WITHDRAW] Token: {data.token}")
-            logger.info(f"[WITHDRAW] Amount: R{result.get('amount_rands', 0):.2f}")
-            logger.info(f"[WITHDRAW] Timestamp: {datetime.now(timezone.utc).isoformat()}")
+            logger.info("[WITHDRAW] SUCCESS")
+            logger.info("[WITHDRAW] Admin: %s", admin.email)
+            logger.info("[WITHDRAW] Token: %s", token)
+            logger.info("[WITHDRAW] Amount: R%.2f", result.get('amount_rands', 0))
+            logger.info("[WITHDRAW] Timestamp: %s", datetime.now(timezone.utc).isoformat())
             logger.info("=" * 60)
             
             return {
                 "success": True,
                 "message": result.get("message", "Withdrawal initiated"),
-                "token": data.token,
+                "token": token,
                 "amount_cents": result.get("amount_cents", 0),
                 "amount_rands": result.get("amount_rands", 0),
                 "new_balance_cents": result.get("new_balance_cents", 0),
                 "new_balance_rands": result.get("new_balance_rands", 0)
             }
         else:
-            logger.warning(f"[WITHDRAW] FAILED - {result.get('error')}")
+            logger.warning("[WITHDRAW] FAILED - %s", result.get('error'))
             
             # Determine appropriate status code
             error_msg = result.get("error", "Unknown error")
@@ -1398,7 +1411,7 @@ async def withdraw_token(request: Request, data: TokenWithdrawRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"[WITHDRAW] Exception: {str(e)}")
+        logger.error("[WITHDRAW] Exception: %s", str(e))
         import traceback
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))

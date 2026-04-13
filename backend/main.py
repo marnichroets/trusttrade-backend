@@ -54,6 +54,10 @@ def root():
 def ping():
     return {"status": "ok"}
 
+@app.get("/ping-test")
+def ping_test():
+    return {"status": "working"}
+
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(transactions_router)

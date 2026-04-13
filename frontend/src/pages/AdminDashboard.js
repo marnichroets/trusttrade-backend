@@ -232,6 +232,23 @@ function AdminDashboard() {
               </div>
             </Card>
           </Link>
+
+          <Link to="/admin/token-recovery" className="block">
+            <Card className="p-6 hover:shadow-lg transition-all hover:border-[#1a2942] border-2 border-transparent" style={{ backgroundColor: COLORS.background }}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${COLORS.warning}15` }}>
+                    <DollarSign className="w-6 h-6" style={{ color: COLORS.warning }} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold" style={{ color: COLORS.text }}>Token Recovery</h3>
+                    <p className="text-sm" style={{ color: COLORS.subtext }}>Recover legacy TradeSafe token balances</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5" style={{ color: COLORS.subtext }} />
+              </div>
+            </Card>
+          </Link>
         </div>
 
         {/* Recent Activity Grid */}

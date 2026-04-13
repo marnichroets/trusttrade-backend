@@ -1036,3 +1036,283 @@ async def test_email(request: Request, to: str = "marnichr@gmail.com"):
         logger.error(f"[EMAIL TEST] ERROR: {str(e)}")
         print(f"[EMAIL TEST] ERROR: {str(e)}")
         return {"success": False, "error": str(e), "recipient": to}
+
+
+
+# ============ TRADESAFE TOKEN RECOVERY (TEMPORARY ADMIN TOOL) ============
+
+from pydantic import BaseModel
+
+class TokenRecoveryUpdateRequest(BaseModel):
+    """Request to update TradeSafe token with banking details"""
+    token: str  # The TradeSafe token ID
+    mobile_number: str  # South African mobile number
+    bank_name: str  # Bank name (e.g., "STANDARD_BANK", "FNB", "ABSA")
+    account_holder: str  # Name on the account
+    account_number: str  # Bank account number
+    branch_code: str  # Universal branch code
+    account_type: str  # "SAVINGS" or "CHEQUE"
+
+
+@router.get("/tradesafe/token-recovery/{token}")
+async def get_token_recovery_details(request: Request, token: str):
+    """
+    ADMIN ONLY: Get TradeSafe token details for recovery.
+    Returns balance, validity, banking status, and payout readiness.
+    """
+    from tradesafe_service import execute_graphql
+    
+    db = get_database()
+    admin = await require_admin(request, db)
+    
+    logger.info(f"[TOKEN_RECOVERY] Admin {admin.email} checking token: {token}")
+    
+    # Query TradeSafe for full token details
+    query = """
+    query token($id: ID!) {
+        token(id: $id) {
+            id
+            name
+            balance
+            valid
+            user {
+                givenName
+                familyName
+                email
+                mobile
+                idNumber
+            }
+            bankAccount {
+                bank
+                accountNumber
+                branchCode
+                accountType
+            }
+            settings {
+                payout {
+                    interval
+                }
+            }
+        }
+    }
+    """
+    
+    try:
+        result = await execute_graphql(query, {"id": token})
+        
+        if result and 'errors' in result:
+            error_msg = result['errors'][0].get('message', 'Unknown error')
+            logger.error(f"[TOKEN_RECOVERY] GraphQL error: {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg,
+                "token": token
+            }
+        
+        if result and 'token' in result:
+            token_data = result['token']
+            
+            # Derive useful fields
+            balance_cents = token_data.get('balance') or 0
+            balance_rands = balance_cents / 100
+            has_banking = bool(token_data.get('bankAccount') and token_data['bankAccount'].get('accountNumber'))
+            has_mobile = bool(token_data.get('user') and token_data['user'].get('mobile'))
+            is_valid = token_data.get('valid', False)
+            
+            # Determine payout readiness
+            payout_ready = is_valid and has_banking and has_mobile and balance_cents > 0
+            
+            return {
+                "success": True,
+                "token": token,
+                "balance_cents": balance_cents,
+                "balance_rands": balance_rands,
+                "valid": is_valid,
+                "complete": has_banking and has_mobile,
+                "payout_ready": payout_ready,
+                "has_banking_details": has_banking,
+                "has_mobile": has_mobile,
+                "user": token_data.get('user'),
+                "bank_account": token_data.get('bankAccount'),
+                "settings": token_data.get('settings'),
+                "raw_response": token_data
+            }
+        
+        return {
+            "success": False,
+            "error": "Token not found or invalid response",
+            "token": token
+        }
+        
+    except Exception as e:
+        logger.error(f"[TOKEN_RECOVERY] Error checking token {token}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "token": token
+        }
+
+
+@router.post("/tradesafe/token-recovery/update")
+async def update_token_for_recovery(request: Request, data: TokenRecoveryUpdateRequest):
+    """
+    ADMIN ONLY: Update TradeSafe token with mobile number and banking details.
+    Used to recover legacy tokens that need banking info before withdrawal.
+    
+    WARNING: Banking details may be irreversible. Double-check before updating.
+    
+    NEVER triggers automatic withdrawal - manual review required.
+    """
+    from tradesafe_service import execute_graphql
+    
+    db = get_database()
+    admin = await require_admin(request, db)
+    
+    logger.info("=" * 60)
+    logger.info("[TOKEN_RECOVERY] === UPDATE REQUEST ===")
+    logger.info(f"Admin: {admin.email}")
+    logger.info(f"Token: {data.token}")
+    logger.info(f"Mobile: {data.mobile_number}")
+    logger.info(f"Bank: {data.bank_name}")
+    logger.info(f"Account Holder: {data.account_holder}")
+    logger.info(f"Account: ***{data.account_number[-4:] if len(data.account_number) >= 4 else '****'}")
+    logger.info(f"Branch: {data.branch_code}")
+    logger.info(f"Type: {data.account_type}")
+    logger.info("=" * 60)
+    
+    # Normalize mobile number to international format
+    mobile = data.mobile_number.strip()
+    if mobile.startswith('0'):
+        mobile = '+27' + mobile[1:]
+    elif not mobile.startswith('+'):
+        mobile = '+27' + mobile
+    
+    # Normalize bank name
+    bank_name = data.bank_name.upper().replace(" ", "_")
+    
+    # Map account type
+    account_type_map = {
+        "savings": "SAVINGS",
+        "cheque": "CHEQUE",
+        "checking": "CHEQUE",
+        "current": "CHEQUE",
+        "SAVINGS": "SAVINGS",
+        "CHEQUE": "CHEQUE",
+    }
+    account_type = account_type_map.get(data.account_type.lower(), "SAVINGS")
+    
+    # Build the tokenUpdate mutation with mobile and banking
+    mutation = """
+    mutation tokenUpdate($id: ID!, $input: TokenInput!) {
+        tokenUpdate(id: $id, input: $input) {
+            id
+            name
+            balance
+            valid
+            user {
+                givenName
+                familyName
+                email
+                mobile
+            }
+            bankAccount {
+                bank
+                accountNumber
+                branchCode
+                accountType
+            }
+            settings {
+                payout {
+                    interval
+                }
+            }
+        }
+    }
+    """
+    
+    variables = {
+        "id": data.token,
+        "input": {
+            "user": {
+                "mobile": mobile
+            },
+            "bankAccount": {
+                "bank": bank_name,
+                "accountNumber": data.account_number,
+                "branchCode": data.branch_code,
+                "accountType": account_type
+            }
+        }
+    }
+    
+    logger.info(f"[TOKEN_RECOVERY] GraphQL variables: {variables}")
+    
+    try:
+        result = await execute_graphql(mutation, variables)
+        
+        logger.info(f"[TOKEN_RECOVERY] GraphQL result: {result}")
+        
+        if result and 'errors' in result:
+            errors = result['errors']
+            error_msg = errors[0].get('message', 'Unknown error') if errors else 'Unknown error'
+            debug_msg = errors[0].get('extensions', {}).get('debugMessage', '') if errors else ''
+            validation_errors = errors[0].get('extensions', {}).get('validation', {}) if errors else {}
+            
+            logger.error(f"[TOKEN_RECOVERY] Update failed: {error_msg}")
+            logger.error(f"[TOKEN_RECOVERY] Debug: {debug_msg}")
+            logger.error(f"[TOKEN_RECOVERY] Validation: {validation_errors}")
+            
+            return {
+                "success": False,
+                "error": error_msg,
+                "debug_message": debug_msg,
+                "validation_errors": validation_errors,
+                "token": data.token
+            }
+        
+        if result and 'tokenUpdate' in result:
+            updated = result['tokenUpdate']
+            balance_cents = updated.get('balance') or 0
+            balance_rands = balance_cents / 100
+            has_banking = bool(updated.get('bankAccount') and updated['bankAccount'].get('accountNumber'))
+            has_mobile = bool(updated.get('user') and updated['user'].get('mobile'))
+            is_valid = updated.get('valid', False)
+            
+            logger.info("[TOKEN_RECOVERY] === UPDATE SUCCESSFUL ===")
+            logger.info(f"Token: {updated.get('id')}")
+            logger.info(f"Balance: R{balance_rands:.2f}")
+            logger.info(f"Valid: {is_valid}")
+            logger.info(f"Has Banking: {has_banking}")
+            logger.info(f"Has Mobile: {has_mobile}")
+            
+            return {
+                "success": True,
+                "message": "Token updated successfully. Review details before any withdrawal.",
+                "token": updated.get('id'),
+                "balance_cents": balance_cents,
+                "balance_rands": balance_rands,
+                "valid": is_valid,
+                "complete": has_banking and has_mobile,
+                "user": updated.get('user'),
+                "bank_account": updated.get('bankAccount'),
+                "settings": updated.get('settings'),
+                "raw_response": updated
+            }
+        
+        logger.error(f"[TOKEN_RECOVERY] Unexpected response: {result}")
+        return {
+            "success": False,
+            "error": "Unexpected response from TradeSafe",
+            "token": data.token,
+            "raw_response": result
+        }
+        
+    except Exception as e:
+        logger.error(f"[TOKEN_RECOVERY] Exception: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return {
+            "success": False,
+            "error": str(e),
+            "token": data.token
+        }

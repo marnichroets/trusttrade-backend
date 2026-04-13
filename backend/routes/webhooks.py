@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request
 
-from core.database import get_database, db
+from core.database import get_database, _get_sync_db
 from core.security import get_user_from_token
 
 logger = logging.getLogger(__name__)
@@ -20,9 +20,10 @@ async def tradesafe_webhook(request: Request):
     print("[WEBHOOK] RECEIVED:", payload)
     tradesafe_id = payload.get("data", {}).get("id")
     # find transaction
-    txn = db.transactions.find_one({"tradesafe_id": tradesafe_id})
+    sync_db = _get_sync_db()
+    txn = sync_db.transactions.find_one({"tradesafe_id": tradesafe_id})
     if txn:
-        db.transactions.update_one(
+        sync_db.transactions.update_one(
             {"_id": txn["_id"]},
             {"$set": {"status": "FUNDS_RECEIVED"}}
         )

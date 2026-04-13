@@ -8,7 +8,7 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import api from '../utils/api';
 import { toast } from 'sonner';
-import { AlertTriangle, Search, Save, Loader2, CheckCircle, XCircle, Info } from 'lucide-react';
+import { AlertTriangle, Search, Save, Loader2, CheckCircle, XCircle, Info, Banknote } from 'lucide-react';
 
 const COLORS = {
   primary: '#3b82f6',
@@ -42,6 +42,7 @@ function AdminTokenRecovery() {
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
   
   // Form state
   const [token, setToken] = useState('');
@@ -55,6 +56,7 @@ function AdminTokenRecovery() {
   // Result state
   const [checkResult, setCheckResult] = useState(null);
   const [updateResult, setUpdateResult] = useState(null);
+  const [withdrawResult, setWithdrawResult] = useState(null);
 
   useEffect(() => {
     checkAuth();
@@ -183,6 +185,60 @@ function AdminTokenRecovery() {
       setUpdateResult({ success: false, error: msg });
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!token.trim()) {
+      toast.error('Please enter a token ID');
+      return;
+    }
+    
+    // Check if token is ready for withdrawal
+    const canWithdraw = checkResult?.success && checkResult?.complete && checkResult?.balance_cents > 0;
+    
+    if (!canWithdraw) {
+      toast.error('Token must be complete and have a balance to withdraw');
+      return;
+    }
+    
+    // Confirmation dialog
+    const confirmed = window.confirm(
+      '⚠️ WITHDRAWAL CONFIRMATION ⚠️\n\n' +
+      'Are you sure you want to withdraw funds from this token?\n\n' +
+      '• This action CANNOT be reversed\n' +
+      '• Funds will be sent to the configured bank account\n' +
+      '• Transfer takes 1-2 business days\n\n' +
+      `Token: ${token}\n` +
+      `Amount: R ${checkResult?.balance_rands?.toFixed(2) || '0.00'}\n\n` +
+      'Click OK to proceed with withdrawal.'
+    );
+    
+    if (!confirmed) return;
+    
+    setWithdrawing(true);
+    setWithdrawResult(null);
+    
+    try {
+      const res = await api.post('/admin/tradesafe/token-withdraw', {
+        token: token.trim()
+      });
+      
+      setWithdrawResult(res.data);
+      
+      if (res.data.success) {
+        toast.success(`Withdrawal initiated! R ${res.data.amount_rands?.toFixed(2)} will be transferred.`);
+        // Refresh token status
+        handleCheckToken();
+      } else {
+        toast.error(res.data.error || 'Withdrawal failed');
+      }
+    } catch (error) {
+      const msg = error.response?.data?.detail || error.message;
+      toast.error(`Withdrawal failed: ${msg}`);
+      setWithdrawResult({ success: false, error: msg });
+    } finally {
+      setWithdrawing(false);
     }
   };
 
@@ -478,6 +534,99 @@ function AdminTokenRecovery() {
           </Card>
         )}
         
+        {/* Step 3: Withdraw Funds */}
+        <Card className="p-6 mb-6 border-2" style={{ borderColor: checkResult?.complete && checkResult?.balance_cents > 0 ? COLORS.green : COLORS.border }}>
+          <h2 className="text-lg font-semibold mb-4" style={{ color: COLORS.text }}>Step 3: Withdraw Funds</h2>
+          
+          {/* Withdrawal Prerequisites */}
+          <div className="mb-4 p-3 rounded" style={{ backgroundColor: COLORS.section }}>
+            <p className="text-sm font-medium mb-2" style={{ color: COLORS.text }}>Withdrawal Prerequisites:</p>
+            <div className="space-y-1 text-sm">
+              <div className="flex items-center gap-2">
+                {checkResult?.complete ? (
+                  <CheckCircle className="w-4 h-4" style={{ color: COLORS.green }} />
+                ) : (
+                  <XCircle className="w-4 h-4" style={{ color: COLORS.error }} />
+                )}
+                <span style={{ color: checkResult?.complete ? COLORS.green : COLORS.error }}>
+                  Token complete (mobile + banking)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {checkResult?.balance_cents > 0 ? (
+                  <CheckCircle className="w-4 h-4" style={{ color: COLORS.green }} />
+                ) : (
+                  <XCircle className="w-4 h-4" style={{ color: COLORS.error }} />
+                )}
+                <span style={{ color: checkResult?.balance_cents > 0 ? COLORS.green : COLORS.error }}>
+                  Balance available: R {checkResult?.balance_rands?.toFixed(2) || '0.00'}
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          {/* Warning */}
+          <div className="mb-4 p-3 rounded border-l-4" style={{ borderLeftColor: COLORS.error, backgroundColor: '#fef2f2' }}>
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5" style={{ color: COLORS.error }} />
+              <div className="text-sm">
+                <p className="font-medium" style={{ color: COLORS.error }}>Withdrawal Warning</p>
+                <p style={{ color: COLORS.text }}>This action cannot be reversed. Funds will be sent to the configured bank account and typically arrive within 1-2 business days.</p>
+              </div>
+            </div>
+          </div>
+          
+          <Button 
+            onClick={handleWithdraw} 
+            disabled={withdrawing || !token || !checkResult?.complete || checkResult?.balance_cents <= 0}
+            className="w-full"
+            style={{ 
+              backgroundColor: checkResult?.complete && checkResult?.balance_cents > 0 ? COLORS.green : COLORS.subtext,
+              opacity: (!checkResult?.complete || checkResult?.balance_cents <= 0) ? 0.5 : 1
+            }}
+          >
+            {withdrawing ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Banknote className="w-4 h-4 mr-2" />
+            )}
+            Withdraw R {checkResult?.balance_rands?.toFixed(2) || '0.00'} to Bank Account
+          </Button>
+        </Card>
+        
+        {/* Withdrawal Result */}
+        {withdrawResult && (
+          <Card className="p-6 mb-6">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.text }}>
+              Withdrawal Result
+              {withdrawResult.success ? (
+                <CheckCircle className="w-5 h-5" style={{ color: COLORS.green }} />
+              ) : (
+                <XCircle className="w-5 h-5" style={{ color: COLORS.error }} />
+              )}
+            </h2>
+            
+            {withdrawResult.success ? (
+              <div className="p-4 rounded" style={{ backgroundColor: '#f0fdf4' }}>
+                <p className="font-medium text-lg" style={{ color: COLORS.green }}>Withdrawal Initiated Successfully!</p>
+                <div className="mt-3 space-y-2">
+                  <p><strong>Amount:</strong> R {withdrawResult.amount_rands?.toFixed(2)}</p>
+                  <p><strong>Token:</strong> {withdrawResult.token}</p>
+                  <p><strong>New Balance:</strong> R {withdrawResult.new_balance_rands?.toFixed(2)}</p>
+                  <p className="text-sm mt-3" style={{ color: COLORS.subtext }}>
+                    Funds will be transferred to the configured bank account within 1-2 business days.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded" style={{ backgroundColor: '#fef2f2' }}>
+                <p className="font-medium" style={{ color: COLORS.error }}>Withdrawal Failed</p>
+                <p className="mt-1">{withdrawResult.error}</p>
+              </div>
+            )}
+          </Card>
+        )}
+        
         {/* Info Section */}
         <Card className="p-4" style={{ backgroundColor: COLORS.section }}>
           <div className="flex items-start gap-3">
@@ -487,10 +636,11 @@ function AdminTokenRecovery() {
               <ol className="mt-2 space-y-1 list-decimal list-inside">
                 <li>Enter the TradeSafe token ID and click "Check Token"</li>
                 <li>Review the current balance, validity, and banking status</li>
-                <li>Fill in the mobile number and banking details</li>
-                <li>Double-check all information carefully</li>
-                <li>Click "Update Token" to submit the changes</li>
-                <li>Verify the update was successful before any withdrawal</li>
+                <li>If needed, fill in mobile number and banking details</li>
+                <li>Click "Update Token" to save banking details</li>
+                <li>Verify token shows "Complete" status</li>
+                <li>Click "Withdraw" to initiate bank transfer</li>
+                <li>Funds arrive in 1-2 business days</li>
               </ol>
             </div>
           </div>

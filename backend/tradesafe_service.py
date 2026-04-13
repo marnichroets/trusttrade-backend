@@ -1329,19 +1329,23 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
         logger.error(f"[WITHDRAW] Token has no balance: {balance}")
         return {"success": False, "error": "Token has no balance to withdraw"}
     
-    # Execute withdrawal mutation
+    # Execute withdrawal mutation - TradeSafe requires BOTH token_id AND value (in cents)
     mutation = """
-    mutation tokenWithdraw($id: ID!) {
-        tokenWithdraw(id: $id) {
+    mutation tokenAccountWithdraw($id: ID!, $value: Int!) {
+        tokenAccountWithdraw(id: $id, value: $value) {
             id
             balance
         }
     }
     """
     
-    logger.info(f"[WITHDRAW] Executing tokenWithdraw for {token_id}, amount: {balance} cents (R{balance/100:.2f})")
+    # value must be in cents and > 0
+    withdrawal_value = int(balance)
     
-    result = await execute_graphql(mutation, {"id": token_id})
+    logger.info(f"[WITHDRAW] Executing tokenAccountWithdraw for {token_id}")
+    logger.info(f"[WITHDRAW] Value sent: {withdrawal_value} cents (R{withdrawal_value/100:.2f})")
+    
+    result = await execute_graphql(mutation, {"id": token_id, "value": withdrawal_value})
     
     if result and 'errors' in result:
         error_msg = result['errors'][0].get('message', 'Unknown error')
@@ -1354,9 +1358,9 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
             "debug_message": debug_msg
         }
     
-    if result and 'tokenWithdraw' in result:
-        new_balance = result['tokenWithdraw'].get('balance', 0)
-        withdrawn_amount = balance  # Original balance before withdrawal
+    if result and 'tokenAccountWithdraw' in result:
+        new_balance = result['tokenAccountWithdraw'].get('balance', 0)
+        withdrawn_amount = withdrawal_value  # The amount we requested to withdraw
         
         logger.info(f"[WITHDRAW] SUCCESS - Token: {token_id}, Withdrawn: R{withdrawn_amount/100:.2f}, New Balance: {new_balance}")
         

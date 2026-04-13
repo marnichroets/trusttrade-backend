@@ -54,6 +54,10 @@ def root():
 def ping():
     return {"status": "ok"}
 
+@app.get("/ping-clean")
+def ping_clean():
+    return {"status": "clean"}
+
 @app.get("/ping-test")
 def ping_test():
     return {"status": "working"}

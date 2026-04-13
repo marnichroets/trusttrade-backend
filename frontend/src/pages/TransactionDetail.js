@@ -15,8 +15,8 @@ import api from '../utils/api';
 import { toast } from 'sonner';
 import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, ExternalLink, Shield, Loader2, Phone, Lock, RefreshCw, Clock, Banknote } from 'lucide-react';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+const BASE_URL = process.env.REACT_APP_API_URL || 'https://trusttrade-backend-production-3efa.up.railway.app';
+const API = BASE_URL ? `${BASE_URL}/api` : '/api';
 
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;
@@ -32,6 +32,8 @@ function parseErrorMessage(error) {
 }
 
 function TransactionDetail() {
+  const API_BASE = process.env.REACT_APP_API_URL || '';
+  const BASE_URL = API_BASE.replace('/api', '');
   const [user, setUser] = useState(null);
   const [transaction, setTransaction] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1793,9 +1795,9 @@ function TransactionDetail() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {transaction.item_photos.map((photo, index) => {
                     // Construct full URL for the photo
-                    const photoUrl = photo.startsWith('http') 
-                      ? photo 
-                      : `${BACKEND_URL}/uploads/photos/${photo}`;
+                    const photoUrl = photo.startsWith('http')
+                       ? photo
+                       : `${BASE_URL}/uploads/photos/${photo}`;
                     return (
                       <div 
                         key={index} 

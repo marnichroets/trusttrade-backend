@@ -25,13 +25,13 @@ def _get_sync_db():
     """Get a synchronous PyMongo database instance."""
     global _sync_client, _sync_db
     if _sync_db is None:
-        _sync_client = MongoClient(settings.MONGO_URL)
+        _sync_client = MongoClient(settings.MONGO_URL, serverSelectionTimeoutMS=5000)
         _sync_db = _sync_client[settings.DB_NAME]
     return _sync_db
 
 
 # Module-level synchronous db instance for direct import
-db = _get_sync_db()
+db = None  # Lazy-loaded on first use
 
 
 def get_database() -> AsyncIOMotorDatabase:

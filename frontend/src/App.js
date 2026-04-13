@@ -17,6 +17,7 @@ import AdminTransactionDetail from './pages/AdminTransactionDetail';
 import AdminDisputeDetail from './pages/AdminDisputeDetail';
 import AdminUserDetail from './pages/AdminUserDetail';
 import AdminMonitoring from './pages/AdminMonitoring';
+import AdminTokenRecovery from './pages/AdminTokenRecovery';
 import ShareTransaction from './pages/ShareTransaction';
 import UserProfile from './pages/UserProfile';
 import LiveActivity from './pages/LiveActivity';
@@ -73,6 +74,7 @@ function AppRouter() {
       <Route path="/admin/transaction/:transactionId" element={<ProtectedRoute><AdminTransactionDetail /></ProtectedRoute>} />
       <Route path="/admin/dispute/:disputeId" element={<ProtectedRoute><AdminDisputeDetail /></ProtectedRoute>} />
       <Route path="/admin/user/:userId" element={<ProtectedRoute><AdminUserDetail /></ProtectedRoute>} />
+      <Route path="/admin/token-recovery" element={<ProtectedRoute><AdminTokenRecovery /></ProtectedRoute>} />
       
       <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />

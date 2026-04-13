@@ -15,9 +15,8 @@ import api from '../utils/api';
 import { toast } from 'sonner';
 import { ArrowLeft, FileText, User, Mail, Calendar, Package, Download, CheckCircle2, Image as ImageIcon, Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, ExternalLink, Shield, Loader2, Phone, Lock, RefreshCw, Clock, Banknote } from 'lucide-react';
 
-const API = process.env.REACT_APP_API_URL
-  ? `${process.env.REACT_APP_API_URL}/api`
-  : '/api';
+const BASE_URL = process.env.REACT_APP_API_URL || 'https://trusttrade-backend-production-3efa.up.railway.app';
+const API = BASE_URL ? `${BASE_URL}/api` : '/api';
 
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;

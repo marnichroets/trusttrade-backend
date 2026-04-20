@@ -14,13 +14,23 @@
 - **Phone Display in Party Info**: Buyer/Seller Information cards now show phone numbers when `invite_type == "phone"`
 - **Via Phone Indicator**: PARTIES sidebar shows "via phone" indicator for phone-based invites
 
+### OTP Security Enhancements (P0 - COMPLETE)
+- **Phone Validation**: Validates entered phone matches masked format (last 4 digits) before sending OTP
+- **Rate Limiting**: Max 3 OTP requests per 10-minute window
+- **Cooldown Timer**: 60-second cooldown between OTP requests
+- **Attempt Limiting**: Max 5 incorrect OTP attempts before 30-minute lockout
+- **Audit Logging**: All OTP requests logged to `otp_logs` collection (user_id, phone, IP, timestamp, success/failure)
+- **Clear UI Feedback**: Shows remaining requests, remaining attempts, cooldown timer, expiration time, lockout status
+
 ### Technical Changes
-- **Backend**: `/api/transactions/{id}` returns structured 403 with `type: phone_verification_required` including masked phone, item description, and price
-- **Backend**: Added `invite_type` field to Transaction model to ensure proper serialization
-- **Frontend**: `TransactionDetail.js` handles phone verification error with dedicated UI (lines 730-910)
-- **Frontend**: Buyer/Seller Information cards display phone numbers (lines 1714-1780)
-- **Frontend**: Fixed OTP endpoint paths (`/api/verification/phone/send-otp`, `/api/verification/phone/verify-otp`)
-- **Frontend**: Fixed OTP payload (`otp` instead of `otp_code`)
+- **Backend**: `/api/verification/phone/send-otp` - Rate limiting, cooldown, phone validation, audit logging
+- **Backend**: `/api/verification/phone/verify-otp` - Attempt tracking, lockout, clear error messages
+- **Backend**: New `otp_logs` collection for audit trail
+- **Backend**: In-memory rate limit stores (use Redis in production)
+- **Frontend**: `phoneVerificationContext` state for transaction preview
+- **Frontend**: `validatePhoneAgainstMask()` helper for client-side validation
+- **Frontend**: Enhanced error states (mismatch, cooldown, lockout, expired, incorrect code)
+- **Frontend**: Security info display (remaining requests, attempts, expiration)
 
 ---
 

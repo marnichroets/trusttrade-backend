@@ -1555,6 +1555,8 @@ async def get_transaction_tradesafe_details(request: Request, transaction_id: st
         "status": transaction.get("status"),
         "payment_status": transaction.get("payment_status"),
         "payout_status": transaction.get("payout_status"),
+        "bank_details_attached": transaction.get("bank_details_attached", False),  # Token-level banking
+        "payout_ready": transaction.get("payout_ready", False),
         "tradesafe": {
             "tradesafe_id": transaction.get("tradesafe_id"),
             "tradesafe_allocation_id": transaction.get("tradesafe_allocation_id"),
@@ -1567,13 +1569,39 @@ async def get_transaction_tradesafe_details(request: Request, transaction_id: st
         },
         "seller_token_details": None,
         "buyer_token_details": None,
-        "tradesafe_transaction": None
+        "tradesafe_transaction": None,
+        "seller_profile_banking": None,  # Profile-level banking status
+        "token_banking_status": None      # Token-level banking status
     }
     
-    # Get seller token details
+    # Get seller's profile banking status
+    seller_email = transaction.get("seller_email")
+    if seller_email:
+        seller_user = await db.users.find_one({"email": seller_email.lower()})
+        if seller_user:
+            result["seller_profile_banking"] = {
+                "has_banking": seller_user.get("banking_details_completed", False),
+                "bank_name": seller_user.get("banking_details", {}).get("bank_name"),
+                "account_number_last4": seller_user.get("banking_details", {}).get("account_number", "")[-4:] if seller_user.get("banking_details", {}).get("account_number") else None,
+                "phone": seller_user.get("phone")
+            }
+    
+    # Get seller token details (actual TradeSafe token banking)
     seller_token_id = transaction.get("tradesafe_seller_token_id")
     if seller_token_id:
-        result["seller_token_details"] = await get_token_details(seller_token_id)
+        token_details = await get_token_details(seller_token_id)
+        result["seller_token_details"] = token_details
+        
+        if token_details:
+            has_token_banking = bool(token_details.get("bankAccount") and token_details["bankAccount"].get("accountNumber"))
+            has_token_mobile = bool(token_details.get("user", {}).get("mobile"))
+            result["token_banking_status"] = {
+                "has_banking": has_token_banking,
+                "has_mobile": has_token_mobile,
+                "payout_ready": has_token_banking and has_token_mobile,
+                "bank_name": token_details.get("bankAccount", {}).get("bank") if token_details.get("bankAccount") else None,
+                "balance_cents": token_details.get("balance", 0)
+            }
     
     # Get buyer token details
     buyer_token_id = transaction.get("tradesafe_buyer_token_id")
@@ -1605,6 +1633,104 @@ async def update_payout_status(request: Request, transaction_id: str):
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
     
     transaction = await db.transactions.find_one({"transaction_id": transaction_id})
+
+
+@router.post("/transactions/{transaction_id}/resync-banking")
+async def resync_banking_to_transaction(request: Request, transaction_id: str):
+    """
+    ADMIN ONLY: Resync seller's profile banking details to the TradeSafe token for this transaction.
+    Use when profile banking exists but wasn't synced to the token at escrow creation time.
+    """
+    from tradesafe_service import sync_banking_to_token, check_payout_readiness
+    
+    db = get_database()
+    admin = await require_admin(request, db)
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    seller_token_id = transaction.get("tradesafe_seller_token_id")
+    if not seller_token_id:
+        raise HTTPException(status_code=400, detail="No seller token ID on this transaction")
+    
+    # Get seller's profile banking
+    seller_email = transaction.get("seller_email")
+    seller_user = await db.users.find_one({"email": seller_email.lower()}) if seller_email else None
+    
+    if not seller_user:
+        raise HTTPException(status_code=404, detail="Seller user not found")
+    
+    if not seller_user.get("banking_details_completed"):
+        raise HTTPException(status_code=400, detail="Seller has no banking details in profile")
+    
+    banking = seller_user.get("banking_details", {})
+    seller_mobile = seller_user.get("phone") or transaction.get("seller_phone")
+    
+    if not banking.get("bank_name") or not banking.get("account_number"):
+        raise HTTPException(status_code=400, detail="Seller profile banking incomplete")
+    
+    logger.info("=" * 60)
+    logger.info(f"[RESYNC_BANKING] Admin: {admin.email}")
+    logger.info(f"[RESYNC_BANKING] Transaction: {transaction_id}")
+    logger.info(f"[RESYNC_BANKING] Seller Token: {seller_token_id}")
+    logger.info(f"[RESYNC_BANKING] Bank: {banking.get('bank_name')}")
+    logger.info(f"[RESYNC_BANKING] Mobile: {seller_mobile}")
+    logger.info("=" * 60)
+    
+    # Sync banking to token
+    sync_result = await sync_banking_to_token(
+        token_id=seller_token_id,
+        bank_name=banking.get("bank_name"),
+        account_number=banking.get("account_number"),
+        branch_code=banking.get("branch_code", ""),
+        account_type=banking.get("account_type", "SAVINGS"),
+        mobile=seller_mobile
+    )
+    
+    if not sync_result.get("success"):
+        logger.error(f"[RESYNC_BANKING] FAILED: {sync_result.get('error')}")
+        return {
+            "success": False,
+            "error": sync_result.get("error"),
+            "transaction_id": transaction_id,
+            "seller_token_id": seller_token_id
+        }
+    
+    # Check payout readiness
+    payout_check = await check_payout_readiness(seller_token_id)
+    payout_ready = payout_check.get("ready", False)
+    
+    # Update transaction record
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": "Banking Resynced",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "by": f"Admin: {admin.email}",
+        "details": f"Banking resynced to token {seller_token_id}"
+    })
+    
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "bank_details_attached": True,
+            "payout_ready": payout_ready,
+            "banking_sync_result": sync_result,
+            "timeline": timeline
+        }}
+    )
+    
+    logger.info(f"[RESYNC_BANKING] SUCCESS - Payout ready: {payout_ready}")
+    
+    return {
+        "success": True,
+        "message": "Banking synced to TradeSafe token",
+        "transaction_id": transaction_id,
+        "seller_token_id": seller_token_id,
+        "payout_ready": payout_ready,
+        "payout_check": payout_check
+    }
+
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     

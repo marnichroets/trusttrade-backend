@@ -643,14 +643,28 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     )
     
     # Send notifications
-    await send_funds_released_email(
-        to_email=transaction["seller_email"],
-        to_name=transaction["seller_name"],
-        share_code=transaction.get("share_code", transaction_id),
-        item_description=transaction["item_description"],
-        amount=transaction["item_price"],
-        net_amount=net_amount
-    )
+    logger.info("=" * 60)
+    logger.info("[RELEASE] === SENDING FUNDS RELEASED NOTIFICATIONS ===")
+    logger.info(f"[RELEASE] Transaction: {transaction_id}")
+    logger.info(f"[RELEASE] Seller Email: {transaction['seller_email']}")
+    logger.info(f"[RELEASE] Seller Name: {transaction['seller_name']}")
+    logger.info(f"[RELEASE] Amount: R{transaction['item_price']}, Net: R{net_amount}")
+    logger.info("=" * 60)
+    
+    try:
+        email_result = await send_funds_released_email(
+            to_email=transaction["seller_email"],
+            to_name=transaction["seller_name"],
+            share_code=transaction.get("share_code", transaction_id),
+            item_description=transaction["item_description"],
+            amount=transaction["item_price"],
+            net_amount=net_amount
+        )
+        logger.info(f"[RELEASE] Funds released email result: {email_result}")
+    except Exception as e:
+        logger.error(f"[RELEASE] Funds released email EXCEPTION: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
     
     seller_phone = transaction.get("seller_phone")
     if seller_phone:

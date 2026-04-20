@@ -471,37 +471,60 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     # Get base URL for email links
     base_url = settings.FRONTEND_URL
     
+    logger.info("=" * 60)
+    logger.info("[TX_CREATE] === EMAIL DISPATCH STARTING ===")
+    logger.info(f"[TX_CREATE] Transaction: {transaction_id}")
+    logger.info(f"[TX_CREATE] Share Code: {share_code}")
+    logger.info(f"[TX_CREATE] Buyer Email: {buyer_email}")
+    logger.info(f"[TX_CREATE] Seller Email: {seller_email}")
+    logger.info(f"[TX_CREATE] Base URL: {base_url}")
+    logger.info("=" * 60)
+    
     # Send transaction created emails
     # Only send if email addresses are valid (not empty/phone-only invites)
     if buyer_email and '@' in buyer_email:
-        email_result = await send_transaction_created_email(
-            to_email=buyer_email,
-            to_name=buyer_name,
-            share_code=share_code,
-            item_description=transaction_data.item_description,
-            amount=item_price,
-            other_party_name=seller_name,
-            role="Buyer",
-            base_url=base_url
-        )
-        logger.info(f"Buyer email send result: {email_result} to {buyer_email}")
+        logger.info(f"[TX_CREATE] Sending buyer email to {buyer_email}...")
+        try:
+            email_result = await send_transaction_created_email(
+                to_email=buyer_email,
+                to_name=buyer_name,
+                share_code=share_code,
+                item_description=transaction_data.item_description,
+                amount=item_price,
+                other_party_name=seller_name,
+                role="Buyer",
+                base_url=base_url
+            )
+            logger.info(f"[TX_CREATE] Buyer email result: {email_result}")
+        except Exception as e:
+            logger.error(f"[TX_CREATE] Buyer email EXCEPTION: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
     else:
-        logger.info(f"Skipping buyer email - no valid email address (phone invite): {buyer_email}")
+        logger.info(f"[TX_CREATE] Skipping buyer email - no valid email address: {buyer_email}")
     
     if seller_email and '@' in seller_email:
-        email_result = await send_transaction_created_email(
-            to_email=seller_email,
-            to_name=seller_name,
-            share_code=share_code,
-            item_description=transaction_data.item_description,
-            amount=item_price,
-            other_party_name=buyer_name,
-            role="Seller",
-            base_url=base_url
-        )
-        logger.info(f"Seller email send result: {email_result} to {seller_email}")
+        logger.info(f"[TX_CREATE] Sending seller email to {seller_email}...")
+        try:
+            email_result = await send_transaction_created_email(
+                to_email=seller_email,
+                to_name=seller_name,
+                share_code=share_code,
+                item_description=transaction_data.item_description,
+                amount=item_price,
+                other_party_name=buyer_name,
+                role="Seller",
+                base_url=base_url
+            )
+            logger.info(f"[TX_CREATE] Seller email result: {email_result}")
+        except Exception as e:
+            logger.error(f"[TX_CREATE] Seller email EXCEPTION: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
     else:
-        logger.info(f"Skipping seller email - no valid email address (phone invite): {seller_email}")
+        logger.info(f"[TX_CREATE] Skipping seller email - no valid email address: {seller_email}")
+    
+    logger.info("[TX_CREATE] === EMAIL DISPATCH COMPLETE ===")
     
     # If recipient was invited via phone, also send SMS
     if recipient_type == "phone" and recipient_phone:
@@ -1004,23 +1027,40 @@ async def confirm_payment(request: Request, transaction_id: str, payment: Paymen
         )
         
         # Send payment received emails
-        await send_payment_received_email(
-            to_email=transaction["buyer_email"],
-            to_name=transaction["buyer_name"],
-            share_code=transaction.get("share_code", transaction_id),
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"],
-            role="buyer"
-        )
+        logger.info("=" * 60)
+        logger.info("[PAYMENT] === SENDING PAYMENT RECEIVED EMAILS ===")
+        logger.info(f"[PAYMENT] Transaction: {transaction_id}")
+        logger.info(f"[PAYMENT] Buyer Email: {transaction['buyer_email']}")
+        logger.info(f"[PAYMENT] Seller Email: {transaction['seller_email']}")
+        logger.info("=" * 60)
         
-        await send_payment_received_email(
-            to_email=transaction["seller_email"],
-            to_name=transaction["seller_name"],
-            share_code=transaction.get("share_code", transaction_id),
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"],
-            role="seller"
-        )
+        try:
+            buyer_result = await send_payment_received_email(
+                to_email=transaction["buyer_email"],
+                to_name=transaction["buyer_name"],
+                share_code=transaction.get("share_code", transaction_id),
+                item_description=transaction["item_description"],
+                amount=transaction["item_price"],
+                role="buyer"
+            )
+            logger.info(f"[PAYMENT] Buyer payment email result: {buyer_result}")
+        except Exception as e:
+            logger.error(f"[PAYMENT] Buyer payment email EXCEPTION: {str(e)}")
+        
+        try:
+            seller_result = await send_payment_received_email(
+                to_email=transaction["seller_email"],
+                to_name=transaction["seller_name"],
+                share_code=transaction.get("share_code", transaction_id),
+                item_description=transaction["item_description"],
+                amount=transaction["item_price"],
+                role="seller"
+            )
+            logger.info(f"[PAYMENT] Seller payment email result: {seller_result}")
+        except Exception as e:
+            logger.error(f"[PAYMENT] Seller payment email EXCEPTION: {str(e)}")
+        
+        logger.info("[PAYMENT] === PAYMENT EMAILS COMPLETE ===")
         
         return {"message": "Payment confirmed", "status": "Paid", "auto_release_at": auto_release_at}
     

@@ -100,6 +100,81 @@ async def get_fee_calculation(amount: float, fee_allocation: str = "SELLER_AGENT
     }
 
 
+@router.get("/payout-readiness/{transaction_id}")
+async def check_transaction_payout_readiness(request: Request, transaction_id: str):
+    """
+    Check if a transaction's seller token is ready for payout.
+    Call this before showing/enabling the release button.
+    
+    Returns:
+        - payout_ready: bool - Whether release can proceed
+        - has_banking: bool - Token has banking details
+        - has_mobile: bool - Token has mobile number
+        - issues: list - Any issues blocking payout
+        - can_auto_sync: bool - Whether seller profile has banking to sync
+    """
+    db = get_database()
+    
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    # Verify user is party to transaction
+    is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
+    is_seller = transaction.get("seller_email") == user.email or transaction.get("seller_user_id") == user.user_id
+    
+    if not is_buyer and not is_seller and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to view this transaction")
+    
+    seller_token_id = transaction.get("tradesafe_seller_token_id")
+    
+    logger.info(f"[PAYOUT_CHECK] Checking readiness for transaction {transaction_id}")
+    
+    if not seller_token_id:
+        logger.warning(f"[PAYOUT_CHECK] No seller token ID for {transaction_id}")
+        return {
+            "payout_ready": False,
+            "has_banking": False,
+            "has_mobile": False,
+            "issues": ["No seller token linked to this transaction"],
+            "can_auto_sync": False,
+            "message": "Seller must complete payout setup before funds can be released."
+        }
+    
+    # Check live token state
+    from tradesafe_service import check_payout_readiness
+    payout_check = await check_payout_readiness(seller_token_id)
+    
+    # Check if seller profile has banking details we could sync
+    seller_email = transaction.get("seller_email")
+    seller_user = await db.users.find_one({"email": seller_email.lower()}) if seller_email else None
+    can_auto_sync = bool(
+        seller_user and 
+        seller_user.get("banking_details_completed") and
+        seller_user.get("banking_details", {}).get("bank_name") and
+        seller_user.get("banking_details", {}).get("account_number")
+    )
+    
+    is_ready = payout_check.get("ready", False)
+    
+    return {
+        "payout_ready": is_ready,
+        "has_banking": payout_check.get("has_banking", False),
+        "has_mobile": payout_check.get("has_mobile", False),
+        "issues": payout_check.get("issues", []),
+        "can_auto_sync": can_auto_sync and not is_ready,
+        "message": "Seller payout setup complete." if is_ready else "Seller must complete payout setup before funds can be released.",
+        "bank_details_attached_db": transaction.get("bank_details_attached", False),
+        "seller_token_id": seller_token_id
+    }
+
+
+
+
 
 @router.post("/create-transaction")
 async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCreate):
@@ -275,11 +350,11 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
                 else:
                     logger.error(f"[BANKING_SYNC] FAILED - {sync_result.get('error')}")
             else:
-                logger.warning(f"[BANKING_SYNC] Seller profile banking incomplete - missing bank_name or account_number")
+                logger.warning("[BANKING_SYNC] Seller profile banking incomplete - missing bank_name or account_number")
         else:
-            logger.warning(f"[BANKING_SYNC] Seller has no profile banking details saved")
+            logger.warning("[BANKING_SYNC] Seller has no profile banking details saved")
     else:
-        logger.warning(f"[BANKING_SYNC] No seller token ID to sync banking to")
+        logger.warning("[BANKING_SYNC] No seller token ID to sync banking to")
     
     # Update timeline
     timeline = transaction.get("timeline", [])
@@ -567,48 +642,101 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     if not allocation_id:
         raise HTTPException(status_code=400, detail="Transaction not properly linked to TradeSafe")
     
-    # PAYOUT PREFLIGHT CHECK: Verify seller token is ready for payout
+    # ===== PAYOUT PREFLIGHT: Step 1 - Verify seller token exists =====
     seller_token_id = transaction.get("tradesafe_seller_token_id")
     bank_details_attached = transaction.get("bank_details_attached", False)
     
+    logger.info("=" * 60)
+    logger.info(f"[PAYOUT_PREFLIGHT] === Release Initiated for {transaction_id} ===")
+    logger.info(f"[PAYOUT_PREFLIGHT] Initiated by: {user.email} (Admin: {user.is_admin})")
+    logger.info(f"[PAYOUT_PREFLIGHT] Seller Token: {seller_token_id}")
+    logger.info(f"[PAYOUT_PREFLIGHT] DB bank_details_attached: {bank_details_attached}")
+    
     if not seller_token_id:
-        logger.error(f"[PAYOUT_PREFLIGHT] CRITICAL: No seller token ID stored for {transaction_id}")
+        logger.error(f"[PAYOUT_BLOCKED] CRITICAL: No seller token ID stored for {transaction_id}")
         if not user.is_admin:
             raise HTTPException(
                 status_code=400,
                 detail="Cannot release: No seller token linked. Please contact support."
             )
         else:
-            logger.warning(f"[PAYOUT_PREFLIGHT] Admin bypassing missing token check: {user.email}")
+            logger.warning(f"[PAYOUT_BLOCKED] Admin bypassing missing token check: {user.email}")
     
-    if seller_token_id:
-        from tradesafe_service import check_payout_readiness
-        payout_check = await check_payout_readiness(seller_token_id)
+    # ===== PAYOUT PREFLIGHT: Step 2 - Check live token state =====
+    from tradesafe_service import check_payout_readiness, sync_banking_to_token
+    
+    payout_check = await check_payout_readiness(seller_token_id) if seller_token_id else {"ready": False}
+    
+    if not payout_check.get("ready"):
+        logger.warning("[PAYOUT_PREFLIGHT] Token not ready, attempting auto-sync...")
         
-        # Log full payout check details
-        logger.info(f"[PAYOUT_PREFLIGHT] Token: {seller_token_id}")
-        logger.info(f"[PAYOUT_PREFLIGHT] DB bank_details_attached: {bank_details_attached}")
-        logger.info(f"[PAYOUT_PREFLIGHT] Live payout_check: {payout_check}")
+        # ===== PAYOUT PREFLIGHT: Step 3 - Auto-sync banking if available =====
+        seller_email = transaction.get("seller_email")
+        seller_user = await db.users.find_one({"email": seller_email.lower()}) if seller_email else None
         
-        if not payout_check.get("ready"):
-            issues = payout_check.get("issues", [])
-            has_token_banking = payout_check.get("has_banking", False)
-            has_token_mobile = payout_check.get("has_mobile", False)
+        if seller_user and seller_user.get("banking_details_completed"):
+            banking = seller_user.get("banking_details", {})
+            seller_mobile = seller_user.get("phone") or transaction.get("seller_phone")
             
-            logger.error(f"[PAYOUT_PREFLIGHT] BLOCKED - Token not ready")
-            logger.error(f"[PAYOUT_PREFLIGHT] Issues: {issues}")
-            logger.error(f"[PAYOUT_PREFLIGHT] Token banking: {has_token_banking}, Token mobile: {has_token_mobile}")
-            
-            # Block release for non-admins
-            if not user.is_admin:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Cannot release: TradeSafe token not ready for payout. Issues: {', '.join(issues)}. The seller's banking details may not be synced to TradeSafe. Please contact support."
+            if banking.get("bank_name") and banking.get("account_number"):
+                logger.info("[PAYOUT_SYNC] Seller has profile banking - auto-syncing to token")
+                
+                sync_result = await sync_banking_to_token(
+                    token_id=seller_token_id,
+                    bank_name=banking.get("bank_name"),
+                    account_number=banking.get("account_number"),
+                    branch_code=banking.get("branch_code", ""),
+                    account_type=banking.get("account_type", "SAVINGS"),
+                    mobile=seller_mobile
                 )
+                
+                if sync_result.get("success"):
+                    logger.info("[PAYOUT_SYNC] Auto-sync SUCCESS")
+                    # Re-check payout readiness
+                    payout_check = await check_payout_readiness(seller_token_id)
+                    
+                    # Update transaction record
+                    await db.transactions.update_one(
+                        {"transaction_id": transaction_id},
+                        {"$set": {
+                            "bank_details_attached": True,
+                            "payout_ready": payout_check.get("ready", False),
+                            "banking_auto_synced_at": datetime.now(timezone.utc).isoformat()
+                        }}
+                    )
+                else:
+                    logger.error(f"[PAYOUT_SYNC] Auto-sync FAILED: {sync_result.get('error')}")
             else:
-                logger.warning(f"[PAYOUT_PREFLIGHT] ADMIN BYPASS: {user.email} proceeding despite payout not ready")
+                logger.warning("[PAYOUT_BLOCKED] Seller profile banking incomplete")
         else:
-            logger.info(f"[PAYOUT_PREFLIGHT] PASSED - Token ready for payout")
+            logger.warning("[PAYOUT_BLOCKED] Seller has no banking details in profile")
+    
+    # ===== PAYOUT PREFLIGHT: Final Decision =====
+    if not payout_check.get("ready"):
+        issues = payout_check.get("issues", ["Unknown issue"])
+        has_token_banking = payout_check.get("has_banking", False)
+        has_token_mobile = payout_check.get("has_mobile", False)
+        
+        logger.error("[PAYOUT_BLOCKED] === RELEASE BLOCKED ===")
+        logger.error(f"[PAYOUT_BLOCKED] Token: {seller_token_id}")
+        logger.error(f"[PAYOUT_BLOCKED] Issues: {issues}")
+        logger.error(f"[PAYOUT_BLOCKED] Has Banking: {has_token_banking}")
+        logger.error(f"[PAYOUT_BLOCKED] Has Mobile: {has_token_mobile}")
+        logger.info("=" * 60)
+        
+        if not user.is_admin:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot release: Seller must complete payout setup before funds can be released. Issues: {', '.join(issues)}. Please contact support."
+            )
+        else:
+            logger.warning(f"[PAYOUT_BLOCKED] ADMIN BYPASS: {user.email} proceeding despite payout not ready")
+    else:
+        logger.info("[PAYOUT_READY] === Token ready for payout ===")
+        logger.info(f"[PAYOUT_READY] Token: {seller_token_id}")
+        logger.info(f"[PAYOUT_READY] Banking: {payout_check.get('has_banking')}")
+        logger.info(f"[PAYOUT_READY] Mobile: {payout_check.get('has_mobile')}")
+        logger.info("=" * 60)
     
     # Call TradeSafe
     result = await accept_delivery(allocation_id)

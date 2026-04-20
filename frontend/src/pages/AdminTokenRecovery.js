@@ -535,7 +535,7 @@ function AdminTokenRecovery() {
         )}
         
         {/* Step 3: Withdraw Funds */}
-        <Card className="p-6 mb-6 border-2" style={{ borderColor: checkResult?.complete && checkResult?.balance_cents > 0 ? COLORS.green : COLORS.border }}>
+        <Card className="p-6 mb-6 border-2" style={{ borderColor: checkResult?.complete && checkResult?.balance_cents >= 1000 ? COLORS.green : COLORS.border }}>
           <h2 className="text-lg font-semibold mb-4" style={{ color: COLORS.text }}>Step 3: Withdraw Funds</h2>
           
           {/* Withdrawal Prerequisites */}
@@ -553,17 +553,33 @@ function AdminTokenRecovery() {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {checkResult?.balance_cents > 0 ? (
+                {checkResult?.balance_cents >= 1000 ? (
                   <CheckCircle className="w-4 h-4" style={{ color: COLORS.green }} />
                 ) : (
                   <XCircle className="w-4 h-4" style={{ color: COLORS.error }} />
                 )}
-                <span style={{ color: checkResult?.balance_cents > 0 ? COLORS.green : COLORS.error }}>
-                  Balance available: R {checkResult?.balance_rands?.toFixed(2) || '0.00'}
+                <span style={{ color: checkResult?.balance_cents >= 1000 ? COLORS.green : COLORS.error }}>
+                  Minimum balance R10.00 (current: R {checkResult?.balance_rands?.toFixed(2) || '0.00'})
                 </span>
               </div>
             </div>
           </div>
+          
+          {/* Small balance warning */}
+          {checkResult?.balance_cents > 0 && checkResult?.balance_cents < 1000 && (
+            <div className="mb-4 p-3 rounded border-l-4" style={{ borderLeftColor: COLORS.warning, backgroundColor: '#fffbeb' }}>
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 mt-0.5" style={{ color: COLORS.warning }} />
+                <div className="text-sm">
+                  <p className="font-medium" style={{ color: COLORS.warning }}>Balance Too Low</p>
+                  <p style={{ color: COLORS.text }}>
+                    Small balances below R10.00 cannot be withdrawn due to provider payout fees. 
+                    Current balance: R {checkResult?.balance_rands?.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           
           {/* Warning */}
           <div className="mb-4 p-3 rounded border-l-4" style={{ borderLeftColor: COLORS.error, backgroundColor: '#fef2f2' }}>
@@ -578,11 +594,11 @@ function AdminTokenRecovery() {
           
           <Button 
             onClick={handleWithdraw} 
-            disabled={withdrawing || !token || !checkResult?.complete || checkResult?.balance_cents <= 0}
+            disabled={withdrawing || !token || !checkResult?.complete || checkResult?.balance_cents < 1000}
             className="w-full"
             style={{ 
-              backgroundColor: checkResult?.complete && checkResult?.balance_cents > 0 ? COLORS.green : COLORS.subtext,
-              opacity: (!checkResult?.complete || checkResult?.balance_cents <= 0) ? 0.5 : 1
+              backgroundColor: checkResult?.complete && checkResult?.balance_cents >= 1000 ? COLORS.green : COLORS.subtext,
+              opacity: (!checkResult?.complete || checkResult?.balance_cents < 1000) ? 0.5 : 1
             }}
           >
             {withdrawing ? (

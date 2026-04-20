@@ -58,8 +58,12 @@ class Transaction(BaseModel):
     # TradeSafe Integration Fields
     tradesafe_id: Optional[str] = None
     tradesafe_allocation_id: Optional[str] = None
+    tradesafe_seller_token_id: Optional[str] = None  # Seller's TradeSafe token for payout
+    tradesafe_buyer_token_id: Optional[str] = None   # Buyer's TradeSafe token
     tradesafe_state: Optional[str] = None
     tradesafe_fee_allocation: Optional[str] = None  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
+    payout_status: Optional[str] = None  # "pending", "awaiting_bank_payout", "payout_completed", "payout_failed"
+    payout_ready: Optional[bool] = None  # Whether seller token has banking details
     funds_received_at: Optional[str] = None
     delivery_started_at: Optional[str] = None
     delivery_confirmed_at: Optional[str] = None

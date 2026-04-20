@@ -565,6 +565,12 @@ async def create_tradesafe_transaction(
             'fee_allocation': normalized_fee_allocation
         }
         
+        # Store token IDs for payout tracking
+        tx['seller_token_id'] = seller_token
+        tx['buyer_token_id'] = buyer_token
+        
+        logger.info(f"[PAYOUT_TRACKING] Transaction {tx['id']} - Seller Token: {seller_token}, Buyer Token: {buyer_token}")
+        
         return tx
     
     logger.error("=== UNEXPECTED TRANSACTION RESPONSE ===")
@@ -1154,6 +1160,143 @@ async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
     logger.error(f"Failed to get token details: {result}")
     return None
 
+
+
+
+async def check_payout_readiness(seller_token_id: str) -> Dict[str, Any]:
+    """
+    Check if a seller token is ready for payout after funds release.
+    
+    Returns:
+        {
+            "ready": bool,
+            "token_id": str,
+            "has_banking": bool,
+            "has_mobile": bool,
+            "balance_cents": int,
+            "balance_rands": float,
+            "issues": list[str]
+        }
+    """
+    logger.info(f"[PAYOUT_CHECK] Checking payout readiness for token: {seller_token_id}")
+    
+    if not seller_token_id:
+        return {
+            "ready": False,
+            "token_id": None,
+            "has_banking": False,
+            "has_mobile": False,
+            "balance_cents": 0,
+            "balance_rands": 0,
+            "issues": ["No seller token ID stored for this transaction"]
+        }
+    
+    token_details = await get_token_details(seller_token_id)
+    
+    if not token_details:
+        return {
+            "ready": False,
+            "token_id": seller_token_id,
+            "has_banking": False,
+            "has_mobile": False,
+            "balance_cents": 0,
+            "balance_rands": 0,
+            "issues": ["Could not fetch token details from TradeSafe"]
+        }
+    
+    issues = []
+    has_banking = token_details.get('has_banking_details', False)
+    has_mobile = bool(token_details.get('user', {}).get('mobile'))
+    balance_cents = token_details.get('balance', 0)
+    balance_rands = balance_cents / 100 if balance_cents else 0
+    
+    if not has_banking:
+        issues.append("Banking details not attached to seller token")
+    if not has_mobile:
+        issues.append("Mobile number not set on seller token")
+    
+    is_ready = has_banking and has_mobile
+    
+    logger.info(f"[PAYOUT_CHECK] Token {seller_token_id} - Ready: {is_ready}, Banking: {has_banking}, Mobile: {has_mobile}")
+    if issues:
+        logger.warning(f"[PAYOUT_CHECK] Issues: {issues}")
+    
+    return {
+        "ready": is_ready,
+        "token_id": seller_token_id,
+        "has_banking": has_banking,
+        "has_mobile": has_mobile,
+        "balance_cents": balance_cents,
+        "balance_rands": balance_rands,
+        "bank_account": token_details.get('bankAccount'),
+        "user": token_details.get('user'),
+        "issues": issues
+    }
+
+
+async def sync_banking_to_token(token_id: str, bank_name: str, account_number: str, 
+                                  branch_code: str, account_type: str, mobile: str = None) -> Dict[str, Any]:
+    """
+    Sync banking details to a TradeSafe token for payout.
+    Used by admin to fix tokens missing banking info.
+    """
+    logger.info(f"[BANKING_SYNC] Syncing banking to token: {token_id}")
+    
+    # Normalize bank name
+    bank_name_normalized = bank_name.upper().replace(" ", "_")
+    
+    # Normalize mobile
+    if mobile:
+        if mobile.startswith('0'):
+            mobile = '+27' + mobile[1:]
+        elif not mobile.startswith('+'):
+            mobile = '+27' + mobile
+    
+    mutation = """
+    mutation tokenUpdate($id: ID!, $input: TokenInput!) {
+        tokenUpdate(id: $id, input: $input) {
+            id
+            user {
+                mobile
+            }
+            bankAccount {
+                bank
+                accountNumber
+                branchCode
+                accountType
+            }
+        }
+    }
+    """
+    
+    input_data = {
+        "bankAccount": {
+            "bank": bank_name_normalized,
+            "accountNumber": account_number,
+            "branchCode": branch_code,
+            "accountType": account_type.upper()
+        }
+    }
+    
+    if mobile:
+        input_data["user"] = {"mobile": mobile}
+    
+    variables = {"id": token_id, "input": input_data}
+    
+    logger.info(f"[BANKING_SYNC] Variables: {variables}")
+    
+    result = await execute_graphql(mutation, variables)
+    
+    if result and 'errors' in result:
+        error_msg = result['errors'][0].get('message', 'Unknown error')
+        logger.error(f"[BANKING_SYNC] Failed: {error_msg}")
+        return {"success": False, "error": error_msg}
+    
+    if result and 'tokenUpdate' in result:
+        logger.info(f"[BANKING_SYNC] Success: {result['tokenUpdate']}")
+        return {"success": True, "token": result['tokenUpdate']}
+    
+    return {"success": False, "error": "Unexpected response"}
 
 async def request_token_withdrawal(token_id: str, amount_cents: int) -> Dict[str, Any]:
     """

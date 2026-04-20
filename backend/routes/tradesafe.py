@@ -222,9 +222,16 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     logger.info(f"[ESCROW] TradeSafe response: {result}")
     logger.info(f"[ESCROW] success - TradeSafe ID: {result.get('id')}")
     
-    # Store escrow ID and allocation ID
+    # Store escrow ID, allocation ID, and token IDs for payout tracking
     tradesafe_id = result.get("id")
     allocation_id = result.get("allocations", [{}])[0].get("id") if result.get("allocations") else None
+    seller_token_id = result.get("seller_token_id")  # Added for payout tracking
+    buyer_token_id = result.get("buyer_token_id")    # Added for payout tracking
+    
+    logger.info(f"[PAYOUT_TRACKING] Transaction {data.transaction_id}")
+    logger.info(f"[PAYOUT_TRACKING] TradeSafe ID: {tradesafe_id}")
+    logger.info(f"[PAYOUT_TRACKING] Seller Token: {seller_token_id}")
+    logger.info(f"[PAYOUT_TRACKING] Buyer Token: {buyer_token_id}")
     
     # Update timeline
     timeline = transaction.get("timeline", [])
@@ -240,9 +247,12 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
         {"$set": {
             "tradesafe_id": tradesafe_id,
             "tradesafe_allocation_id": allocation_id,
+            "tradesafe_seller_token_id": seller_token_id,  # Store for payout
+            "tradesafe_buyer_token_id": buyer_token_id,    # Store for reference
             "tradesafe_state": result.get("state", "CREATED"),
-            "tradesafe_fee_allocation": result.get("fee_allocation", data.fee_allocation),  # Store fee allocation
+            "tradesafe_fee_allocation": result.get("fee_allocation", data.fee_allocation),
             "payment_status": "Awaiting Payment",
+            "payout_status": "pending",  # Initialize payout status
             "timeline": timeline
         }}
     )
@@ -498,6 +508,27 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     if not allocation_id:
         raise HTTPException(status_code=400, detail="Transaction not properly linked to TradeSafe")
     
+    # PAYOUT PREFLIGHT CHECK: Verify seller token is ready for payout
+    seller_token_id = transaction.get("tradesafe_seller_token_id")
+    if seller_token_id:
+        from tradesafe_service import check_payout_readiness
+        payout_check = await check_payout_readiness(seller_token_id)
+        
+        if not payout_check.get("ready"):
+            issues = payout_check.get("issues", [])
+            logger.warning(f"[PAYOUT_PREFLIGHT] Release blocked - token not ready: {issues}")
+            
+            # Allow admin to bypass with warning
+            if not user.is_admin:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Payout not ready: {', '.join(issues)}. Please contact support."
+                )
+            else:
+                logger.warning(f"[PAYOUT_PREFLIGHT] Admin bypassing preflight check: {user.email}")
+    else:
+        logger.warning(f"[PAYOUT_PREFLIGHT] No seller token ID stored for {transaction_id}")
+    
     # Call TradeSafe
     result = await accept_delivery(allocation_id)
     
@@ -522,8 +553,10 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
             "tradesafe_state": "FUNDS_RELEASED",
             "payment_status": "Released",
             "release_status": "Released",
+            "payout_status": "awaiting_bank_payout",  # Update payout status
             "delivery_confirmed": True,
             "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "funds_released_at": datetime.now(timezone.utc).isoformat(),
             "timeline": timeline
         }}
     )
@@ -688,10 +721,12 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         {"$set": {
             "tradesafe_state": "FUNDS_RELEASED",
             "payment_status": "Completed",
+            "payout_status": "awaiting_bank_payout",  # Update payout status
             "delivery_confirmed": True,
             "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
             "release_status": "Released",
             "released_at": datetime.now(timezone.utc).isoformat(),
+            "funds_released_at": datetime.now(timezone.utc).isoformat(),
             "timeline": timeline,
             "manual_delivery_accept": True,
             "net_amount": net_amount

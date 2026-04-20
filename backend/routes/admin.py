@@ -1425,3 +1425,210 @@ async def withdraw_token(request: Request, data: TokenWithdrawRequest):
             "debug_message": "Python exception in withdrawal endpoint",
             "token": token
         }
+
+
+
+# ============ PAYOUT MANAGEMENT ============
+
+class BankingSyncRequest(BaseModel):
+    """Request to sync banking details to a TradeSafe token"""
+    token_id: str
+    bank_name: str
+    account_number: str
+    branch_code: str
+    account_type: str
+    mobile: Optional[str] = None
+
+
+@router.get("/payout-status/{transaction_id}")
+async def get_payout_status(request: Request, transaction_id: str):
+    """
+    ADMIN ONLY: Get detailed payout status for a transaction.
+    Shows TradeSafe token details, banking status, and payout readiness.
+    """
+    from tradesafe_service import check_payout_readiness, get_token_details
+    
+    db = get_database()
+    admin = await require_admin(request, db)
+    
+    transaction = await db.transactions.find_one(
+        {"transaction_id": transaction_id},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    seller_token_id = transaction.get("tradesafe_seller_token_id")
+    
+    # Get payout readiness
+    payout_check = await check_payout_readiness(seller_token_id) if seller_token_id else {
+        "ready": False,
+        "issues": ["No seller token ID stored"]
+    }
+    
+    return {
+        "transaction_id": transaction_id,
+        "tradesafe_id": transaction.get("tradesafe_id"),
+        "tradesafe_allocation_id": transaction.get("tradesafe_allocation_id"),
+        "tradesafe_seller_token_id": seller_token_id,
+        "tradesafe_buyer_token_id": transaction.get("tradesafe_buyer_token_id"),
+        "tradesafe_state": transaction.get("tradesafe_state"),
+        "payment_status": transaction.get("payment_status"),
+        "payout_status": transaction.get("payout_status", "unknown"),
+        "delivery_confirmed": transaction.get("delivery_confirmed", False),
+        "funds_released_at": transaction.get("funds_released_at"),
+        "payout_readiness": payout_check
+    }
+
+
+@router.post("/sync-banking-to-token")
+async def sync_banking_to_token_admin(request: Request, data: BankingSyncRequest):
+    """
+    ADMIN ONLY: Sync banking details to a TradeSafe token.
+    Used to fix tokens that are missing banking info for payout.
+    """
+    from tradesafe_service import sync_banking_to_token, check_payout_readiness
+    
+    db = get_database()
+    admin = await require_admin(request, db)
+    
+    logger.info("=" * 60)
+    logger.info("[BANKING_SYNC] Admin banking sync request")
+    logger.info(f"[BANKING_SYNC] Admin: {admin.email}")
+    logger.info(f"[BANKING_SYNC] Token: {data.token_id}")
+    logger.info(f"[BANKING_SYNC] Bank: {data.bank_name}")
+    logger.info(f"[BANKING_SYNC] Account: ***{data.account_number[-4:] if len(data.account_number) >= 4 else '****'}")
+    logger.info("=" * 60)
+    
+    # Sync the banking details
+    result = await sync_banking_to_token(
+        token_id=data.token_id,
+        bank_name=data.bank_name,
+        account_number=data.account_number,
+        branch_code=data.branch_code,
+        account_type=data.account_type,
+        mobile=data.mobile
+    )
+    
+    if not result.get("success"):
+        return {
+            "success": False,
+            "error": result.get("error", "Unknown error"),
+            "token_id": data.token_id
+        }
+    
+    # Check payout readiness after sync
+    payout_check = await check_payout_readiness(data.token_id)
+    
+    return {
+        "success": True,
+        "message": "Banking details synced successfully",
+        "token_id": data.token_id,
+        "payout_ready": payout_check.get("ready", False),
+        "payout_check": payout_check
+    }
+
+
+@router.get("/transactions/{transaction_id}/tradesafe-details")
+async def get_transaction_tradesafe_details(request: Request, transaction_id: str):
+    """
+    ADMIN ONLY: Get full TradeSafe details for a transaction including token info.
+    """
+    from tradesafe_service import get_token_details, get_tradesafe_transaction
+    
+    db = get_database()
+    admin = await require_admin(request, db)
+    
+    transaction = await db.transactions.find_one(
+        {"transaction_id": transaction_id},
+        {"_id": 0}
+    )
+    
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    result = {
+        "transaction_id": transaction_id,
+        "item_description": transaction.get("item_description"),
+        "item_price": transaction.get("item_price"),
+        "status": transaction.get("status"),
+        "payment_status": transaction.get("payment_status"),
+        "payout_status": transaction.get("payout_status"),
+        "tradesafe": {
+            "tradesafe_id": transaction.get("tradesafe_id"),
+            "tradesafe_allocation_id": transaction.get("tradesafe_allocation_id"),
+            "tradesafe_state": transaction.get("tradesafe_state"),
+            "tradesafe_fee_allocation": transaction.get("tradesafe_fee_allocation")
+        },
+        "tokens": {
+            "seller_token_id": transaction.get("tradesafe_seller_token_id"),
+            "buyer_token_id": transaction.get("tradesafe_buyer_token_id")
+        },
+        "seller_token_details": None,
+        "buyer_token_details": None,
+        "tradesafe_transaction": None
+    }
+    
+    # Get seller token details
+    seller_token_id = transaction.get("tradesafe_seller_token_id")
+    if seller_token_id:
+        result["seller_token_details"] = await get_token_details(seller_token_id)
+    
+    # Get buyer token details
+    buyer_token_id = transaction.get("tradesafe_buyer_token_id")
+    if buyer_token_id:
+        result["buyer_token_details"] = await get_token_details(buyer_token_id)
+    
+    # Get TradeSafe transaction details
+    tradesafe_id = transaction.get("tradesafe_id")
+    if tradesafe_id:
+        result["tradesafe_transaction"] = await get_tradesafe_transaction(tradesafe_id)
+    
+    return result
+
+
+@router.patch("/transactions/{transaction_id}/payout-status")
+async def update_payout_status(request: Request, transaction_id: str):
+    """
+    ADMIN ONLY: Update payout status for a transaction.
+    Valid statuses: pending, awaiting_bank_payout, payout_completed, payout_failed
+    """
+    db = get_database()
+    admin = await require_admin(request, db)
+    
+    body = await request.json()
+    new_status = body.get("payout_status")
+    
+    valid_statuses = ["pending", "awaiting_bank_payout", "payout_completed", "payout_failed"]
+    if new_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+    
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    logger.info(f"[PAYOUT_STATUS] Admin {admin.email} updating {transaction_id} to {new_status}")
+    
+    # Update timeline
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": f"Payout Status: {new_status.replace('_', ' ').title()}",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "by": f"Admin: {admin.email}",
+        "details": f"Payout status updated to {new_status}"
+    })
+    
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "payout_status": new_status,
+            "timeline": timeline
+        }}
+    )
+    
+    return {
+        "success": True,
+        "transaction_id": transaction_id,
+        "payout_status": new_status
+    }

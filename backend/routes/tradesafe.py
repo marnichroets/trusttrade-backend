@@ -644,13 +644,11 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     
     # ===== PAYOUT PREFLIGHT: Step 1 - Verify seller token exists =====
     seller_token_id = transaction.get("tradesafe_seller_token_id")
-    bank_details_attached = transaction.get("bank_details_attached", False)
     
     logger.info("=" * 60)
     logger.info(f"[PAYOUT_PREFLIGHT] === Release Initiated for {transaction_id} ===")
     logger.info(f"[PAYOUT_PREFLIGHT] Initiated by: {user.email} (Admin: {user.is_admin})")
     logger.info(f"[PAYOUT_PREFLIGHT] Seller Token: {seller_token_id}")
-    logger.info(f"[PAYOUT_PREFLIGHT] DB bank_details_attached: {bank_details_attached}")
     
     if not seller_token_id:
         logger.error(f"[PAYOUT_BLOCKED] CRITICAL: No seller token ID stored for {transaction_id}")
@@ -662,54 +660,87 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         else:
             logger.warning(f"[PAYOUT_BLOCKED] Admin bypassing missing token check: {user.email}")
     
-    # ===== PAYOUT PREFLIGHT: Step 2 - Check live token state =====
+    # ===== PAYOUT PREFLIGHT: Step 1 - Get seller profile banking (ALWAYS check profile, not transaction flag) =====
+    seller_email = transaction.get("seller_email")
+    seller_user = await db.users.find_one({"email": seller_email.lower()}) if seller_email else None
+    
+    seller_has_profile_banking = False
+    seller_banking = {}
+    seller_mobile = None
+    
+    if seller_user:
+        seller_banking = seller_user.get("banking_details", {})
+        seller_mobile = seller_user.get("phone") or transaction.get("seller_phone")
+        seller_has_profile_banking = bool(
+            seller_user.get("banking_details_completed") and
+            seller_banking.get("bank_name") and
+            seller_banking.get("account_number")
+        )
+    
+    logger.info(f"[PAYOUT_PREFLIGHT] Seller email: {seller_email}")
+    logger.info(f"[PAYOUT_PREFLIGHT] Seller profile has banking: {seller_has_profile_banking}")
+    if seller_has_profile_banking:
+        logger.info(f"[PAYOUT_PREFLIGHT] Seller bank: {seller_banking.get('bank_name')}")
+        acct = seller_banking.get('account_number', '')
+        logger.info(f"[PAYOUT_PREFLIGHT] Seller account: ***{acct[-4:] if len(acct) >= 4 else '****'}")
+        logger.info(f"[PAYOUT_PREFLIGHT] Seller mobile: {seller_mobile}")
+    
+    # ===== PAYOUT PREFLIGHT: Step 2 - Check LIVE token state =====
     from tradesafe_service import check_payout_readiness, sync_banking_to_token
     
-    payout_check = await check_payout_readiness(seller_token_id) if seller_token_id else {"ready": False}
+    payout_check = await check_payout_readiness(seller_token_id) if seller_token_id else {"ready": False, "issues": ["No seller token"]}
     
-    if not payout_check.get("ready"):
-        logger.warning("[PAYOUT_PREFLIGHT] Token not ready, attempting auto-sync...")
+    logger.info(f"[PAYOUT_PREFLIGHT] Live token payout_ready: {payout_check.get('ready')}")
+    logger.info(f"[PAYOUT_PREFLIGHT] Live token has_banking: {payout_check.get('has_banking')}")
+    logger.info(f"[PAYOUT_PREFLIGHT] Live token has_mobile: {payout_check.get('has_mobile')}")
+    
+    # ===== PAYOUT PREFLIGHT: Step 3 - Auto-sync if token not ready BUT seller profile has banking =====
+    if not payout_check.get("ready") and seller_has_profile_banking and seller_token_id:
+        logger.info("[PAYOUT_SYNC] === Auto-sync triggered ===")
+        logger.info("[PAYOUT_SYNC] Reason: Token not ready but seller profile has banking")
+        logger.info(f"[PAYOUT_SYNC] Syncing to token: {seller_token_id}")
         
-        # ===== PAYOUT PREFLIGHT: Step 3 - Auto-sync banking if available =====
-        seller_email = transaction.get("seller_email")
-        seller_user = await db.users.find_one({"email": seller_email.lower()}) if seller_email else None
+        sync_result = await sync_banking_to_token(
+            token_id=seller_token_id,
+            bank_name=seller_banking.get("bank_name"),
+            account_number=seller_banking.get("account_number"),
+            branch_code=seller_banking.get("branch_code", ""),
+            account_type=seller_banking.get("account_type", "SAVINGS"),
+            mobile=seller_mobile
+        )
         
-        if seller_user and seller_user.get("banking_details_completed"):
-            banking = seller_user.get("banking_details", {})
-            seller_mobile = seller_user.get("phone") or transaction.get("seller_phone")
+        if sync_result.get("success"):
+            logger.info("[PAYOUT_SYNC] SUCCESS - Banking synced to token")
             
-            if banking.get("bank_name") and banking.get("account_number"):
-                logger.info("[PAYOUT_SYNC] Seller has profile banking - auto-syncing to token")
-                
-                sync_result = await sync_banking_to_token(
-                    token_id=seller_token_id,
-                    bank_name=banking.get("bank_name"),
-                    account_number=banking.get("account_number"),
-                    branch_code=banking.get("branch_code", ""),
-                    account_type=banking.get("account_type", "SAVINGS"),
-                    mobile=seller_mobile
-                )
-                
-                if sync_result.get("success"):
-                    logger.info("[PAYOUT_SYNC] Auto-sync SUCCESS")
-                    # Re-check payout readiness
-                    payout_check = await check_payout_readiness(seller_token_id)
-                    
-                    # Update transaction record
-                    await db.transactions.update_one(
-                        {"transaction_id": transaction_id},
-                        {"$set": {
-                            "bank_details_attached": True,
-                            "payout_ready": payout_check.get("ready", False),
-                            "banking_auto_synced_at": datetime.now(timezone.utc).isoformat()
-                        }}
-                    )
-                else:
-                    logger.error(f"[PAYOUT_SYNC] Auto-sync FAILED: {sync_result.get('error')}")
-            else:
-                logger.warning("[PAYOUT_BLOCKED] Seller profile banking incomplete")
+            # Re-check payout readiness after sync
+            logger.info("[PAYOUT_CHECK] Re-checking payout readiness after sync...")
+            payout_check = await check_payout_readiness(seller_token_id)
+            
+            logger.info(f"[PAYOUT_CHECK] After sync - payout_ready: {payout_check.get('ready')}")
+            logger.info(f"[PAYOUT_CHECK] After sync - has_banking: {payout_check.get('has_banking')}")
+            logger.info(f"[PAYOUT_CHECK] After sync - has_mobile: {payout_check.get('has_mobile')}")
+            
+            # Update transaction record to reflect successful sync
+            await db.transactions.update_one(
+                {"transaction_id": transaction_id},
+                {"$set": {
+                    "bank_details_attached": True,
+                    "payout_ready": payout_check.get("ready", False),
+                    "banking_auto_synced_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            
+            if payout_check.get("ready"):
+                logger.info("[PAYOUT_READY] === Token now ready after auto-sync ===")
         else:
-            logger.warning("[PAYOUT_BLOCKED] Seller has no banking details in profile")
+            logger.error(f"[PAYOUT_SYNC] FAILED: {sync_result.get('error')}")
+            logger.error(f"[PAYOUT_SYNC] Debug: {sync_result.get('debug', 'N/A')}")
+    
+    elif not payout_check.get("ready") and not seller_has_profile_banking:
+        logger.warning("[PAYOUT_BLOCKED] Cannot auto-sync: Seller profile has no banking details")
+        logger.warning(f"[PAYOUT_BLOCKED] Seller banking_details_completed: {seller_user.get('banking_details_completed') if seller_user else False}")
+        logger.warning(f"[PAYOUT_BLOCKED] Seller bank_name: {seller_banking.get('bank_name', 'NOT SET')}")
+        logger.warning(f"[PAYOUT_BLOCKED] Seller account_number: {'SET' if seller_banking.get('account_number') else 'NOT SET'}")
     
     # ===== PAYOUT PREFLIGHT: Final Decision =====
     if not payout_check.get("ready"):
@@ -720,8 +751,9 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         logger.error("[PAYOUT_BLOCKED] === RELEASE BLOCKED ===")
         logger.error(f"[PAYOUT_BLOCKED] Token: {seller_token_id}")
         logger.error(f"[PAYOUT_BLOCKED] Issues: {issues}")
-        logger.error(f"[PAYOUT_BLOCKED] Has Banking: {has_token_banking}")
-        logger.error(f"[PAYOUT_BLOCKED] Has Mobile: {has_token_mobile}")
+        logger.error(f"[PAYOUT_BLOCKED] Token has_banking: {has_token_banking}")
+        logger.error(f"[PAYOUT_BLOCKED] Token has_mobile: {has_token_mobile}")
+        logger.error(f"[PAYOUT_BLOCKED] Seller profile has_banking: {seller_has_profile_banking}")
         logger.info("=" * 60)
         
         if not user.is_admin:

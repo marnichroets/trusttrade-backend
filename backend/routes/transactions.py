@@ -634,9 +634,9 @@ async def list_transactions(request: Request):
         raise HTTPException(status_code=500, detail="Failed to load transactions")
 
 
-@router.get("/transactions/{transaction_id}", response_model=Transaction)
+@router.get("/transactions/{transaction_id}")
 async def get_transaction(request: Request, transaction_id: str):
-    """Get transaction details"""
+    """Get transaction details with phone invite handling"""
     db = get_database()
     
     user = await get_user_from_token(request, db)
@@ -651,12 +651,79 @@ async def get_transaction(request: Request, transaction_id: str):
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
-    # Check privacy
-    if not user.is_admin:
-        if (transaction.get("buyer_user_id") != user.user_id and
-            transaction.get("buyer_email") != user.email and
-            transaction.get("seller_email") != user.email):
-            raise HTTPException(status_code=403, detail="Access denied")
+    # Get user's verified phone for access check
+    user_phone = getattr(user, 'phone', None)
+    user_phone_verified = getattr(user, 'phone_verified', False)
+    user_phone_normalized = normalize_phone_number(user_phone) if user_phone else None
+    
+    # Check access - email or phone based
+    has_access = False
+    requires_phone_verification = False
+    invited_phone = None
+    invite_type = transaction.get("recipient_type", "email")
+    
+    if user.is_admin:
+        has_access = True
+    else:
+        user_email_lower = user.email.lower() if user.email else ""
+        
+        # Check email-based access
+        if (transaction.get("buyer_user_id") == user.user_id or
+            transaction.get("seller_user_id") == user.user_id or
+            transaction.get("buyer_email", "").lower() == user_email_lower or
+            transaction.get("seller_email", "").lower() == user_email_lower):
+            has_access = True
+        
+        # Check phone-based access (only if user has verified phone)
+        if not has_access and user_phone_normalized:
+            buyer_phone = transaction.get("buyer_phone")
+            seller_phone = transaction.get("seller_phone")
+            recipient_info = transaction.get("recipient_info")
+            
+            # Normalize transaction phones
+            buyer_phone_normalized = normalize_phone_number(buyer_phone) if buyer_phone else None
+            seller_phone_normalized = normalize_phone_number(seller_phone) if seller_phone else None
+            recipient_normalized = normalize_phone_number(recipient_info) if recipient_info else None
+            
+            if user_phone_normalized in [buyer_phone_normalized, seller_phone_normalized, recipient_normalized]:
+                if user_phone_verified:
+                    has_access = True
+                else:
+                    # User's phone matches but not verified
+                    requires_phone_verification = True
+                    invited_phone = buyer_phone_normalized or seller_phone_normalized or recipient_normalized
+        
+        # Check if this is a phone invite and user hasn't verified
+        if not has_access and invite_type == "phone":
+            invited_phone = transaction.get("buyer_phone") or transaction.get("seller_phone") or transaction.get("recipient_info")
+            if invited_phone:
+                requires_phone_verification = True
+    
+    # If no access and no phone verification path, deny
+    if not has_access and not requires_phone_verification:
+        raise HTTPException(status_code=403, detail="Not part of this transaction")
+    
+    # If requires phone verification, return special response
+    if requires_phone_verification:
+        # Mask the invited phone for display
+        masked_phone = None
+        if invited_phone:
+            clean_phone = invited_phone.replace("+", "").replace(" ", "")
+            if len(clean_phone) >= 4:
+                masked_phone = f"+{clean_phone[:2]}•••{clean_phone[-4:]}"
+        
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "type": "phone_verification_required",
+                "message": "This transaction was sent to a phone number. Verify your phone to access it.",
+                "invited_phone_masked": masked_phone,
+                "invite_type": invite_type,
+                "transaction_id": transaction_id,
+                "item_description": transaction.get("item_description", "Transaction"),
+                "item_price": transaction.get("item_price", 0)
+            }
+        )
     
     # Generate share_code for old transactions that don't have one
     if not transaction.get("share_code"):
@@ -668,6 +735,9 @@ async def get_transaction(request: Request, transaction_id: str):
             {"$set": {"share_code": share_code}}
         )
         transaction["share_code"] = share_code
+    
+    # Add invite_type and phone info to response
+    transaction["invite_type"] = invite_type
     
     return Transaction(**transaction)
 

@@ -161,11 +161,12 @@ class OTPVerifyRequest(BaseModel):
 
 
 class PhoneOtpRequest(BaseModel):
-    """Legacy phone OTP request"""
+    """Phone OTP request with optional validation"""
     phone_number: str
+    expected_phone_masked: Optional[str] = None  # e.g., "+27•••2758" - for validation
 
 
 class PhoneOtpVerify(BaseModel):
-    """Legacy phone OTP verification"""
+    """Phone OTP verification"""
     phone_number: str
     otp: str

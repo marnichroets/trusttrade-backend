@@ -61,6 +61,12 @@ function TransactionDetail() {
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [verificationError, setVerificationError] = useState(null);
+  // OTP security states
+  const [remainingOtpRequests, setRemainingOtpRequests] = useState(3);
+  const [remainingVerifyAttempts, setRemainingVerifyAttempts] = useState(5);
+  const [otpExpiresIn, setOtpExpiresIn] = useState(10);
+  const [isLockedOut, setIsLockedOut] = useState(false);
+  const [lockoutMinutes, setLockoutMinutes] = useState(0);
   // Sync status state
   const [syncing, setSyncing] = useState(false);
   // Wrong account state
@@ -107,6 +113,9 @@ function TransactionDetail() {
     }
   }, [transaction?.payment_status, transactionId]);
 
+  // State for phone verification context from backend
+  const [phoneVerificationContext, setPhoneVerificationContext] = useState(null);
+
   const fetchData = async () => {
     try {
       // First get user info
@@ -122,15 +131,26 @@ function TransactionDetail() {
       const transactionRes = await api.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
       setTransaction(transactionRes.data);
       setNeedsPhoneVerification(false);
+      setPhoneVerificationContext(null);
     } catch (error) {
       console.error('Failed to fetch transaction:', error);
       
-      // Check if it's a phone verification required error
-      const errorDetail = error.response?.data?.detail || '';
-      if (error.response?.status === 403 && errorDetail.includes('phone')) {
+      const errorDetail = error.response?.data?.detail;
+      const errorStatus = error.response?.status;
+      
+      // Check if it's a structured phone verification required error
+      if (errorStatus === 403 && typeof errorDetail === 'object' && errorDetail?.type === 'phone_verification_required') {
         // Phone verification needed - show inline verification
+        console.log('[PHONE_VERIFY] Phone verification required:', errorDetail);
         setNeedsPhoneVerification(true);
-        setVerificationError(errorDetail);
+        setPhoneVerificationContext({
+          maskedPhone: errorDetail.invited_phone_masked,
+          inviteType: errorDetail.invite_type,
+          itemDescription: errorDetail.item_description,
+          itemPrice: errorDetail.item_price,
+          message: errorDetail.message
+        });
+        setVerificationError(errorDetail.message);
         
         // Still try to get user info for pre-filling
         try {
@@ -142,9 +162,24 @@ function TransactionDetail() {
         } catch (e) {
           console.error('Failed to get user:', e);
         }
-      } else if (error.response?.status === 403 && (errorDetail.includes('email') || errorDetail.includes('does not match'))) {
-        // Wrong account - extract expected email from error
-        const match = errorDetail.match(/sent to (?:email address |phone number )?([^\s.]+)/i);
+      } else if (errorStatus === 403 && (typeof errorDetail === 'string' && (errorDetail.includes('phone') || errorDetail.includes('Phone')))) {
+        // Legacy string-based phone verification error
+        setNeedsPhoneVerification(true);
+        setVerificationError(errorDetail);
+        
+        try {
+          const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
+          setUser(userRes.data);
+          if (userRes.data.phone) {
+            setPhoneNumber(userRes.data.phone);
+          }
+        } catch (e) {
+          console.error('Failed to get user:', e);
+        }
+      } else if (errorStatus === 403) {
+        // Wrong account or other access denied
+        const errorMsg = typeof errorDetail === 'string' ? errorDetail : (errorDetail?.message || 'Access denied');
+        const match = errorMsg.match(/sent to (?:email address |phone number )?([^\s.]+)/i);
         const expectedEmail = match ? match[1] : 'the invited account';
         
         try {
@@ -153,14 +188,14 @@ function TransactionDetail() {
           setWrongAccount({
             expected: expectedEmail,
             current: userRes.data.email,
-            message: errorDetail
+            message: errorMsg
           });
         } catch (e) {
           console.error('Failed to get user:', e);
           setWrongAccount({
             expected: expectedEmail,
             current: 'current account',
-            message: errorDetail
+            message: errorMsg
           });
         }
       } else {
@@ -172,27 +207,87 @@ function TransactionDetail() {
     }
   };
 
-  // Send OTP for phone verification
+  // Validate phone number against masked format
+  const validatePhoneAgainstMask = (enteredPhone, maskedPhone) => {
+    if (!maskedPhone) return true; // No mask to validate against
+    
+    // Normalize entered phone - remove spaces, dashes, plus sign
+    let normalized = enteredPhone.replace(/[\s\-\+]/g, '');
+    // Remove leading 0 or 27
+    if (normalized.startsWith('0')) normalized = normalized.slice(1);
+    if (normalized.startsWith('27')) normalized = normalized.slice(2);
+    
+    if (normalized.length < 9) return false;
+    
+    // Extract last 4 digits from masked phone (pattern: +27•••2758 or similar)
+    const match = maskedPhone.match(/(\d{4})$/);
+    if (match) {
+      const expectedLast4 = match[1];
+      return normalized.endsWith(expectedLast4);
+    }
+    return true;
+  };
+
+  // Send OTP for phone verification with validation
   const handleSendOtp = async () => {
+    // Clear previous errors
+    setVerificationError(null);
+    
     if (!phoneNumber || phoneNumber.length < 10) {
       toast.error('Please enter a valid phone number');
       return;
     }
 
+    // Check if locked out
+    if (isLockedOut) {
+      toast.error(`Too many attempts. Please try again in ${lockoutMinutes} minutes.`);
+      return;
+    }
+
+    // Validate phone against expected masked format
+    const maskedPhone = phoneVerificationContext?.maskedPhone;
+    if (maskedPhone && !validatePhoneAgainstMask(phoneNumber, maskedPhone)) {
+      setVerificationError(`Phone number doesn't match the expected format. The number should end with ${maskedPhone.slice(-4)}.`);
+      toast.error(`Phone number doesn't match. Expected ending: ${maskedPhone.slice(-4)}`);
+      return;
+    }
+
     setSendingOtp(true);
     try {
-      await api.post(
-        `${API}/phone/send-otp`,
-        { phone_number: phoneNumber },
+      const response = await api.post(
+        `${API}/verification/phone/send-otp`,
+        { 
+          phone_number: phoneNumber,
+          expected_phone_masked: maskedPhone || null
+        },
         { withCredentials: true }
       );
       
       setOtpSent(true);
-      setResendCooldown(60);
-      toast.success('Verification code sent to your phone');
+      setResendCooldown(response.data.cooldown_seconds || 60);
+      setRemainingOtpRequests(response.data.remaining_requests ?? 2);
+      setOtpExpiresIn(response.data.expires_in_minutes || 10);
+      setRemainingVerifyAttempts(5); // Reset verify attempts for new OTP
+      toast.success(`Verification code sent! Expires in ${response.data.expires_in_minutes || 10} minutes.`);
     } catch (error) {
       console.error('Failed to send OTP:', error);
-      toast.error(parseErrorMessage(error) || 'Failed to send verification code');
+      const errorDetail = error.response?.data?.detail || 'Failed to send verification code';
+      
+      // Handle specific error cases
+      if (error.response?.status === 429) {
+        // Rate limited or locked out
+        if (errorDetail.includes('locked') || errorDetail.includes('Too many failed')) {
+          setIsLockedOut(true);
+          const minutes = errorDetail.match(/(\d+) minutes/);
+          setLockoutMinutes(minutes ? parseInt(minutes[1]) : 30);
+        }
+        toast.error(errorDetail);
+      } else if (errorDetail.includes("doesn't match")) {
+        setVerificationError(errorDetail);
+        toast.error('Phone number mismatch');
+      } else {
+        toast.error(errorDetail);
+      }
     } finally {
       setSendingOtp(false);
     }
@@ -205,12 +300,20 @@ function TransactionDetail() {
       return;
     }
 
+    // Check if locked out
+    if (isLockedOut) {
+      toast.error(`Too many attempts. Please try again in ${lockoutMinutes} minutes.`);
+      return;
+    }
+
     setVerifyingOtp(true);
+    setVerificationError(null);
+    
     try {
       // First verify the OTP
       await api.post(
-        `${API}/phone/verify-otp`,
-        { phone_number: phoneNumber, otp_code: otpCode },
+        `${API}/verification/phone/verify-otp`,
+        { phone_number: phoneNumber, otp: otpCode },
         { withCredentials: true }
       );
       
@@ -221,6 +324,7 @@ function TransactionDetail() {
       setTransaction(transactionRes.data);
       setNeedsPhoneVerification(false);
       setVerificationError(null);
+      setIsLockedOut(false);
       
       // Update user state with verified phone
       const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
@@ -231,11 +335,37 @@ function TransactionDetail() {
       console.error('Failed to verify OTP:', error);
       const errorDetail = error.response?.data?.detail || 'Verification failed';
       
-      // Check if phone was verified but doesn't match transaction
-      if (errorDetail.includes('different') || errorDetail.includes('does not match')) {
+      // Handle specific error cases
+      if (error.response?.status === 429) {
+        // Rate limited or locked out
+        setIsLockedOut(true);
+        const minutes = errorDetail.match(/(\d+) minutes/);
+        setLockoutMinutes(minutes ? parseInt(minutes[1]) : 30);
+        setVerificationError(errorDetail);
+        toast.error(errorDetail);
+      } else if (errorDetail.includes('expired')) {
+        // OTP expired - need to request new one
+        setOtpSent(false);
+        setOtpCode('');
+        setVerificationError('Verification code expired. Please request a new code.');
+        toast.error('Code expired. Request a new one.');
+      } else if (errorDetail.includes('attempts remaining')) {
+        // Failed attempt with remaining tries
+        const remaining = errorDetail.match(/(\d+) attempts/);
+        if (remaining) setRemainingVerifyAttempts(parseInt(remaining[1]));
+        setVerificationError(errorDetail);
+        toast.error(errorDetail);
+      } else if (errorDetail.includes('No verification code')) {
+        // No OTP found
+        setOtpSent(false);
+        setOtpCode('');
+        toast.error('Please request a new verification code.');
+      } else if (errorDetail.includes('different') || errorDetail.includes('does not match')) {
+        // Phone doesn't match transaction
         setVerificationError(errorDetail);
         toast.error('This transaction was sent to a different phone number');
       } else {
+        setVerificationError(errorDetail);
         toast.error(errorDetail);
       }
     } finally {
@@ -700,31 +830,111 @@ function TransactionDetail() {
     );
   }
 
-  // Phone verification disabled for beta - skip straight to normal transaction view
-  // if (needsPhoneVerification) { ... }
-  const needsPhoneVerificationDisabled = false; // BETA: Phone verification hidden
-  if (needsPhoneVerificationDisabled) {
+  // Phone verification flow - show inline OTP verification when needed
+  if (needsPhoneVerification) {
     return (
       <DashboardLayout user={user}>
         <div className="max-w-md mx-auto py-12 px-4">
           <Card className="p-8">
             <div className="text-center mb-6">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Lock className="w-8 h-8 text-blue-600" />
+                <Phone className="w-8 h-8 text-blue-600" />
               </div>
               <h1 className="text-2xl font-bold text-slate-900 mb-2">Verify Your Phone Number</h1>
               <p className="text-slate-600">
-                This transaction was sent to a phone number. Please verify your number to continue.
+                This transaction was sent to a phone number. Please verify your number to access it.
               </p>
             </div>
 
-            {verificationError && verificationError.includes('different') && (
+            {/* Transaction Preview Info */}
+            {phoneVerificationContext && (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-6">
+                <div className="space-y-2">
+                  {phoneVerificationContext.itemDescription && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Item:</span>
+                      <span className="text-sm font-medium text-slate-700 truncate max-w-[200px]">
+                        {phoneVerificationContext.itemDescription}
+                      </span>
+                    </div>
+                  )}
+                  {phoneVerificationContext.itemPrice > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Amount:</span>
+                      <span className="text-sm font-semibold text-emerald-600">
+                        R {phoneVerificationContext.itemPrice.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {phoneVerificationContext.maskedPhone && (
+                    <div className="flex justify-between items-center border-t border-slate-200 pt-2 mt-2">
+                      <span className="text-xs text-slate-500">Sent to:</span>
+                      <span className="text-sm font-mono font-medium text-blue-600">
+                        {phoneVerificationContext.maskedPhone}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Error message - enhanced for all error types */}
+            {verificationError && (
+              <div className={`border rounded-lg p-4 mb-6 ${
+                verificationError.includes('locked') || verificationError.includes('Too many') 
+                  ? 'bg-orange-50 border-orange-200' 
+                  : verificationError.includes('expired')
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-red-50 border-red-200'
+              }`}>
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className={`w-5 h-5 mt-0.5 ${
+                    verificationError.includes('locked') || verificationError.includes('Too many')
+                      ? 'text-orange-600'
+                      : verificationError.includes('expired')
+                        ? 'text-amber-600'
+                        : 'text-red-600'
+                  }`} />
+                  <div>
+                    <p className={`text-sm font-medium ${
+                      verificationError.includes('locked') || verificationError.includes('Too many')
+                        ? 'text-orange-800'
+                        : verificationError.includes('expired')
+                          ? 'text-amber-800'
+                          : 'text-red-800'
+                    }`}>
+                      {verificationError.includes('locked') || verificationError.includes('Too many')
+                        ? 'Too Many Attempts'
+                        : verificationError.includes('expired')
+                          ? 'Code Expired'
+                          : verificationError.includes('mismatch') || verificationError.includes("doesn't match")
+                            ? 'Phone Number Mismatch'
+                            : verificationError.includes('attempts remaining')
+                              ? 'Incorrect Code'
+                              : 'Verification Error'}
+                    </p>
+                    <p className={`text-sm mt-1 ${
+                      verificationError.includes('locked') || verificationError.includes('Too many')
+                        ? 'text-orange-600'
+                        : verificationError.includes('expired')
+                          ? 'text-amber-600'
+                          : 'text-red-600'
+                    }`}>{verificationError}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Lockout warning */}
+            {isLockedOut && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
                 <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
+                  <Lock className="w-5 h-5 text-red-600 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium text-red-800">Phone Number Mismatch</p>
-                    <p className="text-sm text-red-600 mt-1">{verificationError}</p>
+                    <p className="text-sm font-medium text-red-800">Account Temporarily Locked</p>
+                    <p className="text-sm text-red-600 mt-1">
+                      Too many failed attempts. Please try again in {lockoutMinutes} minutes.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -743,20 +953,34 @@ function TransactionDetail() {
                       type="tel"
                       placeholder="+27 82 123 4567"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      onChange={(e) => {
+                        setPhoneNumber(e.target.value);
+                        // Clear mismatch error when user types
+                        if (verificationError?.includes("doesn't match")) {
+                          setVerificationError(null);
+                        }
+                      }}
                       className="pl-10"
                       data-testid="phone-input"
+                      disabled={isLockedOut}
                     />
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Enter the phone number this transaction was sent to
-                  </p>
+                  {phoneVerificationContext?.maskedPhone ? (
+                    <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      Enter the number matching: {phoneVerificationContext.maskedPhone}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Enter the phone number this transaction was sent to
+                    </p>
+                  )}
                 </div>
 
                 <Button
                   onClick={handleSendOtp}
-                  disabled={sendingOtp || !phoneNumber}
-                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  disabled={sendingOtp || !phoneNumber || isLockedOut}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
                   data-testid="send-otp-btn"
                 >
                   {sendingOtp ? (
@@ -764,20 +988,34 @@ function TransactionDetail() {
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Sending...
                     </>
+                  ) : isLockedOut ? (
+                    `Locked - Try again in ${lockoutMinutes}m`
                   ) : (
                     'Send Verification Code'
                   )}
                 </Button>
+                
+                {/* Rate limit info */}
+                {remainingOtpRequests < 3 && !isLockedOut && (
+                  <p className="text-xs text-amber-600 text-center">
+                    {remainingOtpRequests} code requests remaining in this window
+                  </p>
+                )}
               </div>
             ) : (
               // Step 2: Enter OTP
               <div className="space-y-4">
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    <p className="text-sm text-emerald-800">
-                      Code sent to <span className="font-medium">{phoneNumber}</span>
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                      <p className="text-sm text-emerald-800">
+                        Code sent to <span className="font-medium">{phoneNumber}</span>
+                      </p>
+                    </div>
+                    <span className="text-xs text-emerald-600 font-medium">
+                      Expires in {otpExpiresIn}m
+                    </span>
                   </div>
                 </div>
 
@@ -789,20 +1027,32 @@ function TransactionDetail() {
                     type="text"
                     placeholder="Enter 6-digit code"
                     value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    onChange={(e) => {
+                      setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                      // Clear error when typing new code
+                      if (verificationError?.includes('attempts remaining') || verificationError?.includes('Incorrect')) {
+                        setVerificationError(null);
+                      }
+                    }}
                     className="text-center text-2xl tracking-widest font-mono"
                     maxLength={6}
                     data-testid="otp-input"
+                    disabled={isLockedOut}
                   />
                   <p className="text-xs text-slate-500 mt-1 text-center">
-                    Code expires in 10 minutes
+                    Code expires in {otpExpiresIn} minutes
                   </p>
+                  {remainingVerifyAttempts < 5 && (
+                    <p className="text-xs text-amber-600 mt-1 text-center">
+                      {remainingVerifyAttempts} attempts remaining
+                    </p>
+                  )}
                 </div>
 
                 <Button
                   onClick={handleVerifyOtp}
-                  disabled={verifyingOtp || otpCode.length !== 6}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700"
+                  disabled={verifyingOtp || otpCode.length !== 6 || isLockedOut}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
                   data-testid="verify-otp-btn"
                 >
                   {verifyingOtp ? (
@@ -810,6 +1060,8 @@ function TransactionDetail() {
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Verifying...
                     </>
+                  ) : isLockedOut ? (
+                    `Locked - Try again in ${lockoutMinutes}m`
                   ) : (
                     'Verify & Join Transaction'
                   )}
@@ -820,8 +1072,10 @@ function TransactionDetail() {
                     onClick={() => {
                       setOtpSent(false);
                       setOtpCode('');
+                      setVerificationError(null);
                     }}
                     className="text-slate-600 hover:text-slate-800"
+                    disabled={isLockedOut}
                   >
                     Change number
                   </button>
@@ -830,14 +1084,18 @@ function TransactionDetail() {
                     <span className="text-slate-400">
                       Resend in {resendCooldown}s
                     </span>
-                  ) : (
+                  ) : remainingOtpRequests > 0 && !isLockedOut ? (
                     <button
                       onClick={handleSendOtp}
                       disabled={sendingOtp}
                       className="text-blue-600 hover:text-blue-800 font-medium"
                     >
-                      Resend code
+                      Resend code ({remainingOtpRequests} left)
                     </button>
+                  ) : (
+                    <span className="text-slate-400 text-xs">
+                      No more requests available
+                    </span>
                   )}
                 </div>
               </div>
@@ -1655,10 +1913,27 @@ function TransactionDetail() {
                     <p className="text-xs text-slate-500 mb-1">Name</p>
                     <p className="text-sm font-medium text-slate-900">{transaction.buyer_name}</p>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1">Email</p>
-                    <p className="text-sm text-slate-700">{transaction.buyer_email}</p>
-                  </div>
+                  {transaction.buyer_email ? (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Email</p>
+                      <p className="text-sm text-slate-700">{transaction.buyer_email}</p>
+                    </div>
+                  ) : null}
+                  {transaction.buyer_phone && (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> Phone
+                      </p>
+                      <p className="text-sm text-slate-700 font-mono">{transaction.buyer_phone}</p>
+                    </div>
+                  )}
+                  {transaction.invite_type === 'phone' && !transaction.buyer_email && !transaction.buyer_phone && (
+                    <div className="bg-blue-50 rounded-lg p-2">
+                      <p className="text-xs text-blue-600 flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> Invited via phone
+                      </p>
+                    </div>
+                  )}
                 </div>
               </Card>
 
@@ -1671,10 +1946,27 @@ function TransactionDetail() {
                     <p className="text-xs text-slate-500 mb-1">Name</p>
                     <p className="text-sm font-medium text-slate-900">{transaction.seller_name}</p>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1">Email</p>
-                    <p className="text-sm text-slate-700">{transaction.seller_email}</p>
-                  </div>
+                  {transaction.seller_email ? (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Email</p>
+                      <p className="text-sm text-slate-700">{transaction.seller_email}</p>
+                    </div>
+                  ) : null}
+                  {transaction.seller_phone && (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> Phone
+                      </p>
+                      <p className="text-sm text-slate-700 font-mono">{transaction.seller_phone}</p>
+                    </div>
+                  )}
+                  {transaction.invite_type === 'phone' && !transaction.seller_email && !transaction.seller_phone && (
+                    <div className="bg-blue-50 rounded-lg p-2">
+                      <p className="text-xs text-blue-600 flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> Invited via phone
+                      </p>
+                    </div>
+                  )}
                 </div>
               </Card>
             </div>
@@ -2017,7 +2309,9 @@ function TransactionDetail() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-900 truncate">{transaction.buyer_name}</p>
-                      <p className="text-xs text-slate-500">Buyer</p>
+                      <p className="text-xs text-slate-500">
+                        Buyer {transaction.buyer_phone && <span className="text-blue-500 ml-1">• via phone</span>}
+                      </p>
                     </div>
                     {buyerConfirmed && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                   </div>
@@ -2027,7 +2321,9 @@ function TransactionDetail() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-900 truncate">{transaction.seller_name}</p>
-                      <p className="text-xs text-slate-500">Seller</p>
+                      <p className="text-xs text-slate-500">
+                        Seller {transaction.seller_phone && <span className="text-blue-500 ml-1">• via phone</span>}
+                      </p>
                     </div>
                     {sellerConfirmed && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                   </div>

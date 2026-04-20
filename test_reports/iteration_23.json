@@ -1,0 +1,104 @@
+{
+  "summary": "Phone Invite Join Flow testing complete. All features verified: Backend returns 403 with phone_verification_required when user doesn't have matching verified phone, Backend returns invite_type/buyer_phone/seller_phone in successful response, Frontend shows inline phone verification UI with masked phone and transaction preview, Buyer/Seller Information cards show phone numbers, PARTIES sidebar shows 'via phone' indicator.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/health", "issue": "Health check endpoint doesn't exist (not critical)", "priority": "LOW"}
+    ]
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard", "issues": ["Minor: validateDOMNesting warning in console - tr/span nesting issue in table component"]}
+    ]
+  },
+
+  "passed_tests": [
+    "✅ BACKEND: GET /api/transactions/{id} returns 403 with phone_verification_required type when user doesn't have matching verified phone",
+    "✅ BACKEND: 403 response includes invited_phone_masked, invite_type, transaction_id, item_description, item_price",
+    "✅ BACKEND: GET /api/transactions/{id} returns invite_type field in successful response",
+    "✅ BACKEND: GET /api/transactions/{id} returns buyer_phone and seller_phone fields",
+    "✅ BACKEND: POST /api/verification/phone/send-otp endpoint exists and accessible",
+    "✅ BACKEND: POST /api/verification/phone/verify-otp endpoint exists and accessible",
+    "✅ FRONTEND: Inline phone verification UI appears when 403 phone_verification_required is returned",
+    "✅ FRONTEND: Phone verification UI shows 'Verify Your Phone Number' heading",
+    "✅ FRONTEND: Phone verification UI shows masked invited phone number (+27•••2758)",
+    "✅ FRONTEND: Transaction preview shows item description (Headset) and amount (R 799.99)",
+    "✅ FRONTEND: Phone input field with data-testid='phone-input' present",
+    "✅ FRONTEND: 'Send Verification Code' button with data-testid='send-otp-btn' present",
+    "✅ FRONTEND: 'Back to My Transactions' button present",
+    "✅ FRONTEND: Buyer Information card shows buyer name and email",
+    "✅ FRONTEND: Seller Information card shows seller name and phone number (+27791782758)",
+    "✅ FRONTEND: PARTIES sidebar shows 'via phone' indicator for phone-based invites"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_phone_invite_flow.py",
+    "/app/test_reports/pytest/phone_invite_flow_results.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    {
+      "file": "/app/backend/models/transaction.py",
+      "status": "FIXED",
+      "comment": "Added invite_type field to Transaction model to ensure it's included in API responses (was being dropped due to extra='ignore')"
+    },
+    {
+      "file": "/app/backend/routes/transactions.py",
+      "status": "VERIFIED",
+      "comment": "Lines 637-742: get_transaction correctly handles phone access logic and returns structured 403 response with phone_verification_required type"
+    },
+    {
+      "file": "/app/frontend/src/pages/TransactionDetail.js",
+      "status": "VERIFIED",
+      "comment": "Lines 108-195: fetchData correctly handles structured 403 response and sets phoneVerificationContext state"
+    },
+    {
+      "file": "/app/frontend/src/pages/TransactionDetail.js",
+      "status": "VERIFIED",
+      "comment": "Lines 730-910: needsPhoneVerification inline UI correctly displays masked phone, transaction preview, and OTP input"
+    },
+    {
+      "file": "/app/frontend/src/pages/TransactionDetail.js",
+      "status": "VERIFIED",
+      "comment": "Lines 1714-1780: Buyer/Seller Information cards correctly display phone numbers when available"
+    },
+    {
+      "file": "/app/frontend/src/pages/TransactionDetail.js",
+      "status": "VERIFIED",
+      "comment": "Lines 2111-2132: PARTIES sidebar correctly shows 'via phone' indicator for phone-based invites"
+    }
+  ],
+
+  "updated_files": [
+    "/app/backend/models/transaction.py",
+    "/app/backend/tests/test_phone_invite_flow.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (9/9 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+
+  "test_credentials": {
+    "test_user_no_phone": {"email": "test@test.com", "password": "testpass123"},
+    "test_user_with_phone": {"email": "marnichroets@gmail.com", "password": "testpass123"},
+    "phone_based_transaction_id": "txn_adcfbcad4882",
+    "phone_based_share_code": "TT-364335"
+  },
+
+  "seed_data_creation": "None - used existing phone-based transaction txn_adcfbcad4882",
+
+  "retest_needed": false,
+
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Phone Invite Join Flow testing complete. Key verifications: (1) Backend returns structured 403 response with type='phone_verification_required' including masked phone, item description, and price, (2) Frontend correctly handles this response and shows inline OTP verification UI, (3) Transaction detail page shows phone numbers in Buyer/Seller Information cards, (4) PARTIES sidebar shows 'via phone' indicator. Fixed: Added invite_type field to Transaction model in /app/backend/models/transaction.py to ensure it's included in API responses.",
+
+  "rca_of_the_issue": "The invite_type field was being set in the backend route (line 740) but was being dropped when converting to the Transaction model because the model had extra='ignore' and invite_type was not defined as a field. Fixed by adding invite_type: Optional[str] = None to the Transaction model."
+}

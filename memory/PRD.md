@@ -4,6 +4,36 @@
 
 ---
 
+## Phase 6: Phone Invite Join Flow Fix (April 2025)
+
+### Phone-Based Transaction Access (P0 - COMPLETE)
+- **Inline Phone Verification**: Users invited via phone now see inline OTP verification on the transaction detail page
+- **No Settings Redirect**: Removed the hard redirect to settings page for phone verification
+- **Masked Phone Display**: Shows the invited phone number in masked format (+27•••2758) for security
+- **Transaction Preview**: Shows item description and amount in verification UI
+- **Phone Display in Party Info**: Buyer/Seller Information cards now show phone numbers when `invite_type == "phone"`
+- **Via Phone Indicator**: PARTIES sidebar shows "via phone" indicator for phone-based invites
+
+### OTP Security Enhancements (P0 - COMPLETE)
+- **Phone Validation**: Validates entered phone matches masked format (last 4 digits) before sending OTP
+- **Rate Limiting**: Max 3 OTP requests per 10-minute window
+- **Cooldown Timer**: 60-second cooldown between OTP requests
+- **Attempt Limiting**: Max 5 incorrect OTP attempts before 30-minute lockout
+- **Audit Logging**: All OTP requests logged to `otp_logs` collection (user_id, phone, IP, timestamp, success/failure)
+- **Clear UI Feedback**: Shows remaining requests, remaining attempts, cooldown timer, expiration time, lockout status
+
+### Technical Changes
+- **Backend**: `/api/verification/phone/send-otp` - Rate limiting, cooldown, phone validation, audit logging
+- **Backend**: `/api/verification/phone/verify-otp` - Attempt tracking, lockout, clear error messages
+- **Backend**: New `otp_logs` collection for audit trail
+- **Backend**: In-memory rate limit stores (use Redis in production)
+- **Frontend**: `phoneVerificationContext` state for transaction preview
+- **Frontend**: `validatePhoneAgainstMask()` helper for client-side validation
+- **Frontend**: Enhanced error states (mismatch, cooldown, lockout, expired, incorrect code)
+- **Frontend**: Security info display (remaining requests, attempts, expiration)
+
+---
+
 ## Phase 5: Operations + Admin Complete (April 2025)
 
 ### Critical Bug Fixes
@@ -115,8 +145,11 @@ GET  /api/admin/disputes
 - [x] Admin Dashboard
 - [x] Email/SMS verification
 - [x] Banking reset request flow
+- [x] Phone Invite Join Flow (inline OTP verification)
+- [x] Buyer/Seller phone display in transaction details
 
 ### P1 (Next)
+- [ ] Monitor and fix Transactional Email Failures (logging added)
 - [ ] Real TradeSafe refund (`allocationRefund` mutation)
 - [ ] Trust Score visibility in transaction creation
 - [ ] Dispute form improvements (evidence upload)

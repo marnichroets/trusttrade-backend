@@ -767,11 +767,34 @@ async def send_transaction_created_email(
     base_url: str
 ) -> bool:
     """Send transaction created notification"""
-    share_link = f"{base_url}/t/{share_code}"
-    subject, html = get_transaction_created_email(
-        to_name, share_code, item_description, amount, other_party_name, role, share_link
-    )
-    return await send_email(to_email, to_name, subject, html)
+    logger.info("=" * 60)
+    logger.info("[TX_EMAIL] === TRANSACTION CREATED EMAIL ===")
+    logger.info(f"[TX_EMAIL] Event: transaction_created")
+    logger.info(f"[TX_EMAIL] Recipient: {to_email}")
+    logger.info(f"[TX_EMAIL] Name: {to_name}")
+    logger.info(f"[TX_EMAIL] Role: {role}")
+    logger.info(f"[TX_EMAIL] Share Code: {share_code}")
+    logger.info(f"[TX_EMAIL] Item: {item_description}")
+    logger.info(f"[TX_EMAIL] Amount: R{amount}")
+    logger.info("=" * 60)
+    
+    try:
+        share_link = f"{base_url}/t/{share_code}"
+        subject, html = get_transaction_created_email(
+            to_name, share_code, item_description, amount, other_party_name, role, share_link
+        )
+        logger.info(f"[TX_EMAIL] Subject: {subject}")
+        logger.info(f"[TX_EMAIL] Calling send_email()...")
+        
+        result = await send_email(to_email, to_name, subject, html)
+        
+        logger.info(f"[TX_EMAIL] RESULT: {'SUCCESS' if result else 'FAILED'}")
+        return result
+    except Exception as e:
+        logger.error(f"[TX_EMAIL] EXCEPTION: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
 
 
 async def send_payment_received_email(
@@ -783,8 +806,29 @@ async def send_payment_received_email(
     role: str
 ) -> bool:
     """Send payment received notification"""
-    subject, html = get_payment_received_email(to_name, share_code, item_description, amount, role)
-    return await send_email(to_email, to_name, subject, html)
+    logger.info("=" * 60)
+    logger.info("[TX_EMAIL] === PAYMENT RECEIVED EMAIL ===")
+    logger.info(f"[TX_EMAIL] Event: payment_received")
+    logger.info(f"[TX_EMAIL] Recipient: {to_email}")
+    logger.info(f"[TX_EMAIL] Name: {to_name}")
+    logger.info(f"[TX_EMAIL] Role: {role}")
+    logger.info(f"[TX_EMAIL] Share Code: {share_code}")
+    logger.info("=" * 60)
+    
+    try:
+        subject, html = get_payment_received_email(to_name, share_code, item_description, amount, role)
+        logger.info(f"[TX_EMAIL] Subject: {subject}")
+        logger.info(f"[TX_EMAIL] Calling send_email()...")
+        
+        result = await send_email(to_email, to_name, subject, html)
+        
+        logger.info(f"[TX_EMAIL] RESULT: {'SUCCESS' if result else 'FAILED'}")
+        return result
+    except Exception as e:
+        logger.error(f"[TX_EMAIL] EXCEPTION: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
 
 
 async def send_delivery_started_email(
@@ -795,8 +839,28 @@ async def send_delivery_started_email(
     seller_name: str
 ) -> bool:
     """Send delivery started notification to buyer"""
-    subject, html = get_delivery_started_email(to_name, share_code, item_description, seller_name)
-    return await send_email(to_email, to_name, subject, html)
+    logger.info("=" * 60)
+    logger.info("[TX_EMAIL] === DELIVERY STARTED EMAIL ===")
+    logger.info(f"[TX_EMAIL] Event: delivery_started")
+    logger.info(f"[TX_EMAIL] Recipient: {to_email}")
+    logger.info(f"[TX_EMAIL] Name: {to_name}")
+    logger.info(f"[TX_EMAIL] Share Code: {share_code}")
+    logger.info("=" * 60)
+    
+    try:
+        subject, html = get_delivery_started_email(to_name, share_code, item_description, seller_name)
+        logger.info(f"[TX_EMAIL] Subject: {subject}")
+        logger.info(f"[TX_EMAIL] Calling send_email()...")
+        
+        result = await send_email(to_email, to_name, subject, html)
+        
+        logger.info(f"[TX_EMAIL] RESULT: {'SUCCESS' if result else 'FAILED'}")
+        return result
+    except Exception as e:
+        logger.error(f"[TX_EMAIL] EXCEPTION: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
 
 
 async def send_delivery_confirmed_email(
@@ -807,8 +871,29 @@ async def send_delivery_confirmed_email(
     role: str
 ) -> bool:
     """Send delivery confirmation notification"""
-    subject, html = get_delivery_confirmed_email(to_name, share_code, item_description, role)
-    return await send_email(to_email, to_name, subject, html)
+    logger.info("=" * 60)
+    logger.info("[TX_EMAIL] === DELIVERY CONFIRMED EMAIL ===")
+    logger.info(f"[TX_EMAIL] Event: delivery_confirmed")
+    logger.info(f"[TX_EMAIL] Recipient: {to_email}")
+    logger.info(f"[TX_EMAIL] Name: {to_name}")
+    logger.info(f"[TX_EMAIL] Role: {role}")
+    logger.info(f"[TX_EMAIL] Share Code: {share_code}")
+    logger.info("=" * 60)
+    
+    try:
+        subject, html = get_delivery_confirmed_email(to_name, share_code, item_description, role)
+        logger.info(f"[TX_EMAIL] Subject: {subject}")
+        logger.info(f"[TX_EMAIL] Calling send_email()...")
+        
+        result = await send_email(to_email, to_name, subject, html)
+        
+        logger.info(f"[TX_EMAIL] RESULT: {'SUCCESS' if result else 'FAILED'}")
+        return result
+    except Exception as e:
+        logger.error(f"[TX_EMAIL] EXCEPTION: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
 
 
 async def send_funds_released_email(
@@ -820,8 +905,29 @@ async def send_funds_released_email(
     net_amount: float
 ) -> bool:
     """Send funds released notification"""
-    subject, html = get_funds_released_email(to_name, share_code, item_description, amount, net_amount)
-    return await send_email(to_email, to_name, subject, html)
+    logger.info("=" * 60)
+    logger.info("[TX_EMAIL] === FUNDS RELEASED EMAIL ===")
+    logger.info(f"[TX_EMAIL] Event: funds_released")
+    logger.info(f"[TX_EMAIL] Recipient: {to_email}")
+    logger.info(f"[TX_EMAIL] Name: {to_name}")
+    logger.info(f"[TX_EMAIL] Share Code: {share_code}")
+    logger.info(f"[TX_EMAIL] Amount: R{amount}, Net: R{net_amount}")
+    logger.info("=" * 60)
+    
+    try:
+        subject, html = get_funds_released_email(to_name, share_code, item_description, amount, net_amount)
+        logger.info(f"[TX_EMAIL] Subject: {subject}")
+        logger.info(f"[TX_EMAIL] Calling send_email()...")
+        
+        result = await send_email(to_email, to_name, subject, html)
+        
+        logger.info(f"[TX_EMAIL] RESULT: {'SUCCESS' if result else 'FAILED'}")
+        return result
+    except Exception as e:
+        logger.error(f"[TX_EMAIL] EXCEPTION: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
 
 
 async def send_dispute_opened_email(
@@ -832,8 +938,25 @@ async def send_dispute_opened_email(
     description: str
 ) -> bool:
     """Send dispute opened notification"""
-    subject, html = get_dispute_opened_email(to_name, share_code, dispute_type, description)
-    return await send_email(to_email, to_name, subject, html)
+    logger.info("=" * 60)
+    logger.info("[TX_EMAIL] === DISPUTE OPENED EMAIL ===")
+    logger.info(f"[TX_EMAIL] Event: dispute_opened")
+    logger.info(f"[TX_EMAIL] Recipient: {to_email}")
+    logger.info(f"[TX_EMAIL] Share Code: {share_code}")
+    logger.info(f"[TX_EMAIL] Dispute Type: {dispute_type}")
+    logger.info("=" * 60)
+    
+    try:
+        subject, html = get_dispute_opened_email(to_name, share_code, dispute_type, description)
+        logger.info(f"[TX_EMAIL] Subject: {subject}")
+        result = await send_email(to_email, to_name, subject, html)
+        logger.info(f"[TX_EMAIL] RESULT: {'SUCCESS' if result else 'FAILED'}")
+        return result
+    except Exception as e:
+        logger.error(f"[TX_EMAIL] EXCEPTION: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
 
 
 async def send_dispute_resolved_email(
@@ -844,8 +967,25 @@ async def send_dispute_resolved_email(
     admin_notes: str = ""
 ) -> bool:
     """Send dispute resolved notification"""
-    subject, html = get_dispute_resolved_email(to_name, share_code, resolution, admin_notes)
-    return await send_email(to_email, to_name, subject, html)
+    logger.info("=" * 60)
+    logger.info("[TX_EMAIL] === DISPUTE RESOLVED EMAIL ===")
+    logger.info(f"[TX_EMAIL] Event: dispute_resolved")
+    logger.info(f"[TX_EMAIL] Recipient: {to_email}")
+    logger.info(f"[TX_EMAIL] Share Code: {share_code}")
+    logger.info(f"[TX_EMAIL] Resolution: {resolution}")
+    logger.info("=" * 60)
+    
+    try:
+        subject, html = get_dispute_resolved_email(to_name, share_code, resolution, admin_notes)
+        logger.info(f"[TX_EMAIL] Subject: {subject}")
+        result = await send_email(to_email, to_name, subject, html)
+        logger.info(f"[TX_EMAIL] RESULT: {'SUCCESS' if result else 'FAILED'}")
+        return result
+    except Exception as e:
+        logger.error(f"[TX_EMAIL] EXCEPTION: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
 
 
 async def send_refund_email(

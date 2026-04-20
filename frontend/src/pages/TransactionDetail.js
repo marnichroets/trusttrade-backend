@@ -59,6 +59,12 @@ function TransactionDetail() {
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [verificationError, setVerificationError] = useState(null);
+  // OTP security states
+  const [remainingOtpRequests, setRemainingOtpRequests] = useState(3);
+  const [remainingVerifyAttempts, setRemainingVerifyAttempts] = useState(5);
+  const [otpExpiresIn, setOtpExpiresIn] = useState(10);
+  const [isLockedOut, setIsLockedOut] = useState(false);
+  const [lockoutMinutes, setLockoutMinutes] = useState(0);
   // Sync status state
   const [syncing, setSyncing] = useState(false);
   // Wrong account state
@@ -199,27 +205,87 @@ function TransactionDetail() {
     }
   };
 
-  // Send OTP for phone verification
+  // Validate phone number against masked format
+  const validatePhoneAgainstMask = (enteredPhone, maskedPhone) => {
+    if (!maskedPhone) return true; // No mask to validate against
+    
+    // Normalize entered phone - remove spaces, dashes, plus sign
+    let normalized = enteredPhone.replace(/[\s\-\+]/g, '');
+    // Remove leading 0 or 27
+    if (normalized.startsWith('0')) normalized = normalized.slice(1);
+    if (normalized.startsWith('27')) normalized = normalized.slice(2);
+    
+    if (normalized.length < 9) return false;
+    
+    // Extract last 4 digits from masked phone (pattern: +27•••2758 or similar)
+    const match = maskedPhone.match(/(\d{4})$/);
+    if (match) {
+      const expectedLast4 = match[1];
+      return normalized.endsWith(expectedLast4);
+    }
+    return true;
+  };
+
+  // Send OTP for phone verification with validation
   const handleSendOtp = async () => {
+    // Clear previous errors
+    setVerificationError(null);
+    
     if (!phoneNumber || phoneNumber.length < 10) {
       toast.error('Please enter a valid phone number');
       return;
     }
 
+    // Check if locked out
+    if (isLockedOut) {
+      toast.error(`Too many attempts. Please try again in ${lockoutMinutes} minutes.`);
+      return;
+    }
+
+    // Validate phone against expected masked format
+    const maskedPhone = phoneVerificationContext?.maskedPhone;
+    if (maskedPhone && !validatePhoneAgainstMask(phoneNumber, maskedPhone)) {
+      setVerificationError(`Phone number doesn't match the expected format. The number should end with ${maskedPhone.slice(-4)}.`);
+      toast.error(`Phone number doesn't match. Expected ending: ${maskedPhone.slice(-4)}`);
+      return;
+    }
+
     setSendingOtp(true);
     try {
-      await api.post(
+      const response = await api.post(
         `${API}/verification/phone/send-otp`,
-        { phone_number: phoneNumber },
+        { 
+          phone_number: phoneNumber,
+          expected_phone_masked: maskedPhone || null
+        },
         { withCredentials: true }
       );
       
       setOtpSent(true);
-      setResendCooldown(60);
-      toast.success('Verification code sent to your phone');
+      setResendCooldown(response.data.cooldown_seconds || 60);
+      setRemainingOtpRequests(response.data.remaining_requests ?? 2);
+      setOtpExpiresIn(response.data.expires_in_minutes || 10);
+      setRemainingVerifyAttempts(5); // Reset verify attempts for new OTP
+      toast.success(`Verification code sent! Expires in ${response.data.expires_in_minutes || 10} minutes.`);
     } catch (error) {
       console.error('Failed to send OTP:', error);
-      toast.error(parseErrorMessage(error) || 'Failed to send verification code');
+      const errorDetail = error.response?.data?.detail || 'Failed to send verification code';
+      
+      // Handle specific error cases
+      if (error.response?.status === 429) {
+        // Rate limited or locked out
+        if (errorDetail.includes('locked') || errorDetail.includes('Too many failed')) {
+          setIsLockedOut(true);
+          const minutes = errorDetail.match(/(\d+) minutes/);
+          setLockoutMinutes(minutes ? parseInt(minutes[1]) : 30);
+        }
+        toast.error(errorDetail);
+      } else if (errorDetail.includes("doesn't match")) {
+        setVerificationError(errorDetail);
+        toast.error('Phone number mismatch');
+      } else {
+        toast.error(errorDetail);
+      }
     } finally {
       setSendingOtp(false);
     }
@@ -232,7 +298,15 @@ function TransactionDetail() {
       return;
     }
 
+    // Check if locked out
+    if (isLockedOut) {
+      toast.error(`Too many attempts. Please try again in ${lockoutMinutes} minutes.`);
+      return;
+    }
+
     setVerifyingOtp(true);
+    setVerificationError(null);
+    
     try {
       // First verify the OTP
       await api.post(
@@ -248,6 +322,7 @@ function TransactionDetail() {
       setTransaction(transactionRes.data);
       setNeedsPhoneVerification(false);
       setVerificationError(null);
+      setIsLockedOut(false);
       
       // Update user state with verified phone
       const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
@@ -258,11 +333,37 @@ function TransactionDetail() {
       console.error('Failed to verify OTP:', error);
       const errorDetail = error.response?.data?.detail || 'Verification failed';
       
-      // Check if phone was verified but doesn't match transaction
-      if (errorDetail.includes('different') || errorDetail.includes('does not match')) {
+      // Handle specific error cases
+      if (error.response?.status === 429) {
+        // Rate limited or locked out
+        setIsLockedOut(true);
+        const minutes = errorDetail.match(/(\d+) minutes/);
+        setLockoutMinutes(minutes ? parseInt(minutes[1]) : 30);
+        setVerificationError(errorDetail);
+        toast.error(errorDetail);
+      } else if (errorDetail.includes('expired')) {
+        // OTP expired - need to request new one
+        setOtpSent(false);
+        setOtpCode('');
+        setVerificationError('Verification code expired. Please request a new code.');
+        toast.error('Code expired. Request a new one.');
+      } else if (errorDetail.includes('attempts remaining')) {
+        // Failed attempt with remaining tries
+        const remaining = errorDetail.match(/(\d+) attempts/);
+        if (remaining) setRemainingVerifyAttempts(parseInt(remaining[1]));
+        setVerificationError(errorDetail);
+        toast.error(errorDetail);
+      } else if (errorDetail.includes('No verification code')) {
+        // No OTP found
+        setOtpSent(false);
+        setOtpCode('');
+        toast.error('Please request a new verification code.');
+      } else if (errorDetail.includes('different') || errorDetail.includes('does not match')) {
+        // Phone doesn't match transaction
         setVerificationError(errorDetail);
         toast.error('This transaction was sent to a different phone number');
       } else {
+        setVerificationError(errorDetail);
         toast.error(errorDetail);
       }
     } finally {
@@ -775,14 +876,63 @@ function TransactionDetail() {
               </div>
             )}
 
-            {/* Error message for phone mismatch */}
-            {verificationError && (verificationError.includes('different') || verificationError.includes('mismatch')) && (
+            {/* Error message - enhanced for all error types */}
+            {verificationError && (
+              <div className={`border rounded-lg p-4 mb-6 ${
+                verificationError.includes('locked') || verificationError.includes('Too many') 
+                  ? 'bg-orange-50 border-orange-200' 
+                  : verificationError.includes('expired')
+                    ? 'bg-amber-50 border-amber-200'
+                    : 'bg-red-50 border-red-200'
+              }`}>
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className={`w-5 h-5 mt-0.5 ${
+                    verificationError.includes('locked') || verificationError.includes('Too many')
+                      ? 'text-orange-600'
+                      : verificationError.includes('expired')
+                        ? 'text-amber-600'
+                        : 'text-red-600'
+                  }`} />
+                  <div>
+                    <p className={`text-sm font-medium ${
+                      verificationError.includes('locked') || verificationError.includes('Too many')
+                        ? 'text-orange-800'
+                        : verificationError.includes('expired')
+                          ? 'text-amber-800'
+                          : 'text-red-800'
+                    }`}>
+                      {verificationError.includes('locked') || verificationError.includes('Too many')
+                        ? 'Too Many Attempts'
+                        : verificationError.includes('expired')
+                          ? 'Code Expired'
+                          : verificationError.includes('mismatch') || verificationError.includes("doesn't match")
+                            ? 'Phone Number Mismatch'
+                            : verificationError.includes('attempts remaining')
+                              ? 'Incorrect Code'
+                              : 'Verification Error'}
+                    </p>
+                    <p className={`text-sm mt-1 ${
+                      verificationError.includes('locked') || verificationError.includes('Too many')
+                        ? 'text-orange-600'
+                        : verificationError.includes('expired')
+                          ? 'text-amber-600'
+                          : 'text-red-600'
+                    }`}>{verificationError}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Lockout warning */}
+            {isLockedOut && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
                 <div className="flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
+                  <Lock className="w-5 h-5 text-red-600 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium text-red-800">Phone Number Mismatch</p>
-                    <p className="text-sm text-red-600 mt-1">{verificationError}</p>
+                    <p className="text-sm font-medium text-red-800">Account Temporarily Locked</p>
+                    <p className="text-sm text-red-600 mt-1">
+                      Too many failed attempts. Please try again in {lockoutMinutes} minutes.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -801,9 +951,16 @@ function TransactionDetail() {
                       type="tel"
                       placeholder="+27 82 123 4567"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      onChange={(e) => {
+                        setPhoneNumber(e.target.value);
+                        // Clear mismatch error when user types
+                        if (verificationError?.includes("doesn't match")) {
+                          setVerificationError(null);
+                        }
+                      }}
                       className="pl-10"
                       data-testid="phone-input"
+                      disabled={isLockedOut}
                     />
                   </div>
                   {phoneVerificationContext?.maskedPhone ? (
@@ -820,8 +977,8 @@ function TransactionDetail() {
 
                 <Button
                   onClick={handleSendOtp}
-                  disabled={sendingOtp || !phoneNumber}
-                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  disabled={sendingOtp || !phoneNumber || isLockedOut}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
                   data-testid="send-otp-btn"
                 >
                   {sendingOtp ? (
@@ -829,20 +986,34 @@ function TransactionDetail() {
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Sending...
                     </>
+                  ) : isLockedOut ? (
+                    `Locked - Try again in ${lockoutMinutes}m`
                   ) : (
                     'Send Verification Code'
                   )}
                 </Button>
+                
+                {/* Rate limit info */}
+                {remainingOtpRequests < 3 && !isLockedOut && (
+                  <p className="text-xs text-amber-600 text-center">
+                    {remainingOtpRequests} code requests remaining in this window
+                  </p>
+                )}
               </div>
             ) : (
               // Step 2: Enter OTP
               <div className="space-y-4">
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-4">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    <p className="text-sm text-emerald-800">
-                      Code sent to <span className="font-medium">{phoneNumber}</span>
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                      <p className="text-sm text-emerald-800">
+                        Code sent to <span className="font-medium">{phoneNumber}</span>
+                      </p>
+                    </div>
+                    <span className="text-xs text-emerald-600 font-medium">
+                      Expires in {otpExpiresIn}m
+                    </span>
                   </div>
                 </div>
 
@@ -854,20 +1025,32 @@ function TransactionDetail() {
                     type="text"
                     placeholder="Enter 6-digit code"
                     value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    onChange={(e) => {
+                      setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                      // Clear error when typing new code
+                      if (verificationError?.includes('attempts remaining') || verificationError?.includes('Incorrect')) {
+                        setVerificationError(null);
+                      }
+                    }}
                     className="text-center text-2xl tracking-widest font-mono"
                     maxLength={6}
                     data-testid="otp-input"
+                    disabled={isLockedOut}
                   />
                   <p className="text-xs text-slate-500 mt-1 text-center">
-                    Code expires in 10 minutes
+                    Code expires in {otpExpiresIn} minutes
                   </p>
+                  {remainingVerifyAttempts < 5 && (
+                    <p className="text-xs text-amber-600 mt-1 text-center">
+                      {remainingVerifyAttempts} attempts remaining
+                    </p>
+                  )}
                 </div>
 
                 <Button
                   onClick={handleVerifyOtp}
-                  disabled={verifyingOtp || otpCode.length !== 6}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700"
+                  disabled={verifyingOtp || otpCode.length !== 6 || isLockedOut}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
                   data-testid="verify-otp-btn"
                 >
                   {verifyingOtp ? (
@@ -875,6 +1058,8 @@ function TransactionDetail() {
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Verifying...
                     </>
+                  ) : isLockedOut ? (
+                    `Locked - Try again in ${lockoutMinutes}m`
                   ) : (
                     'Verify & Join Transaction'
                   )}
@@ -885,8 +1070,10 @@ function TransactionDetail() {
                     onClick={() => {
                       setOtpSent(false);
                       setOtpCode('');
+                      setVerificationError(null);
                     }}
                     className="text-slate-600 hover:text-slate-800"
+                    disabled={isLockedOut}
                   >
                     Change number
                   </button>
@@ -895,14 +1082,18 @@ function TransactionDetail() {
                     <span className="text-slate-400">
                       Resend in {resendCooldown}s
                     </span>
-                  ) : (
+                  ) : remainingOtpRequests > 0 && !isLockedOut ? (
                     <button
                       onClick={handleSendOtp}
                       disabled={sendingOtp}
                       className="text-blue-600 hover:text-blue-800 font-medium"
                     >
-                      Resend code
+                      Resend code ({remainingOtpRequests} left)
                     </button>
+                  ) : (
+                    <span className="text-slate-400 text-xs">
+                      No more requests available
+                    </span>
                   )}
                 </div>
               </div>

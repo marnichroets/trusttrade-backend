@@ -12,6 +12,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
+from collections import defaultdict
 
 from core.config import settings
 from core.database import get_database
@@ -29,6 +30,82 @@ router = APIRouter(prefix="/api", tags=["Users"])
 
 # In-memory OTP store (use Redis in production)
 otp_store = {}
+
+# Rate limiting stores (use Redis in production)
+otp_rate_limit_store = defaultdict(list)  # user_id -> list of timestamps
+otp_attempt_store = defaultdict(int)  # otp_key -> failed attempt count
+otp_lockout_store = {}  # user_id -> lockout_until timestamp
+
+# Rate limit constants
+OTP_MAX_REQUESTS_PER_WINDOW = 3  # Max 3 OTP requests
+OTP_RATE_LIMIT_WINDOW_MINUTES = 10  # per 10 minutes
+OTP_COOLDOWN_SECONDS = 60  # 60 seconds between requests
+OTP_MAX_VERIFY_ATTEMPTS = 5  # Max 5 incorrect attempts
+OTP_LOCKOUT_MINUTES = 30  # 30 minute lockout after max attempts
+
+
+def get_client_ip(request: Request) -> str:
+    """Extract client IP from request headers"""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def normalize_phone(phone: str) -> str:
+    """Normalize phone number to 9-digit format without country code"""
+    phone = phone.replace(" ", "").replace("-", "").replace("+", "")
+    if phone.startswith("0"):
+        phone = phone[1:]
+    if phone.startswith("27"):
+        phone = phone[2:]
+    return phone
+
+
+def phone_matches_masked(entered_phone: str, masked_phone: str) -> bool:
+    """
+    Check if entered phone could match the masked format.
+    masked_phone format: +27•••2758 or +27****2758
+    """
+    if not masked_phone:
+        return True  # No mask to validate against
+    
+    # Normalize entered phone
+    normalized = normalize_phone(entered_phone)
+    if len(normalized) < 9:
+        return False
+    
+    # Extract last 4 digits from masked phone (after the dots/asterisks)
+    import re
+    # Match patterns like +27•••2758 or +27****2758
+    match = re.search(r'(\d{4})$', masked_phone)
+    if match:
+        expected_last4 = match.group(1)
+        return normalized.endswith(expected_last4)
+    
+    return True  # Can't validate, allow
+
+
+async def log_otp_request(db, user_id: str, phone: str, ip: str, action: str, success: bool, reason: str = None):
+    """Log OTP request for audit trail"""
+    log_entry = {
+        "user_id": user_id,
+        "phone": f"+27{phone[:2]}****{phone[-2:]}" if len(phone) >= 4 else "invalid",
+        "ip": ip,
+        "action": action,  # "send" or "verify"
+        "success": success,
+        "reason": reason,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    
+    try:
+        await db.otp_logs.insert_one(log_entry)
+    except Exception as e:
+        logger.error(f"[OTP_LOG] Failed to log: {e}")
+    
+    # Also log to application logger
+    status = "SUCCESS" if success else "FAILED"
+    logger.info(f"[OTP_{action.upper()}] {status} | user={user_id} | phone={log_entry['phone']} | ip={ip} | reason={reason}")
 
 
 # ============ TERMS ============
@@ -419,74 +496,205 @@ async def upload_selfie(request: Request, file: UploadFile = File(...)):
 
 @router.post("/verification/phone/send-otp")
 async def send_phone_otp(request: Request, data: PhoneOtpRequest):
-    """Send OTP to phone number"""
+    """
+    Send OTP to phone number with rate limiting and validation.
+    
+    Security features:
+    - Rate limiting: Max 3 requests per 10 minutes
+    - Cooldown: 60 seconds between requests
+    - Phone validation against masked format (if provided)
+    - Lockout after max failed verification attempts
+    - Full audit logging
+    """
     db = get_database()
+    client_ip = get_client_ip(request)
     
     user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    # Check if user is locked out
+    lockout_until = otp_lockout_store.get(user.user_id)
+    if lockout_until and datetime.now(timezone.utc) < lockout_until:
+        remaining_minutes = int((lockout_until - datetime.now(timezone.utc)).total_seconds() / 60)
+        await log_otp_request(db, user.user_id, "", client_ip, "send", False, f"locked_out_{remaining_minutes}min")
+        raise HTTPException(
+            status_code=429, 
+            detail=f"Too many failed attempts. Please try again in {remaining_minutes} minutes."
+        )
+    
     # Normalize phone
-    phone = data.phone_number.replace(" ", "").replace("-", "").replace("+", "")
-    if phone.startswith("0"):
-        phone = phone[1:]
-    if phone.startswith("27"):
-        phone = phone[2:]
+    phone = normalize_phone(data.phone_number)
     
     if len(phone) < 9:
-        raise HTTPException(status_code=400, detail="Invalid phone number")
+        await log_otp_request(db, user.user_id, phone, client_ip, "send", False, "invalid_phone_format")
+        raise HTTPException(status_code=400, detail="Invalid phone number format")
+    
+    # Validate phone against expected masked format (if provided in request)
+    expected_masked = getattr(data, 'expected_phone_masked', None)
+    if expected_masked and not phone_matches_masked(phone, expected_masked):
+        await log_otp_request(db, user.user_id, phone, client_ip, "send", False, "phone_mismatch")
+        raise HTTPException(
+            status_code=400, 
+            detail="Phone number doesn't match the expected format. Please enter the number this transaction was sent to."
+        )
+    
+    # Rate limiting check
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(minutes=OTP_RATE_LIMIT_WINDOW_MINUTES)
+    
+    # Clean old entries and count recent requests
+    user_requests = otp_rate_limit_store[user.user_id]
+    user_requests = [ts for ts in user_requests if ts > window_start]
+    otp_rate_limit_store[user.user_id] = user_requests
+    
+    if len(user_requests) >= OTP_MAX_REQUESTS_PER_WINDOW:
+        await log_otp_request(db, user.user_id, phone, client_ip, "send", False, "rate_limit_exceeded")
+        raise HTTPException(
+            status_code=429, 
+            detail=f"Too many requests. Maximum {OTP_MAX_REQUESTS_PER_WINDOW} codes per {OTP_RATE_LIMIT_WINDOW_MINUTES} minutes. Please wait and try again."
+        )
+    
+    # Cooldown check (must wait 60 seconds between requests)
+    if user_requests:
+        last_request = max(user_requests)
+        cooldown_remaining = OTP_COOLDOWN_SECONDS - (now - last_request).total_seconds()
+        if cooldown_remaining > 0:
+            await log_otp_request(db, user.user_id, phone, client_ip, "send", False, f"cooldown_{int(cooldown_remaining)}s")
+            raise HTTPException(
+                status_code=429, 
+                detail=f"Please wait {int(cooldown_remaining)} seconds before requesting another code."
+            )
     
     # Generate OTP
     otp = ''.join(random.choices(string.digits, k=6))
+    otp_key = f"{user.user_id}_{phone}"
     
-    # Store OTP (expires in 10 minutes)
-    otp_store[f"{user.user_id}_{phone}"] = {
+    # Store OTP with metadata
+    otp_store[otp_key] = {
         "otp": otp,
-        "expires": datetime.now(timezone.utc) + timedelta(minutes=10)
+        "expires": now + timedelta(minutes=10),
+        "created_at": now,
+        "ip": client_ip
     }
+    
+    # Reset attempt counter for this OTP
+    otp_attempt_store[otp_key] = 0
+    
+    # Record this request for rate limiting
+    otp_rate_limit_store[user.user_id].append(now)
     
     # Send OTP via SMS
     sms_result = await send_otp_sms(f"+27{phone}", otp)
     
     if not sms_result.get("success"):
-        logger.error(f"Failed to send OTP SMS: {sms_result.get('error')}")
+        logger.error(f"[OTP_SEND] SMS failed: {sms_result.get('error')}")
+        await log_otp_request(db, user.user_id, phone, client_ip, "send", False, f"sms_failed: {sms_result.get('error')}")
+        raise HTTPException(status_code=500, detail="Failed to send verification code. Please try again.")
     
-    logger.info(f"OTP sent to +27{phone}")
+    await log_otp_request(db, user.user_id, phone, client_ip, "send", True, "otp_sent")
     
-    return {"message": "OTP sent successfully", "phone": f"+27{phone[:2]}****{phone[-2:]}"}
+    # Calculate remaining requests in window
+    remaining_requests = OTP_MAX_REQUESTS_PER_WINDOW - len(otp_rate_limit_store[user.user_id])
+    
+    return {
+        "message": "Verification code sent successfully",
+        "phone": f"+27{phone[:2]}****{phone[-2:]}",
+        "expires_in_minutes": 10,
+        "cooldown_seconds": OTP_COOLDOWN_SECONDS,
+        "remaining_requests": remaining_requests
+    }
 
 
 @router.post("/verification/phone/verify-otp")
 async def verify_phone_otp_legacy(request: Request, data: PhoneOtpVerify):
-    """Verify phone OTP"""
+    """
+    Verify phone OTP with attempt limiting.
+    
+    Security features:
+    - Max 5 incorrect attempts before temporary lockout
+    - Full audit logging
+    - Clear error messages
+    """
     db = get_database()
+    client_ip = get_client_ip(request)
     
     user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    # Check if user is locked out
+    lockout_until = otp_lockout_store.get(user.user_id)
+    if lockout_until and datetime.now(timezone.utc) < lockout_until:
+        remaining_minutes = int((lockout_until - datetime.now(timezone.utc)).total_seconds() / 60)
+        await log_otp_request(db, user.user_id, "", client_ip, "verify", False, f"locked_out_{remaining_minutes}min")
+        raise HTTPException(
+            status_code=429, 
+            detail=f"Too many failed attempts. Please try again in {remaining_minutes} minutes."
+        )
+    
     # Normalize phone
-    phone = data.phone_number.replace(" ", "").replace("-", "").replace("+", "")
-    if phone.startswith("0"):
-        phone = phone[1:]
-    if phone.startswith("27"):
-        phone = phone[2:]
+    phone = normalize_phone(data.phone_number)
+    otp_key = f"{user.user_id}_{phone}"
     
-    key = f"{user.user_id}_{phone}"
-    
-    stored = otp_store.get(key)
+    stored = otp_store.get(otp_key)
     if not stored:
-        raise HTTPException(status_code=400, detail="No OTP found. Please request a new code.")
+        await log_otp_request(db, user.user_id, phone, client_ip, "verify", False, "no_otp_found")
+        raise HTTPException(
+            status_code=400, 
+            detail="No verification code found. Please request a new code."
+        )
     
+    # Check expiration
     if datetime.now(timezone.utc) > stored["expires"]:
-        del otp_store[key]
-        raise HTTPException(status_code=400, detail="OTP expired. Please request a new code.")
+        del otp_store[otp_key]
+        otp_attempt_store.pop(otp_key, None)
+        await log_otp_request(db, user.user_id, phone, client_ip, "verify", False, "otp_expired")
+        raise HTTPException(
+            status_code=400, 
+            detail="Verification code expired. Please request a new code."
+        )
     
+    # Check attempt limit
+    current_attempts = otp_attempt_store.get(otp_key, 0)
+    remaining_attempts = OTP_MAX_VERIFY_ATTEMPTS - current_attempts
+    
+    # Verify OTP
     if stored["otp"] != data.otp:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
+        # Increment attempt counter
+        otp_attempt_store[otp_key] = current_attempts + 1
+        remaining_attempts -= 1
+        
+        await log_otp_request(db, user.user_id, phone, client_ip, "verify", False, f"invalid_otp_attempt_{current_attempts + 1}")
+        
+        # Check if max attempts reached
+        if remaining_attempts <= 0:
+            # Lock out user
+            otp_lockout_store[user.user_id] = datetime.now(timezone.utc) + timedelta(minutes=OTP_LOCKOUT_MINUTES)
+            # Clear the OTP
+            del otp_store[otp_key]
+            otp_attempt_store.pop(otp_key, None)
+            
+            await log_otp_request(db, user.user_id, phone, client_ip, "verify", False, "max_attempts_lockout")
+            
+            raise HTTPException(
+                status_code=429, 
+                detail=f"Too many incorrect attempts. Your account is temporarily locked. Please try again in {OTP_LOCKOUT_MINUTES} minutes."
+            )
+        
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Incorrect verification code. {remaining_attempts} attempts remaining."
+        )
     
-    # OTP verified
-    del otp_store[key]
+    # OTP verified successfully
+    del otp_store[otp_key]
+    otp_attempt_store.pop(otp_key, None)
+    
+    # Clear any lockout
+    otp_lockout_store.pop(user.user_id, None)
+    
+    await log_otp_request(db, user.user_id, phone, client_ip, "verify", True, "verified")
     
     # Check if all verification steps are complete
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})

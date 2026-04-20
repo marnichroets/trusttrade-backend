@@ -4,6 +4,26 @@
 
 ---
 
+## Phase 6: Phone Invite Join Flow Fix (April 2025)
+
+### Phone-Based Transaction Access (P0 - COMPLETE)
+- **Inline Phone Verification**: Users invited via phone now see inline OTP verification on the transaction detail page
+- **No Settings Redirect**: Removed the hard redirect to settings page for phone verification
+- **Masked Phone Display**: Shows the invited phone number in masked format (+27•••2758) for security
+- **Transaction Preview**: Shows item description and amount in verification UI
+- **Phone Display in Party Info**: Buyer/Seller Information cards now show phone numbers when `invite_type == "phone"`
+- **Via Phone Indicator**: PARTIES sidebar shows "via phone" indicator for phone-based invites
+
+### Technical Changes
+- **Backend**: `/api/transactions/{id}` returns structured 403 with `type: phone_verification_required` including masked phone, item description, and price
+- **Backend**: Added `invite_type` field to Transaction model to ensure proper serialization
+- **Frontend**: `TransactionDetail.js` handles phone verification error with dedicated UI (lines 730-910)
+- **Frontend**: Buyer/Seller Information cards display phone numbers (lines 1714-1780)
+- **Frontend**: Fixed OTP endpoint paths (`/api/verification/phone/send-otp`, `/api/verification/phone/verify-otp`)
+- **Frontend**: Fixed OTP payload (`otp` instead of `otp_code`)
+
+---
+
 ## Phase 5: Operations + Admin Complete (April 2025)
 
 ### Critical Bug Fixes
@@ -115,8 +135,11 @@ GET  /api/admin/disputes
 - [x] Admin Dashboard
 - [x] Email/SMS verification
 - [x] Banking reset request flow
+- [x] Phone Invite Join Flow (inline OTP verification)
+- [x] Buyer/Seller phone display in transaction details
 
 ### P1 (Next)
+- [ ] Monitor and fix Transactional Email Failures (logging added)
 - [ ] Real TradeSafe refund (`allocationRefund` mutation)
 - [ ] Trust Score visibility in transaction creation
 - [ ] Dispute form improvements (evidence upload)

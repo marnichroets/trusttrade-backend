@@ -50,6 +50,9 @@ function TransactionDetail() {
   const [paymentInfo, setPaymentInfo] = useState(null);
   const [startingDelivery, setStartingDelivery] = useState(false);
   const [acceptingDelivery, setAcceptingDelivery] = useState(false);
+  // Payout readiness state
+  const [payoutReadiness, setPayoutReadiness] = useState(null);
+  const [checkingPayoutReadiness, setCheckingPayoutReadiness] = useState(false);
   // Payment method selection
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   // Phone verification states
@@ -77,6 +80,20 @@ function TransactionDetail() {
   useEffect(() => {
     fetchData();
   }, [transactionId]);
+
+  // Check payout readiness when transaction is in delivery state and user is buyer
+  useEffect(() => {
+    if (!transaction || !user) return;
+    
+    const isBuyerUser = transaction.buyer_email === user.email || transaction.buyer_user_id === user.user_id;
+    const escrowState = transaction.tradesafe_state;
+    const hasEscrow = !!transaction.tradesafe_id;
+    const canRelease = hasEscrow && isBuyerUser && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState);
+    
+    if (canRelease && !payoutReadiness) {
+      checkPayoutReadiness();
+    }
+  }, [transaction, user]);
 
   // Resend cooldown timer
   useEffect(() => {
@@ -666,8 +683,44 @@ function TransactionDetail() {
     }
   };
 
-  // Buyer accepts delivery
+  // Check payout readiness before showing release button
+  const checkPayoutReadiness = async () => {
+    if (!transactionId) return;
+    
+    setCheckingPayoutReadiness(true);
+    try {
+      const response = await api.get(
+        `${API}/tradesafe/payout-readiness/${transactionId}`,
+        { withCredentials: true }
+      );
+      setPayoutReadiness(response.data);
+      
+      if (!response.data.payout_ready) {
+        console.warn('[PAYOUT] Not ready:', response.data.issues);
+      }
+    } catch (error) {
+      console.error('Failed to check payout readiness:', error);
+      // Don't block UI, just set to unknown state
+      setPayoutReadiness({ payout_ready: null, issues: ['Could not verify payout readiness'] });
+    } finally {
+      setCheckingPayoutReadiness(false);
+    }
+  };
+
+  // Buyer accepts delivery - with payout readiness pre-check
   const handleAcceptDelivery = async () => {
+    // Pre-check payout readiness
+    if (!payoutReadiness?.payout_ready) {
+      // Refresh the check
+      await checkPayoutReadiness();
+      
+      if (!payoutReadiness?.payout_ready) {
+        const issues = payoutReadiness?.issues?.join(', ') || 'Unknown issue';
+        toast.error(`Cannot release: Seller must complete payout setup. Issues: ${issues}`);
+        return;
+      }
+    }
+    
     if (!window.confirm('Confirm you have received the item? This will release funds to the seller. This action cannot be undone.')) {
       return;
     }
@@ -1814,10 +1867,38 @@ function TransactionDetail() {
                 <p className="text-xs text-green-700 mb-4 p-2 bg-green-100 rounded">
                   <strong>Important:</strong> Only confirm if you have received the item and are satisfied. This action cannot be undone.
                 </p>
+                
+                {/* Payout Readiness Warning */}
+                {payoutReadiness && !payoutReadiness.payout_ready && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-800">Seller Payout Setup Incomplete</p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          {payoutReadiness.issues?.join('. ') || 'Seller must complete payout setup before funds can be released.'}
+                        </p>
+                        {payoutReadiness.can_auto_sync && (
+                          <p className="text-xs text-amber-600 mt-1">
+                            The system will attempt to sync automatically when you confirm.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {checkingPayoutReadiness && (
+                  <div className="flex items-center gap-2 text-sm text-slate-600 mb-4">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Checking payout readiness...
+                  </div>
+                )}
+                
                 <Button 
                   onClick={handleAcceptDelivery} 
-                  disabled={acceptingDelivery}
-                  className="bg-green-600 hover:bg-green-700"
+                  disabled={acceptingDelivery || checkingPayoutReadiness}
+                  className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
                   data-testid="accept-delivery-btn"
                 >
                   {acceptingDelivery ? (
@@ -1852,10 +1933,26 @@ function TransactionDetail() {
                 <p className="text-xs text-green-700 mb-4 p-2 bg-green-100 rounded">
                   <strong>Important:</strong> Only confirm if you have received the item and are satisfied. This action cannot be undone.
                 </p>
+                
+                {/* Payout Readiness Warning */}
+                {payoutReadiness && !payoutReadiness.payout_ready && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-800">Seller Payout Setup Incomplete</p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          {payoutReadiness.issues?.join('. ') || 'Seller must complete payout setup.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 <Button 
                   onClick={handleManualAcceptDelivery} 
-                  disabled={acceptingDelivery}
-                  className="bg-green-600 hover:bg-green-700"
+                  disabled={acceptingDelivery || checkingPayoutReadiness}
+                  className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
                   data-testid="manual-accept-delivery-btn"
                 >
                   {acceptingDelivery ? (

@@ -4,6 +4,51 @@
 
 ---
 
+## Phase 7: Payout Reliability Fix (April 2025)
+
+### Payout Readiness & Auto-Sync (P0 - COMPLETE)
+
+**Problem Diagnosed:**
+- Production transactions (txn_ded101b29b3, txn_7704f6aa01a3) failed release
+- Error: "Banking details not attached to seller token"
+- Root cause: Transactions created BEFORE banking sync was added to escrow creation
+- Preview and Production use SEPARATE MongoDB databases
+
+**Solution Implemented:**
+1. **Escrow Creation Sync** (lines 311-357 in tradesafe.py)
+   - At escrow creation, seller banking is now synced to TradeSafe token
+   - Tracks `bank_details_attached` and `payout_ready` in transaction
+
+2. **Release Preflight with Auto-Sync** (lines 646-735 in tradesafe.py)
+   - Before release: checks LIVE TradeSafe token state
+   - If banking missing but seller profile has it: AUTO-SYNC runs
+   - Only proceeds if payout_ready=true (or admin bypass)
+
+3. **Payout Readiness Endpoint** (lines 103-172 in tradesafe.py)
+   - GET /api/tradesafe/payout-readiness/{id}
+   - Frontend checks before showing release button
+   - Returns: payout_ready, has_banking, has_mobile, issues, can_auto_sync
+
+4. **Comprehensive Logging Tags:**
+   - [PAYOUT_PREFLIGHT] - Release initiated
+   - [PAYOUT_CHECK] - Live token state verified
+   - [PAYOUT_SYNC] - Banking sync to token attempted
+   - [PAYOUT_BLOCKED] - Release blocked with reason
+   - [PAYOUT_READY] - Token ready for payout
+
+**Frontend Changes:**
+- Release button shows warning if payout not ready
+- Calls checkPayoutReadiness() when transaction in delivery state
+- Displays issues and can_auto_sync message
+
+**To Fix Production Transactions:**
+1. Deploy to Production (Save to GitHub → Railway)
+2. Re-attempt release on failing transactions
+3. Auto-sync will run and banking will be attached
+4. Check Railway logs for [PAYOUT_*] tags
+
+---
+
 ## Phase 6: Phone Invite Join Flow Fix (April 2025)
 
 ### Phone-Based Transaction Access (P0 - COMPLETE)

@@ -1167,70 +1167,105 @@ async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
 async def check_payout_readiness(seller_token_id: str) -> Dict[str, Any]:
     """
     Check if a seller token is ready for payout after funds release.
+    This queries TradeSafe LIVE to verify actual token state.
     
     Returns:
         {
             "ready": bool,
+            "payout_ready": bool,  # Alias for ready
             "token_id": str,
             "has_banking": bool,
             "has_mobile": bool,
             "balance_cents": int,
             "balance_rands": float,
+            "bank_account": dict or None,
+            "user": dict or None,
             "issues": list[str]
         }
     """
-    logger.info(f"[PAYOUT_CHECK] Checking payout readiness for token: {seller_token_id}")
+    logger.info(f"[PAYOUT_CHECK] === Checking payout readiness for token: {seller_token_id} ===")
     
     if not seller_token_id:
+        logger.error("[PAYOUT_CHECK] FAILED: No seller token ID provided")
         return {
             "ready": False,
+            "payout_ready": False,
             "token_id": None,
             "has_banking": False,
             "has_mobile": False,
             "balance_cents": 0,
             "balance_rands": 0,
+            "bank_account": None,
+            "user": None,
             "issues": ["No seller token ID stored for this transaction"]
         }
     
     token_details = await get_token_details(seller_token_id)
     
     if not token_details:
+        logger.error(f"[PAYOUT_CHECK] FAILED: Could not fetch token {seller_token_id} from TradeSafe")
         return {
             "ready": False,
+            "payout_ready": False,
             "token_id": seller_token_id,
             "has_banking": False,
             "has_mobile": False,
             "balance_cents": 0,
             "balance_rands": 0,
+            "bank_account": None,
+            "user": None,
             "issues": ["Could not fetch token details from TradeSafe"]
         }
     
     issues = []
-    has_banking = token_details.get('has_banking_details', False)
-    has_mobile = bool(token_details.get('user', {}).get('mobile'))
+    
+    # Check banking details on the LIVE token
+    bank_account = token_details.get('bankAccount')
+    has_banking = bool(bank_account and bank_account.get('accountNumber'))
+    
+    # Check mobile on the LIVE token
+    user_info = token_details.get('user', {})
+    has_mobile = bool(user_info.get('mobile'))
+    
+    # Get balance
     balance_cents = token_details.get('balance', 0)
     balance_rands = balance_cents / 100 if balance_cents else 0
     
+    # Build issues list
     if not has_banking:
-        issues.append("Banking details not attached to seller token")
+        issues.append("Banking details not attached to TradeSafe token")
     if not has_mobile:
-        issues.append("Mobile number not set on seller token")
+        issues.append("Mobile number not set on TradeSafe token")
     
     is_ready = has_banking and has_mobile
     
-    logger.info(f"[PAYOUT_CHECK] Token {seller_token_id} - Ready: {is_ready}, Banking: {has_banking}, Mobile: {has_mobile}")
+    # Detailed logging
+    logger.info(f"[PAYOUT_CHECK] Token ID: {seller_token_id}")
+    logger.info(f"[PAYOUT_CHECK] Has Banking: {has_banking}")
+    if has_banking and bank_account:
+        logger.info(f"[PAYOUT_CHECK] Bank: {bank_account.get('bank')}, Account: ***{str(bank_account.get('accountNumber', ''))[-4:]}")
+    logger.info(f"[PAYOUT_CHECK] Has Mobile: {has_mobile}")
+    if has_mobile:
+        mobile = user_info.get('mobile', '')
+        logger.info(f"[PAYOUT_CHECK] Mobile: {mobile[:6]}***{mobile[-2:] if len(mobile) > 6 else ''}")
+    logger.info(f"[PAYOUT_CHECK] Balance: R{balance_rands:.2f}")
+    logger.info(f"[PAYOUT_CHECK] READY: {is_ready}")
+    
     if issues:
         logger.warning(f"[PAYOUT_CHECK] Issues: {issues}")
+    else:
+        logger.info(f"[PAYOUT_READY] Token {seller_token_id} is ready for payout")
     
     return {
         "ready": is_ready,
+        "payout_ready": is_ready,  # Alias for frontend consistency
         "token_id": seller_token_id,
         "has_banking": has_banking,
         "has_mobile": has_mobile,
         "balance_cents": balance_cents,
         "balance_rands": balance_rands,
-        "bank_account": token_details.get('bankAccount'),
-        "user": token_details.get('user'),
+        "bank_account": bank_account,
+        "user": user_info,
         "issues": issues
     }
 
@@ -1239,19 +1274,57 @@ async def sync_banking_to_token(token_id: str, bank_name: str, account_number: s
                                   branch_code: str, account_type: str, mobile: str = None) -> Dict[str, Any]:
     """
     Sync banking details to a TradeSafe token for payout.
-    Used by admin to fix tokens missing banking info.
-    """
-    logger.info(f"[BANKING_SYNC] Syncing banking to token: {token_id}")
+    Used at escrow creation and by admin to fix tokens missing banking info.
     
-    # Normalize bank name
+    Returns:
+        {
+            "success": bool,
+            "error": str or None,
+            "token": dict or None (TradeSafe response on success)
+        }
+    """
+    logger.info("=" * 60)
+    logger.info("[PAYOUT_SYNC] === Syncing Banking to Token ===")
+    logger.info(f"[PAYOUT_SYNC] Token ID: {token_id}")
+    
+    if not token_id:
+        logger.error("[PAYOUT_SYNC] FAILED: No token ID provided")
+        return {"success": False, "error": "No token ID provided"}
+    
+    if not bank_name or not account_number:
+        logger.error("[PAYOUT_SYNC] FAILED: Missing bank_name or account_number")
+        return {"success": False, "error": "Missing required banking fields"}
+    
+    # Normalize bank name for TradeSafe API
     bank_name_normalized = bank_name.upper().replace(" ", "_")
     
+    # Normalize account type
+    account_type_map = {
+        "savings": "SAVINGS",
+        "cheque": "CHEQUE",
+        "checking": "CHEQUE",
+        "current": "CHEQUE",
+    }
+    account_type_normalized = account_type_map.get(account_type.lower() if account_type else "savings", "SAVINGS")
+    
     # Normalize mobile
+    mobile_normalized = None
     if mobile:
+        mobile_normalized = mobile
         if mobile.startswith('0'):
-            mobile = '+27' + mobile[1:]
+            mobile_normalized = '+27' + mobile[1:]
         elif not mobile.startswith('+'):
-            mobile = '+27' + mobile
+            mobile_normalized = '+27' + mobile
+    
+    # Log the MASKED payload being sent
+    masked_account = f"***{account_number[-4:]}" if account_number and len(account_number) >= 4 else "****"
+    masked_mobile = f"{mobile_normalized[:6]}***{mobile_normalized[-2:]}" if mobile_normalized and len(mobile_normalized) > 6 else "N/A"
+    
+    logger.info(f"[PAYOUT_SYNC] Bank: {bank_name_normalized}")
+    logger.info(f"[PAYOUT_SYNC] Account: {masked_account}")
+    logger.info(f"[PAYOUT_SYNC] Branch Code: {branch_code or 'N/A'}")
+    logger.info(f"[PAYOUT_SYNC] Account Type: {account_type_normalized}")
+    logger.info(f"[PAYOUT_SYNC] Mobile: {masked_mobile}")
     
     mutation = """
     mutation tokenUpdate($id: ID!, $input: TokenInput!) {
@@ -1274,30 +1347,52 @@ async def sync_banking_to_token(token_id: str, bank_name: str, account_number: s
         "bankAccount": {
             "bank": bank_name_normalized,
             "accountNumber": account_number,
-            "branchCode": branch_code,
-            "accountType": account_type.upper()
+            "branchCode": branch_code or "",
+            "accountType": account_type_normalized
         }
     }
     
-    if mobile:
-        input_data["user"] = {"mobile": mobile}
+    if mobile_normalized:
+        input_data["user"] = {"mobile": mobile_normalized}
     
     variables = {"id": token_id, "input": input_data}
     
-    logger.info(f"[BANKING_SYNC] Variables: {variables}")
+    logger.info("[PAYOUT_SYNC] Calling TradeSafe tokenUpdate...")
     
     result = await execute_graphql(mutation, variables)
     
+    # Log TradeSafe response
+    logger.info(f"[PAYOUT_SYNC] TradeSafe Response: {result}")
+    
     if result and 'errors' in result:
         error_msg = result['errors'][0].get('message', 'Unknown error')
-        logger.error(f"[BANKING_SYNC] Failed: {error_msg}")
-        return {"success": False, "error": error_msg}
+        debug_msg = result['errors'][0].get('extensions', {}).get('debugMessage', '')
+        logger.error(f"[PAYOUT_SYNC] FAILED: {error_msg}")
+        if debug_msg:
+            logger.error(f"[PAYOUT_SYNC] Debug: {debug_msg}")
+        logger.info("=" * 60)
+        return {"success": False, "error": error_msg, "debug": debug_msg}
     
     if result and 'tokenUpdate' in result:
-        logger.info(f"[BANKING_SYNC] Success: {result['tokenUpdate']}")
-        return {"success": True, "token": result['tokenUpdate']}
+        token_result = result['tokenUpdate']
+        # Verify the banking was actually set
+        new_bank = token_result.get('bankAccount', {})
+        new_account = new_bank.get('accountNumber', '')
+        
+        if new_account and new_account == account_number:
+            logger.info(f"[PAYOUT_SYNC] SUCCESS - Banking attached to token {token_id}")
+            logger.info(f"[PAYOUT_SYNC] Verified Bank: {new_bank.get('bank')}")
+            logger.info(f"[PAYOUT_SYNC] Verified Account: ***{new_account[-4:]}")
+            logger.info("=" * 60)
+            return {"success": True, "token": token_result}
+        else:
+            logger.warning("[PAYOUT_SYNC] Response received but banking not confirmed")
+            logger.info("=" * 60)
+            return {"success": True, "token": token_result, "warning": "Banking may not have been fully applied"}
     
-    return {"success": False, "error": "Unexpected response"}
+    logger.error("[PAYOUT_SYNC] FAILED: Unexpected response")
+    logger.info("=" * 60)
+    return {"success": False, "error": "Unexpected response from TradeSafe"}
 
 async def request_token_withdrawal(token_id: str, amount_cents: int) -> Dict[str, Any]:
     """
@@ -1565,7 +1660,7 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
                 "message": "Withdrawal initiated successfully. Funds will reflect in 1-2 business days."
             }
         else:
-            logger.error(f"[WITHDRAW] TradeSafe returned false for withdrawal")
+            logger.error("[WITHDRAW] TradeSafe returned false for withdrawal")
             logger.error(f"[WITHDRAW] Full response: {result}")
             return {
                 "success": False, 

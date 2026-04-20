@@ -1721,6 +1721,7 @@ async def resync_banking_to_transaction(request: Request, transaction_id: str):
     )
     
     logger.info(f"[RESYNC_BANKING] SUCCESS - Payout ready: {payout_ready}")
+    logger.info("=" * 60)
     
     return {
         "success": True,
@@ -1729,32 +1730,4 @@ async def resync_banking_to_transaction(request: Request, transaction_id: str):
         "seller_token_id": seller_token_id,
         "payout_ready": payout_ready,
         "payout_check": payout_check
-    }
-
-    if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-    
-    logger.info(f"[PAYOUT_STATUS] Admin {admin.email} updating {transaction_id} to {new_status}")
-    
-    # Update timeline
-    timeline = transaction.get("timeline", [])
-    timeline.append({
-        "status": f"Payout Status: {new_status.replace('_', ' ').title()}",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "by": f"Admin: {admin.email}",
-        "details": f"Payout status updated to {new_status}"
-    })
-    
-    await db.transactions.update_one(
-        {"transaction_id": transaction_id},
-        {"$set": {
-            "payout_status": new_status,
-            "timeline": timeline
-        }}
-    )
-    
-    return {
-        "success": True,
-        "transaction_id": transaction_id,
-        "payout_status": new_status
     }

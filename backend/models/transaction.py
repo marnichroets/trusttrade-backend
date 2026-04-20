@@ -24,6 +24,7 @@ class Transaction(BaseModel):
     seller_phone: Optional[str] = None  # Phone in +27 format
     recipient_info: Optional[str] = None  # Email or phone used for invite
     recipient_type: Optional[str] = None  # "email" or "phone"
+    invite_type: Optional[str] = None  # "email" or "phone" - alias for recipient_type for frontend
     item_description: str
     item_condition: Optional[str] = None
     known_issues: Optional[str] = None

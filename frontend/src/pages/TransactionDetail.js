@@ -105,6 +105,9 @@ function TransactionDetail() {
     }
   }, [transaction?.payment_status, transactionId]);
 
+  // State for phone verification context from backend
+  const [phoneVerificationContext, setPhoneVerificationContext] = useState(null);
+
   const fetchData = async () => {
     try {
       // First get user info
@@ -120,15 +123,26 @@ function TransactionDetail() {
       const transactionRes = await api.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
       setTransaction(transactionRes.data);
       setNeedsPhoneVerification(false);
+      setPhoneVerificationContext(null);
     } catch (error) {
       console.error('Failed to fetch transaction:', error);
       
-      // Check if it's a phone verification required error
-      const errorDetail = error.response?.data?.detail || '';
-      if (error.response?.status === 403 && errorDetail.includes('phone')) {
+      const errorDetail = error.response?.data?.detail;
+      const errorStatus = error.response?.status;
+      
+      // Check if it's a structured phone verification required error
+      if (errorStatus === 403 && typeof errorDetail === 'object' && errorDetail?.type === 'phone_verification_required') {
         // Phone verification needed - show inline verification
+        console.log('[PHONE_VERIFY] Phone verification required:', errorDetail);
         setNeedsPhoneVerification(true);
-        setVerificationError(errorDetail);
+        setPhoneVerificationContext({
+          maskedPhone: errorDetail.invited_phone_masked,
+          inviteType: errorDetail.invite_type,
+          itemDescription: errorDetail.item_description,
+          itemPrice: errorDetail.item_price,
+          message: errorDetail.message
+        });
+        setVerificationError(errorDetail.message);
         
         // Still try to get user info for pre-filling
         try {
@@ -140,9 +154,24 @@ function TransactionDetail() {
         } catch (e) {
           console.error('Failed to get user:', e);
         }
-      } else if (error.response?.status === 403 && (errorDetail.includes('email') || errorDetail.includes('does not match'))) {
-        // Wrong account - extract expected email from error
-        const match = errorDetail.match(/sent to (?:email address |phone number )?([^\s.]+)/i);
+      } else if (errorStatus === 403 && (typeof errorDetail === 'string' && (errorDetail.includes('phone') || errorDetail.includes('Phone')))) {
+        // Legacy string-based phone verification error
+        setNeedsPhoneVerification(true);
+        setVerificationError(errorDetail);
+        
+        try {
+          const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });
+          setUser(userRes.data);
+          if (userRes.data.phone) {
+            setPhoneNumber(userRes.data.phone);
+          }
+        } catch (e) {
+          console.error('Failed to get user:', e);
+        }
+      } else if (errorStatus === 403) {
+        // Wrong account or other access denied
+        const errorMsg = typeof errorDetail === 'string' ? errorDetail : (errorDetail?.message || 'Access denied');
+        const match = errorMsg.match(/sent to (?:email address |phone number )?([^\s.]+)/i);
         const expectedEmail = match ? match[1] : 'the invited account';
         
         try {
@@ -151,14 +180,14 @@ function TransactionDetail() {
           setWrongAccount({
             expected: expectedEmail,
             current: userRes.data.email,
-            message: errorDetail
+            message: errorMsg
           });
         } catch (e) {
           console.error('Failed to get user:', e);
           setWrongAccount({
             expected: expectedEmail,
             current: 'current account',
-            message: errorDetail
+            message: errorMsg
           });
         }
       } else {
@@ -180,7 +209,7 @@ function TransactionDetail() {
     setSendingOtp(true);
     try {
       await api.post(
-        `${API}/phone/send-otp`,
+        `${API}/verification/phone/send-otp`,
         { phone_number: phoneNumber },
         { withCredentials: true }
       );
@@ -207,8 +236,8 @@ function TransactionDetail() {
     try {
       // First verify the OTP
       await api.post(
-        `${API}/phone/verify-otp`,
-        { phone_number: phoneNumber, otp_code: otpCode },
+        `${API}/verification/phone/verify-otp`,
+        { phone_number: phoneNumber, otp: otpCode },
         { withCredentials: true }
       );
       
@@ -698,25 +727,56 @@ function TransactionDetail() {
     );
   }
 
-  // Phone verification disabled for beta - skip straight to normal transaction view
-  // if (needsPhoneVerification) { ... }
-  const needsPhoneVerificationDisabled = false; // BETA: Phone verification hidden
-  if (needsPhoneVerificationDisabled) {
+  // Phone verification flow - show inline OTP verification when needed
+  if (needsPhoneVerification) {
     return (
       <DashboardLayout user={user}>
         <div className="max-w-md mx-auto py-12 px-4">
           <Card className="p-8">
             <div className="text-center mb-6">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Lock className="w-8 h-8 text-blue-600" />
+                <Phone className="w-8 h-8 text-blue-600" />
               </div>
               <h1 className="text-2xl font-bold text-slate-900 mb-2">Verify Your Phone Number</h1>
               <p className="text-slate-600">
-                This transaction was sent to a phone number. Please verify your number to continue.
+                This transaction was sent to a phone number. Please verify your number to access it.
               </p>
             </div>
 
-            {verificationError && verificationError.includes('different') && (
+            {/* Transaction Preview Info */}
+            {phoneVerificationContext && (
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-6">
+                <div className="space-y-2">
+                  {phoneVerificationContext.itemDescription && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Item:</span>
+                      <span className="text-sm font-medium text-slate-700 truncate max-w-[200px]">
+                        {phoneVerificationContext.itemDescription}
+                      </span>
+                    </div>
+                  )}
+                  {phoneVerificationContext.itemPrice > 0 && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-slate-500">Amount:</span>
+                      <span className="text-sm font-semibold text-emerald-600">
+                        R {phoneVerificationContext.itemPrice.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  {phoneVerificationContext.maskedPhone && (
+                    <div className="flex justify-between items-center border-t border-slate-200 pt-2 mt-2">
+                      <span className="text-xs text-slate-500">Sent to:</span>
+                      <span className="text-sm font-mono font-medium text-blue-600">
+                        {phoneVerificationContext.maskedPhone}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Error message for phone mismatch */}
+            {verificationError && (verificationError.includes('different') || verificationError.includes('mismatch')) && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="w-5 h-5 text-red-600 mt-0.5" />
@@ -746,9 +806,16 @@ function TransactionDetail() {
                       data-testid="phone-input"
                     />
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Enter the phone number this transaction was sent to
-                  </p>
+                  {phoneVerificationContext?.maskedPhone ? (
+                    <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      Enter the number matching: {phoneVerificationContext.maskedPhone}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Enter the phone number this transaction was sent to
+                    </p>
+                  )}
                 </div>
 
                 <Button
@@ -1653,10 +1720,27 @@ function TransactionDetail() {
                     <p className="text-xs text-slate-500 mb-1">Name</p>
                     <p className="text-sm font-medium text-slate-900">{transaction.buyer_name}</p>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1">Email</p>
-                    <p className="text-sm text-slate-700">{transaction.buyer_email}</p>
-                  </div>
+                  {transaction.buyer_email ? (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Email</p>
+                      <p className="text-sm text-slate-700">{transaction.buyer_email}</p>
+                    </div>
+                  ) : null}
+                  {transaction.buyer_phone && (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> Phone
+                      </p>
+                      <p className="text-sm text-slate-700 font-mono">{transaction.buyer_phone}</p>
+                    </div>
+                  )}
+                  {transaction.invite_type === 'phone' && !transaction.buyer_email && !transaction.buyer_phone && (
+                    <div className="bg-blue-50 rounded-lg p-2">
+                      <p className="text-xs text-blue-600 flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> Invited via phone
+                      </p>
+                    </div>
+                  )}
                 </div>
               </Card>
 
@@ -1669,10 +1753,27 @@ function TransactionDetail() {
                     <p className="text-xs text-slate-500 mb-1">Name</p>
                     <p className="text-sm font-medium text-slate-900">{transaction.seller_name}</p>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1">Email</p>
-                    <p className="text-sm text-slate-700">{transaction.seller_email}</p>
-                  </div>
+                  {transaction.seller_email ? (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1">Email</p>
+                      <p className="text-sm text-slate-700">{transaction.seller_email}</p>
+                    </div>
+                  ) : null}
+                  {transaction.seller_phone && (
+                    <div>
+                      <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> Phone
+                      </p>
+                      <p className="text-sm text-slate-700 font-mono">{transaction.seller_phone}</p>
+                    </div>
+                  )}
+                  {transaction.invite_type === 'phone' && !transaction.seller_email && !transaction.seller_phone && (
+                    <div className="bg-blue-50 rounded-lg p-2">
+                      <p className="text-xs text-blue-600 flex items-center gap-1">
+                        <Phone className="w-3 h-3" /> Invited via phone
+                      </p>
+                    </div>
+                  )}
                 </div>
               </Card>
             </div>
@@ -2015,7 +2116,9 @@ function TransactionDetail() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-900 truncate">{transaction.buyer_name}</p>
-                      <p className="text-xs text-slate-500">Buyer</p>
+                      <p className="text-xs text-slate-500">
+                        Buyer {transaction.buyer_phone && <span className="text-blue-500 ml-1">• via phone</span>}
+                      </p>
                     </div>
                     {buyerConfirmed && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                   </div>
@@ -2025,7 +2128,9 @@ function TransactionDetail() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-900 truncate">{transaction.seller_name}</p>
-                      <p className="text-xs text-slate-500">Seller</p>
+                      <p className="text-xs text-slate-500">
+                        Seller {transaction.seller_phone && <span className="text-blue-500 ml-1">• via phone</span>}
+                      </p>
                     </div>
                     {sellerConfirmed && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                   </div>

@@ -27,6 +27,95 @@ logger.info(f"[TRADESAFE] Configured API URL: {TRADESAFE_API_URL}")
 TRADESAFE_PAYMENT_URL = os.environ.get('TRADESAFE_PAYMENT_URL', 'https://pay.tradesafe.co.za')
 TRADESAFE_ENV = os.environ.get('TRADESAFE_ENV', 'production')
 
+# ================== BANK ENUM + HELPERS ==================
+
+_BANK_ENUM_MAP = {
+    "FNB": "FNB",
+    "FIRST NATIONAL BANK": "FNB",
+    "FIRST_NATIONAL_BANK": "FNB",
+    "FIRST_NATIONAL_BANK_(FNB)": "FNB",
+    "FIRST NATIONAL BANK (FNB)": "FNB",
+
+    "ABSA": "ABSA",
+    "ABSA BANK": "ABSA",
+    "ABSA_BANK": "ABSA",
+
+    "STANDARD BANK": "STANDARD_BANK",
+    "STANDARD_BANK": "STANDARD_BANK",
+    "STANDARDBANK": "STANDARD_BANK",
+
+    "NEDBANK": "NEDBANK",
+    "NED BANK": "NEDBANK",
+
+    "CAPITEC": "CAPITEC",
+    "CAPITEC BANK": "CAPITEC",
+    "CAPITEC_BANK": "CAPITEC",
+
+    "INVESTEC": "INVESTEC",
+    "INVESTEC BANK": "INVESTEC",
+
+    "AFRICAN BANK": "AFRICAN_BANK",
+    "AFRICAN_BANK": "AFRICAN_BANK",
+
+    "TYMEBANK": "TYMEBANK",
+    "TYME BANK": "TYMEBANK",
+    "TYME_BANK": "TYMEBANK",
+
+    "DISCOVERY": "DISCOVERY_BANK",
+    "DISCOVERY BANK": "DISCOVERY_BANK",
+    "DISCOVERY_BANK": "DISCOVERY_BANK",
+
+    "BIDVEST": "BIDVEST_BANK",
+    "BIDVEST BANK": "BIDVEST_BANK",
+    "BIDVEST_BANK": "BIDVEST_BANK",
+}
+
+
+def map_bank_to_tradesafe_enum(bank_name: str) -> str:
+    if not bank_name:
+        raise ValueError("bank_name is empty")
+
+    key = " ".join(str(bank_name).strip().upper().split())
+
+    if key in _BANK_ENUM_MAP:
+        return _BANK_ENUM_MAP[key]
+
+    alt = key.replace("_", " ")
+    if alt in _BANK_ENUM_MAP:
+        return _BANK_ENUM_MAP[alt]
+
+    alt2 = key.replace(" ", "_")
+    if alt2 in _BANK_ENUM_MAP:
+        return _BANK_ENUM_MAP[alt2]
+
+    if "(" in key and ")" in key:
+        inside = key[key.index("(")+1:key.index(")")].strip()
+        if inside in _BANK_ENUM_MAP:
+            return _BANK_ENUM_MAP[inside]
+        outside = key.split("(")[0].strip()
+        if outside in _BANK_ENUM_MAP:
+            return _BANK_ENUM_MAP[outside]
+
+    raise ValueError(f"Unknown bank '{bank_name}'")
+
+
+def _get(obj, key, default=None):
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _first_non_empty(*values):
+    for v in values:
+        if v:
+            return v
+    return None
+
+# =========================================================
+
+
 # TrustTrade Platform Settings - Beta Launch Limits
 MINIMUM_TRANSACTION_AMOUNT = 100.0  # R100 minimum (beta)
 PLATFORM_FEE_PERCENT = 1.5  # TrustTrade 1.5% agent fee
@@ -1270,34 +1359,43 @@ async def check_payout_readiness(seller_token_id: str) -> Dict[str, Any]:
     }
 
 
-async def sync_banking_to_token(token_id: str, bank_name: str, account_number: str, 
-                                  branch_code: str, account_type: str, mobile: str = None) -> Dict[str, Any]:
+async def sync_banking_to_token(
+    token_id: str,
+    bank_name: str,
+    account_number: str,
+    branch_code: str,
+    account_type: str,
+    mobile: str = None,
+    user=None,
+    transaction=None,
+    given_name: str = None,
+    family_name: str = None,
+    email: str = None,
+) -> Dict[str, Any]:
     """
     Sync banking details to a TradeSafe token for payout.
     Used at escrow creation and by admin to fix tokens missing banking info.
-    
-    Returns:
-        {
-            "success": bool,
-            "error": str or None,
-            "token": dict or None (TradeSafe response on success)
-        }
     """
+
     logger.info("=" * 60)
     logger.info("[PAYOUT_SYNC] === Syncing Banking to Token ===")
     logger.info(f"[PAYOUT_SYNC] Token ID: {token_id}")
-    
+
     if not token_id:
         logger.error("[PAYOUT_SYNC] FAILED: No token ID provided")
         return {"success": False, "error": "No token ID provided"}
-    
+
     if not bank_name or not account_number:
         logger.error("[PAYOUT_SYNC] FAILED: Missing bank_name or account_number")
         return {"success": False, "error": "Missing required banking fields"}
-    
-    # Normalize bank name for TradeSafe API
-    bank_name_normalized = bank_name.upper().replace(" ", "_")
-    
+
+    # Map bank name to exact TradeSafe enum
+    try:
+        bank_enum = map_bank_to_tradesafe_enum(bank_name)
+    except ValueError as e:
+        logger.error(f"[PAYOUT_SYNC] FAILED: {str(e)}")
+        return {"success": False, "error": str(e)}
+
     # Normalize account type
     account_type_map = {
         "savings": "SAVINGS",
@@ -1305,32 +1403,76 @@ async def sync_banking_to_token(token_id: str, bank_name: str, account_number: s
         "checking": "CHEQUE",
         "current": "CHEQUE",
     }
-    account_type_normalized = account_type_map.get(account_type.lower() if account_type else "savings", "SAVINGS")
-    
+    account_type_normalized = account_type_map.get(
+        account_type.lower() if account_type else "savings",
+        "SAVINGS"
+    )
+
+    # Resolve user fields
+    resolved_given_name = _first_non_empty(
+        given_name,
+        _get(user, "first_name"),
+        _get(user, "given_name"),
+        _get(user, "givenName"),
+    )
+    resolved_family_name = _first_non_empty(
+        family_name,
+        _get(user, "last_name"),
+        _get(user, "family_name"),
+        _get(user, "familyName"),
+    )
+    resolved_email = _first_non_empty(
+        email,
+        _get(user, "email"),
+        _get(transaction, "seller_email"),
+    )
+
     # Normalize mobile
+    resolved_mobile = _first_non_empty(
+        mobile,
+        _get(user, "mobile"),
+        _get(user, "phone"),
+        _get(transaction, "seller_phone"),
+    )
+
     mobile_normalized = None
-    if mobile:
-        mobile_normalized = mobile
-        if mobile.startswith('0'):
-            mobile_normalized = '+27' + mobile[1:]
-        elif not mobile.startswith('+'):
-            mobile_normalized = '+27' + mobile
-    
-    # Log the MASKED payload being sent
+    if resolved_mobile:
+        mobile_normalized = str(resolved_mobile).strip()
+        if mobile_normalized.startswith("0"):
+            mobile_normalized = "+27" + mobile_normalized[1:]
+        elif not mobile_normalized.startswith("+"):
+            mobile_normalized = "+27" + mobile_normalized
+
+    if not resolved_given_name or not resolved_family_name or not resolved_email:
+        error_msg = "Missing required user fields for TradeSafe token update"
+        logger.error(f"[PAYOUT_SYNC] FAILED: {error_msg}")
+        return {"success": False, "error": error_msg}
+
+    if not mobile_normalized:
+        error_msg = "Missing required mobile for TradeSafe token update"
+        logger.error(f"[PAYOUT_SYNC] FAILED: {error_msg}")
+        return {"success": False, "error": error_msg}
+
+    # Log masked payload
     masked_account = f"***{account_number[-4:]}" if account_number and len(account_number) >= 4 else "****"
-    masked_mobile = f"{mobile_normalized[:6]}***{mobile_normalized[-2:]}" if mobile_normalized and len(mobile_normalized) > 6 else "N/A"
-    
-    logger.info(f"[PAYOUT_SYNC] Bank: {bank_name_normalized}")
+    masked_mobile = f"{mobile_normalized[:6]}***{mobile_normalized[-2:]}" if len(mobile_normalized) > 6 else mobile_normalized
+
+    logger.info(f"[PAYOUT_SYNC] Bank Enum: {bank_enum}")
     logger.info(f"[PAYOUT_SYNC] Account: {masked_account}")
     logger.info(f"[PAYOUT_SYNC] Branch Code: {branch_code or 'N/A'}")
     logger.info(f"[PAYOUT_SYNC] Account Type: {account_type_normalized}")
     logger.info(f"[PAYOUT_SYNC] Mobile: {masked_mobile}")
-    
+    logger.info(f"[PAYOUT_SYNC] Email: {resolved_email}")
+    logger.info(f"[PAYOUT_SYNC] Name: {resolved_given_name} {resolved_family_name}")
+
     mutation = """
-    mutation tokenUpdate($id: ID!, $input: TokenInput!) {
-        tokenUpdate(id: $id, input: $input) {
+    mutation TokenUpdate($input: TokenUpdateInput!) {
+        tokenUpdate(input: $input) {
             id
             user {
+                givenName
+                familyName
+                email
                 mobile
             }
             bankAccount {
@@ -1342,54 +1484,56 @@ async def sync_banking_to_token(token_id: str, bank_name: str, account_number: s
         }
     }
     """
-    
-    input_data = {
-        "bankAccount": {
-            "bank": bank_name_normalized,
-            "accountNumber": account_number,
-            "branchCode": branch_code or "",
-            "accountType": account_type_normalized
+
+    variables = {
+        "input": {
+            "id": token_id,
+            "user": {
+                "givenName": resolved_given_name,
+                "familyName": resolved_family_name,
+                "email": resolved_email,
+                "mobile": mobile_normalized
+            },
+            "bankAccount": {
+                "bank": bank_enum,
+                "accountNumber": account_number,
+                "branchCode": branch_code or "",
+                "accountType": account_type_normalized
+            }
         }
     }
-    
-    if mobile_normalized:
-        input_data["user"] = {"mobile": mobile_normalized}
-    
-    variables = {"id": token_id, "input": input_data}
-    
+
     logger.info("[PAYOUT_SYNC] Calling TradeSafe tokenUpdate...")
-    
+
     result = await execute_graphql(mutation, variables)
-    
-    # Log TradeSafe response
+
     logger.info(f"[PAYOUT_SYNC] TradeSafe Response: {result}")
-    
-    if result and 'errors' in result:
-        error_msg = result['errors'][0].get('message', 'Unknown error')
-        debug_msg = result['errors'][0].get('extensions', {}).get('debugMessage', '')
+
+    if result and "errors" in result:
+        error_msg = result["errors"][0].get("message", "Unknown error")
+        debug_msg = result["errors"][0].get("extensions", {}).get("debugMessage", "")
         logger.error(f"[PAYOUT_SYNC] FAILED: {error_msg}")
         if debug_msg:
             logger.error(f"[PAYOUT_SYNC] Debug: {debug_msg}")
         logger.info("=" * 60)
         return {"success": False, "error": error_msg, "debug": debug_msg}
-    
-    if result and 'tokenUpdate' in result:
-        token_result = result['tokenUpdate']
-        # Verify the banking was actually set
-        new_bank = token_result.get('bankAccount', {})
-        new_account = new_bank.get('accountNumber', '')
-        
+
+    if result and "tokenUpdate" in result:
+        token_result = result["tokenUpdate"]
+        new_bank = token_result.get("bankAccount", {})
+        new_account = new_bank.get("accountNumber", "")
+
         if new_account and new_account == account_number:
             logger.info(f"[PAYOUT_SYNC] SUCCESS - Banking attached to token {token_id}")
             logger.info(f"[PAYOUT_SYNC] Verified Bank: {new_bank.get('bank')}")
             logger.info(f"[PAYOUT_SYNC] Verified Account: ***{new_account[-4:]}")
             logger.info("=" * 60)
             return {"success": True, "token": token_result}
-        else:
-            logger.warning("[PAYOUT_SYNC] Response received but banking not confirmed")
-            logger.info("=" * 60)
-            return {"success": True, "token": token_result, "warning": "Banking may not have been fully applied"}
-    
+
+        logger.warning("[PAYOUT_SYNC] Response received but banking not confirmed")
+        logger.info("=" * 60)
+        return {"success": True, "token": token_result, "warning": "Banking may not have been fully applied"}
+
     logger.error("[PAYOUT_SYNC] FAILED: Unexpected response")
     logger.info("=" * 60)
     return {"success": False, "error": "Unexpected response from TradeSafe"}

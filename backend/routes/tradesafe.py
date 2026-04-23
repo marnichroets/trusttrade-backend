@@ -377,24 +377,26 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
         })
     
     await db.transactions.update_one(
-        {"transaction_id": data.transaction_id},
-        {"$set": {
+    {"transaction_id": data.transaction_id},
+    {
+        "$set": {
             "tradesafe_id": tradesafe_id,
             "tradesafe_allocation_id": allocation_id,
             "tradesafe_seller_token_id": seller_token_id,
             "tradesafe_buyer_token_id": buyer_token_id,
-            "tradesafe_state": result.get("state", "CREATED"),
+            "tradesafe_state": (result.get("state") if result else "CREATED"),
             "tradesafe_fee_allocation": result.get("fee_allocation", data.fee_allocation),
             "payment_status": "Awaiting Payment",
             "payout_status": "pending",
-            "bank_details_attached": bank_details_attached,  # Track if banking synced to token
+            "bank_details_attached": bank_details_attached,
             "payout_ready": payout_ready,
             "banking_sync_result": banking_sync_result,
-            "timeline": timeline
+            "timeline": timeline,
             "buyer_phone": buyer_mobile,
-            "seller_phone": seller_mobile,
-        }}
-    )
+            "seller_phone": seller_mobile
+        }
+    }
+)
     
     logger.info(f"=== ESCROW CREATED: {tradesafe_id} ===")
     

@@ -1168,8 +1168,9 @@ async def update_token_banking_details(
         }
     
     logger.info(f"Calling tokenUpdate with variables: {variables}")
-    
+    logger.info(f"[PAYOUT_SYNC] FINAL VARIABLES: {variables}")
     result = await execute_graphql(mutation, variables)
+    logger.info(f"[PAYOUT_SYNC] TradeSafe Response: {result}")
     
     if result and 'errors' in result:
         error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'

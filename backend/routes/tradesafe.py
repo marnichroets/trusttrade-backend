@@ -9,8 +9,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone
 from unittest import result
 from fastapi import APIRouter, HTTPException, Request
-from backend.models import transaction
-from backend.models import transaction
+import models.transaction as transaction
 from core.config import settings
 from core.database import get_database
 from core.security import get_user_from_token

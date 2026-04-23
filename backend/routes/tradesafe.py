@@ -262,6 +262,8 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
             seller_mobile = seller_mobile or recipient_info
         else:
             buyer_mobile = buyer_mobile or recipient_info
+    logger.info(f"[ESCROW] buyer_mobile={buyer_mobile}")
+    logger.info(f"[ESCROW] seller_mobile={seller_mobile}")
     
     logger.info("=== ESCROW CREATION PRE-FLIGHT ===")
     logger.info(f"Transaction ID: {data.transaction_id}")

@@ -11,6 +11,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 from dotenv import load_dotenv
+from uritemplate import variables
 
 from models import transaction
 from models import user
@@ -1533,24 +1534,24 @@ async def _sync_banking_to_token_impl(
     logger.info(f"[PAYOUT_SYNC] Name: {(resolved_given_name or '').strip()} {(resolved_family_name or '').strip()}".strip())
 
     mutation = """
-    mutation TokenUpdate($input: TokenUpdateInput!) {
-        tokenUpdate(input: $input) {
+    mutation TokenUpdate($id: ID!, $input: TokenUserInput!) {
+        tokenUpdate(id: $id, input: $input) {
             id
             user {
                 givenName
                 familyName
                 email
-                mobile
-            }
-            bankAccount {
-                bank
-                accountNumber
-                branchCode
-                accountType
-            }
+             mobile
+        }   
+        bankAccount {
+            bank
+            accountNumber
+            branchCode
+            accountType
         }
     }
-    """
+}
+"""
 
     # Build user sub-object from whatever we have; omit keys with empty values
     # so TradeSafe won't receive `null` and reject the mutation outright.
@@ -1580,7 +1581,10 @@ async def _sync_banking_to_token_impl(
             f"[PAYOUT_SYNC] No user fields available - sending bankAccount only for token {token_id}"
         )
 
-    variables = {"input": token_input}
+        variables = {
+        "id": token_id,
+        "input": user_input  # ONLY user fields here
+        }
 
     logger.info("[PAYOUT_SYNC] Calling TradeSafe tokenUpdate...")
 

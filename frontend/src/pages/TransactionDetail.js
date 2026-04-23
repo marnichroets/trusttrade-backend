@@ -709,17 +709,16 @@ function TransactionDetail() {
 
   // Buyer accepts delivery - with payout readiness pre-check
   const handleAcceptDelivery = async () => {
-    // Pre-check payout readiness
+  // Pre-check payout readiness
     if (!payoutReadiness?.payout_ready) {
-      // Refresh the check
+     // Refresh the check
       await checkPayoutReadiness();
-      
+
       if (!payoutReadiness?.payout_ready) {
         const issues = payoutReadiness?.issues?.join(', ') || 'Unknown issue';
-        toast.error(`Cannot release: Seller must complete payout setup. Issues: ${issues}`);
-        return;
-      }
+        toast.warning(`Seller payout setup incomplete. Attempting automatic sync on release. Current issues: ${issues}`);
     }
+  }
     
     if (!window.confirm('Confirm you have received the item? This will release funds to the seller. This action cannot be undone.')) {
       return;

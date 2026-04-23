@@ -1492,8 +1492,15 @@ async def sync_banking_to_token(
         }
     }
     """
-    mobile_normalized = "+27791782758"
+     
+    logger.info(f"[PAYOUT_SYNC] SELLER PHONE RAW: {getattr(transaction, 'seller_phone', None)}")
 
+    mobile_normalized = getattr(transaction, 'seller_phone', None) or "+27791782758"
+
+    logger.info(f"[PAYOUT_SYNC] FINAL MOBILE USED: {mobile_normalized}")
+
+    if not mobile_normalized:
+        raise Exception("NO MOBILE FOUND — STOPPING")
     variables = {
         "id": token_id,
         "input": {
@@ -1511,10 +1518,7 @@ async def sync_banking_to_token(
             }
         }
     }
-    logger.info(f"[PAYOUT_SYNC] FINAL VARIABLES: {variables}")
-    result = await execute_graphql(mutation, variables)
 
-    logger.info(f"[PAYOUT_SYNC] TradeSafe Response: {result}")
 
     if result and "errors" in result:
         error_msg = result["errors"][0].get("message", "Unknown error")

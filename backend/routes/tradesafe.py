@@ -679,13 +679,30 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     from tradesafe_service import check_payout_readiness, sync_banking_to_token
 
     # ===== PAYOUT PREFLIGHT: Step 3 - Check live token readiness =====
+    logger.info(f"[PAYOUT_CHECK] Initial readiness check txn={transaction_id} token={seller_token_id}")
     payout_check = await check_payout_readiness(seller_token_id)
+    logger.info(
+        f"[PAYOUT_CHECK] Initial result txn={transaction_id} token={seller_token_id} "
+        f"ready={payout_check.get('ready')} has_banking={payout_check.get('has_banking')} "
+        f"has_mobile={payout_check.get('has_mobile')} issues={payout_check.get('issues')}"
+    )
+
+    sync_attempted = False
+    sync_result = None
 
     # Auto-sync banking if token not ready but seller profile has banking
     if not payout_check.get("ready") and seller_has_profile_banking:
-        logger.info("[PAYOUT_SYNC] === Auto-sync triggered ===")
-        logger.info("[PAYOUT_SYNC] Reason: Token not ready but seller profile has banking")
-        logger.info(f"[PAYOUT_SYNC] Syncing to token: {seller_token_id}")
+        sync_attempted = True
+        logger.info(
+            f"[PAYOUT_SYNC] Auto-sync triggered txn={transaction_id} token={seller_token_id} "
+            f"reason='Token not ready but seller profile has banking' "
+            f"bank={seller_banking.get('bank_name')} account_last4=***{str(seller_banking.get('account_number',''))[-4:]}"
+        )
+
+        seller_name = transaction.get("seller_name", "") or ""
+        name_parts = seller_name.split(" ")
+        given_name = name_parts[0] if name_parts and name_parts[0] else None
+        family_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else "User"
 
         sync_result = await sync_banking_to_token(
             token_id=seller_token_id,
@@ -693,17 +710,26 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
             account_number=seller_banking.get("account_number"),
             branch_code=seller_banking.get("branch_code", ""),
             account_type=seller_banking.get("account_type", "SAVINGS"),
-            mobile=seller_mobile
+            mobile=seller_mobile,
+            user=seller_user,
+            transaction=transaction,
+            given_name=given_name,
+            family_name=family_name,
+            email=transaction.get("seller_email"),
         )
 
         if sync_result.get("success"):
-            logger.info("[PAYOUT_SYNC] SUCCESS - Banking synced to token")
-            logger.info("[PAYOUT_CHECK] Re-checking payout readiness after sync...")
+            logger.info(
+                f"[PAYOUT_SYNC] SUCCESS txn={transaction_id} token={seller_token_id} "
+                f"tradesafe_response={sync_result.get('token')}"
+            )
+            logger.info(f"[PAYOUT_CHECK] Re-checking after sync txn={transaction_id} token={seller_token_id}")
             payout_check = await check_payout_readiness(seller_token_id)
-
-            logger.info(f"[PAYOUT_CHECK] After sync - payout_ready: {payout_check.get('ready')}")
-            logger.info(f"[PAYOUT_CHECK] After sync - has_banking: {payout_check.get('has_banking')}")
-            logger.info(f"[PAYOUT_CHECK] After sync - has_mobile: {payout_check.get('has_mobile')}")
+            logger.info(
+                f"[PAYOUT_CHECK] Post-sync result txn={transaction_id} token={seller_token_id} "
+                f"ready={payout_check.get('ready')} has_banking={payout_check.get('has_banking')} "
+                f"has_mobile={payout_check.get('has_mobile')} issues={payout_check.get('issues')}"
+            )
 
             await db.transactions.update_one(
                 {"transaction_id": transaction_id},
@@ -714,24 +740,27 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
                 }}
             )
         else:
-            logger.error(f"[PAYOUT_SYNC] FAILED: {sync_result.get('error')}")
-            logger.error(f"[PAYOUT_SYNC] Debug: {sync_result.get('debug', 'N/A')}")
+            logger.error(
+                f"[PAYOUT_SYNC] FAILED txn={transaction_id} token={seller_token_id} "
+                f"error={sync_result.get('error')} debug={sync_result.get('debug', 'N/A')} "
+                f"tradesafe_response={sync_result}"
+            )
 
     elif not payout_check.get("ready") and not seller_has_profile_banking:
-        logger.warning("[PAYOUT_BLOCKED] Cannot auto-sync: Seller profile has no banking details")
+        logger.warning(
+            f"[PAYOUT_BLOCKED] Cannot auto-sync txn={transaction_id} token={seller_token_id} "
+            f"reason='Seller profile has no banking details to sync'"
+        )
 
     # ===== PAYOUT PREFLIGHT: Final decision =====
     if not payout_check.get("ready"):
         issues = payout_check.get("issues", ["Unknown issue"])
-        has_token_banking = payout_check.get("has_banking", False)
-        has_token_mobile = payout_check.get("has_mobile", False)
-
-        logger.error("[PAYOUT_BLOCKED] === RELEASE BLOCKED ===")
-        logger.error(f"[PAYOUT_BLOCKED] Token: {seller_token_id}")
-        logger.error(f"[PAYOUT_BLOCKED] Issues: {issues}")
-        logger.error(f"[PAYOUT_BLOCKED] Token has_banking: {has_token_banking}")
-        logger.error(f"[PAYOUT_BLOCKED] Token has_mobile: {has_token_mobile}")
-        logger.error(f"[PAYOUT_BLOCKED] Seller profile has_banking: {seller_has_profile_banking}")
+        logger.error(
+            f"[PAYOUT_BLOCKED] Release blocked txn={transaction_id} token={seller_token_id} "
+            f"sync_attempted={sync_attempted} sync_error={(sync_result or {}).get('error') if sync_attempted else None} "
+            f"token_has_banking={payout_check.get('has_banking')} token_has_mobile={payout_check.get('has_mobile')} "
+            f"seller_profile_has_banking={seller_has_profile_banking} issues={issues}"
+        )
         logger.info("=" * 60)
 
         raise HTTPException(
@@ -739,10 +768,11 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
             detail=f"Cannot release: Seller must complete payout setup before funds can be released. Issues: {', '.join(issues)}"
         )
 
-    logger.info("[PAYOUT_READY] === Token ready for payout ===")
-    logger.info(f"[PAYOUT_READY] Token: {seller_token_id}")
-    logger.info(f"[PAYOUT_READY] Banking: {payout_check.get('has_banking')}")
-    logger.info(f"[PAYOUT_READY] Mobile: {payout_check.get('has_mobile')}")
+    logger.info(
+        f"[PAYOUT_READY] Token ready for payout txn={transaction_id} token={seller_token_id} "
+        f"has_banking={payout_check.get('has_banking')} has_mobile={payout_check.get('has_mobile')} "
+        f"sync_attempted={sync_attempted}"
+    )
     logger.info("=" * 60)
 
     # Call TradeSafe
@@ -819,11 +849,11 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         "state": "FUNDS_RELEASED",
         "net_amount": net_amount
     }
-    
 
-@router.post("/manual-start-delivery/{transaction_id}")
-async def manual_start_delivery(request: Request, transaction_id: str):
-    """Manual override: Start delivery bypassing state checks."""
+
+@router.post("/manual-accept-delivery/{transaction_id}")
+async def manual_accept_delivery(request: Request, transaction_id: str):
+    """Manual override: Accept delivery bypassing state checks."""
     db = get_database()
     
     user = await get_user_from_token(request, db)
@@ -835,70 +865,189 @@ async def manual_start_delivery(request: Request, transaction_id: str):
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
-    # Only seller or admin
-    is_seller = transaction.get("seller_email") == user.email or transaction.get("seller_user_id") == user.user_id
-    if not is_seller and not user.is_admin:
-        raise HTTPException(status_code=403, detail="Only seller or admin can trigger manual delivery")
+    # Only buyer or admin
+    is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
+    if not is_buyer and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only buyer or admin can confirm delivery")
     
     allocation_id = transaction.get("tradesafe_allocation_id")
     if not allocation_id:
         raise HTTPException(status_code=400, detail="No TradeSafe allocation ID found")
-    
-    logger.info(f"MANUAL START DELIVERY: {transaction_id}")
-    
-    result = await start_delivery(allocation_id)
-    
-    # Update even if TradeSafe call fails
+
+    logger.info(f"MANUAL ACCEPT DELIVERY: {transaction_id}")
+
+    # ===== PAYOUT PREFLIGHT (same gate as normal release, no bypass) =====
+    from tradesafe_service import check_payout_readiness, sync_banking_to_token
+
+    seller_token_id = transaction.get("tradesafe_seller_token_id")
+    logger.info(f"[PAYOUT_PREFLIGHT] Manual release txn={transaction_id} token={seller_token_id} by={user.email}")
+
+    if not seller_token_id:
+        logger.error(f"[PAYOUT_BLOCKED] Manual release: no seller token txn={transaction_id}")
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot release: No seller token linked to this transaction."
+        )
+
+    seller_email = transaction.get("seller_email")
+    seller_user_doc = await db.users.find_one({"email": seller_email.lower()}) if seller_email else None
+    seller_banking = (seller_user_doc or {}).get("banking_details", {}) or {}
+    seller_mobile = (seller_user_doc or {}).get("phone") or transaction.get("seller_phone")
+
+    profile_ok = bool(
+        seller_user_doc
+        and seller_user_doc.get("banking_details_completed")
+        and seller_banking.get("bank_name")
+        and seller_banking.get("account_number")
+    )
+
+    # Step 1: Check live token readiness FIRST
+    logger.info(f"[PAYOUT_CHECK] Manual release initial check txn={transaction_id} token={seller_token_id}")
+    payout_check = await check_payout_readiness(seller_token_id)
+    logger.info(
+        f"[PAYOUT_CHECK] Manual release initial result txn={transaction_id} token={seller_token_id} "
+        f"ready={payout_check.get('ready')} issues={payout_check.get('issues')}"
+    )
+
+    sync_attempted = False
+    sync_result = None
+
+    # Step 2: If not ready and seller profile has banking, sync then re-check
+    if not payout_check.get("ready") and profile_ok:
+        sync_attempted = True
+        logger.info(
+            f"[PAYOUT_SYNC] Manual release auto-sync txn={transaction_id} token={seller_token_id} "
+            f"bank={seller_banking.get('bank_name')} account_last4=***{str(seller_banking.get('account_number',''))[-4:]}"
+        )
+
+        sync_result = await sync_banking_to_token(
+            token_id=seller_token_id,
+            bank_name=seller_banking.get("bank_name"),
+            account_number=seller_banking.get("account_number"),
+            branch_code=seller_banking.get("branch_code", ""),
+            account_type=seller_banking.get("account_type", "SAVINGS"),
+            mobile=seller_mobile,
+            user=seller_user_doc,
+            transaction=transaction,
+            given_name=transaction.get("seller_name", "").split(" ")[0],
+            family_name=" ".join(transaction.get("seller_name", "").split(" ")[1:]) or "User",
+            email=transaction.get("seller_email")
+        )
+
+        if sync_result.get("success"):
+            logger.info(
+                f"[PAYOUT_SYNC] Manual release SUCCESS txn={transaction_id} token={seller_token_id} "
+                f"tradesafe_response={sync_result.get('token')}"
+            )
+            payout_check = await check_payout_readiness(seller_token_id)
+            logger.info(
+                f"[PAYOUT_CHECK] Manual release post-sync result txn={transaction_id} token={seller_token_id} "
+                f"ready={payout_check.get('ready')} issues={payout_check.get('issues')}"
+            )
+        else:
+            logger.error(
+                f"[PAYOUT_SYNC] Manual release FAILED txn={transaction_id} token={seller_token_id} "
+                f"error={sync_result.get('error')} debug={sync_result.get('debug', 'N/A')} "
+                f"tradesafe_response={sync_result}"
+            )
+    elif not payout_check.get("ready") and not profile_ok:
+        logger.warning(
+            f"[PAYOUT_BLOCKED] Manual release cannot auto-sync txn={transaction_id} token={seller_token_id} "
+            f"reason='Seller profile has no banking to sync'"
+        )
+
+    # Step 3: Final decision
+    if not payout_check.get("ready"):
+        issues = payout_check.get("issues", ["Unknown"])
+        logger.error(
+            f"[PAYOUT_BLOCKED] Manual release blocked txn={transaction_id} token={seller_token_id} "
+            f"sync_attempted={sync_attempted} sync_error={(sync_result or {}).get('error') if sync_attempted else None} "
+            f"issues={issues}"
+        )
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot release: Seller payout not ready. Issues: {', '.join(issues)}."
+        )
+
+    logger.info(
+        f"[PAYOUT_READY] Manual release proceeding txn={transaction_id} token={seller_token_id} "
+        f"sync_attempted={sync_attempted}"
+    )
+
+    result = await accept_delivery(allocation_id)
+
     if not result:
-        logger.warning("TradeSafe start_delivery failed, updating local state anyway")
+        logger.error(f"[PAYOUT_BLOCKED] Manual release: TradeSafe accept_delivery failed for {transaction_id}")
+        raise HTTPException(
+            status_code=500,
+            detail="TradeSafe release call failed. Funds have NOT been released. Please retry."
+        )
+    
+    # Calculate net amount using Decimal precision
+    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
     
     timeline = transaction.get("timeline", [])
     timeline.append({
-        "status": "Delivery Started (Manual)",
+        "status": "Delivery Confirmed (Manual)",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "by": user.name,
-        "details": f"Manual override by {'admin' if user.is_admin else 'seller'}"
+        "details": f"Manual override by {'admin' if user.is_admin else 'buyer'}"
+    })
+    timeline.append({
+        "status": "Funds Released",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "by": "System",
+        "details": f"R{net_amount:.2f} released to seller"
     })
     
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
         {"$set": {
-            "tradesafe_state": "INITIATED",
-            "payment_status": "Delivery in Progress",
-            "delivery_started_at": datetime.now(timezone.utc).isoformat(),
+            "tradesafe_state": "FUNDS_RELEASED",
+            "payment_status": "Completed",
+            "payout_status": "awaiting_bank_payout",  # Update payout status
+            "delivery_confirmed": True,
+            "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "release_status": "Released",
+            "released_at": datetime.now(timezone.utc).isoformat(),
+            "funds_released_at": datetime.now(timezone.utc).isoformat(),
             "timeline": timeline,
-            "manual_delivery_start": True
+            "manual_delivery_accept": True,
+            "net_amount": net_amount
         }}
     )
     
     # Send notifications
-    buyer_email = transaction.get("buyer_email")
-    buyer_phone = transaction.get("buyer_phone")
+    seller_email = transaction.get("seller_email")
+    seller_phone = transaction.get("seller_phone")
     
-    if buyer_email:
-        await send_delivery_started_email(
-            to_email=buyer_email,
-            to_name=transaction.get("buyer_name", "Buyer"),
+    if seller_email:
+        await send_funds_released_email(
+            to_email=seller_email,
+            to_name=transaction.get("seller_name"),
             share_code=transaction.get("share_code", transaction_id),
             item_description=transaction["item_description"],
-            seller_name=transaction.get("seller_name", "Seller")
+            amount=transaction["item_price"],
+            net_amount=net_amount
         )
     
-    if buyer_phone:
+    if seller_phone:
         try:
-            await send_delivery_sms(
-                to_phone=buyer_phone,
-                message=f"TrustTrade: Your item has been dispatched! Please confirm receipt once delivered. Ref: {transaction.get('share_code', transaction_id)}"
+            await send_funds_released_sms(
+                to_phone=seller_phone,
+                message=f"TrustTrade: Great news! R{net_amount:.2f} has been released to your account. Ref: {transaction.get('share_code', transaction_id)}"
             )
         except Exception as e:
-            logger.error(f"Failed to send delivery SMS: {e}")
+            logger.error(f"Failed to send funds released SMS: {e}")
     
     return {
-        "status": "delivery_started",
-        "message": "Delivery manually started. Buyer notified.",
-        "state": "INITIATED",
+        "status": "funds_released",
+        "message": "Delivery confirmed. Funds released to seller.",
+        "state": "FUNDS_RELEASED",
+        "net_amount": net_amount,
         "tradesafe_result": result
     }
+
 
 
 @router.post("/manual-accept-delivery/{transaction_id}")

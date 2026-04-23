@@ -1492,7 +1492,7 @@ async def sync_banking_to_token(
         }
     }
     """
-    mobile_normalized = "+27XXXXXXXXX"
+    mobile_normalized = "+27791782758"
 
     variables = {
         "id": token_id,

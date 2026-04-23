@@ -1492,14 +1492,17 @@ async def sync_banking_to_token(
         }
     }
     """
+    mobile_normalized = "+27YOURREALNUMBER"
 
     variables = {
-    "input": {
-        "id": token_id,
-        "user": {
-            "givenName": resolved_given_name,
-            "familyName": resolved_family_name,
-            "email": resolved_email,   
+        "input": {
+            "id": token_id,
+            "mobile": mobile_normalized,
+            "user": {
+                "givenName": resolved_given_name,
+                "familyName": resolved_family_name,
+                "email": resolved_email,
+                "mobile": mobile_normalized,
         },
         "bankAccount": {
             "bank": bank_enum,

@@ -1589,6 +1589,7 @@ async def _sync_banking_to_token_impl(
     logger.info("[PAYOUT_SYNC] Calling TradeSafe tokenUpdate...")
 
     try:
+        logger.info(f"[PAYOUT_SYNC] FINAL VARIABLES: {variables}")
         result = await execute_graphql(mutation, variables)
     except Exception as e:
         logger.error(f"[PAYOUT_SYNC] FAILED: exception during tokenUpdate - {e}")

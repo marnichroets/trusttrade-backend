@@ -1496,7 +1496,11 @@ async def sync_banking_to_token(
      
     logger.info(f"[PAYOUT_SYNC] SELLER PHONE RAW: {getattr(transaction, 'seller_phone', None)}")
 
-    mobile_normalized = getattr(transaction, 'seller_phone', None) or "+27791782758"
+    mobile_normalized = getattr(transaction, 'seller_phone', None)
+
+    if not mobile_normalized:
+        logger.warning("[PAYOUT_SYNC] No mobile found — skipping mobile update")
+        mobile_normalized = None
 
     logger.info(f"[PAYOUT_SYNC] FINAL MOBILE USED: {mobile_normalized}")
 

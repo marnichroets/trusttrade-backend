@@ -12,7 +12,8 @@ from typing import Optional, Dict, Any, List
 from pathlib import Path
 from dotenv import load_dotenv
 
-from backend.models import transaction, user
+from models import transaction
+from models import user
 
 # Load environment variables
 ROOT_DIR = Path(__file__).parent

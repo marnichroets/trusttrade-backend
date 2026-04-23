@@ -1379,8 +1379,43 @@ async def sync_banking_to_token(
     """
     Sync banking details to a TradeSafe token for payout.
     Used at escrow creation and by admin to fix tokens missing banking info.
-    """
 
+    This function is intentionally crash-proof: any internal failure is logged
+    and returned as {"success": False, "error": ...} so callers (release flow)
+    can decide how to proceed instead of propagating exceptions.
+    """
+    try:
+        return await _sync_banking_to_token_impl(
+            token_id=token_id,
+            bank_name=bank_name,
+            account_number=account_number,
+            branch_code=branch_code,
+            account_type=account_type,
+            mobile=mobile,
+            user=user,
+            transaction=transaction,
+            given_name=given_name,
+            family_name=family_name,
+            email=email,
+        )
+    except Exception as e:
+        logger.exception(f"[PAYOUT_SYNC] UNEXPECTED EXCEPTION for token {token_id}: {e}")
+        return {"success": False, "error": f"Unexpected exception: {e}"}
+
+
+async def _sync_banking_to_token_impl(
+    token_id: str,
+    bank_name: str,
+    account_number: str,
+    branch_code: str,
+    account_type: str,
+    mobile: str = None,
+    user=None,
+    transaction=None,
+    given_name: str = None,
+    family_name: str = None,
+    email: str = None,
+) -> Dict[str, Any]:
     logger.info("=" * 60)
     logger.info("[PAYOUT_SYNC] === Syncing Banking to Token ===")
     logger.info(f"[PAYOUT_SYNC] Token ID: {token_id}")
@@ -1439,6 +1474,11 @@ async def sync_banking_to_token(
         _get(transaction, "seller_phone"),
     )
 
+    # Visibility for debugging — these are the exact sources the sync saw.
+    logger.info(f"[PAYOUT_SYNC] user.mobile={_get(user, 'mobile')}")
+    logger.info(f"[PAYOUT_SYNC] user.phone={_get(user, 'phone')}")
+    logger.info(f"[PAYOUT_SYNC] transaction.seller_phone={_get(transaction, 'seller_phone')}")
+
     mobile_normalized = None
     if resolved_mobile:
         mobile_normalized = str(resolved_mobile).strip()
@@ -1447,36 +1487,54 @@ async def sync_banking_to_token(
         elif not mobile_normalized.startswith("+"):
             mobile_normalized = "+27" + mobile_normalized
 
-    if not resolved_given_name or not resolved_family_name or not resolved_email:
-        error_msg = "Missing required user fields for TradeSafe token update"
-        logger.error(f"[PAYOUT_SYNC] FAILED: {error_msg}")
-        return {"success": False, "error": error_msg}
-    logger.info(f"[PAYOUT_SYNC] resolved_mobile raw={resolved_mobile}")
-    logger.info(f"[PAYOUT_SYNC] user.mobile={_get(user, 'mobile')}")
-    logger.info(f"[PAYOUT_SYNC] user.phone={_get(user, 'phone')}")
-    logger.info(f"[PAYOUT_SYNC] transaction.seller_phone={_get(transaction, 'seller_phone')}")
-    logger.info(f"[PAYOUT_SYNC] mobile_normalized={mobile_normalized}")
+    # Fallback: if no mobile from local sources, fetch mobile already on the
+    # TradeSafe token so the tokenUpdate payload can still satisfy the API's
+    # mobile requirement without clobbering it with nothing.
     if not mobile_normalized:
-        logger.warning("[PAYOUT_SYNC] No mobile provided — continuing without mobile")
+        logger.info(
+            f"[PAYOUT_SYNC] No mobile from local sources - fetching from TradeSafe token {token_id}"
+        )
+        try:
+            existing_token = await get_token_details(token_id)
+        except Exception as e:
+            existing_token = None
+            logger.error(f"[PAYOUT_SYNC] Failed to fetch existing token {token_id}: {e}")
+
+        existing_mobile = _get(_get(existing_token, "user", {}) or {}, "mobile")
+        if existing_mobile:
+            mobile_normalized = str(existing_mobile).strip()
+            if mobile_normalized.startswith("0"):
+                mobile_normalized = "+27" + mobile_normalized[1:]
+            elif not mobile_normalized.startswith("+"):
+                mobile_normalized = "+27" + mobile_normalized
+            logger.info(
+                f"[PAYOUT_SYNC] Recovered mobile from TradeSafe token {token_id}"
+            )
+        else:
+            logger.warning(
+                f"[PAYOUT_SYNC] No mobile found anywhere for token {token_id} - "
+                f"will send tokenUpdate without mobile field"
+            )
 
     # Log masked payload
     masked_account = f"***{account_number[-4:]}" if account_number and len(account_number) >= 4 else "****"
-    masked_mobile = (
-    f"{mobile_normalized[:6]}***{mobile_normalized[-2:]}"
-    if mobile_normalized and len(mobile_normalized) > 6
-    else (mobile_normalized or "N/A")
-)
+    if mobile_normalized and len(mobile_normalized) > 6:
+        masked_mobile = f"{mobile_normalized[:6]}***{mobile_normalized[-2:]}"
+    else:
+        masked_mobile = mobile_normalized or "N/A"
+
     logger.info(f"[PAYOUT_SYNC] Bank Enum: {bank_enum}")
     logger.info(f"[PAYOUT_SYNC] Account: {masked_account}")
     logger.info(f"[PAYOUT_SYNC] Branch Code: {branch_code or 'N/A'}")
     logger.info(f"[PAYOUT_SYNC] Account Type: {account_type_normalized}")
     logger.info(f"[PAYOUT_SYNC] Mobile: {masked_mobile}")
-    logger.info(f"[PAYOUT_SYNC] Email: {resolved_email}")
-    logger.info(f"[PAYOUT_SYNC] Name: {resolved_given_name} {resolved_family_name}")
+    logger.info(f"[PAYOUT_SYNC] Sending mobile: {mobile_normalized}")
+    logger.info(f"[PAYOUT_SYNC] Email: {resolved_email or 'N/A'}")
+    logger.info(f"[PAYOUT_SYNC] Name: {(resolved_given_name or '').strip()} {(resolved_family_name or '').strip()}".strip())
 
     mutation = """
-    mutation tokenUpdate($id: ID!, $input: TokenInput!) {
-        tokenUpdate(id: $id, input: $input) {
+    mutation TokenUpdate($input: TokenUpdateInput!) {
+        tokenUpdate(input: $input) {
             id
             user {
                 givenName
@@ -1493,37 +1551,47 @@ async def sync_banking_to_token(
         }
     }
     """
-     
-    logger.info(f"[PAYOUT_SYNC] SELLER PHONE RAW: {getattr(transaction, 'seller_phone', None)}")
 
-    mobile_normalized = getattr(transaction, 'seller_phone', None)
+    # Build user sub-object from whatever we have; omit keys with empty values
+    # so TradeSafe won't receive `null` and reject the mutation outright.
+    user_input: Dict[str, Any] = {}
+    if resolved_given_name:
+        user_input["givenName"] = resolved_given_name
+    if resolved_family_name:
+        user_input["familyName"] = resolved_family_name
+    if resolved_email:
+        user_input["email"] = resolved_email
+    if mobile_normalized:
+        user_input["mobile"] = mobile_normalized
 
-    if not mobile_normalized:
-        logger.warning("[PAYOUT_SYNC] No mobile found — skipping mobile update")
-        mobile_normalized = None
-
-    logger.info(f"[PAYOUT_SYNC] FINAL MOBILE USED: {mobile_normalized}")
-
-    if not mobile_normalized:
-        raise Exception("NO MOBILE FOUND — STOPPING")
-    variables = {
+    token_input: Dict[str, Any] = {
         "id": token_id,
-        "input": {
-            "user": {
-                "givenName": resolved_given_name,
-                "familyName": resolved_family_name,
-                "email": resolved_email,
-                "mobile": mobile_normalized,
-            },
-            "bankAccount": {
-                "bank": bank_enum,
-                "accountNumber": account_number,
-                "branchCode": branch_code or "",
-                "accountType": account_type_normalized
-            }
-        }
+        "bankAccount": {
+            "bank": bank_enum,
+            "accountNumber": account_number,
+            "branchCode": branch_code or "",
+            "accountType": account_type_normalized,
+        },
     }
+    if user_input:
+        token_input["user"] = user_input
+    else:
+        logger.warning(
+            f"[PAYOUT_SYNC] No user fields available - sending bankAccount only for token {token_id}"
+        )
 
+    variables = {"input": token_input}
+
+    logger.info("[PAYOUT_SYNC] Calling TradeSafe tokenUpdate...")
+
+    try:
+        result = await execute_graphql(mutation, variables)
+    except Exception as e:
+        logger.error(f"[PAYOUT_SYNC] FAILED: exception during tokenUpdate - {e}")
+        logger.info("=" * 60)
+        return {"success": False, "error": f"tokenUpdate call raised: {e}"}
+
+    logger.info(f"[PAYOUT_SYNC] TradeSafe Response: {result}")
 
     if result and "errors" in result:
         error_msg = result["errors"][0].get("message", "Unknown error")
@@ -1536,7 +1604,7 @@ async def sync_banking_to_token(
 
     if result and "tokenUpdate" in result:
         token_result = result["tokenUpdate"]
-        new_bank = token_result.get("bankAccount", {})
+        new_bank = token_result.get("bankAccount", {}) or {}
         new_account = new_bank.get("accountNumber", "")
 
         if new_account and new_account == account_number:
@@ -1553,6 +1621,7 @@ async def sync_banking_to_token(
     logger.error("[PAYOUT_SYNC] FAILED: Unexpected response")
     logger.info("=" * 60)
     return {"success": False, "error": "Unexpected response from TradeSafe"}
+
 
 async def request_token_withdrawal(token_id: str, amount_cents: int) -> Dict[str, Any]:
     """

@@ -391,6 +391,8 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
             "payout_ready": payout_ready,
             "banking_sync_result": banking_sync_result,
             "timeline": timeline
+            "buyer_phone": buyer_mobile,
+            "seller_phone": seller_mobile,
         }}
     )
     

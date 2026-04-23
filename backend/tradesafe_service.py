@@ -1488,12 +1488,10 @@ async def sync_banking_to_token(
     variables = {
     "input": {
         "id": token_id,
-        "mobile": mobile_normalized,
         "user": {
             "givenName": resolved_given_name,
             "familyName": resolved_family_name,
-            "email": resolved_email,
-            "mobile": mobile_normalized
+            "email": resolved_email,   
         },
         "bankAccount": {
             "bank": bank_enum,
@@ -1503,8 +1501,6 @@ async def sync_banking_to_token(
         }
     }
 }
-
-    logger.info(f"[PAYOUT_SYNC] Final payload mobile top-level={mobile_normalized} user.mobile={mobile_normalized}")
 
     result = await execute_graphql(mutation, variables)
 

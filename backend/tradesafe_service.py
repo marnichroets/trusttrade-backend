@@ -1455,14 +1455,15 @@ async def sync_banking_to_token(
     logger.info(f"[PAYOUT_SYNC] transaction.seller_phone={_get(transaction, 'seller_phone')}")
     logger.info(f"[PAYOUT_SYNC] mobile_normalized={mobile_normalized}")
     if not mobile_normalized:
-        error_msg = "Missing required mobile for TradeSafe token update"
-        logger.error(f"[PAYOUT_SYNC] FAILED: {error_msg}")
-        return {"success": False, "error": error_msg}
+        logger.warning("[PAYOUT_SYNC] No mobile provided — continuing without mobile")
 
     # Log masked payload
     masked_account = f"***{account_number[-4:]}" if account_number and len(account_number) >= 4 else "****"
-    masked_mobile = f"{mobile_normalized[:6]}***{mobile_normalized[-2:]}" if len(mobile_normalized) > 6 else mobile_normalized
-
+    masked_mobile = (
+    f"{mobile_normalized[:6]}***{mobile_normalized[-2:]}"
+    if mobile_normalized and len(mobile_normalized) > 6
+    else (mobile_normalized or "N/A")
+)
     logger.info(f"[PAYOUT_SYNC] Bank Enum: {bank_enum}")
     logger.info(f"[PAYOUT_SYNC] Account: {masked_account}")
     logger.info(f"[PAYOUT_SYNC] Branch Code: {branch_code or 'N/A'}")

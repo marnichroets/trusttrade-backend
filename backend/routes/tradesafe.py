@@ -278,20 +278,24 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     
     # Create escrow transaction
     logger.info("[ESCROW] calling TradeSafe API...")
-    result = await create_tradesafe_transaction(
-        internal_reference=data.transaction_id,
-        title=f"TrustTrade - {transaction['item_description'][:50]}",
-        description=transaction.get("item_description", "Item/Service"),
-        amount=transaction["item_price"],
-        buyer_name=transaction["buyer_name"],
-        buyer_email=transaction["buyer_email"],
-        seller_name=transaction["seller_name"],
-        seller_email=transaction["seller_email"],
-        buyer_mobile=buyer_mobile,
-        seller_mobile=seller_mobile,
-        fee_allocation=fee_allocation
+    try:
+        result = await create_tradesafe_transaction(
+            internal_reference=data.transaction_id,
+            title=f"TrustTrade - {transaction['item_description'][:50]}",
+            description=transaction.get("item_description", "Item/Service"),
+            amount=transaction["item_price"],
+            buyer_name=transaction["buyer_name"],
+            buyer_email=transaction["buyer_email"],
+            seller_name=transaction["seller_name"],
+            seller_email=transaction["seller_email"],
+            buyer_mobile=buyer_mobile,
+         seller_mobile=seller_mobile,
+            fee_allocation=fee_allocation
     )
-    
+    except Exception as e:
+        logger.exception(f"[ESCROW ERROR] transaction_id={data.transaction_id} create_tradesafe_transaction failed: {e}")
+        raise
+
     if not result or "error" in result:
         error_msg = result.get("error", "Failed to create escrow. Please try again.") if result else "Failed to create escrow. Please try again."
         logger.error(f"[ESCROW] failure exact reason: {error_msg}")
@@ -418,7 +422,7 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
     
     print("=== PAY FLOW START ===")
     db = get_database()
-    
+
     user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")

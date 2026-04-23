@@ -1486,24 +1486,25 @@ async def sync_banking_to_token(
     """
 
     variables = {
-        "input": {
-            "id": token_id,
-            "user": {
-                "givenName": resolved_given_name,
-                "familyName": resolved_family_name,
-                "email": resolved_email,
-                "mobile": mobile_normalized
-            },
-            "bankAccount": {
-                "bank": bank_enum,
-                "accountNumber": account_number,
-                "branchCode": branch_code or "",
-                "accountType": account_type_normalized
-            }
+    "input": {
+        "id": token_id,
+        "mobile": mobile_normalized,
+        "user": {
+            "givenName": resolved_given_name,
+            "familyName": resolved_family_name,
+            "email": resolved_email,
+            "mobile": mobile_normalized
+        },
+        "bankAccount": {
+            "bank": bank_enum,
+            "accountNumber": account_number,
+            "branchCode": branch_code or "",
+            "accountType": account_type_normalized
         }
     }
+}
 
-    logger.info("[PAYOUT_SYNC] Calling TradeSafe tokenUpdate...")
+    logger.info(f"[PAYOUT_SYNC] Final payload mobile top-level={mobile_normalized} user.mobile={mobile_normalized}")
 
     result = await execute_graphql(mutation, variables)
 

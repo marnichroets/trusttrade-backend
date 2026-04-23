@@ -1511,7 +1511,7 @@ async def sync_banking_to_token(
             }
         }
     }
-
+    logger.info(f"[PAYOUT_SYNC] FINAL VARIABLES: {variables}")
     result = await execute_graphql(mutation, variables)
 
     logger.info(f"[PAYOUT_SYNC] TradeSafe Response: {result}")

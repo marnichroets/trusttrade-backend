@@ -12,6 +12,8 @@ from typing import Optional, Dict, Any, List
 from pathlib import Path
 from dotenv import load_dotenv
 
+from backend.models import transaction, user
+
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -1447,7 +1449,11 @@ async def sync_banking_to_token(
         error_msg = "Missing required user fields for TradeSafe token update"
         logger.error(f"[PAYOUT_SYNC] FAILED: {error_msg}")
         return {"success": False, "error": error_msg}
-
+    logger.info(f"[PAYOUT_SYNC] resolved_mobile raw={resolved_mobile}")
+    logger.info(f"[PAYOUT_SYNC] user.mobile={_get(user, 'mobile')}")
+    logger.info(f"[PAYOUT_SYNC] user.phone={_get(user, 'phone')}")
+    logger.info(f"[PAYOUT_SYNC] transaction.seller_phone={_get(transaction, 'seller_phone')}")
+    logger.info(f"[PAYOUT_SYNC] mobile_normalized={mobile_normalized}")
     if not mobile_normalized:
         error_msg = "Missing required mobile for TradeSafe token update"
         logger.error(f"[PAYOUT_SYNC] FAILED: {error_msg}")

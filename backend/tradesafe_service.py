@@ -1474,8 +1474,8 @@ async def sync_banking_to_token(
     logger.info(f"[PAYOUT_SYNC] Name: {resolved_given_name} {resolved_family_name}")
 
     mutation = """
-    mutation TokenUpdate($input: TokenUpdateInput!) {
-        tokenUpdate(input: $input) {
+    mutation tokenUpdate($id: ID!, $input: TokenInput!) {
+        tokenUpdate(id: $id, input: $input) {
             id
             user {
                 givenName
@@ -1492,17 +1492,17 @@ async def sync_banking_to_token(
         }
     }
     """
-    mobile_normalized = "+27YOURREALNUMBER"
+    mobile_normalized = "+27XXXXXXXXX"
 
     variables = {
+        "id": token_id,
         "input": {
-            "id": token_id,
             "mobile": mobile_normalized,
             "user": {
-                "givenName": resolved_given_name,
-                "familyName": resolved_family_name,
-                "email": resolved_email,
-                "mobile": mobile_normalized,
+            "givenName": resolved_given_name,
+            "familyName": resolved_family_name,
+            "email": resolved_email,
+            "mobile": mobile_normalized,
         },
         "bankAccount": {
             "bank": bank_enum,

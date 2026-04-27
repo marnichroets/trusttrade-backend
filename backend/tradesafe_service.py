@@ -1565,8 +1565,8 @@ async def _sync_banking_to_token_impl(
     if mobile_normalized:
         user_input["mobile"] = mobile_normalized
 
-    token_input: Dict[str, Any] = {
-        "id": token_id,
+    
+    input_payload: Dict[str, Any] = {
         "bankAccount": {
             "bank": bank_enum,
             "accountNumber": account_number,
@@ -1575,16 +1575,16 @@ async def _sync_banking_to_token_impl(
         },
     }
     if user_input:
-        token_input["user"] = user_input
+        input_payload["user"] = user_input
     else:
         logger.warning(
             f"[PAYOUT_SYNC] No user fields available - sending bankAccount only for token {token_id}"
         )
 
-        variables = {
+    variables = {
         "id": token_id,
-        "input": user_input  # ONLY user fields here
-        }
+        "input": input_payload,
+    }
 
     logger.info("[PAYOUT_SYNC] Calling TradeSafe tokenUpdate...")
 

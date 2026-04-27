@@ -508,3 +508,28 @@ async def google_auth_callback(request: Request, data: GoogleCallbackRequest):
         print(f"[GOOGLE_AUTH] Error: {str(e)}")
         logger.error(f"[GOOGLE_AUTH] Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Authentication failed")
+
+        class AdminPasswordResetRequest(BaseModel):
+    email: str
+    new_password: str
+    reset_secret: str
+
+@router.post("/reset-password-admin")
+async def reset_admin_password(data: AdminPasswordResetRequest):
+    if not settings.ADMIN_RESET_SECRET:
+        raise HTTPException(status_code=403, detail="Admin password reset is not enabled")
+    if not secrets.compare_digest(data.reset_secret, settings.ADMIN_RESET_SECRET):
+        raise HTTPException(status_code=403, detail="Invalid reset secret")
+    email = normalize_email(data.email)
+    if not settings.ADMIN_EMAIL or email != normalize_email(settings.ADMIN_EMAIL):
+        raise HTTPException(status_code=403, detail="Email does not match admin account")
+    if len(data.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    db = get_database()
+    user_doc = await db.users.find_one({"email": email, "is_admin": True})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="Admin user not found")
+    new_hash = hash_password(data.new_password)
+    await db.users.update_one({"email": email}, {"$set": {"password_hash": new_hash}})
+    logger.warning(f"[ADMIN_RESET] Admin password reset via reset_secret for {email}")
+    return {"success": True, "message": "Admin password updated. Please log in with your new password."}

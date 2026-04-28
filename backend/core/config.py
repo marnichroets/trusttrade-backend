@@ -78,6 +78,8 @@ class Settings:
     # Admin
     ADMIN_ALERT_EMAIL: str = os.environ.get('ADMIN_ALERT_EMAIL', '')
     ADMIN_EMAIL: str = os.environ.get('ADMIN_EMAIL', '')  # Primary admin email
+    ADMIN_RESET_SECRET: str = os.environ.get('ADMIN_RESET_SECRET', '')
+    ADMIN_RESET_SECRET: str = os.environ.get('ADMIN_RESET_SECRET', '')
     
     # Platform Constants - Beta Launch Limits
     MINIMUM_TRANSACTION_AMOUNT: float = 100.0  # R100 minimum (beta)

@@ -1570,10 +1570,16 @@ async def _sync_banking_to_token_impl(
         "bankAccount": {
             "bank": bank_enum,
             "accountNumber": account_number,
-            "branchCode": branch_code or "",
+            "branchCode": universal_branch_code,
             "accountType": account_type_normalized,
         },
+        "settings": {
+            "payout": {
+                "interval": "IMMEDIATE"
+            }
+        },
     }
+    
     if user_input:
         input_payload["user"] = user_input
     else:

@@ -1534,7 +1534,7 @@ async def _sync_banking_to_token_impl(
     logger.info(f"[PAYOUT_SYNC] Name: {(resolved_given_name or '').strip()} {(resolved_family_name or '').strip()}".strip())
 
     mutation = """
-    mutation TokenUpdate($id: ID!, $input: TokenUserInput!) {
+    mutation TokenUpdate($id: ID!, $input: TokenInput!) {
         tokenUpdate(id: $id, input: $input) {
             id
             user {

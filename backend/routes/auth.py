@@ -509,10 +509,10 @@ async def google_auth_callback(request: Request, data: GoogleCallbackRequest):
         logger.error(f"[GOOGLE_AUTH] Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Authentication failed")
 
-        class AdminPasswordResetRequest(BaseModel):
-            email: str
-            new_password: str
-            reset_secret: str
+class AdminPasswordResetRequest(BaseModel):
+    email: str
+    new_password: str
+    reset_secret: str
 
 @router.post("/reset-password-admin")
 async def reset_admin_password(data: AdminPasswordResetRequest):

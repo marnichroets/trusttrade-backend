@@ -797,6 +797,22 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
         logger.info(f"[TXN] Transaction {transaction_id} already confirmed by seller")
         return {"message": "Transaction already confirmed", "already_confirmed": True}
     
+    # Require banking details before seller can confirm
+    seller_user = await db.users.find_one({"email": user_email}, {"banking_details": 1, "banking_details_completed": 1, "banking_details_added": 1})
+    has_banking = (
+        seller_user and (
+            seller_user.get("banking_details_completed") or
+            seller_user.get("banking_details_added") or
+            (seller_user.get("banking_details") and seller_user["banking_details"].get("account_number"))
+        )
+    )
+    if not has_banking:
+        logger.warning(f"[TXN] Seller {user_email} tried to confirm without banking details")
+        raise HTTPException(
+            status_code=400,
+            detail="Please add your banking details before confirming. Go to Settings > Banking Details."
+        )
+    
     if confirmation.confirmed:
         logger.info(f"[TXN] seller confirmed - {user_email} confirming for transaction {transaction_id}")
         

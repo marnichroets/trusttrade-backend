@@ -33,9 +33,11 @@ from email_service import (
     send_delivery_started_email, send_immediate_payment_secured_email
 )
 from sms_service import (
-    normalize_phone_number, send_transaction_invite_sms,
+    normalize_phone_number, normalize_phone_for_display, send_transaction_invite_sms,
     send_delivery_sms, send_funds_released_sms
 )
+
+
 from tradesafe_service import (
     create_tradesafe_transaction, get_tradesafe_transaction,
     get_payment_link, start_delivery, accept_delivery,
@@ -380,13 +382,28 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     recipient_type = "email"
     recipient_phone = None
     
-    if recipient_info and (recipient_info.startswith('+27') or (recipient_info.startswith('0') and len(recipient_info) <= 12 and recipient_info.replace('+', '').isdigit())):
-        recipient_type = "phone"
-        recipient_phone = normalize_phone_number(recipient_info)
-        if transaction_data.creator_role == "buyer":
-            seller_email = ""
-        else:
-            buyer_email = ""
+    if recipient_info:
+        digits_only = ''.join(c for c in recipient_info if c.isdigit())
+        looks_like_phone = (
+            '@' not in recipient_info and (
+                recipient_info.replace(' ', '').replace('-', '').startswith('+27') or
+                (digits_only.startswith('27') and len(digits_only) >= 11) or
+                (digits_only.startswith('0') and len(digits_only) >= 10) or
+                len(digits_only) == 9
+            )
+        )
+        if looks_like_phone:
+            recipient_type = "phone"
+            recipient_phone = normalize_phone_for_display(recipient_info)
+            if transaction_data.creator_role == "buyer":
+                seller_email = ""
+            else:
+                buyer_email = ""
+        elif '@' not in recipient_info:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Please enter a valid email address or South African phone number for the {'seller' if transaction_data.creator_role == 'buyer' else 'buyer'}."
+            )
     
     logger.info(f"Transaction created by {user.email}: recipient={recipient_info}, type={recipient_type}")
     

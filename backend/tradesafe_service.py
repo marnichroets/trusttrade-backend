@@ -1570,7 +1570,7 @@ async def _sync_banking_to_token_impl(
         "bankAccount": {
             "bank": bank_enum,
             "accountNumber": account_number,
-            "branchCode": universal_branch_code,
+            "branchCode": branch_code,
             "accountType": account_type_normalized,
         },
         "settings": {

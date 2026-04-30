@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import DashboardLayout from './components/DashboardLayout';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider } from './context/AuthContext';
 import LandingPage from './pages/LandingPage';
@@ -26,6 +27,7 @@ import PhoneVerification from './pages/PhoneVerification';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentCancelled from './pages/PaymentCancelled';
 import BankingSettings from './pages/BankingSettings';
+import { CreateSmartDeal, SmartDealDetail, SmartDealList } from './pages/SmartDeal';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import EscrowPage from './pages/EscrowPage';
@@ -82,7 +84,9 @@ function AppRouter() {
       <Route path="/verify" element={<ProtectedRoute><IdentityVerification /></ProtectedRoute>} />
       <Route path="/verify/phone" element={<ProtectedRoute><PhoneVerification /></ProtectedRoute>} />
       <Route path="/settings/banking" element={<ProtectedRoute><BankingSettings /></ProtectedRoute>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="/smart-deals" element={<ProtectedRoute><DashboardLayout user={null}><SmartDealList /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/smart-deals/new" element={<ProtectedRoute><DashboardLayout user={null}><CreateSmartDeal /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/smart-deals/:dealId" element={<ProtectedRoute><DashboardLayout user={null}><SmartDealDetail /></DashboardLayout></ProtectedRoute>} />
     </Routes>
   );
 }

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings, User, Activity, Shield } from 'lucide-react';
+import { LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings, User, Activity, Shield, Briefcase } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
@@ -25,6 +25,7 @@ function DashboardLayout({ children, user }) {
     { icon: Plus, label: 'New Transaction', path: '/transactions/new', highlight: true },
     { icon: FileText, label: 'My Transactions', path: '/transactions' },
     { icon: AlertCircle, label: 'Disputes', path: '/disputes-dashboard' },
+    { icon: Briefcase, label: 'Smart Deals', path: '/smart-deals' },
     { icon: Activity, label: 'Live Activity', path: '/activity' },
     { icon: User, label: 'My Profile', path: '/profile' },
   ];

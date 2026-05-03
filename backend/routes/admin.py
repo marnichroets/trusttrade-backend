@@ -1731,3 +1731,47 @@ async def resync_banking_to_transaction(request: Request, transaction_id: str):
         "payout_ready": payout_ready,
         "payout_check": payout_check
     }
+
+# ============ FORCE SYNC TOKEN (ONE-OFF RECOVERY TOOL) ============
+
+class ForceSyncTokenRequest(BaseModel):
+    token_id: str
+
+@router.post("/force-sync-token")
+async def force_sync_token(
+    body: ForceSyncTokenRequest,
+    request: Request,
+):
+    db = get_database()
+    admin = await require_admin(request, db)
+    user_doc = await db.users.find_one({"tradesafe_token_id": body.token_id})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail=f"No user found with tradesafe_token_id={body.token_id}")
+    banking = user_doc.get("banking_details") or {}
+    bank_name = banking.get("bank_name")
+    account_number = banking.get("account_number")
+    branch_code = banking.get("branch_code")
+    account_type = banking.get("account_type", "savings")
+    if not bank_name or not account_number:
+        raise HTTPException(status_code=400, detail=f"User {user_doc.get('email')} has no banking details saved")
+    from tradesafe_service import _sync_banking_to_token_impl
+    name_parts = (user_doc.get("name") or "").split()
+    result = await _sync_banking_to_token_impl(
+        token_id=body.token_id,
+        bank_name=bank_name,
+        account_number=account_number,
+        branch_code=branch_code,
+        account_type=account_type,
+        mobile=user_doc.get("phone"),
+        given_name=name_parts[0] if name_parts else None,
+        family_name=" ".join(name_parts[1:]) if len(name_parts) > 1 else None,
+        email=user_doc.get("email"),
+    )
+    logger.info(f"[ADMIN] force-sync-token {body.token_id} by {admin.email}: {result}")
+    return {
+        "token_id": body.token_id,
+        "user_email": user_doc.get("email"),
+        "bank_name": bank_name,
+        "account_number_last4": account_number[-4:] if len(account_number) >= 4 else "****",
+        "result": result,
+    }

@@ -1,32 +1,54 @@
+import { useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings, User, Activity, Shield, Briefcase, ChevronRight } from 'lucide-react';
+import { LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings, User, Activity, Shield, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
-import TrustLogo from './TrustLogo';
 
-function DashboardLayout({ children, user }) {
+export const V = {
+  bg:      '#0A0E14',
+  surface: '#1C2128',
+  border:  '#2D333B',
+  accent:  '#00D1FF',
+  success: '#00FFA3',
+  error:   '#FF3B30',
+  warn:    '#F0B429',
+  text:    '#E6EDF3',
+  sub:     '#8B949E',
+  dim:     '#4A5568',
+  mono:    "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+  sans:    "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
+};
+
+function DashboardLayout({ children, user, loading = false }) {
   const navigate = useNavigate();
   const { logout } = useAuth();
+
+  useEffect(() => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap';
+    document.head.appendChild(link);
+    return () => { if (document.head.contains(link)) document.head.removeChild(link); };
+  }, []);
 
   const handleLogout = async () => {
     try {
       await logout();
-      toast.success('Logged out successfully');
+      toast.success('Signed out');
       navigate('/');
-    } catch (error) {
-      console.error('Logout error:', error);
-      toast.error('Failed to logout');
+    } catch {
+      toast.error('Failed to sign out');
     }
   };
 
   const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-    { icon: Plus, label: 'New Transaction', path: '/transactions/new', highlight: true },
-    { icon: FileText, label: 'My Transactions', path: '/transactions' },
-    { icon: AlertCircle, label: 'Disputes', path: '/disputes-dashboard' },
-    { icon: Briefcase, label: 'Smart Deals', path: '/smart-deals' },
-    { icon: Activity, label: 'Live Activity', path: '/activity' },
-    { icon: User, label: 'My Profile', path: '/profile' },
+    { icon: LayoutDashboard, label: 'Dashboard',       path: '/dashboard' },
+    { icon: Plus,            label: 'New Transaction', path: '/transactions/new', highlight: true },
+    { icon: FileText,        label: 'My Transactions', path: '/transactions' },
+    { icon: AlertCircle,     label: 'Disputes',        path: '/disputes-dashboard' },
+    { icon: Briefcase,       label: 'Smart Deals',     path: '/smart-deals' },
+    { icon: Activity,        label: 'Live Activity',   path: '/activity' },
+    { icon: User,            label: 'My Profile',      path: '/profile' },
   ];
 
   if (user?.is_admin) {
@@ -35,81 +57,189 @@ function DashboardLayout({ children, user }) {
 
   const userInitials = user?.name
     ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
-    : '?';
+    : '??';
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: V.bg, fontFamily: V.sans, color: V.text }}>
 
-      {/* ── Sidebar ─────────────────────────────────────── */}
-      <aside style={{
-        width: 240,
-        flexShrink: 0,
-        background: 'linear-gradient(180deg, #0f1729 0%, #111827 60%, #0d1520 100%)',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        height: '100vh',
-        zIndex: 40,
-        borderRight: '1px solid rgba(255,255,255,0.04)',
-      }} className="hidden lg:flex">
+      {/* ── Global styles ── */}
+      <style>{`
+        *, *::before, *::after { box-sizing: border-box; }
 
+        body {
+          background: ${V.bg};
+          color: ${V.text};
+          font-family: ${V.sans};
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+        }
+
+        @keyframes vaultProgress {
+          0%   { left: -40%; width: 40%; }
+          60%  { left: 60%;  width: 40%; }
+          100% { left: 100%; width: 40%; }
+        }
+        @keyframes vaultPulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.3; }
+        }
+        @keyframes vaultSpin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes vaultFadeIn {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: none; }
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar        { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track  { background: ${V.bg}; }
+        ::-webkit-scrollbar-thumb  { background: ${V.border}; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: ${V.dim}; }
+
+        /* Vault table hover */
+        .vault-tr:hover td { background: rgba(255,255,255,0.025) !important; }
+
+        /* Vault row hover (non-table) */
+        .vault-row:hover { background: rgba(255,255,255,0.03) !important; }
+
+        /* Vault button hover — neon outline */
+        .vault-btn {
+          transition: border-color 0.12s, color 0.12s, background 0.12s !important;
+        }
+        .vault-btn:hover:not(:disabled) {
+          border-color: ${V.accent} !important;
+          color: ${V.accent} !important;
+        }
+        .vault-btn-primary:hover:not(:disabled) {
+          background: rgba(0,209,255,0.12) !important;
+          border-color: ${V.accent} !important;
+          color: ${V.accent} !important;
+        }
+        .vault-btn-danger:hover:not(:disabled) {
+          border-color: ${V.error} !important;
+          color: ${V.error} !important;
+        }
+        .vault-btn-success:hover:not(:disabled) {
+          border-color: ${V.success} !important;
+          color: ${V.success} !important;
+        }
+
+        /* Input focus */
+        .vault-input:focus {
+          outline: none;
+          border-color: ${V.accent} !important;
+          box-shadow: 0 0 0 2px rgba(0,209,255,0.12);
+        }
+      `}</style>
+
+      {/* ── Linear progress bar ── */}
+      {loading && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0,
+          height: 2, zIndex: 9999,
+          background: V.border, overflow: 'hidden',
+        }}>
+          <div style={{
+            position: 'absolute', top: 0, height: '100%', width: '40%',
+            background: `linear-gradient(90deg, transparent, ${V.accent}, transparent)`,
+            animation: 'vaultProgress 1.4s ease-in-out infinite',
+          }} />
+        </div>
+      )}
+
+      {/* ── Sidebar (desktop) ── */}
+      <aside
+        className="hidden lg:flex"
+        style={{
+          width: 240, flexShrink: 0,
+          background: V.bg,
+          borderRight: `1px solid ${V.border}`,
+          display: 'flex', flexDirection: 'column',
+          position: 'fixed', top: 0, left: 0, height: '100vh',
+          zIndex: 40,
+        }}
+      >
         {/* Logo */}
-        <div style={{ padding: '24px 20px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ padding: '18px 16px 14px', borderBottom: `1px solid ${V.border}` }}>
           <NavLink to="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
             <div style={{
-              width: 32, height: 32, borderRadius: 8,
-              background: 'linear-gradient(135deg, #10b981, #059669)',
+              width: 30, height: 30, borderRadius: 4,
+              border: `1px solid rgba(0,209,255,0.4)`,
+              background: 'rgba(0,209,255,0.06)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 12px rgba(16,185,129,0.3)',
               flexShrink: 0,
             }}>
-              <Shield size={16} color="#fff" />
+              <Shield size={14} color={V.accent} />
             </div>
-            <span style={{ color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: '-0.01em' }}>TrustTrade</span>
+            <div style={{ lineHeight: 1 }}>
+              <div style={{
+                color: V.text, fontWeight: 700, fontSize: 14,
+                letterSpacing: '0.06em', textTransform: 'uppercase',
+              }}>
+                TrustTrade
+              </div>
+              <div style={{
+                color: V.dim, fontSize: 9, letterSpacing: '0.14em',
+                fontFamily: V.mono, textTransform: 'uppercase', marginTop: 2,
+              }}>
+                SECURE VAULT
+              </div>
+            </div>
           </NavLink>
         </div>
 
-        {/* Nav Items */}
-        <nav style={{ flex: 1, padding: '12px 10px', overflowY: 'auto' }}>
-          <div style={{ marginBottom: 6, padding: '0 8px' }}>
-            <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-              Menu
+        {/* Nav items */}
+        <nav style={{ flex: 1, padding: '12px 8px 8px', overflowY: 'auto' }}>
+          <div style={{ padding: '0 8px 8px' }}>
+            <span style={{
+              fontSize: 10, fontWeight: 600,
+              color: V.dim, letterSpacing: '0.12em',
+              textTransform: 'uppercase', fontFamily: V.mono,
+            }}>
+              NAV
             </span>
           </div>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {navItems.map((item) => (
               <li key={item.path}>
                 <NavLink
                   to={item.path}
                   data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                   style={({ isActive }) => ({
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '9px 10px', borderRadius: 8,
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    padding: '7px 10px', marginBottom: 1,
                     fontSize: 13, fontWeight: isActive ? 600 : 400,
-                    color: isActive ? '#fff' : 'rgba(255,255,255,0.55)',
-                    background: isActive
-                      ? 'rgba(16,185,129,0.15)'
-                      : item.highlight && !isActive
-                      ? 'rgba(59,130,246,0.1)'
-                      : 'transparent',
-                    borderLeft: isActive ? '2px solid #10b981' : '2px solid transparent',
+                    color: isActive ? V.text : V.sub,
+                    background: isActive ? 'rgba(0,209,255,0.06)' : 'transparent',
+                    borderLeft: `2px solid ${isActive ? V.accent : 'transparent'}`,
+                    borderRadius: '0 3px 3px 0',
                     textDecoration: 'none',
-                    transition: 'all 0.15s ease',
+                    transition: 'color 0.1s, background 0.1s',
                     cursor: 'pointer',
+                    letterSpacing: '-0.01em',
                   })}
                 >
                   {({ isActive }) => (
                     <>
-                      <item.icon size={15} color={isActive ? '#10b981' : item.highlight ? '#60a5fa' : 'rgba(255,255,255,0.45)'} />
+                      <item.icon
+                        size={13}
+                        color={isActive ? V.accent : V.dim}
+                        style={{ flexShrink: 0 }}
+                      />
                       <span style={{ flex: 1 }}>{item.label}</span>
-                      {item.highlight && (
+                      {item.highlight && !isActive && (
                         <span style={{
-                          fontSize: 9, fontWeight: 700, background: '#3b82f6',
-                          color: '#fff', padding: '1px 5px', borderRadius: 4,
-                          letterSpacing: '0.04em', textTransform: 'uppercase',
-                        }}>New</span>
+                          fontSize: 8, fontWeight: 700,
+                          color: V.accent,
+                          border: `1px solid rgba(0,209,255,0.3)`,
+                          background: 'rgba(0,209,255,0.08)',
+                          padding: '1px 5px', borderRadius: 2,
+                          letterSpacing: '0.1em', textTransform: 'uppercase',
+                          fontFamily: V.mono,
+                        }}>
+                          NEW
+                        </span>
                       )}
                     </>
                   )}
@@ -119,101 +249,129 @@ function DashboardLayout({ children, user }) {
           </ul>
         </nav>
 
-        {/* User section at bottom */}
-        <div style={{ padding: '12px 10px 20px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '10px', borderRadius: 10,
-            background: 'rgba(255,255,255,0.04)',
-            marginBottom: 8,
-            cursor: 'pointer',
-          }} onClick={() => navigate('/profile')}>
+        {/* User card + logout */}
+        <div style={{ padding: '10px 8px 16px', borderTop: `1px solid ${V.border}` }}>
+          <div
+            onClick={() => navigate('/profile')}
+            className="vault-btn"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              padding: '8px 10px', marginBottom: 8,
+              border: `1px solid ${V.border}`, borderRadius: 3,
+              cursor: 'pointer', background: 'transparent',
+            }}
+          >
             {user?.picture ? (
-              <img src={user.picture} alt={user?.name} style={{ width: 32, height: 32, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.15)', flexShrink: 0 }} />
+              <img
+                src={user.picture}
+                alt={user?.name}
+                style={{ width: 28, height: 28, borderRadius: 2, border: `1px solid ${V.border}`, flexShrink: 0, objectFit: 'cover' }}
+              />
             ) : (
               <div style={{
-                width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                width: 28, height: 28, borderRadius: 2, flexShrink: 0,
+                background: 'rgba(0,209,255,0.08)',
+                border: `1px solid rgba(0,209,255,0.2)`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, fontWeight: 700, color: '#fff',
-              }}>{userInitials}</div>
+                fontSize: 10, fontWeight: 700, color: V.accent,
+                fontFamily: V.mono, letterSpacing: '0.02em',
+              }}>
+                {userInitials}
+              </div>
             )}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p data-testid="user-name" style={{ fontSize: 12, fontWeight: 600, color: '#fff', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <p
+                data-testid="user-name"
+                style={{
+                  fontSize: 12, fontWeight: 600, color: V.text,
+                  margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
+              >
                 {user?.name || 'User'}
               </p>
-              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <p style={{
+                fontSize: 10, color: V.sub, margin: 0,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                fontFamily: V.mono,
+              }}>
                 {user?.email}
               </p>
             </div>
-            <ChevronRight size={14} color="rgba(255,255,255,0.25)" />
           </div>
+
           <button
             data-testid="logout-btn"
             onClick={handleLogout}
+            className="vault-btn vault-btn-danger"
             style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 10px', borderRadius: 8, border: 'none',
-              background: 'rgba(239,68,68,0.08)', color: 'rgba(239,68,68,0.7)',
+              width: '100%', display: 'flex', alignItems: 'center', gap: 7,
+              padding: '7px 10px', borderRadius: 3,
+              border: `1px solid ${V.border}`,
+              background: 'transparent', color: V.sub,
               fontSize: 12, fontWeight: 500, cursor: 'pointer',
-              transition: 'all 0.15s ease',
+              fontFamily: V.sans,
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.15)'; e.currentTarget.style.color = '#ef4444'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.08)'; e.currentTarget.style.color = 'rgba(239,68,68,0.7)'; }}
           >
-            <LogOut size={13} />
+            <LogOut size={12} />
             Sign out
           </button>
         </div>
       </aside>
 
-      {/* ── Main ────────────────────────────────────────── */}
-      <div style={{ flex: 1, marginLeft: 0, display: 'flex', flexDirection: 'column' }} className="lg:ml-60">
-
-        {/* Top bar */}
-        <header style={{
-          height: 56, background: '#fff', borderBottom: '1px solid #f1f5f9',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 24px', position: 'sticky', top: 0, zIndex: 30,
-          boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-        }}>
-          {/* Mobile logo */}
-          <div className="flex lg:hidden items-center gap-2">
-            <div style={{ width: 28, height: 28, borderRadius: 7, background: 'linear-gradient(135deg,#10b981,#059669)', display:'flex',alignItems:'center',justifyContent:'center' }}>
-              <Shield size={14} color="#fff" />
-            </div>
-            <span style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>TrustTrade</span>
+      {/* ── Main content ── */}
+      <div
+        style={{ flex: 1, marginLeft: 0, display: 'flex', flexDirection: 'column', minWidth: 0 }}
+        className="lg:ml-60"
+      >
+        {/* Mobile header */}
+        <header
+          className="flex lg:hidden"
+          style={{
+            height: 48, background: V.bg,
+            borderBottom: `1px solid ${V.border}`,
+            alignItems: 'center', justifyContent: 'space-between',
+            padding: '0 16px',
+            position: 'sticky', top: 0, zIndex: 30,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Shield size={14} color={V.accent} />
+            <span style={{ fontWeight: 700, fontSize: 13, color: V.text, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              TrustTrade
+            </span>
           </div>
-          <div className="hidden lg:block" />
-
-          {/* Right side */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <NavLink to="/profile" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
-              {user?.picture ? (
-                <img src={user.picture} alt={user?.name} style={{ width: 30, height: 30, borderRadius: '50%', border: '1.5px solid #e2e8f0' }} />
-              ) : (
-                <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', display:'flex',alignItems:'center',justifyContent:'center', fontSize:11, fontWeight:700, color:'#fff' }}>
-                  {userInitials}
-                </div>
-              )}
-              <span className="hidden sm:block" style={{ fontSize: 13, fontWeight: 500, color: '#0f172a' }}>{user?.name}</span>
-            </NavLink>
+          <div>
+            {user?.picture ? (
+              <img src={user.picture} alt={user?.name} style={{ width: 26, height: 26, borderRadius: 2, border: `1px solid ${V.border}` }} />
+            ) : (
+              <div style={{
+                width: 26, height: 26, borderRadius: 2,
+                background: 'rgba(0,209,255,0.08)', border: `1px solid rgba(0,209,255,0.2)`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 9, fontWeight: 700, color: V.accent, fontFamily: V.mono,
+              }}>
+                {userInitials}
+              </div>
+            )}
           </div>
         </header>
 
-        {/* Content */}
-        <main style={{ flex: 1, padding: '24px', paddingBottom: 80 }} className="lg:pb-6">
+        {/* Page content */}
+        <main style={{ flex: 1, padding: '24px', paddingBottom: 80, background: V.bg }} className="lg:pb-6">
           {children}
         </main>
       </div>
 
-      {/* ── Mobile bottom nav ───────────────────────────── */}
-      <nav className="lg:hidden" style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
-        background: '#0f1729', borderTop: '1px solid rgba(255,255,255,0.08)',
-        display: 'flex', justifyContent: 'space-around', alignItems: 'center',
-        height: 60, padding: '0 8px',
-      }}>
+      {/* ── Mobile bottom nav ── */}
+      <nav
+        className="lg:hidden"
+        style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
+          background: V.surface, borderTop: `1px solid ${V.border}`,
+          display: 'flex', justifyContent: 'space-around', alignItems: 'center',
+          height: 56, padding: '0 8px',
+        }}
+      >
         {navItems.slice(0, 4).map((item) => (
           <NavLink
             key={item.path}
@@ -221,13 +379,13 @@ function DashboardLayout({ children, user }) {
             data-testid={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
             style={({ isActive }) => ({
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-              padding: '6px 12px', borderRadius: 8, textDecoration: 'none',
-              color: isActive ? '#10b981' : 'rgba(255,255,255,0.4)',
-              transition: 'color 0.15s',
+              padding: '6px 10px', textDecoration: 'none',
+              color: isActive ? V.accent : V.sub,
+              transition: 'color 0.1s',
             })}
           >
-            <item.icon size={18} />
-            <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <item.icon size={15} />
+            <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: V.mono }}>
               {item.label.split(' ')[0]}
             </span>
           </NavLink>

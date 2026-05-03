@@ -151,23 +151,7 @@ function TransactionDetail() {
       setNeedsPhoneVerification(false);
       setPhoneVerificationContext(null);
     } catch (error) {
-      console.error('Failed to confirm:', error);
-      const msg = parseErrorMessage(error) || '';
-      if (msg.startsWith('MISSING_PROFILE:')) {
-        setProfileIncompleteError(msg.replace('MISSING_PROFILE:', '').trim());
-      } else {
-        toast.error(msg || 'Failed to confirm transaction');
-      }
-    } finally {
-      setSellerConfirming(false);
-    }
-      const msg = parseErrorMessage(error) || '';
-      if (msg.startsWith('MISSING_PROFILE:')) {
-        setProfileIncompleteError(msg.replace('MISSING_PROFILE:', '').trim());
-      } else {
-        toast.error(msg || 'Failed to confirm transaction');
-      }
-    } finally {
+      console.error('Failed to fetch transaction:', error);
       
       const errorDetail = error.response?.data?.detail;
       const errorStatus = error.response?.status;

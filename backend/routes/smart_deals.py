@@ -58,9 +58,10 @@ def assert_participant(deal: dict, user_id: str, role: Optional[str] = None):
 @router.post("/", status_code=201)
 async def create_deal(
     body: CreateDealRequest,
-    db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_user_from_token),
+    request: Request,
 ):
+    db = get_database()
+    current_user = await get_user_from_token(request, db)
     freelancer = await db.users.find_one({"email": body.freelancer_email})
     if not freelancer:
         raise HTTPException(status_code=404, detail="No TrustTrade account found for that email. Ask your freelancer to sign up first.")
@@ -103,9 +104,10 @@ async def create_deal(
 @router.post("/{deal_id}/fund")
 async def fund_deal(
     deal_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_user_from_token),
+    request: Request,
 ):
+    db = get_database()
+    current_user = await get_user_from_token(request, db)
     deal = await get_deal_or_404(deal_id, db)
     assert_participant(deal, str(current_user["_id"]), role="client")
     if deal["status"] != "PENDING":
@@ -161,9 +163,10 @@ async def fund_deal(
 @router.post("/{deal_id}/approve")
 async def approve_deal(
     deal_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_user_from_token),
+    request: Request,
 ):
+    db = get_database()
+    current_user = await get_user_from_token(request, db)
     deal = await get_deal_or_404(deal_id, db)
     assert_participant(deal, str(current_user["_id"]), role="client")
     if deal["status"] != "DELIVERED":
@@ -207,9 +210,10 @@ async def approve_deal(
 async def dispute_deal(
     deal_id: str,
     body: DisputeRequest,
-    db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_user_from_token),
+    request: Request,
 ):
+    db = get_database()
+    current_user = await get_user_from_token(request, db)
     deal = await get_deal_or_404(deal_id, db)
     assert_participant(deal, str(current_user["_id"]), role="client")
     if deal["status"] not in ("DELIVERED",):
@@ -235,9 +239,10 @@ async def dispute_deal(
 
 @router.get("/")
 async def list_deals(
-    db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_user_from_token),
+    request: Request,
 ):
+    db = get_database()
+    current_user = await get_user_from_token(request, db)
     user_id = str(current_user["_id"])
     cursor = db.transactions.find(
         {"deal_type": "DIGITAL_WORK", "$or": [{"client_id": user_id}, {"freelancer_id": user_id}]},
@@ -253,9 +258,10 @@ async def list_deals(
 @router.get("/{deal_id}")
 async def get_deal(
     deal_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_user_from_token),
+    request: Request,
 ):
+    db = get_database()
+    current_user = await get_user_from_token(request, db)
     deal = await get_deal_or_404(deal_id, db)
     assert_participant(deal, str(current_user["_id"]))
     deal["_id"] = str(deal["_id"])

@@ -59,7 +59,7 @@ def assert_participant(deal: dict, user_id: str, role: Optional[str] = None):
 async def create_deal(
     body: CreateDealRequest,
     db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_user_from_token),
 ):
     freelancer = await db.users.find_one({"email": body.freelancer_email})
     if not freelancer:
@@ -104,7 +104,7 @@ async def create_deal(
 async def fund_deal(
     deal_id: str,
     db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_user_from_token),
 ):
     deal = await get_deal_or_404(deal_id, db)
     assert_participant(deal, str(current_user["_id"]), role="client")
@@ -162,7 +162,7 @@ async def fund_deal(
 async def approve_deal(
     deal_id: str,
     db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_user_from_token),
 ):
     deal = await get_deal_or_404(deal_id, db)
     assert_participant(deal, str(current_user["_id"]), role="client")
@@ -208,7 +208,7 @@ async def dispute_deal(
     deal_id: str,
     body: DisputeRequest,
     db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_user_from_token),
 ):
     deal = await get_deal_or_404(deal_id, db)
     assert_participant(deal, str(current_user["_id"]), role="client")
@@ -236,7 +236,7 @@ async def dispute_deal(
 @router.get("/")
 async def list_deals(
     db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_user_from_token),
 ):
     user_id = str(current_user["_id"])
     cursor = db.transactions.find(
@@ -254,7 +254,7 @@ async def list_deals(
 async def get_deal(
     deal_id: str,
     db: AsyncIOMotorDatabase = Depends(get_database),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_user_from_token),
 ):
     deal = await get_deal_or_404(deal_id, db)
     assert_participant(deal, str(current_user["_id"]))

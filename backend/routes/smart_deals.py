@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from core.database import get_database
-from core.security import get_current_user
+from core.security import get_user_from_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

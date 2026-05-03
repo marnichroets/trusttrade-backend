@@ -17,6 +17,7 @@ from routes.users import router as users_router
 from routes.admin import router as admin_router
 from routes.monitoring import router as monitoring_router
 from routes.webhooks import router as webhooks_router
+from routes.smart_deals import router as smart_deals_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -71,6 +72,7 @@ app.include_router(disputes_router)
 app.include_router(admin_router)
 app.include_router(monitoring_router)
 app.include_router(webhooks_router)
+app.include_router(smart_deals_router, prefix="/api/smart-deals", tags=["smart-deals"])
 
 try:
     Path(settings.UPLOAD_BASE_PATH).mkdir(parents=True, exist_ok=True)

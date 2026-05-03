@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import Timeline from '../components/Timeline';
 import { TransactionTimeline, AutoReleaseCountdown } from '../components/TransactionTimeline';
@@ -35,6 +35,7 @@ function TransactionDetail() {
   const API_BASE = process.env.REACT_APP_API_URL || '';
   const BASE_URL = API_BASE.replace('/api', '');
   const [user, setUser] = useState(null);
+  const [profileIncompleteError, setProfileIncompleteError] = useState(null);
   const [transaction, setTransaction] = useState(null);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
@@ -150,7 +151,23 @@ function TransactionDetail() {
       setNeedsPhoneVerification(false);
       setPhoneVerificationContext(null);
     } catch (error) {
-      console.error('Failed to fetch transaction:', error);
+      console.error('Failed to confirm:', error);
+      const msg = parseErrorMessage(error) || '';
+      if (msg.startsWith('MISSING_PROFILE:')) {
+        setProfileIncompleteError(msg.replace('MISSING_PROFILE:', '').trim());
+      } else {
+        toast.error(msg || 'Failed to confirm transaction');
+      }
+    } finally {
+      setSellerConfirming(false);
+    }
+      const msg = parseErrorMessage(error) || '';
+      if (msg.startsWith('MISSING_PROFILE:')) {
+        setProfileIncompleteError(msg.replace('MISSING_PROFILE:', '').trim());
+      } else {
+        toast.error(msg || 'Failed to confirm transaction');
+      }
+    } finally {
       
       const errorDetail = error.response?.data?.detail;
       const errorStatus = error.response?.status;
@@ -1490,6 +1507,26 @@ function TransactionDetail() {
                     <p className="text-sm text-slate-600 mb-2">
                       1.5% TrustTrade fee (min R5). You'll receive R {(transaction.seller_receives ?? (transaction.item_price - transaction.trusttrade_fee))?.toFixed(2)}
                     </p>
+                    {profileIncompleteError && (
+                      <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                        <p className="font-medium mb-1">Complete your profile before confirming</p>
+                        <p className="mb-2">You need to add your <strong>{profileIncompleteError}</strong> before you can confirm transactions.</p>
+                        <div className="flex gap-3">
+                          <Link to="/settings/banking" className="text-red-700 underline font-medium">Add banking details</Link>
+                          <Link to="/verify/phone" className="text-red-700 underline font-medium">Add phone number</Link>
+                        </div>
+                      </div>
+                    )}
+                    {profileIncompleteError && (
+                      <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                        <p className="font-medium mb-1">Complete your profile before confirming</p>
+                        <p className="mb-2">You need to add your <strong>{profileIncompleteError}</strong> before you can confirm transactions.</p>
+                        <div className="flex gap-3">
+                          <Link to="/settings/banking" className="text-red-700 underline font-medium">Add banking details</Link>
+                          <Link to="/verify/phone" className="text-red-700 underline font-medium">Add phone number</Link>
+                        </div>
+                      </div>
+                    )}
                     <Button 
                       onClick={handleSellerConfirm} 
                       disabled={sellerConfirming} 

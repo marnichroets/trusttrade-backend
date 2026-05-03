@@ -17,12 +17,13 @@ async function apiFetch(path, options = {}) {
 }
 
 const STATUS = {
-  PENDING:   { label: "Awaiting payment",    color: "#854F0B", bg: "#FAEEDA" },
-  FUNDED:    { label: "Funded — in progress", color: "#085041", bg: "#E1F5EE" },
-  DELIVERED: { label: "Ready for review",    color: "#3C3489", bg: "#EEEDFE" },
-  APPROVED:  { label: "Approved",            color: "#27500A", bg: "#EAF3DE" },
-  COMPLETE:  { label: "Complete",            color: "#27500A", bg: "#EAF3DE" },
-  DISPUTED:  { label: "In dispute",          color: "#712B13", bg: "#FAECE7" },
+  PENDING:   { label: "Awaiting freelancer",   color: "#854F0B", bg: "#FAEEDA" },
+  ACCEPTED:  { label: "Awaiting payment",       color: "#3C3489", bg: "#EEEDFE" },
+  FUNDED:    { label: "Funded — in progress",   color: "#085041", bg: "#E1F5EE" },
+  DELIVERED: { label: "Ready for review",       color: "#3C3489", bg: "#EEEDFE" },
+  APPROVED:  { label: "Approved",               color: "#27500A", bg: "#EAF3DE" },
+  COMPLETE:  { label: "Complete",               color: "#27500A", bg: "#EAF3DE" },
+  DISPUTED:  { label: "In dispute",             color: "#712B13", bg: "#FAECE7" },
 };
 
 function StatusBadge({ status }) {
@@ -82,8 +83,8 @@ function Alert({ type = "info", children }) {
 }
 
 function ProgressTracker({ status }) {
-  const steps = ["PENDING", "FUNDED", "DELIVERED", "COMPLETE"];
-  const labels = { PENDING: "Created", FUNDED: "Funded", DELIVERED: "Delivered", COMPLETE: "Complete" };
+  const steps = ["PENDING", "ACCEPTED", "FUNDED", "DELIVERED", "COMPLETE"];
+  const labels = { PENDING: "Created", ACCEPTED: "Accepted", FUNDED: "Funded", DELIVERED: "Delivered", COMPLETE: "Complete" };
   const current = status === "DISPUTED" ? "DELIVERED" : status;
   const currentIdx = steps.indexOf(current);
   return (
@@ -158,7 +159,7 @@ export function CreateSmartDeal() {
             ))}
           </div>
         </div>
-        <Alert type="info">Once created, your freelancer is notified. You fund escrow, they do the work, and you approve to release payment.</Alert>
+        <Alert type="info">Once created, your freelancer accepts the deal, you fund escrow, they do the work, and you approve to release payment.</Alert>
         <Button onClick={handleSubmit} disabled={loading} style={{ width: "100%", justifyContent: "center" }}>{loading ? "Creating..." : "Create Smart Deal"}</Button>
       </Card>
     </div>
@@ -171,6 +172,9 @@ export function SmartDealDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [accepting, setAccepting] = useState(false);
+  const [funding, setFunding] = useState(false);
+  const [delivering, setDelivering] = useState(false);
   const [approving, setApproving] = useState(false);
   const [disputing, setDisputing] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
@@ -186,7 +190,34 @@ export function SmartDealDetail() {
 
   useEffect(() => { load(); }, [load]);
 
-  const isClient = currentUser && deal && deal.client_id === currentUser.user_id;
+  const isClient     = currentUser && deal && deal.client_id     === currentUser.user_id;
+  const isFreelancer = currentUser && deal && deal.freelancer_id  === currentUser.user_id;
+
+  async function handleAccept() {
+    setAccepting(true); setActionError(null);
+    try {
+      await apiFetch(`/api/smart-deals/${dealId}/accept`, { method: "POST" });
+      await load();
+    } catch (e) { setActionError(e.message); } finally { setAccepting(false); }
+  }
+
+  async function handleFund() {
+    if (!window.confirm("Fund this deal? This will create an escrow for the agreed amount.")) return;
+    setFunding(true); setActionError(null);
+    try {
+      await apiFetch(`/api/smart-deals/${dealId}/fund`, { method: "POST" });
+      await load();
+    } catch (e) { setActionError(e.message); } finally { setFunding(false); }
+  }
+
+  async function handleDeliver() {
+    if (!window.confirm("Mark work as delivered? The client will have 48 hours to review.")) return;
+    setDelivering(true); setActionError(null);
+    try {
+      await apiFetch(`/api/smart-deals/${dealId}/deliver`, { method: "POST" });
+      await load();
+    } catch (e) { setActionError(e.message); } finally { setDelivering(false); }
+  }
 
   async function handleApprove() {
     if (!window.confirm("Approve this deliverable? This will release payment to the freelancer.")) return;
@@ -228,6 +259,35 @@ export function SmartDealDetail() {
         {deal.description && <div style={{ marginTop: 12, paddingTop: 12, borderTop: "0.5px solid var(--color-border-tertiary)", fontSize: 14, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>{deal.description}</div>}
       </Card>
       <ProgressTracker status={deal.status} />
+
+      {/* Freelancer: accept the deal */}
+      {isFreelancer && deal.status === "PENDING" && (
+        <Card style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 500, marginTop: 0, marginBottom: 8 }}>Accept this deal</h3>
+          <p style={{ fontSize: 14, color: "var(--color-text-secondary)", marginTop: 0, marginBottom: 16 }}>Review the scope and amount. Once you accept, the client can fund escrow and you can start work.</p>
+          <Button onClick={handleAccept} disabled={accepting} style={{ width: "100%", justifyContent: "center" }}>{accepting ? "Accepting..." : "Accept deal"}</Button>
+        </Card>
+      )}
+
+      {/* Client: fund escrow after freelancer accepts */}
+      {isClient && deal.status === "ACCEPTED" && (
+        <Card style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 500, marginTop: 0, marginBottom: 8 }}>Fund escrow</h3>
+          <p style={{ fontSize: 14, color: "var(--color-text-secondary)", marginTop: 0, marginBottom: 16 }}>Your freelancer accepted the deal. Fund the escrow to let them start work. Funds are only released when you approve the delivery.</p>
+          <Button onClick={handleFund} disabled={funding} style={{ width: "100%", justifyContent: "center" }}>{funding ? "Funding..." : `Fund R ${Number(deal.amount).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}`}</Button>
+        </Card>
+      )}
+
+      {/* Freelancer: mark as delivered */}
+      {isFreelancer && deal.status === "FUNDED" && (
+        <Card style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 500, marginTop: 0, marginBottom: 8 }}>Mark as delivered</h3>
+          <p style={{ fontSize: 14, color: "var(--color-text-secondary)", marginTop: 0, marginBottom: 16 }}>When your work is complete, mark it as delivered. The client has 48 hours to review and approve.</p>
+          <Button onClick={handleDeliver} disabled={delivering} style={{ width: "100%", justifyContent: "center" }}>{delivering ? "Submitting..." : "Mark as delivered"}</Button>
+        </Card>
+      )}
+
+      {/* Client: review deliverable */}
       {isClient && deal.status === "DELIVERED" && (
         <Card style={{ marginBottom: 16 }}>
           <h3 style={{ fontSize: 16, fontWeight: 500, marginTop: 0, marginBottom: 8 }}>Review the deliverable</h3>
@@ -247,8 +307,15 @@ export function SmartDealDetail() {
           )}
         </Card>
       )}
+
       {deal.dispute && <Alert type="error">Dispute raised {new Date(deal.dispute.raised_at).toLocaleDateString("en-ZA")}: {deal.dispute.reason}</Alert>}
-      {deal.status === "COMPLETE" && <Alert type="success">Deal complete — payment has been released to the freelancer.</Alert>}
+      {(deal.status === "COMPLETE" || deal.status === "APPROVED") && <Alert type="success">Deal complete — payment has been released to the freelancer.</Alert>}
+
+      {/* Status context for waiting states */}
+      {deal.status === "PENDING" && isClient && <Alert type="info">Waiting for the freelancer to accept the deal.</Alert>}
+      {deal.status === "FUNDED" && isClient && <Alert type="info">Waiting for the freelancer to deliver the work.</Alert>}
+      {deal.status === "ACCEPTED" && isFreelancer && <Alert type="info">Waiting for the client to fund escrow.</Alert>}
+      {deal.status === "DELIVERED" && isFreelancer && <Alert type="info">Waiting for the client to review and approve your work.</Alert>}
     </div>
   );
 }

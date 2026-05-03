@@ -3,7 +3,6 @@ routes/smart_deals.py
 Smart Deals — Digital Work (escrow without file vault)
 """
 
-import os
 import uuid
 import logging
 from datetime import datetime, timezone
@@ -62,10 +61,13 @@ async def create_deal(
 ):
     db = get_database()
     current_user = await get_user_from_token(request, db)
-    freelancer = await db.users.find_one({"email": body.freelancer_email})
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    freelancer = await db.users.find_one({"email": body.freelancer_email.strip().lower()})
     if not freelancer:
         raise HTTPException(status_code=404, detail="No TrustTrade account found for that email. Ask your freelancer to sign up first.")
-    if str(freelancer["_id"]) == str(current_user["_id"]):
+    if str(freelancer["user_id"]) == str(current_user.user_id):
         raise HTTPException(status_code=400, detail="You cannot create a deal with yourself")
 
     deal_id = generate_deal_id()
@@ -75,9 +77,9 @@ async def create_deal(
         "deal_id": deal_id,
         "deal_type": "DIGITAL_WORK",
         "transaction_id": deal_id,
-        "client_id": str(current_user["_id"]),
-        "client_email": current_user["email"],
-        "freelancer_id": str(freelancer["_id"]),
+        "client_id": current_user.user_id,
+        "client_email": current_user.email,
+        "freelancer_id": str(freelancer["user_id"]),
         "freelancer_email": freelancer["email"],
         "tradesafe_token_id": None,
         "title": body.title,
@@ -98,20 +100,48 @@ async def create_deal(
     }
 
     await db.transactions.insert_one(doc)
-    logger.info(f"[SMART_DEAL] Created {deal_id} by {current_user['email']} for {freelancer['email']}")
+    logger.info(f"[SMART_DEAL] Created {deal_id} by {current_user.email} for {freelancer['email']}")
     return {"deal_id": deal_id, "status": "PENDING"}
+
+@router.post("/{deal_id}/accept")
+async def accept_deal(
+    deal_id: str,
+    request: Request,
+):
+    """Freelancer accepts the deal — moves PENDING → ACCEPTED."""
+    db = get_database()
+    current_user = await get_user_from_token(request, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    deal = await get_deal_or_404(deal_id, db)
+    assert_participant(deal, str(current_user.user_id), role="freelancer")
+    if deal["status"] != "PENDING":
+        raise HTTPException(status_code=400, detail=f"Cannot accept a deal in status: {deal['status']}")
+
+    now = utcnow()
+    await db.transactions.update_one(
+        {"deal_id": deal_id},
+        {"$set": {"status": "ACCEPTED", "accepted_at": now, "updated_at": now}}
+    )
+    logger.info(f"[SMART_DEAL] {deal_id} accepted by {current_user.email}")
+    return {"deal_id": deal_id, "status": "ACCEPTED"}
 
 @router.post("/{deal_id}/fund")
 async def fund_deal(
     deal_id: str,
     request: Request,
 ):
+    """Client funds escrow — moves ACCEPTED → FUNDED."""
     db = get_database()
     current_user = await get_user_from_token(request, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     deal = await get_deal_or_404(deal_id, db)
-    assert_participant(deal, str(current_user["_id"]), role="client")
-    if deal["status"] != "PENDING":
-        raise HTTPException(status_code=400, detail=f"Cannot fund a deal in status: {deal['status']}")
+    assert_participant(deal, str(current_user.user_id), role="client")
+    if deal["status"] != "ACCEPTED":
+        raise HTTPException(status_code=400, detail=f"Cannot fund a deal in status: {deal['status']}. Freelancer must accept first.")
 
     from tradesafe_service import create_tradesafe_transaction
 
@@ -146,6 +176,7 @@ async def fund_deal(
     allocation_id = result.get("allocations", [{}])[0].get("id") if result.get("allocations") else None
     seller_token_id = result.get("seller_token_id")
 
+    now = utcnow()
     await db.transactions.update_one(
         {"deal_id": deal_id},
         {"$set": {
@@ -153,22 +184,59 @@ async def fund_deal(
             "tradesafe_token_id": tradesafe_id,
             "tradesafe_allocation_id": allocation_id,
             "tradesafe_seller_token_id": seller_token_id,
-            "funded_at": utcnow(),
-            "updated_at": utcnow(),
+            "funded_at": now,
+            "updated_at": now,
         }}
     )
-    logger.info(f"[SMART_DEAL] {deal_id} funded by {current_user['email']}")
+    logger.info(f"[SMART_DEAL] {deal_id} funded by {current_user.email}")
     return {"deal_id": deal_id, "status": "FUNDED"}
+
+@router.post("/{deal_id}/deliver")
+async def deliver_deal(
+    deal_id: str,
+    request: Request,
+):
+    """Freelancer marks work as delivered — moves FUNDED → DELIVERED."""
+    db = get_database()
+    current_user = await get_user_from_token(request, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    deal = await get_deal_or_404(deal_id, db)
+    assert_participant(deal, str(current_user.user_id), role="freelancer")
+    if deal["status"] != "FUNDED":
+        raise HTTPException(status_code=400, detail=f"Cannot mark as delivered — deal is in status: {deal['status']}")
+
+    now = utcnow()
+    from datetime import timedelta
+    expires_at = now + timedelta(hours=REVIEW_WINDOW_HOURS)
+
+    await db.transactions.update_one(
+        {"deal_id": deal_id},
+        {"$set": {
+            "status": "DELIVERED",
+            "delivered_at": now,
+            "updated_at": now,
+            "review_window.opened_at": now,
+            "review_window.expires_at": expires_at,
+        }}
+    )
+    logger.info(f"[SMART_DEAL] {deal_id} delivered by {current_user.email}")
+    return {"deal_id": deal_id, "status": "DELIVERED"}
 
 @router.post("/{deal_id}/approve")
 async def approve_deal(
     deal_id: str,
     request: Request,
 ):
+    """Client approves delivery — moves DELIVERED → COMPLETE and releases payment."""
     db = get_database()
     current_user = await get_user_from_token(request, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     deal = await get_deal_or_404(deal_id, db)
-    assert_participant(deal, str(current_user["_id"]), role="client")
+    assert_participant(deal, str(current_user.user_id), role="client")
     if deal["status"] != "DELIVERED":
         raise HTTPException(status_code=400, detail=f"Nothing to approve — deal is in status: {deal['status']}")
 
@@ -203,7 +271,7 @@ async def approve_deal(
             {"$set": {"payout_failed": True, "payout_error": str(e), "updated_at": now}}
         )
 
-    logger.info(f"[SMART_DEAL] {deal_id} approved by {current_user['email']}")
+    logger.info(f"[SMART_DEAL] {deal_id} approved by {current_user.email}")
     return {"deal_id": deal_id, "status": "COMPLETE"}
 
 @router.post("/{deal_id}/dispute")
@@ -212,10 +280,14 @@ async def dispute_deal(
     body: DisputeRequest,
     request: Request,
 ):
+    """Client raises a dispute — moves DELIVERED → DISPUTED."""
     db = get_database()
     current_user = await get_user_from_token(request, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     deal = await get_deal_or_404(deal_id, db)
-    assert_participant(deal, str(current_user["_id"]), role="client")
+    assert_participant(deal, str(current_user.user_id), role="client")
     if deal["status"] not in ("DELIVERED",):
         raise HTTPException(status_code=400, detail="You can only dispute after the freelancer has delivered")
 
@@ -225,8 +297,8 @@ async def dispute_deal(
         {"$set": {
             "status": "DISPUTED",
             "dispute": {
-                "raised_by": str(current_user["_id"]),
-                "raised_by_email": current_user["email"],
+                "raised_by": str(current_user.user_id),
+                "raised_by_email": current_user.email,
                 "reason": body.reason,
                 "raised_at": now,
                 "resolved_at": None, "resolution": None,
@@ -234,7 +306,7 @@ async def dispute_deal(
             "updated_at": now,
         }}
     )
-    logger.info(f"[SMART_DEAL] {deal_id} disputed by {current_user['email']}")
+    logger.info(f"[SMART_DEAL] {deal_id} disputed by {current_user.email}")
     return {"deal_id": deal_id, "status": "DISPUTED"}
 
 @router.get("/")
@@ -243,7 +315,10 @@ async def list_deals(
 ):
     db = get_database()
     current_user = await get_user_from_token(request, db)
-    user_id = str(current_user["_id"])
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user_id = str(current_user.user_id)
     cursor = db.transactions.find(
         {"deal_type": "DIGITAL_WORK", "$or": [{"client_id": user_id}, {"freelancer_id": user_id}]},
         {"deal_id": 1, "title": 1, "amount": 1, "currency": 1, "status": 1,
@@ -262,8 +337,11 @@ async def get_deal(
 ):
     db = get_database()
     current_user = await get_user_from_token(request, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     deal = await get_deal_or_404(deal_id, db)
-    assert_participant(deal, str(current_user["_id"]))
+    assert_participant(deal, str(current_user.user_id))
     deal["_id"] = str(deal["_id"])
     return deal
 

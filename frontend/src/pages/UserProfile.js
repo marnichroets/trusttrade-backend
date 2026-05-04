@@ -1,14 +1,86 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import DashboardLayout from '../components/DashboardLayout';
+import DashboardLayout, { V } from '../components/DashboardLayout';
 import ReportUserModal from '../components/ReportUserModal';
-import { Card } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import api from '../utils/api';
 import { toast } from 'sonner';
 import { ArrowLeft, Star, Shield, ShieldCheck, Award, CheckCircle, AlertTriangle, TrendingUp, Package, User as UserIcon, Flag, HelpCircle } from 'lucide-react';
+
+function SectionHead({ label }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+      <span style={{
+        fontSize: 10, fontWeight: 700, color: V.sub,
+        textTransform: 'uppercase', letterSpacing: '0.12em',
+        fontFamily: V.mono, whiteSpace: 'nowrap',
+      }}>
+        {label}
+      </span>
+      <div style={{ flex: 1, height: 1, background: V.border }} />
+    </div>
+  );
+}
+
+const TRUST_COLOR = (score) => {
+  if (score >= 80) return V.success;
+  if (score >= 60) return V.accent;
+  if (score >= 40) return V.warn;
+  return V.error;
+};
+
+const BADGE_CONFIG = {
+  Verified: { color: V.accent,   icon: ShieldCheck },
+  Gold:     { color: '#F0B429',  icon: Award },
+  Silver:   { color: '#A0AEC0',  icon: Award },
+};
+
+function BadgePill({ badge }) {
+  const cfg = BADGE_CONFIG[badge] || { color: V.sub, icon: Shield };
+  const Icon = cfg.icon;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      padding: '3px 10px', borderRadius: 3,
+      fontSize: 11, fontWeight: 600, fontFamily: V.mono,
+      color: cfg.color,
+      background: `${cfg.color}18`,
+      border: `1px solid ${cfg.color}40`,
+    }}>
+      <Icon size={11} /> {badge} Trust Badge
+    </span>
+  );
+}
+
+function StarRating({ value }) {
+  return (
+    <div style={{ display: 'flex', gap: 2 }}>
+      {[1, 2, 3, 4, 5].map(star => (
+        <Star
+          key={star}
+          size={14}
+          style={{
+            fill: star <= value ? '#F0B429' : star - 0.5 <= value ? '#F0B42980' : 'transparent',
+            color: star <= value ? '#F0B429' : star - 0.5 <= value ? '#F0B429' : V.dim,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ProgressBar({ value, max, color }) {
+  return (
+    <div style={{ height: 4, background: V.border, borderRadius: 2, overflow: 'hidden' }}>
+      <div style={{
+        height: '100%', borderRadius: 2,
+        background: color,
+        width: `${Math.min(100, (value / max) * 100)}%`,
+        transition: 'width 0.4s ease',
+      }} />
+    </div>
+  );
+}
 
 function UserProfile() {
   const [user, setUser] = useState(null);
@@ -18,22 +90,16 @@ function UserProfile() {
   const navigate = useNavigate();
   const { userId } = useParams();
 
-  useEffect(() => {
-    fetchData();
-  }, [userId]);
+  useEffect(() => { fetchData(); }, [userId]);
 
   const fetchData = async () => {
     try {
-      // Get current logged in user
       const userRes = await api.get('/auth/me');
       setUser(userRes.data);
-
-      // Get profile user (could be self or another user)
       const targetUserId = userId || userRes.data.user_id;
       const profileRes = await api.get(`/users/${targetUserId}/profile`);
       setProfileUser(profileRes.data);
-    } catch (error) {
-      console.error('Failed to fetch profile:', error);
+    } catch {
       toast.error('Profile not found');
       navigate('/dashboard');
     } finally {
@@ -41,328 +107,258 @@ function UserProfile() {
     }
   };
 
-  const getTrustScoreColor = (score) => {
-    if (score >= 80) return 'text-green-600';
-    if (score >= 60) return 'text-blue-600';
-    if (score >= 40) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getTrustScoreBg = (score) => {
-    if (score >= 80) return 'bg-green-100';
-    if (score >= 60) return 'bg-blue-100';
-    if (score >= 40) return 'bg-yellow-100';
-    return 'bg-red-100';
-  };
-
-  const getBadgeIcon = (badge) => {
-    switch(badge) {
-      case 'Verified': return <ShieldCheck className="w-5 h-5 text-blue-600" />;
-      case 'Gold': return <Award className="w-5 h-5 text-yellow-500" />;
-      case 'Silver': return <Award className="w-5 h-5 text-slate-400" />;
-      default: return <Shield className="w-5 h-5 text-slate-400" />;
-    }
-  };
-
-  const getBadgeStyle = (badge) => {
-    switch(badge) {
-      case 'Verified': return 'bg-blue-100 text-blue-800 border-blue-200';
-      case 'Gold': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'Silver': return 'bg-slate-100 text-slate-700 border-slate-200';
-      default: return 'bg-slate-100 text-slate-600 border-slate-200';
-    }
-  };
-
-  const StarRating = ({ value, size = 'w-5 h-5' }) => {
-    return (
-      <div className="flex gap-0.5">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            className={`${size} ${
-              star <= value
-                ? 'fill-yellow-400 text-yellow-400'
-                : star - 0.5 <= value
-                ? 'fill-yellow-400/50 text-yellow-400'
-                : 'text-slate-300'
-            }`}
-          />
-        ))}
-      </div>
-    );
-  };
-
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
+    return <DashboardLayout user={null} loading><div /></DashboardLayout>;
   }
 
-  if (!profileUser) {
-    return null;
-  }
+  if (!profileUser) return null;
 
   const isSelf = user?.user_id === profileUser.user_id;
+  const tc = TRUST_COLOR(profileUser.trust_score);
+
+  const surface = { background: V.surface, border: `1px solid ${V.border}`, borderRadius: 4, padding: '20px 24px' };
+
+  const scoreBreakdown = [
+    {
+      label: 'Transaction History',
+      tooltip: 'Earn 4 points for each successful trade completed. Maximum 40 points (10 trades).',
+      score: Math.min(40, (profileUser.successful_trades || 0) * 4),
+      max: 40,
+      color: V.accent,
+    },
+    {
+      label: 'User Ratings',
+      tooltip: 'Based on average star rating from other users. 6 points per star, maximum 30 points.',
+      score: Math.round((profileUser.average_rating || 0) * 6),
+      max: 30,
+      color: '#F0B429',
+    },
+    {
+      label: 'Dispute Record',
+      tooltip: 'Starts at 20 points, minus 5 for each valid dispute. A clean record means no confirmed complaints.',
+      score: Math.max(0, 20 - (profileUser.valid_disputes_count || 0) * 5),
+      max: 20,
+      color: V.success,
+    },
+    {
+      label: 'Verification Status',
+      tooltip: '10 bonus points for completing identity verification (ID, selfie, phone number).',
+      score: profileUser.verified ? 10 : 0,
+      max: 10,
+      color: '#A78BFA',
+    },
+  ];
 
   return (
     <DashboardLayout user={user}>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <Button variant="ghost" onClick={() => navigate(-1)} data-testid="back-btn">
-          <ArrowLeft className="w-4 h-4 mr-2" />Back
-        </Button>
+      <div style={{ maxWidth: 760, margin: '0 auto' }}>
+
+        <button onClick={() => navigate(-1)} data-testid="back-btn" style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: 'none', border: 'none', color: V.sub, cursor: 'pointer',
+          fontFamily: V.sans, fontSize: 13, marginBottom: 20,
+        }}>
+          <ArrowLeft size={14} /> Back
+        </button>
 
         {/* Profile Header */}
-        <Card className="p-6">
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+        <div style={{ ...surface, marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 24 }}>
+
             {/* Avatar */}
-            <div className="relative">
+            <div style={{ position: 'relative' }}>
               {profileUser.picture ? (
-                <img 
-                  src={profileUser.picture} 
-                  alt={profileUser.name} 
-                  className="w-24 h-24 rounded-full border-4 border-white shadow-lg"
+                <img
+                  src={profileUser.picture}
+                  alt={profileUser.name}
+                  style={{ width: 80, height: 80, borderRadius: '50%', border: `2px solid ${V.border}`, objectFit: 'cover' }}
                 />
               ) : (
-                <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center border-4 border-white shadow-lg">
-                  <UserIcon className="w-12 h-12 text-primary" />
+                <div style={{
+                  width: 80, height: 80, borderRadius: '50%',
+                  background: `${V.accent}18`, border: `2px solid ${V.border}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <UserIcon size={36} color={V.accent} />
                 </div>
               )}
               {profileUser.verified && (
-                <div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-1">
-                  <CheckCircle className="w-5 h-5 text-white" />
+                <div style={{
+                  position: 'absolute', bottom: -2, right: -2,
+                  background: V.accent, borderRadius: '50%', padding: 3,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <CheckCircle size={12} color="#000" />
                 </div>
               )}
             </div>
 
             {/* Info */}
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-2xl font-bold text-slate-900">{profileUser.name}</h1>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <h1 style={{ fontFamily: V.sans, fontSize: 20, fontWeight: 700, color: V.text, margin: 0 }}>
+                  {profileUser.name}
+                </h1>
                 {profileUser.suspended && (
-                  <Badge className="bg-red-100 text-red-800">Suspended</Badge>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: 3, fontSize: 11, fontWeight: 600,
+                    color: V.error, background: `${V.error}18`, border: `1px solid ${V.error}40`,
+                    fontFamily: V.mono,
+                  }}>
+                    Suspended
+                  </span>
                 )}
               </div>
-              <p className="text-slate-500 mb-3">{profileUser.email}</p>
-              
-              {/* Badges */}
-              <div className="flex flex-wrap gap-2">
-                {profileUser.badges && profileUser.badges.map((badge, index) => (
-                  <Badge 
-                    key={index} 
-                    className={`${getBadgeStyle(badge)} flex items-center gap-1.5 px-3 py-1`}
-                  >
-                    {getBadgeIcon(badge)}
-                    {badge} Trust Badge
-                  </Badge>
-                ))}
-                {(!profileUser.badges || profileUser.badges.length === 0) && (
-                  <span className="text-sm text-slate-400">No badges yet</span>
-                )}
+              <p style={{ color: V.sub, fontSize: 13, marginBottom: 10 }}>{profileUser.email}</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {profileUser.badges?.length > 0
+                  ? profileUser.badges.map((b, i) => <BadgePill key={i} badge={b} />)
+                  : <span style={{ color: V.dim, fontSize: 12 }}>No badges yet</span>
+                }
               </div>
             </div>
 
             {/* Trust Score */}
-            <div className={`${getTrustScoreBg(profileUser.trust_score)} rounded-xl p-6 text-center min-w-[140px]`}>
-              <p className="text-sm text-slate-600 mb-1">Trust Score</p>
-              <p className={`text-4xl font-bold ${getTrustScoreColor(profileUser.trust_score)}`} data-testid="trust-score">
+            <div style={{
+              textAlign: 'center', minWidth: 120,
+              background: `${tc}0F`, border: `1px solid ${tc}30`,
+              borderRadius: 4, padding: '16px 24px',
+            }}>
+              <p style={{ fontSize: 10, color: V.sub, fontFamily: V.mono, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
+                Trust Score
+              </p>
+              <p style={{ fontFamily: V.mono, fontSize: 40, fontWeight: 700, color: tc, margin: 0 }}
+                 data-testid="trust-score">
                 {profileUser.trust_score}
               </p>
-              <p className="text-xs text-slate-500">out of 100</p>
+              <p style={{ fontSize: 11, color: V.dim, fontFamily: V.mono }}>out of 100</p>
             </div>
           </div>
 
-          {/* Report Button - only show for other users */}
+          {/* Actions */}
           {!isSelf && (
-            <div className="mt-4 pt-4 border-t border-slate-200">
-              <Button 
-                variant="outline" 
-                size="sm" 
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${V.border}` }}>
+              <button
                 onClick={() => setShowReportModal(true)}
-                className="text-red-600 border-red-200 hover:bg-red-50"
                 data-testid="report-user-btn"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '7px 14px', borderRadius: 4,
+                  border: `1px solid ${V.error}40`, background: 'transparent',
+                  color: V.error, cursor: 'pointer', fontFamily: V.sans, fontSize: 13,
+                }}
               >
-                <Flag className="w-4 h-4 mr-2" />
-                Report User
-              </Button>
+                <Flag size={13} /> Report User
+              </button>
             </div>
           )}
 
-          {/* Get Verified Button - only show for own profile if not verified */}
           {isSelf && !profileUser.verified && (
-            <div className="mt-4 pt-4 border-t border-slate-200">
-              <Button 
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: `1px solid ${V.border}` }}>
+              <button
                 onClick={() => navigate('/verify')}
-                className="bg-blue-600 hover:bg-blue-700"
                 data-testid="get-verified-btn"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 8,
+                  padding: '9px 18px', borderRadius: 4, border: 'none',
+                  background: V.accent, color: '#000', cursor: 'pointer',
+                  fontFamily: V.sans, fontWeight: 700, fontSize: 13,
+                  boxShadow: `0 0 12px ${V.accent}40`,
+                }}
               >
-                <ShieldCheck className="w-4 h-4 mr-2" />
-                Get Verified
-              </Button>
-              <p className="text-xs text-slate-500 mt-2">
+                <ShieldCheck size={14} /> Get Verified
+              </button>
+              <p style={{ fontSize: 11, color: V.sub, marginTop: 8 }}>
                 Verify your identity to earn +10 trust points
               </p>
             </div>
           )}
-        </Card>
+        </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-4 text-center">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <StarRating value={profileUser.average_rating || 0} size="w-4 h-4" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+          {[
+            {
+              icon: <StarRating value={profileUser.average_rating || 0} />,
+              value: (profileUser.average_rating || 0).toFixed(1),
+              label: 'Average Rating',
+              testId: 'avg-rating',
+              color: '#F0B429',
+            },
+            {
+              icon: <Package size={20} color={V.accent} />,
+              value: profileUser.total_trades || 0,
+              label: 'Total Trades',
+              testId: 'total-trades',
+              color: V.accent,
+            },
+            {
+              icon: <CheckCircle size={20} color={V.success} />,
+              value: profileUser.successful_trades || 0,
+              label: 'Successful Trades',
+              testId: 'successful-trades',
+              color: V.success,
+            },
+            {
+              icon: <AlertTriangle size={20} color={V.warn} />,
+              value: profileUser.valid_disputes_count || 0,
+              label: 'Disputes',
+              testId: 'disputes-count',
+              color: V.warn,
+            },
+          ].map(({ icon, value, label, testId, color }) => (
+            <div key={label} style={{ ...surface, textAlign: 'center', padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>{icon}</div>
+              <p style={{ fontFamily: V.mono, fontSize: 24, fontWeight: 700, color, margin: '0 0 4px' }}
+                 data-testid={testId}>
+                {value}
+              </p>
+              <p style={{ fontSize: 11, color: V.sub }}>{label}</p>
             </div>
-            <p className="text-2xl font-bold text-slate-900" data-testid="avg-rating">
-              {(profileUser.average_rating || 0).toFixed(1)}
-            </p>
-            <p className="text-xs text-slate-500">Average Rating</p>
-          </Card>
-
-          <Card className="p-4 text-center">
-            <Package className="w-6 h-6 text-primary mx-auto mb-2" />
-            <p className="text-2xl font-bold text-slate-900" data-testid="total-trades">
-              {profileUser.total_trades || 0}
-            </p>
-            <p className="text-xs text-slate-500">Total Trades</p>
-          </Card>
-
-          <Card className="p-4 text-center">
-            <CheckCircle className="w-6 h-6 text-green-500 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-slate-900" data-testid="successful-trades">
-              {profileUser.successful_trades || 0}
-            </p>
-            <p className="text-xs text-slate-500">Successful Trades</p>
-          </Card>
-
-          <Card className="p-4 text-center">
-            <AlertTriangle className="w-6 h-6 text-orange-500 mx-auto mb-2" />
-            <p className="text-2xl font-bold text-slate-900" data-testid="disputes-count">
-              {profileUser.valid_disputes_count || 0}
-            </p>
-            <p className="text-xs text-slate-500">Disputes</p>
-          </Card>
+          ))}
         </div>
 
         {/* Trust Score Breakdown */}
-        <Card className="p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            Trust Score Breakdown
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-slate-600 flex items-center gap-1">
-                  Transaction History
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>Earn 4 points for each successful trade completed. Maximum 40 points (10 trades).</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </span>
-                <span className="font-medium">{Math.min(40, (profileUser.successful_trades || 0) * 4)}/40</span>
+        <div style={{ ...surface, marginBottom: 16 }}>
+          <SectionHead label="Trust Score Breakdown" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {scoreBreakdown.map(({ label, tooltip, score, max, color }) => (
+              <div key={label}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 13, color: V.sub }}>{label}</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <HelpCircle size={13} color={V.dim} style={{ cursor: 'help' }} />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>{tooltip}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <span style={{ fontFamily: V.mono, fontSize: 12, fontWeight: 600, color }}>
+                    {score}/{max}
+                  </span>
+                </div>
+                <ProgressBar value={score} max={max} color={color} />
               </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-primary rounded-full transition-all"
-                  style={{ width: `${Math.min(100, (profileUser.successful_trades || 0) * 10)}%` }}
-                />
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-slate-600 flex items-center gap-1">
-                  User Ratings
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>Based on average star rating from other users. 6 points per star, maximum 30 points.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </span>
-                <span className="font-medium">{Math.round((profileUser.average_rating || 0) * 6)}/30</span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-yellow-400 rounded-full transition-all"
-                  style={{ width: `${((profileUser.average_rating || 0) / 5) * 100}%` }}
-                />
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-slate-600 flex items-center gap-1">
-                  Dispute Record
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>Tracks disputes ruled against this user. Starts at 20 points, minus 5 for each valid dispute. A clean record means no confirmed complaints.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </span>
-                <span className="font-medium">{Math.max(0, 20 - (profileUser.valid_disputes_count || 0) * 5)}/20</span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-green-500 rounded-full transition-all"
-                  style={{ width: `${Math.max(0, 100 - (profileUser.valid_disputes_count || 0) * 25)}%` }}
-                />
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-slate-600 flex items-center gap-1">
-                  Verification Status
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p>10 bonus points for completing identity verification (ID, selfie, phone number).</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </span>
-                <span className="font-medium">{profileUser.verified ? 10 : 0}/10</span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-blue-500 rounded-full transition-all"
-                  style={{ width: profileUser.verified ? '100%' : '0%' }}
-                />
-              </div>
-            </div>
+            ))}
           </div>
-        </Card>
+        </div>
 
         {/* Member Since */}
-        <Card className="p-4">
-          <p className="text-sm text-slate-500">
-            Member since {new Date(profileUser.created_at).toLocaleDateString('en-ZA', { 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+        <div style={{ ...surface }}>
+          <p style={{ fontSize: 12, color: V.sub, fontFamily: V.mono }}>
+            Member since{' '}
+            {new Date(profileUser.created_at).toLocaleDateString('en-ZA', {
+              year: 'numeric', month: 'long', day: 'numeric',
             })}
           </p>
-        </Card>
+        </div>
       </div>
 
-      {/* Report User Modal */}
       <ReportUserModal
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}

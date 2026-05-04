@@ -1,27 +1,55 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import DashboardLayout from '../components/DashboardLayout';
-import { Card } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
-import { Label } from '../components/ui/label';
-import { Textarea } from '../components/ui/textarea';
+import DashboardLayout, { V } from '../components/DashboardLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import api from '../utils/api';
 import { toast } from 'sonner';
-import { AlertCircle, Plus } from 'lucide-react';
+import { AlertCircle, Plus, X } from 'lucide-react';
 
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;
   if (!detail) return 'An error occurred';
   if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail)) {
-    return detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
-  }
-  if (typeof detail === 'object') {
-    return detail.msg || detail.message || JSON.stringify(detail);
-  }
+  if (Array.isArray(detail)) return detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
+  if (typeof detail === 'object') return detail.msg || detail.message || JSON.stringify(detail);
   return 'An error occurred';
+}
+
+const STATUS_COLOR = {
+  Pending:  V.warn,
+  Resolved: V.success,
+  Rejected: V.error,
+};
+
+function SectionHead({ label, right }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+      <span style={{
+        fontSize: 10, fontWeight: 700, color: V.sub,
+        textTransform: 'uppercase', letterSpacing: '0.12em',
+        fontFamily: V.mono, whiteSpace: 'nowrap',
+      }}>
+        {label}
+      </span>
+      <div style={{ flex: 1, height: 1, background: V.border }} />
+      {right && <div style={{ flexShrink: 0 }}>{right}</div>}
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={{
+        display: 'block', fontSize: 11, fontWeight: 700, color: V.sub,
+        fontFamily: V.mono, textTransform: 'uppercase', letterSpacing: '0.1em',
+        marginBottom: 6,
+      }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
 }
 
 function Disputes() {
@@ -34,17 +62,14 @@ function Disputes() {
   const [formData, setFormData] = useState({
     transaction_id: '',
     dispute_type: 'Other',
-    description: ''
+    description: '',
   });
   const navigate = useNavigate();
   const location = useLocation();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   useEffect(() => {
-    // Pre-select transaction if passed from transaction detail page
     if (location.state?.transactionId) {
       setFormData(prev => ({ ...prev, transaction_id: location.state.transactionId }));
       setShowForm(true);
@@ -56,14 +81,12 @@ function Disputes() {
       const [userRes, disputesRes, transactionsRes] = await Promise.all([
         api.get('/auth/me'),
         api.get('/disputes'),
-        api.get('/transactions')
+        api.get('/transactions'),
       ]);
-
       setUser(userRes.data);
       setDisputes(disputesRes.data);
       setTransactions(transactionsRes.data);
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
+    } catch {
       navigate('/');
     } finally {
       setLoading(false);
@@ -72,188 +95,226 @@ function Disputes() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!formData.transaction_id || !formData.description) {
       toast.error('Please fill in all fields');
       return;
     }
-
     setSubmitting(true);
     try {
       await api.post('/disputes', formData);
-
       toast.success('Dispute raised successfully');
       setFormData({ transaction_id: '', dispute_type: 'Other', description: '' });
       setShowForm(false);
-      fetchData(); // Refresh data
+      fetchData();
     } catch (error) {
-      console.error('Failed to create dispute:', error);
       toast.error(parseErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const getStatusBadge = (status) => {
-    const variants = {
-      'Pending': 'bg-yellow-100 text-yellow-800',
-      'Resolved': 'bg-green-100 text-green-800'
-    };
-    return variants[status] || 'bg-slate-100 text-slate-600';
-  };
-
-  const getTransactionLabel = (txn) => {
-    return `${txn.transaction_id.substring(0, 12)}... - ${txn.item_description.substring(0, 40)}${txn.item_description.length > 40 ? '...' : ''}`;
-  };
-
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
+    return <DashboardLayout user={null} loading><div /></DashboardLayout>;
   }
+
+  const inputStyle = {
+    width: '100%', padding: '9px 12px', borderRadius: 4,
+    border: `1px solid ${V.border}`, background: '#0D1117',
+    color: V.text, fontFamily: V.sans, fontSize: 13, outline: 'none',
+    boxSizing: 'border-box',
+  };
 
   return (
     <DashboardLayout user={user}>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
+      <div style={{ maxWidth: 820, margin: '0 auto' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
           <div>
-            <h1 className="text-3xl font-bold text-slate-900" data-testid="disputes-title">Disputes</h1>
-            <p className="text-slate-600 mt-2">{disputes.length} dispute(s)</p>
+            <h1 style={{ fontFamily: V.sans, fontSize: 22, fontWeight: 700, color: V.text, margin: 0 }}
+                data-testid="disputes-title">
+              Disputes
+            </h1>
+            <p style={{ color: V.sub, fontSize: 13, marginTop: 4, fontFamily: V.mono }}>
+              {disputes.length} record{disputes.length !== 1 ? 's' : ''}
+            </p>
           </div>
-          <Button
+          <button
             onClick={() => setShowForm(!showForm)}
             data-testid="raise-dispute-btn"
-            className="hover:scale-[1.02] transition-all duration-200 active:scale-95"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '10px 20px', borderRadius: 4, border: 'none', cursor: 'pointer',
+              background: showForm ? V.dim : V.warn,
+              color: '#000', fontFamily: V.sans, fontWeight: 700, fontSize: 13,
+              transition: 'opacity 0.15s',
+            }}
           >
-            <Plus className="w-4 h-4 mr-2" />
-            {showForm ? 'Cancel' : 'Raise Dispute'}
-          </Button>
+            {showForm ? <><X size={14} /> Cancel</> : <><Plus size={14} /> Raise Dispute</>}
+          </button>
         </div>
 
         {/* Raise Dispute Form */}
         {showForm && (
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold text-slate-900 mb-4">Raise a Dispute</h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="transaction_id">Select Transaction *</Label>
+          <div style={{
+            background: V.surface, border: `1px solid ${V.border}`,
+            borderRadius: 4, padding: '20px 24px', marginBottom: 20,
+          }}>
+            <SectionHead label="New Dispute" />
+            <form onSubmit={handleSubmit}>
+              <Field label="Transaction *">
                 <Select
                   value={formData.transaction_id}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, transaction_id: value }))}
+                  onValueChange={v => setFormData(prev => ({ ...prev, transaction_id: v }))}
                 >
-                  <SelectTrigger id="transaction_id" data-testid="select-transaction">
+                  <SelectTrigger
+                    id="transaction_id"
+                    data-testid="select-transaction"
+                    style={{ ...inputStyle, height: 38 }}
+                  >
                     <SelectValue placeholder="Select a transaction" />
                   </SelectTrigger>
                   <SelectContent>
-                    {transactions.map((txn) => (
+                    {transactions.map(txn => (
                       <SelectItem key={txn.transaction_id} value={txn.transaction_id}>
-                        {getTransactionLabel(txn)}
+                        {txn.transaction_id.substring(0, 12)}… — {txn.item_description.substring(0, 40)}{txn.item_description.length > 40 ? '…' : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
 
-              <div>
-                <Label htmlFor="dispute_type">Dispute Type *</Label>
+              <Field label="Dispute Type *">
                 <Select
                   value={formData.dispute_type}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, dispute_type: value }))}
+                  onValueChange={v => setFormData(prev => ({ ...prev, dispute_type: v }))}
                 >
-                  <SelectTrigger id="dispute_type" data-testid="select-dispute-type">
+                  <SelectTrigger
+                    id="dispute_type"
+                    data-testid="select-dispute-type"
+                    style={{ ...inputStyle, height: 38 }}
+                  >
                     <SelectValue placeholder="Select dispute type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Item Not Received">Item Not Received</SelectItem>
-                    <SelectItem value="Item Not As Described">Item Not As Described</SelectItem>
-                    <SelectItem value="Damaged Item">Damaged Item</SelectItem>
-                    <SelectItem value="Payment Issue">Payment Issue</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
+                    {['Item Not Received', 'Item Not As Described', 'Damaged Item', 'Payment Issue', 'Other'].map(v => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </Field>
 
-              <div>
-                <Label htmlFor="description">Issue Description *</Label>
-                <Textarea
-                  id="description"
+              <Field label="Issue Description *">
+                <textarea
                   value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Describe the issue with this transaction..."
+                  onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Describe the issue with this transaction…"
                   rows={5}
                   required
                   data-testid="dispute-description-input"
+                  style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.5 }}
                 />
-              </div>
+              </Field>
 
-              <div className="flex gap-3">
-                <Button
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button
                   type="button"
-                  variant="outline"
                   onClick={() => setShowForm(false)}
                   data-testid="cancel-dispute-btn"
-                  className="flex-1"
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: 4,
+                    border: `1px solid ${V.border}`, background: 'transparent',
+                    color: V.text, fontFamily: V.sans, fontSize: 13, cursor: 'pointer',
+                  }}
                 >
                   Cancel
-                </Button>
-                <Button
+                </button>
+                <button
                   type="submit"
                   disabled={submitting}
                   data-testid="submit-dispute-btn"
-                  className="flex-1"
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: 4, border: 'none',
+                    background: submitting ? V.dim : V.warn,
+                    color: '#000', fontFamily: V.sans, fontWeight: 700, fontSize: 13,
+                    cursor: submitting ? 'not-allowed' : 'pointer',
+                  }}
                 >
-                  {submitting ? 'Submitting...' : 'Submit Dispute'}
-                </Button>
+                  {submitting ? 'Submitting…' : 'Submit Dispute'}
+                </button>
               </div>
             </form>
-          </Card>
+          </div>
         )}
 
         {/* Disputes List */}
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold text-slate-900 mb-4">Your Disputes</h2>
+        <div style={{ background: V.surface, border: `1px solid ${V.border}`, borderRadius: 4, padding: '20px 24px' }}>
+          <SectionHead label="Your Disputes" />
+
           {disputes.length === 0 ? (
-            <div className="text-center py-12">
-              <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500 mb-4">No disputes raised yet</p>
-              <Button
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+              <AlertCircle size={36} color={V.dim} style={{ margin: '0 auto 16px' }} />
+              <p style={{ color: V.sub, fontSize: 14, marginBottom: 16 }}>No disputes raised yet</p>
+              <button
                 onClick={() => setShowForm(true)}
                 data-testid="empty-state-raise-dispute"
+                style={{
+                  padding: '9px 18px', borderRadius: 4, border: `1px solid ${V.warn}`,
+                  background: 'transparent', color: V.warn, cursor: 'pointer',
+                  fontFamily: V.sans, fontSize: 13, fontWeight: 600,
+                }}
               >
                 Raise Your First Dispute
-              </Button>
+              </button>
             </div>
           ) : (
-            <div className="space-y-4">
-              {disputes.map((dispute) => (
-                <Card key={dispute.dispute_id} className="p-5 bg-slate-50 border-slate-200" data-testid={`dispute-${dispute.dispute_id}`}>
-                  <div className="flex justify-between items-start mb-3">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {disputes.map(dispute => (
+                <div
+                  key={dispute.dispute_id}
+                  data-testid={`dispute-${dispute.dispute_id}`}
+                  style={{
+                    background: '#0D1117', border: `1px solid ${V.border}`,
+                    borderRadius: 4, padding: '16px 20px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                     <div>
-                      <p className="text-xs text-slate-500 mb-1">Dispute ID</p>
-                      <p className="font-mono text-sm text-slate-700">{dispute.dispute_id}</p>
+                      <p style={{ fontSize: 10, color: V.sub, fontFamily: V.mono, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Dispute ID</p>
+                      <p style={{ fontFamily: V.mono, fontSize: 12, color: V.text }}>{dispute.dispute_id}</p>
                     </div>
-                    <Badge className={getStatusBadge(dispute.status)} data-testid={`dispute-status-${dispute.dispute_id}`}>
+                    <span
+                      data-testid={`dispute-status-${dispute.dispute_id}`}
+                      style={{
+                        padding: '3px 10px', borderRadius: 3, fontSize: 11, fontWeight: 600,
+                        fontFamily: V.mono,
+                        color: STATUS_COLOR[dispute.status] || V.sub,
+                        background: `${STATUS_COLOR[dispute.status] || V.sub}18`,
+                        border: `1px solid ${STATUS_COLOR[dispute.status] || V.sub}40`,
+                      }}
+                    >
                       {dispute.status}
-                    </Badge>
+                    </span>
                   </div>
-                  <div className="mb-3">
-                    <p className="text-xs text-slate-500 mb-1">Transaction ID</p>
-                    <p className="font-mono text-sm text-slate-700">{dispute.transaction_id}</p>
+
+                  <div style={{ marginBottom: 10 }}>
+                    <p style={{ fontSize: 10, color: V.sub, fontFamily: V.mono, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Transaction ID</p>
+                    <p style={{ fontFamily: V.mono, fontSize: 12, color: V.sub }}>{dispute.transaction_id}</p>
                   </div>
-                  <div className="mb-3">
-                    <p className="text-xs text-slate-500 mb-1">Description</p>
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{dispute.description}</p>
+
+                  <div style={{ marginBottom: 10 }}>
+                    <p style={{ fontSize: 10, color: V.sub, fontFamily: V.mono, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Description</p>
+                    <p style={{ fontSize: 13, color: V.text, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{dispute.description}</p>
                   </div>
-                  <div className="text-xs text-slate-500">
-                    Created on {new Date(dispute.created_at).toLocaleString()}
-                  </div>
-                </Card>
+
+                  <p style={{ fontSize: 11, color: V.dim, fontFamily: V.mono }}>
+                    {new Date(dispute.created_at).toLocaleString()}
+                  </p>
+                </div>
               ))}
             </div>
           )}
-        </Card>
+        </div>
       </div>
     </DashboardLayout>
   );

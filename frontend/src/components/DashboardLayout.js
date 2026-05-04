@@ -97,6 +97,31 @@ function DashboardLayout({ children, user, loading = false }) {
         ::-webkit-scrollbar-thumb  { background: ${V.border}; border-radius: 2px; }
         ::-webkit-scrollbar-thumb:hover { background: ${V.dim}; }
 
+        /* Sidebar layout */
+        .vault-sidebar {
+          width: 220px;
+          position: fixed;
+          top: 0; left: 0;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+          background: ${V.bg};
+          border-right: 1px solid ${V.border};
+          z-index: 40;
+          overflow: hidden;
+        }
+        .vault-main {
+          margin-left: 220px;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+        }
+        @media (max-width: 1023px) {
+          .vault-sidebar { display: none !important; }
+          .vault-main { margin-left: 0 !important; }
+        }
+
         /* Vault table hover */
         .vault-tr:hover td { background: rgba(255,255,255,0.025) !important; }
 
@@ -149,19 +174,9 @@ function DashboardLayout({ children, user, loading = false }) {
       )}
 
       {/* ── Sidebar (desktop) ── */}
-      <aside
-        className="hidden lg:flex"
-        style={{
-          width: 240, flexShrink: 0,
-          background: V.bg,
-          borderRight: `1px solid ${V.border}`,
-          display: 'flex', flexDirection: 'column',
-          position: 'fixed', top: 0, left: 0, height: '100vh',
-          zIndex: 40,
-        }}
-      >
+      <aside className="vault-sidebar">
         {/* Logo */}
-        <div style={{ padding: '18px 16px 14px', borderBottom: `1px solid ${V.border}` }}>
+        <div style={{ padding: '18px 14px 14px', borderBottom: `1px solid ${V.border}` }}>
           <NavLink to="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
             <div style={{
               width: 30, height: 30, borderRadius: 4,
@@ -190,8 +205,8 @@ function DashboardLayout({ children, user, loading = false }) {
         </div>
 
         {/* Nav items */}
-        <nav style={{ flex: 1, padding: '12px 8px 8px', overflowY: 'auto' }}>
-          <div style={{ padding: '0 8px 8px' }}>
+        <nav style={{ flex: 1, padding: '12px 10px 8px', overflowY: 'auto' }}>
+          <div style={{ padding: '0 6px 8px' }}>
             <span style={{
               fontSize: 10, fontWeight: 600,
               color: V.dim, letterSpacing: '0.12em',
@@ -250,7 +265,7 @@ function DashboardLayout({ children, user, loading = false }) {
         </nav>
 
         {/* User card + logout */}
-        <div style={{ padding: '10px 8px 16px', borderTop: `1px solid ${V.border}` }}>
+        <div style={{ padding: '10px 10px 16px', borderTop: `1px solid ${V.border}` }}>
           <div
             onClick={() => navigate('/profile')}
             className="vault-btn"
@@ -319,10 +334,7 @@ function DashboardLayout({ children, user, loading = false }) {
       </aside>
 
       {/* ── Main content ── */}
-      <div
-        style={{ flex: 1, marginLeft: 0, display: 'flex', flexDirection: 'column', minWidth: 0 }}
-        className="lg:ml-60"
-      >
+      <div className="vault-main">
         {/* Mobile header */}
         <header
           className="flex lg:hidden"

@@ -33,6 +33,7 @@ import TermsPage from './pages/TermsPage';
 import EscrowPage from './pages/EscrowPage';
 import DisputesPage from './pages/DisputesPage';
 import RefundPage from './pages/RefundPage';
+import ResetPassword from './pages/ResetPassword';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -50,6 +51,7 @@ function AppRouter() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/escrow" element={<EscrowPage />} />

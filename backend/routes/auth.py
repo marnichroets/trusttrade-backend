@@ -509,6 +509,83 @@ async def google_auth_callback(request: Request, data: GoogleCallbackRequest):
         logger.error(f"[GOOGLE_AUTH] Error: {str(e)}")
         raise HTTPException(status_code=500, detail="Authentication failed")
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+@router.post("/forgot-password")
+async def forgot_password(data: ForgotPasswordRequest):
+    """Request a password reset link. Always returns success to avoid email enumeration."""
+    import email_service
+    from core.config import settings
+
+    email = normalize_email(data.email)
+    db = get_database()
+    user_doc = await db.users.find_one({"email": email})
+
+    if user_doc:
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        await db.password_resets.insert_one({
+            "token": token,
+            "user_id": user_doc["user_id"],
+            "email": email,
+            "expires_at": expires_at,
+            "used": False,
+        })
+        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+        html = f"""
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
+          <h2 style="color:#0A0E14">Reset your TrustTrade password</h2>
+          <p>Click the button below to reset your password. This link expires in 1 hour.</p>
+          <a href="{reset_url}"
+             style="display:inline-block;padding:12px 24px;background:#00D1FF;color:#000;
+                    font-weight:700;border-radius:4px;text-decoration:none;margin:16px 0">
+            Reset Password
+          </a>
+          <p style="color:#888;font-size:12px">
+            If you did not request this, you can safely ignore this email.<br/>
+            Link: <a href="{reset_url}">{reset_url}</a>
+          </p>
+        </div>
+        """
+        await email_service.send_email(
+            to_email=email,
+            to_name=user_doc.get("name", "User"),
+            subject="Reset your TrustTrade password",
+            html_content=html,
+        )
+        logger.info(f"[PASSWORD_RESET] Reset link sent to {email}")
+
+    return {"message": "If an account exists with that email, you'll receive a reset link shortly."}
+
+@router.post("/reset-password")
+async def reset_password(data: ResetPasswordRequest):
+    """Reset password using a valid token."""
+    db = get_database()
+    record = await db.password_resets.find_one({"token": data.token, "used": False})
+
+    if not record:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+
+    if record["expires_at"] < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Reset token has expired")
+
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    new_hash = hash_password(data.new_password)
+    await db.users.update_one(
+        {"user_id": record["user_id"]},
+        {"$set": {"password_hash": new_hash}}
+    )
+    await db.password_resets.update_one({"token": data.token}, {"$set": {"used": True}})
+    logger.info(f"[PASSWORD_RESET] Password reset for user {record['user_id']}")
+    return {"message": "Password updated successfully. You can now sign in."}
+
 class AdminPasswordResetRequest(BaseModel):
     email: str
     new_password: str

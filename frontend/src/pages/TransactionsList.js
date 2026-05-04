@@ -1,19 +1,38 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import DashboardLayout from '../components/DashboardLayout';
-import { Card } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
+import DashboardLayout, { V } from '../components/DashboardLayout';
 import api from '../utils/api';
 import { Plus, FileText, Search } from 'lucide-react';
-import { Input } from '../components/ui/input';
 
-function formatCurrency(value) {
-  const number = Number(value);
-  if (value === null || value === undefined || isNaN(number)) {
-    return "R0.00";
-  }
-  return `R${number.toFixed(2)}`;
+function fmt(value) {
+  const n = Number(value);
+  if (value === null || value === undefined || isNaN(n)) return 'R0.00';
+  return `R${n.toFixed(2)}`;
+}
+
+const STATUS_COLOR = {
+  Pending:      V.warn,
+  Paid:         V.success,
+  Released:     V.success,
+  Cancelled:    V.error,
+  Refunded:     V.sub,
+  'Not Released': V.sub,
+};
+
+function SectionHead({ label, right }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+      <span style={{
+        fontSize: 10, fontWeight: 700, color: V.sub,
+        textTransform: 'uppercase', letterSpacing: '0.12em',
+        fontFamily: V.mono, whiteSpace: 'nowrap',
+      }}>
+        {label}
+      </span>
+      <div style={{ flex: 1, height: 1, background: V.border }} />
+      {right && <div style={{ flexShrink: 0 }}>{right}</div>}
+    </div>
+  );
 }
 
 function TransactionsList() {
@@ -24,25 +43,18 @@ function TransactionsList() {
   const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  useEffect(() => {
-    filterTransactions();
-  }, [transactions, searchTerm]);
+  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { filterTransactions(); }, [transactions, searchTerm]);
 
   const fetchData = async () => {
     try {
       const [userRes, transactionsRes] = await Promise.all([
         api.get('/auth/me'),
-        api.get('/transactions')
+        api.get('/transactions'),
       ]);
-
       setUser(userRes.data);
       setTransactions(transactionsRes.data);
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
+    } catch {
       navigate('/');
     } finally {
       setLoading(false);
@@ -50,148 +62,174 @@ function TransactionsList() {
   };
 
   const filterTransactions = () => {
-    if (!searchTerm) {
-      setFilteredTransactions(transactions);
-      return;
-    }
-
+    if (!searchTerm) { setFilteredTransactions(transactions); return; }
     const term = searchTerm.toLowerCase();
-    const filtered = transactions.filter(t =>
+    setFilteredTransactions(transactions.filter(t =>
       t.buyer_name.toLowerCase().includes(term) ||
       t.seller_name.toLowerCase().includes(term) ||
       t.item_description.toLowerCase().includes(term) ||
       t.transaction_id.toLowerCase().includes(term)
-    );
-    setFilteredTransactions(filtered);
-  };
-
-  const getStatusBadge = (status) => {
-    const variants = {
-      'Pending': 'bg-yellow-100 text-yellow-800',
-      'Paid': 'bg-green-100 text-green-800',
-      'Released': 'bg-green-100 text-green-800'
-    };
-    return variants[status] || 'bg-slate-100 text-slate-600';
-  };
-
-  const getReleaseStatusBadge = (status) => {
-    const variants = {
-      'Not Released': 'bg-slate-100 text-slate-600',
-      'Released': 'bg-green-100 text-green-800'
-    };
-    return variants[status] || 'bg-slate-100 text-slate-600';
+    ));
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-      </div>
+      <DashboardLayout user={null} loading>
+        <div />
+      </DashboardLayout>
     );
   }
 
+  const cell = {
+    padding: '14px 12px',
+    borderBottom: `1px solid ${V.border}`,
+    fontSize: 13,
+    color: V.text,
+    verticalAlign: 'middle',
+  };
+
   return (
     <DashboardLayout user={user}>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
           <div>
-            <h1 className="text-3xl font-bold text-slate-900" data-testid="transactions-list-title">My Transactions</h1>
-            <p className="text-slate-600 mt-2">{filteredTransactions.length} transaction(s)</p>
+            <h1 style={{ fontFamily: V.sans, fontSize: 22, fontWeight: 700, color: V.text, margin: 0 }}
+                data-testid="transactions-list-title">
+              My Transactions
+            </h1>
+            <p style={{ color: V.sub, fontSize: 13, marginTop: 4, fontFamily: V.mono }}>
+              {filteredTransactions.length} record{filteredTransactions.length !== 1 ? 's' : ''}
+            </p>
           </div>
-          <Button
+          <button
             onClick={() => navigate('/transactions/new')}
             data-testid="new-transaction-btn"
-            className="hover:scale-[1.02] transition-all duration-200 active:scale-95"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '10px 20px', borderRadius: 4, border: 'none', cursor: 'pointer',
+              background: V.accent, color: '#000', fontFamily: V.sans,
+              fontWeight: 700, fontSize: 13,
+              boxShadow: `0 0 12px ${V.accent}40`,
+              transition: 'box-shadow 0.2s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.boxShadow = `0 0 20px ${V.accent}80`}
+            onMouseLeave={e => e.currentTarget.style.boxShadow = `0 0 12px ${V.accent}40`}
           >
-            <Plus className="w-4 h-4 mr-2" />
-            New Transaction
-          </Button>
+            <Plus size={15} /> New Transaction
+          </button>
         </div>
 
         {/* Search */}
-        <Card className="p-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
-            <Input
-              type="text"
-              placeholder="Search by buyer, seller, description, or transaction ID..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-              data-testid="search-transactions-input"
-            />
-          </div>
-        </Card>
+        <div style={{
+          background: V.surface, border: `1px solid ${V.border}`,
+          borderRadius: 4, padding: '10px 14px',
+          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20,
+        }}>
+          <Search size={15} color={V.sub} />
+          <input
+            type="text"
+            placeholder="Search by buyer, seller, description, or transaction ID…"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            data-testid="search-transactions-input"
+            style={{
+              flex: 1, background: 'transparent', border: 'none', outline: 'none',
+              color: V.text, fontFamily: V.sans, fontSize: 13,
+            }}
+          />
+        </div>
 
-        {/* Transactions Table */}
-        <Card className="p-6">
+        {/* Table */}
+        <div style={{ background: V.surface, border: `1px solid ${V.border}`, borderRadius: 4 }}>
+          <div style={{ padding: '16px 20px 0' }}>
+            <SectionHead label="Transaction Records" />
+          </div>
+
           {filteredTransactions.length === 0 ? (
-            <div className="text-center py-12">
-              <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-500 mb-4">
-                {searchTerm ? 'No transactions found matching your search' : 'No transactions yet'}
+            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <FileText size={36} color={V.dim} style={{ margin: '0 auto 16px' }} />
+              <p style={{ color: V.sub, fontSize: 14, marginBottom: 16 }}>
+                {searchTerm ? 'No transactions match your search' : 'No transactions yet'}
               </p>
               {!searchTerm && (
-                <Button
+                <button
                   onClick={() => navigate('/transactions/new')}
                   data-testid="empty-state-create-transaction"
+                  style={{
+                    padding: '9px 18px', borderRadius: 4, border: `1px solid ${V.accent}`,
+                    background: 'transparent', color: V.accent, cursor: 'pointer',
+                    fontFamily: V.sans, fontSize: 13, fontWeight: 600,
+                  }}
                 >
                   Create Your First Transaction
-                </Button>
+                </button>
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
-                  <tr className="text-left border-b border-slate-200">
-                    <th className="pb-3 font-medium text-slate-600">Transaction ID</th>
-                    <th className="pb-3 font-medium text-slate-600">Buyer</th>
-                    <th className="pb-3 font-medium text-slate-600">Seller</th>
-                    <th className="pb-3 font-medium text-slate-600">Item</th>
-                    <th className="pb-3 font-medium text-slate-600">Item Price (R)</th>
-                    <th className="pb-3 font-medium text-slate-600">Fee (R)</th>
-                    <th className="pb-3 font-medium text-slate-600">Total (R)</th>
-                    <th className="pb-3 font-medium text-slate-600">Payment Status</th>
-                    <th className="pb-3 font-medium text-slate-600">Release Status</th>
-                    <th className="pb-3 font-medium text-slate-600">Date</th>
+                  <tr>
+                    {['TX ID', 'Buyer', 'Seller', 'Item', 'Price', 'Fee', 'Total', 'Payment', 'Release', 'Date'].map(h => (
+                      <th key={h} style={{
+                        padding: '10px 12px', textAlign: 'left',
+                        fontSize: 10, fontWeight: 700, color: V.sub,
+                        fontFamily: V.mono, textTransform: 'uppercase', letterSpacing: '0.1em',
+                        borderBottom: `1px solid ${V.border}`,
+                      }}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTransactions.map((transaction) => (
+                  {filteredTransactions.map(t => (
                     <tr
-                      key={transaction.transaction_id}
-                      onClick={() => navigate(`/transactions/${transaction.transaction_id}`)}
-                      className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
-                      data-testid={`transaction-row-${transaction.transaction_id}`}
+                      key={t.transaction_id}
+                      onClick={() => navigate(`/transactions/${t.transaction_id}`)}
+                      data-testid={`transaction-row-${t.transaction_id}`}
+                      style={{ cursor: 'pointer', transition: 'background 0.12s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = `${V.accent}08`}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
-                      <td className="py-4 font-mono text-xs text-slate-500">
-                        {transaction.transaction_id.substring(0, 12)}...
+                      <td style={{ ...cell, fontFamily: V.mono, fontSize: 11, color: V.sub }}>
+                        {t.transaction_id.substring(0, 12)}…
                       </td>
-                      <td className="py-4">{transaction.buyer_name}</td>
-                      <td className="py-4">{transaction.seller_name}</td>
-                      <td className="py-4 max-w-xs truncate" title={transaction.item_description}>
-                        {transaction.item_description}
+                      <td style={cell}>{t.buyer_name}</td>
+                      <td style={cell}>{t.seller_name}</td>
+                      <td style={{ ...cell, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          title={t.item_description}>
+                        {t.item_description}
                       </td>
-                      <td className="py-4 font-mono">{formatCurrency(transaction.item_price)}</td>
-                      <td className="py-4 font-mono">{formatCurrency(transaction.trusttrade_fee)}</td>
-                      <td className="py-4 font-mono font-semibold">{formatCurrency(transaction.total)}</td>
-                      <td className="py-4">
-                        <span className="inline-block">
-                          <Badge className={getStatusBadge(transaction.payment_status)}>
-                            {transaction.payment_status}
-                          </Badge>
+                      <td style={{ ...cell, fontFamily: V.mono }}>{fmt(t.item_price)}</td>
+                      <td style={{ ...cell, fontFamily: V.mono, color: V.sub }}>{fmt(t.trusttrade_fee)}</td>
+                      <td style={{ ...cell, fontFamily: V.mono, fontWeight: 700, color: V.text }}>{fmt(t.total)}</td>
+                      <td style={cell}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: 3, fontSize: 11, fontWeight: 600,
+                          fontFamily: V.mono,
+                          color: STATUS_COLOR[t.payment_status] || V.warn,
+                          background: `${STATUS_COLOR[t.payment_status] || V.warn}18`,
+                          border: `1px solid ${STATUS_COLOR[t.payment_status] || V.warn}40`,
+                        }}>
+                          {t.payment_status}
                         </span>
                       </td>
-                      <td className="py-4">
-                        <span className="inline-block">
-                          <Badge className={getReleaseStatusBadge(transaction.release_status)}>
-                            {transaction.release_status}
-                          </Badge>
+                      <td style={cell}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: 3, fontSize: 11, fontWeight: 600,
+                          fontFamily: V.mono,
+                          color: STATUS_COLOR[t.release_status] || V.sub,
+                          background: `${STATUS_COLOR[t.release_status] || V.sub}18`,
+                          border: `1px solid ${STATUS_COLOR[t.release_status] || V.sub}40`,
+                        }}>
+                          {t.release_status}
                         </span>
                       </td>
-                      <td className="py-4 text-slate-500">
-                        {new Date(transaction.created_at).toLocaleDateString()}
+                      <td style={{ ...cell, color: V.sub, fontFamily: V.mono, fontSize: 11 }}>
+                        {new Date(t.created_at).toLocaleDateString()}
                       </td>
                     </tr>
                   ))}
@@ -199,7 +237,7 @@ function TransactionsList() {
               </table>
             </div>
           )}
-        </Card>
+        </div>
       </div>
     </DashboardLayout>
   );

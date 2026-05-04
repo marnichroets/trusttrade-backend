@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
-import { Eye, EyeOff, Loader2, Shield, AlertCircle, Lock } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Shield, AlertCircle, Lock, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../utils/api';
 import TrustLogo from '../components/TrustLogo';
@@ -22,7 +22,11 @@ export default function LoginPage() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState(null);
-  
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
+
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -42,6 +46,20 @@ export default function LoginPage() {
       navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, navigate]);
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      await api.post('/auth/forgot-password', { email: forgotEmail });
+      setForgotSent(true);
+    } catch {
+      // Always show success per spec
+      setForgotSent(true);
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   const handleGoogleLogin = () => {
     setGoogleLoading(true);
@@ -119,6 +137,53 @@ export default function LoginPage() {
             {/* Google Sign-In - HIDDEN FOR BETA */}
             {/* TODO: Re-enable after OAuth app name is configured in Google Cloud Console */}
 
+            {/* Forgot Password Panel */}
+            {showForgotPassword && (
+              <div className="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                {forgotSent ? (
+                  <div className="text-center py-2">
+                    <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-slate-900">Check your email</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      If an account exists with that email, you'll receive a reset link shortly.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => { setShowForgotPassword(false); setForgotSent(false); setForgotEmail(''); }}
+                      className="mt-3 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      Back to sign in
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleForgotPassword} className="space-y-3">
+                    <p className="text-sm font-medium text-slate-900">Reset your password</p>
+                    <p className="text-xs text-slate-500">Enter your email address and we'll send you a reset link.</p>
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      value={forgotEmail}
+                      onChange={e => setForgotEmail(e.target.value)}
+                      required
+                      className="h-9 text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowForgotPassword(false)}
+                        className="flex-1 text-xs text-slate-500 hover:text-slate-700 py-2 border border-slate-200 rounded"
+                      >
+                        Cancel
+                      </button>
+                      <Button type="submit" disabled={forgotLoading} className="flex-1 h-8 text-xs bg-slate-800 hover:bg-slate-700">
+                        {forgotLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Send Reset Link'}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               {!isLoginMode && (
                 <div className="space-y-1.5">
@@ -151,7 +216,18 @@ export default function LoginPage() {
               </div>
               
               <div className="space-y-1.5">
-                <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password</Label>
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password</Label>
+                  {isLoginMode && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowForgotPassword(true); setForgotSent(false); }}
+                      className="text-xs text-blue-600 hover:text-blue-700"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <Input
                     id="password"

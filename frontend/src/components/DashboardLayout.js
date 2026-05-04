@@ -317,18 +317,27 @@ function DashboardLayout({ children, user, loading = false }) {
           <button
             data-testid="logout-btn"
             onClick={handleLogout}
-            className="vault-btn vault-btn-danger"
             style={{
-              width: '100%', display: 'flex', alignItems: 'center', gap: 7,
-              padding: '7px 10px', borderRadius: 3,
-              border: `1px solid ${V.border}`,
-              background: 'transparent', color: V.sub,
-              fontSize: 12, fontWeight: 500, cursor: 'pointer',
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+              padding: '9px 12px', borderRadius: 4,
+              border: `1px solid rgba(255,59,48,0.4)`,
+              background: 'rgba(255,59,48,0.08)',
+              color: V.error,
+              fontSize: 13, fontWeight: 600, cursor: 'pointer',
               fontFamily: V.sans,
+              transition: 'background 0.12s, border-color 0.12s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(255,59,48,0.16)';
+              e.currentTarget.style.borderColor = V.error;
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,59,48,0.08)';
+              e.currentTarget.style.borderColor = 'rgba(255,59,48,0.4)';
             }}
           >
-            <LogOut size={12} />
-            Sign out
+            <LogOut size={14} />
+            Sign Out
           </button>
         </div>
       </aside>

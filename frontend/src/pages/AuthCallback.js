@@ -29,23 +29,12 @@ function AuthCallback() {
         console.log('[AuthCallback] Hash:', location.hash);
         console.log('[AuthCallback] Search:', location.search);
         setStatus('Extracting session...');
-        
-        // Try to get session_id from hash (normal flow)
-        let sessionId = null;
+
         const hash = location.hash;
-        if (hash) {
-          const params = new URLSearchParams(hash.substring(1));
-          sessionId = params.get('session_id');
-        }
-        
-        // Also check query params (some OAuth flows use this)
-        if (!sessionId) {
-          const searchParams = new URLSearchParams(location.search);
-          sessionId = searchParams.get('session_id');
-        }
-        
-        // Check for error in URL
+        const hashParams = hash ? new URLSearchParams(hash.substring(1)) : new URLSearchParams();
         const searchParams = new URLSearchParams(location.search);
+
+        // Check for error in URL (direct Google OAuth failure redirect)
         const error = searchParams.get('error');
         if (error) {
           console.error('[AuthCallback] OAuth error:', error);
@@ -54,10 +43,46 @@ function AuthCallback() {
           return;
         }
 
+        // ── Direct Google OAuth flow: session_token in hash ──────────────────
+        const directToken = hashParams.get('session_token');
+        if (directToken) {
+          console.log('[AuthCallback] Direct Google OAuth token found');
+          setStatus('Authenticating...');
+
+          // Clear the hash immediately to avoid token in browser history
+          window.history.replaceState(null, '', window.location.pathname);
+
+          // Fetch user data from the backend using the token
+          const meResp = await axios.get(`${API}/auth/me`, {
+            headers: { Authorization: `Bearer ${directToken}` },
+            withCredentials: true,
+          });
+
+          const data = meResp.data;
+          const token = directToken;
+
+          localStorage.setItem('session_token', token);
+          const userData = {
+            user_id: data.user_id,
+            email: data.email,
+            name: data.name,
+            is_admin: data.is_admin,
+            picture: data.picture,
+          };
+          localStorage.setItem('user_data', JSON.stringify(userData));
+          login(userData, token);
+
+          setStatus('Login successful!');
+          toast.success(`Welcome, ${userData.name || userData.email}!`);
+          window.location.replace('/dashboard');
+          return;
+        }
+
+        // ── Legacy Emergent Auth flow: session_id in hash/query ──────────────
+        let sessionId = hashParams.get('session_id') || searchParams.get('session_id');
+
         if (!sessionId) {
-          console.error('[AuthCallback] No session_id in URL');
-          console.log('[AuthCallback] URL hash:', hash);
-          console.log('[AuthCallback] URL search:', location.search);
+          console.error('[AuthCallback] No session_id or session_token in URL');
           toast.error('Google sign-in failed. No session found.');
           navigate('/login', { replace: true, state: { error: 'Google sign-in failed. Please try again.' } });
           return;
@@ -66,8 +91,6 @@ function AuthCallback() {
         console.log('[AuthCallback] Session ID:', sessionId.substring(0, 15) + '...');
         setStatus('Authenticating...');
 
-        // Exchange session_id for user data
-        // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
         console.log('[GOOGLE_AUTH] Exchanging session_id with backend...');
         const response = await axios.post(
           `${API}/auth/google/callback`,

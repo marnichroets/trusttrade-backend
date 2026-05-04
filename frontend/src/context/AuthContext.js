@@ -35,7 +35,8 @@ export function AuthProvider({ children }) {
     
     // CRITICAL: If returning from OAuth callback, skip the /me check.
     // AuthCallback will exchange the session_id and establish the session first.
-    if (window.location.hash?.includes('session_id=')) {
+    const h = window.location.hash || '';
+    if (h.includes('session_id=') || h.includes('session_token=')) {
       console.log('[AUTH] Skipping /me check - OAuth callback in progress');
       setLoading(false);
       return;

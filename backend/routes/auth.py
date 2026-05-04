@@ -386,62 +386,115 @@ async def get_phone_verification_status(request: Request):
 
 
 
-# ============ GOOGLE OAUTH ============
+# ============ GOOGLE OAUTH (direct) ============
 
-class GoogleCallbackRequest(BaseModel):
-    session_id: str
+@router.get("/google")
+async def google_login():
+    """Redirect to Google OAuth consent screen."""
+    from urllib.parse import urlencode
+    from fastapi.responses import RedirectResponse
+
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=503, detail="Google OAuth is not configured")
+
+    state = secrets.token_urlsafe(16)
+    params = urlencode({
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "access_type": "online",
+        "prompt": "select_account",
+    })
+    auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{params}"
+
+    resp = RedirectResponse(url=auth_url, status_code=302)
+    resp.set_cookie(
+        "oauth_state", state,
+        httponly=True, secure=True, samesite="lax", max_age=300, path="/"
+    )
+    return resp
 
 
-@router.post("/google/callback")
-async def google_auth_callback(request: Request, data: GoogleCallbackRequest):
-    """
-    Exchange Emergent Auth session_id for user data and session token.
-    Creates new user if not exists, or logs in existing user.
-    """
+@router.get("/google/callback")
+async def google_callback(
+    request: Request,
+    code: str = None,
+    state: str = None,
+    error: str = None,
+):
+    """Handle the Google OAuth callback, create session, redirect to frontend."""
     import httpx
-    
-    db = get_database()
-    session_id = data.session_id
-    
-    print(f"[GOOGLE_AUTH] Callback started, session_id: {session_id[:12]}...")
-    logger.info("[GOOGLE_AUTH] Callback started")
-    
+    from fastapi.responses import RedirectResponse
+
+    frontend_url = settings.FRONTEND_URL
+
+    def fail(reason: str):
+        return RedirectResponse(
+            url=f"{frontend_url}/login?error={reason}", status_code=302
+        )
+
+    if error:
+        logger.warning(f"[GOOGLE_AUTH] OAuth denied: {error}")
+        return fail("google_auth_denied")
+
+    if not code:
+        logger.warning("[GOOGLE_AUTH] No code in callback")
+        return fail("no_code")
+
+    # CSRF check
+    stored_state = request.cookies.get("oauth_state")
+    if stored_state and state != stored_state:
+        logger.warning("[GOOGLE_AUTH] State mismatch (CSRF)")
+        return fail("invalid_state")
+
     try:
-        # Exchange session_id with Emergent Auth
-        print("[GOOGLE_AUTH] Calling Emergent Auth API...")
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-                headers={"X-Session-ID": session_id}
+            token_resp = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                    "grant_type": "authorization_code",
+                },
             )
-        
-        if response.status_code != 200:
-            print(f"[GOOGLE_AUTH] Emergent Auth failed: {response.status_code} {response.text}")
-            logger.error(f"[GOOGLE_AUTH] Emergent Auth error: {response.status_code}")
-            raise HTTPException(status_code=401, detail="Invalid session. Please try again.")
-        
-        auth_data = response.json()
-        print(f"[GOOGLE_AUTH] Success! Email: {auth_data.get('email')}")
-        logger.info(f"[GOOGLE_AUTH] Got user data: {auth_data.get('email')}")
-        
-        email = auth_data.get("email", "").lower()
-        name = auth_data.get("name", "")
-        picture = auth_data.get("picture", "")
-        google_id = auth_data.get("id", "")
-        emergent_session_token = auth_data.get("session_token", "")
-        
+
+        if token_resp.status_code != 200:
+            logger.error(f"[GOOGLE_AUTH] Token exchange failed: {token_resp.text}")
+            return fail("token_exchange_failed")
+
+        access_token = token_resp.json().get("access_token")
+        if not access_token:
+            return fail("no_access_token")
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            profile_resp = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+
+        if profile_resp.status_code != 200:
+            logger.error("[GOOGLE_AUTH] Failed to fetch profile")
+            return fail("profile_fetch_failed")
+
+        profile = profile_resp.json()
+        email = profile.get("email", "").lower().strip()
+        name = profile.get("name", "")
+        picture = profile.get("picture", "")
+        google_id = profile.get("id", "")
+
         if not email:
-            print("[GOOGLE_AUTH] No email in response")
-            raise HTTPException(status_code=400, detail="No email provided by Google")
-        
-        # Check if user exists
+            return fail("no_email")
+
+        db = get_database()
         existing_user = await db.users.find_one({"email": email}, {"_id": 0})
-        
+
         if existing_user:
-            # Update existing user
-            print(f"[GOOGLE_AUTH] Existing user found: {existing_user.get('user_id')}")
             user_id = existing_user["user_id"]
-            
+            is_admin = existing_user.get("is_admin", False)
             await db.users.update_one(
                 {"email": email},
                 {"$set": {
@@ -449,15 +502,12 @@ async def google_auth_callback(request: Request, data: GoogleCallbackRequest):
                     "picture": picture,
                     "google_id": google_id,
                     "last_login": datetime.now(timezone.utc).isoformat(),
-                    "auth_method": "google"
-                }}
+                    "auth_method": "google",
+                }},
             )
-            is_admin = existing_user.get("is_admin", False)
         else:
-            # Create new user
             user_id = f"user_{uuid.uuid4().hex[:12]}"
-            print(f"[GOOGLE_AUTH] Creating new user: {user_id}")
-            
+            is_admin = bool(settings.ADMIN_EMAIL and email == settings.ADMIN_EMAIL.lower())
             await db.users.insert_one({
                 "user_id": user_id,
                 "email": email,
@@ -465,49 +515,40 @@ async def google_auth_callback(request: Request, data: GoogleCallbackRequest):
                 "picture": picture,
                 "google_id": google_id,
                 "auth_method": "google",
-                "is_admin": False,
-                "verified": True,  # Google emails are verified
+                "role": "admin" if is_admin else "buyer",
+                "is_admin": is_admin,
+                "verified": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
-                "last_login": datetime.now(timezone.utc).isoformat()
+                "last_login": datetime.now(timezone.utc).isoformat(),
             })
-            is_admin = False
-        
-        # Generate session token (use Emergent's or generate our own)
-        session_token = emergent_session_token or secrets.token_urlsafe(32)
-        
-        # Store session
+
+        session_token = secrets.token_urlsafe(32)
         expires_at = datetime.now(timezone.utc) + timedelta(days=7)
         await db.user_sessions.update_one(
             {"user_id": user_id},
             {"$set": {
                 "session_token": session_token,
-                "expires_at": expires_at,
-                "created_at": datetime.now(timezone.utc),
-                "auth_method": "google"
+                "expires_at": expires_at.isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "auth_method": "google",
             }},
-            upsert=True
+            upsert=True,
         )
-        
-        print(f"[GOOGLE_AUTH] Login complete for {email}")
+
         logger.info(f"[GOOGLE_AUTH] Login complete: {email}")
-        
-        return {
-            "user_id": user_id,
-            "email": email,
-            "name": name,
-            "picture": picture,
-            "is_admin": is_admin,
-            "session_token": session_token
-        }
-        
-    except httpx.RequestError as e:
-        print(f"[GOOGLE_AUTH] Network error: {str(e)}")
-        logger.error(f"[GOOGLE_AUTH] Network error: {str(e)}")
-        raise HTTPException(status_code=503, detail="Authentication service unavailable")
-    except Exception as e:
-        print(f"[GOOGLE_AUTH] Error: {str(e)}")
-        logger.error(f"[GOOGLE_AUTH] Error: {str(e)}")
-        raise HTTPException(status_code=500, detail="Authentication failed")
+
+        # Redirect to frontend auth callback with token in URL fragment
+        # (fragment is never sent to the server and is cleared by AuthCallback)
+        redirect = RedirectResponse(
+            url=f"{frontend_url}/auth/callback#session_token={session_token}",
+            status_code=302,
+        )
+        redirect.delete_cookie("oauth_state", path="/")
+        return redirect
+
+    except Exception as exc:
+        logger.error(f"[GOOGLE_AUTH] Unexpected error: {exc}", exc_info=True)
+        return fail("auth_failed")
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr

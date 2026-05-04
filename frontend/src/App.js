@@ -42,7 +42,7 @@ function AppRouter() {
   
   // CRITICAL: Check URL fragment for session_id synchronously (NOT in useEffect)
   // This prevents race conditions by processing OAuth callback FIRST
-  if (location.hash?.includes('session_id=')) {
+  if (location.hash?.includes('session_id=') || location.hash?.includes('session_token=')) {
     return <AuthCallback />;
   }
   

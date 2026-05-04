@@ -35,7 +35,7 @@ function DashboardLayout({ children, user, loading = false }) {
     try {
       await logout();
       toast.success('Signed out');
-      navigate('/');
+      navigate('/login');
     } catch {
       toast.error('Failed to sign out');
     }

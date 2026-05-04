@@ -15,6 +15,7 @@ from uritemplate import variables
 
 from models import transaction
 from models import user
+from core.config import settings
 
 # Load environment variables
 ROOT_DIR = Path(__file__).parent
@@ -122,7 +123,7 @@ def _first_non_empty(*values):
 
 # TrustTrade Platform Settings - Beta Launch Limits
 MINIMUM_TRANSACTION_AMOUNT = 100.0  # R100 minimum (beta)
-PLATFORM_FEE_PERCENT = 1.5  # TrustTrade 1.5% agent fee
+PLATFORM_FEE_PERCENT = settings.PLATFORM_FEE_PERCENT
 MINIMUM_FEE_RANDS = 5.0  # Minimum fee R5
 
 # Redirect URLs after payment (from environment variables)
@@ -491,24 +492,35 @@ async def create_tradesafe_transaction(
     # Import here to avoid circular dependency
     from core.database import get_database
     db = get_database()
-    
+
+    # Resolve user_ids so get_or_create_user_token can reuse existing tokens
+    buyer_doc = await db.users.find_one({"email": buyer_email.lower()})
+    buyer_user_id = buyer_doc.get("user_id") if buyer_doc else None
+
+    seller_doc = await db.users.find_one({"email": seller_email.lower()})
+    seller_user_id = seller_doc.get("user_id") if seller_doc else None
+
+    logger.info(f"Resolved buyer_user_id: {buyer_user_id}, seller_user_id: {seller_user_id}")
+
     # Get or create tokens for buyer and seller (reuse from user records if available)
     logger.info("Getting/creating buyer token...")
     buyer_token = await get_or_create_user_token(
-        buyer_name, 
-        buyer_email, 
+        buyer_name,
+        buyer_email,
         mobile=buyer_mobile or "+27000000000",
         reference=f"buyer_{internal_reference}",
-        db=db
+        db=db,
+        user_id=buyer_user_id,
     )
-    
+
     logger.info("Getting/creating seller token...")
     seller_token = await get_or_create_user_token(
-        seller_name, 
-        seller_email, 
+        seller_name,
+        seller_email,
         mobile=seller_mobile or "+27000000000",
         reference=f"seller_{internal_reference}",
-        db=db
+        db=db,
+        user_id=seller_user_id,
     )
     
     if not buyer_token:

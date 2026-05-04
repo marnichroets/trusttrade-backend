@@ -205,7 +205,7 @@ function DashboardLayout({ children, user, loading = false }) {
         </div>
 
         {/* Nav items */}
-        <nav style={{ flex: 1, padding: '12px 10px 8px', overflowY: 'auto' }}>
+        <nav style={{ flex: 1, padding: '12px 10px 8px', overflowY: 'auto', minHeight: 0 }}>
           <div style={{ padding: '0 6px 8px' }}>
             <span style={{
               fontSize: 10, fontWeight: 600,
@@ -411,6 +411,20 @@ function DashboardLayout({ children, user, loading = false }) {
             </span>
           </NavLink>
         ))}
+        <button
+          data-testid="mobile-logout-btn"
+          onClick={handleLogout}
+          style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+            padding: '6px 10px', background: 'none', border: 'none',
+            cursor: 'pointer', color: V.error, transition: 'color 0.1s',
+          }}
+        >
+          <LogOut size={15} />
+          <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: V.mono }}>
+            Sign Out
+          </span>
+        </button>
       </nav>
     </div>
   );

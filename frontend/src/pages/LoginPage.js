@@ -25,6 +25,7 @@ export default function LoginPage() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState(null);
 
   const [form, setForm] = useState({
     email: '',
@@ -90,7 +91,12 @@ export default function LoginPage() {
         : { email: form.email, password: form.password, name: form.name };
       
       const response = await api.post(endpoint, payload);
-      
+
+      if (response.data.needs_verification) {
+        navigate('/verify-email', { replace: true });
+        return;
+      }
+
       const token = response.data.session_token;
       const userData = {
         user_id: response.data.user_id,
@@ -98,13 +104,19 @@ export default function LoginPage() {
         name: response.data.name,
         is_admin: response.data.is_admin || false,
       };
-      
+
       login(userData, token);
       toast.success(isLoginMode ? 'Welcome back!' : 'Account created successfully!');
       navigate('/dashboard', { replace: true });
     } catch (error) {
-      const message = error.response?.data?.detail || 'Authentication failed';
-      toast.error(message);
+      const detail = error.response?.data?.detail || 'Authentication failed';
+      if (detail === 'EMAIL_NOT_VERIFIED') {
+        setUnverifiedEmail(form.email);
+        setAuthError('Please verify your email before logging in.');
+      } else {
+        setAuthError(detail);
+        toast.error(detail);
+      }
     } finally {
       setLoading(false);
     }
@@ -293,7 +305,18 @@ export default function LoginPage() {
             {authError && (
               <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-red-700">{authError}</p>
+                <div className="flex-1">
+                  <p className="text-sm text-red-700">{authError}</p>
+                  {unverifiedEmail && (
+                    <button
+                      type="button"
+                      className="mt-2 text-sm text-blue-600 hover:underline font-medium"
+                      onClick={() => navigate('/verify-email')}
+                    >
+                      Resend verification email →
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             

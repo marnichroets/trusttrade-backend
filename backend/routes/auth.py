@@ -95,39 +95,26 @@ async def register(data: RegisterRequest, response: Response):
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
+    # Generate email verification token
+    verification_token = secrets.token_urlsafe(32)
+    user_data["email_verified"] = False
+    user_data["email_verification_token"] = verification_token
+    user_data["verification_token_expires"] = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+
     await db.users.insert_one(user_data)
-    
-    # Create session
-    session_token = generate_session_token()
-    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-    
-    await db.user_sessions.insert_one({
-        "user_id": user_id,
-        "session_token": session_token,
-        "expires_at": expires_at.isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    })
-    
-    # Set cookie
-    response.set_cookie(
-        key="session_token",
-        value=session_token,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        path="/",
-        max_age=7*24*60*60
-    )
-    
-    logger.info(f"User registered: {email}")
-    
+
+    # Send verification email (fire-and-forget)
+    import asyncio, email_service
+    frontend_url = settings.FRONTEND_URL
+    verify_url = f"{frontend_url}/verify-email?token={verification_token}"
+    asyncio.create_task(email_service.send_verification_email(email, data.name, verify_url))
+
+    logger.info(f"User registered (unverified): {email}")
+
     return {
-        "user_id": user_id,
+        "needs_verification": True,
         "email": email,
-        "name": data.name,
-        "role": user_data["role"],
-        "is_admin": is_admin,
-        "session_token": session_token
+        "message": "Registration successful. Please check your email to verify your account before logging in."
     }
 
 
@@ -156,7 +143,14 @@ async def login(data: LoginRequest, response: Response):
     if not verify_password(data.password, user_doc["password_hash"]):
         logger.warning(f"[LOGIN] Invalid password for: {email}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    
+
+    # Block unverified email/password users
+    if not user_doc.get("email_verified", True):
+        raise HTTPException(
+            status_code=403,
+            detail="EMAIL_NOT_VERIFIED"
+        )
+
     # CRITICAL: Check and update admin status dynamically
     # This ensures existing users get admin status if ADMIN_EMAIL is set later
     should_be_admin = (email.lower() == settings.ADMIN_EMAIL.lower()) if settings.ADMIN_EMAIL else False
@@ -267,6 +261,103 @@ async def logout(request: Request, response: Response):
     
     response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out successfully"}
+
+
+# ============ EMAIL VERIFICATION ENDPOINTS ============
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+
+@router.post("/verify-email")
+async def verify_email(data: VerifyEmailRequest, response: Response):
+    """Verify email address using token from verification email."""
+    db = get_database()
+    now = datetime.now(timezone.utc)
+
+    user_doc = await db.users.find_one({"email_verification_token": data.token})
+    if not user_doc:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link.")
+
+    expires_str = user_doc.get("verification_token_expires", "")
+    if expires_str:
+        try:
+            expires_dt = datetime.fromisoformat(expires_str.replace("Z", "+00:00"))
+            if expires_dt.tzinfo is None:
+                expires_dt = expires_dt.replace(tzinfo=timezone.utc)
+            if now > expires_dt:
+                raise HTTPException(status_code=400, detail="Verification link has expired. Please request a new one.")
+        except ValueError:
+            pass
+
+    await db.users.update_one(
+        {"_id": user_doc["_id"]},
+        {"$set": {"email_verified": True}, "$unset": {"email_verification_token": "", "verification_token_expires": ""}}
+    )
+
+    # Create session
+    session_token = generate_session_token()
+    expires_at = now + timedelta(days=7)
+    await db.user_sessions.insert_one({
+        "user_id": user_doc["user_id"],
+        "session_token": session_token,
+        "expires_at": expires_at.isoformat(),
+        "created_at": now.isoformat()
+    })
+    response.set_cookie(key="session_token", value=session_token, httponly=True, secure=True, samesite="none", path="/", max_age=7*24*60*60)
+
+    logger.info(f"Email verified for: {user_doc['email']}")
+    return {
+        "user_id": user_doc["user_id"],
+        "email": user_doc["email"],
+        "name": user_doc.get("name", ""),
+        "is_admin": user_doc.get("is_admin", False),
+        "session_token": session_token
+    }
+
+
+@router.post("/resend-verification")
+async def resend_verification(data: ResendVerificationRequest):
+    """Resend email verification link."""
+    db = get_database()
+    email = normalize_email(data.email)
+
+    user_doc = await db.users.find_one({"email": email})
+    if not user_doc:
+        return {"message": "If that email is registered, a verification link has been sent."}
+
+    if user_doc.get("email_verified", True):
+        return {"message": "This email is already verified. Please log in."}
+
+    # Rate limit: 1 resend per 2 minutes
+    last_expires = user_doc.get("verification_token_expires", "")
+    if last_expires:
+        try:
+            expires_dt = datetime.fromisoformat(last_expires.replace("Z", "+00:00"))
+            if expires_dt.tzinfo is None:
+                expires_dt = expires_dt.replace(tzinfo=timezone.utc)
+            issued_at = expires_dt - timedelta(hours=24)
+            if (datetime.now(timezone.utc) - issued_at).total_seconds() < 120:
+                raise HTTPException(status_code=429, detail="Please wait 2 minutes before requesting another email.")
+        except (ValueError, TypeError):
+            pass
+
+    new_token = secrets.token_urlsafe(32)
+    expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+    await db.users.update_one(
+        {"email": email},
+        {"$set": {"email_verification_token": new_token, "verification_token_expires": expires}}
+    )
+
+    import asyncio, email_service
+    from core.config import settings
+    verify_url = f"{settings.FRONTEND_URL}/verify-email?token={new_token}"
+    asyncio.create_task(email_service.send_verification_email(email, user_doc.get("name", ""), verify_url))
+
+    return {"message": "If that email is registered, a verification link has been sent."}
 
 
 # ============ PHONE VERIFICATION ENDPOINTS ============
@@ -535,6 +626,7 @@ async def google_callback(
                     "google_id": google_id,
                     "last_login": datetime.now(timezone.utc).isoformat(),
                     "auth_method": "google",
+                    "email_verified": True,
                 }},
             )
         else:
@@ -550,6 +642,7 @@ async def google_callback(
                 "role": "admin" if is_admin else "buyer",
                 "is_admin": is_admin,
                 "verified": True,
+                "email_verified": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "last_login": datetime.now(timezone.utc).isoformat(),
             })

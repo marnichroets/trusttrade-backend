@@ -29,6 +29,7 @@ import PaymentCancelled from './pages/PaymentCancelled';
 import BankingSettings from './pages/BankingSettings';
 import { CreateSmartDeal, SmartDealDetail, SmartDealList } from './pages/SmartDeal';
 import Onboarding from './pages/Onboarding';
+import VerifyEmail from './pages/VerifyEmail';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import EscrowPage from './pages/EscrowPage';
@@ -53,6 +54,7 @@ function AppRouter() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/escrow" element={<EscrowPage />} />

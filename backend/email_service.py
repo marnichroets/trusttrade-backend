@@ -275,6 +275,60 @@ def get_base_email_template(
 </html>"""
 
 
+# ============ EMAIL VERIFICATION ============
+
+async def send_verification_email(email: str, name: str, verification_url: str) -> bool:
+    """Send email address verification email to a new user."""
+    subject = "Verify your TrustTrade email address"
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#F0F2F5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table role="presentation" style="width:100%;border-collapse:collapse;background:#F0F2F5;">
+<tr><td style="padding:32px 16px;">
+  <table role="presentation" style="max-width:560px;margin:0 auto;border-collapse:collapse;width:100%;">
+    <tr>
+      <td style="background:{BRAND_NAVY};padding:28px 32px;text-align:center;">
+        <img src="{EMAIL_LOGO_URL}" alt="TrustTrade" style="height:40px;max-width:180px;display:block;margin:0 auto 8px;">
+        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.4);font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:white;padding:32px 32px 8px;border-top:3px solid {CYAN_LINE};">
+        <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:{BRAND_NAVY};">Verify your email address</h1>
+        <p style="font-size:15px;color:{TEXT_DARK};margin:0 0 24px;line-height:1.5;">Hi {name},</p>
+        <p style="font-size:14px;color:{TEXT_DARK};line-height:1.7;margin:0 0 28px;">
+          Thank you for creating a TrustTrade account. Click the button below to verify your email
+          address and activate your account.
+        </p>
+        <div style="text-align:center;margin:32px 0;">
+          <a href="{verification_url}" style="display:inline-block;background:{BRAND_NAVY};color:white;padding:14px 40px;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:0.3px;">
+            Verify Email Address &rarr;
+          </a>
+        </div>
+        <p style="font-size:13px;color:{LABEL_GREY};line-height:1.6;margin:0 0 16px;">
+          If the button doesn't work, copy and paste this link into your browser:<br>
+          <a href="{verification_url}" style="color:#2563eb;word-break:break-all;">{verification_url}</a>
+        </p>
+        <p style="font-size:12px;color:{LABEL_GREY};margin:0 0 28px;">
+          This link expires in 24 hours. If you did not create a TrustTrade account, you can safely ignore this email.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:{BRAND_NAVY};padding:20px 32px;text-align:center;">
+        <p style="margin:0 0 4px;font-size:12px;color:rgba(255,255,255,0.45);">&copy; 2026 TrustTrade South Africa.</p>
+        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.25);">Secured by TrustTrade Escrow</p>
+      </td>
+    </tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>"""
+    return await send_email(email, name, subject, html)
+
+
 # ============ EMAIL TEMPLATES ============
 
 def get_transaction_created_email(

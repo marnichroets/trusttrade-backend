@@ -25,7 +25,7 @@ ADMIN_DISPUTE_EMAIL = "marnichr@gmail.com"
 
 class CreateDealRequest(BaseModel):
     title: str = Field(..., min_length=3, max_length=200)
-    description: str = Field(..., min_length=10, max_length=2000)
+    description: str = Field(..., min_length=1, max_length=2000)
     amount: float = Field(..., gt=0)
     currency: str = Field(default="ZAR")
     freelancer_email: str

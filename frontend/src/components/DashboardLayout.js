@@ -20,9 +20,10 @@ export const V = {
   sans:    "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
-function DashboardLayout({ children, user, loading = false }) {
+function DashboardLayout({ children, user: userProp, loading = false }) {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, user: authUser } = useAuth();
+  const user = userProp || authUser;
 
   useEffect(() => {
     const link = document.createElement('link');

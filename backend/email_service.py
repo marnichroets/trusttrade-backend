@@ -5,6 +5,7 @@ Professional email templates with consistent branding
 """
 
 import os
+import asyncio
 import logging
 from typing import Optional
 from pathlib import Path
@@ -997,3 +998,179 @@ async def send_verification_status_email(
     """Send ID verification status update"""
     subject, html = get_verification_status_email(to_name, status)
     return await send_email(to_email, to_name, subject, html)
+
+
+# ============ SMART DEAL EMAILS ============
+
+_SD_FRONTEND = os.environ.get("FRONTEND_URL", "https://www.trusttradesa.co.za")
+
+
+def _smart_deal_details(deal: dict) -> dict:
+    return {
+        "Deal ID": deal["deal_id"],
+        "Title": deal["title"],
+        "Amount": f"R {deal['amount']:,.2f}",
+        "Client": deal.get("client_name") or deal["client_email"],
+        "Freelancer": deal.get("freelancer_name") or deal["freelancer_email"],
+        "Days to Deliver": f"{deal['days_to_deliver']} days",
+    }
+
+
+def _sd_html(heading: str, name: str, intro: str, deal: dict,
+             cta_text: str, badge: str, badge_color: str) -> str:
+    link = f"{_SD_FRONTEND}/smart-deals/{deal['deal_id']}"
+    return get_base_email_template(
+        heading=heading,
+        greeting_name=name,
+        intro_text=intro,
+        details=_smart_deal_details(deal),
+        cta_text=cta_text,
+        cta_link=link,
+        show_how_it_works=False,
+        status_badge=badge,
+        status_color=badge_color,
+    )
+
+
+async def send_smart_deal_created(deal: dict, client_name: str, freelancer_name: str) -> bool:
+    """Email to freelancer when a deal is created."""
+    subject = f"TrustTrade: You've been invited to a Smart Deal — {deal['title']}"
+    html = _sd_html(
+        heading="You've been invited to a Smart Deal",
+        name=freelancer_name,
+        intro=(
+            f"<strong>{client_name}</strong> wants to hire you through TrustTrade's Secure Vault escrow. "
+            f"Review the details below and accept the deal to get started. "
+            f"Once you accept, the client will fund the escrow and work can begin."
+        ),
+        deal=deal,
+        cta_text="Review & Accept Deal",
+        badge="Action Required",
+        badge_color="#f97316",
+    )
+    return await send_email(deal["freelancer_email"], freelancer_name, subject, html)
+
+
+async def send_smart_deal_accepted(deal: dict, client_name: str, freelancer_name: str) -> bool:
+    """Email to client when freelancer accepts."""
+    subject = f"TrustTrade: {freelancer_name} accepted your Smart Deal"
+    html = _sd_html(
+        heading="Freelancer accepted your deal",
+        name=client_name,
+        intro=(
+            f"Great news — <strong>{freelancer_name}</strong> has accepted your Smart Deal. "
+            f"The next step is to fund the escrow so work can begin. "
+            f"Your payment is held securely and only released when you approve the delivery."
+        ),
+        deal=deal,
+        cta_text="Fund Escrow",
+        badge="Fund Escrow to Start",
+        badge_color="#3b82f6",
+    )
+    return await send_email(deal["client_email"], client_name, subject, html)
+
+
+async def send_smart_deal_funded(deal: dict, client_name: str, freelancer_name: str) -> bool:
+    """Email to freelancer when escrow is funded."""
+    subject = f"TrustTrade: Escrow funded — you can start work on '{deal['title']}'"
+    html = _sd_html(
+        heading="Escrow funded — start work",
+        name=freelancer_name,
+        intro=(
+            f"<strong>{client_name}</strong> has funded the escrow. "
+            f"You can now start working on the deal. "
+            f"When your work is complete, mark it as delivered from the deal page. "
+            f"Payment will be released once the client approves your delivery."
+        ),
+        deal=deal,
+        cta_text="View Deal",
+        badge="Work in Progress",
+        badge_color="#10b981",
+    )
+    return await send_email(deal["freelancer_email"], freelancer_name, subject, html)
+
+
+async def send_smart_deal_delivered(deal: dict, client_name: str, freelancer_name: str) -> bool:
+    """Email to client when freelancer marks as delivered."""
+    subject = f"TrustTrade: {freelancer_name} has delivered — review and approve"
+    html = _sd_html(
+        heading="Delivery ready for review",
+        name=client_name,
+        intro=(
+            f"<strong>{freelancer_name}</strong> has marked the work as delivered. "
+            f"Please review the deliverable and approve to release payment, "
+            f"or raise a dispute if there is an issue. "
+            f"<strong>Payment will only be released when you manually approve.</strong>"
+        ),
+        deal=deal,
+        cta_text="Review & Approve",
+        badge="Action Required",
+        badge_color="#8b5cf6",
+    )
+    return await send_email(deal["client_email"], client_name, subject, html)
+
+
+async def send_smart_deal_approved(deal: dict, client_name: str, freelancer_name: str) -> bool:
+    """Email to freelancer when client approves and payment is released."""
+    subject = f"TrustTrade: Payment approved and being released — {deal['title']}"
+    html = _sd_html(
+        heading="Payment approved!",
+        name=freelancer_name,
+        intro=(
+            f"<strong>{client_name}</strong> has approved the delivery and your payment is being released. "
+            f"Funds will be processed by TradeSafe Escrow and deposited to your account. "
+            f"Thank you for completing this Smart Deal on TrustTrade."
+        ),
+        deal=deal,
+        cta_text="View Deal",
+        badge="Payment Released",
+        badge_color="#10b981",
+    )
+    return await send_email(deal["freelancer_email"], freelancer_name, subject, html)
+
+
+async def send_smart_deal_disputed(
+    deal: dict,
+    client_name: str,
+    freelancer_name: str,
+    reason: str,
+    raised_by_name: str,
+    admin_email: str,
+) -> bool:
+    """Email both parties and admin when a dispute is raised."""
+    subject = f"TrustTrade DISPUTE: {deal['deal_id']} — {deal['title']}"
+    details_with_reason = {**_smart_deal_details(deal), "Dispute Reason": reason[:200]}
+    link = f"{_SD_FRONTEND}/smart-deals/{deal['deal_id']}"
+
+    def _dispute_html(name: str, intro: str) -> str:
+        return get_base_email_template(
+            heading="Dispute raised — admin investigating",
+            greeting_name=name,
+            intro_text=intro,
+            details=details_with_reason,
+            cta_text="View Deal",
+            cta_link=link,
+            show_how_it_works=False,
+            status_badge="Disputed",
+            status_color="#ef4444",
+        )
+
+    party_intro = (
+        f"A dispute has been raised on this Smart Deal by <strong>{raised_by_name}</strong>. "
+        f"Funds remain securely in escrow while TrustTrade admin investigates. "
+        f"You will be contacted if further information is required."
+    )
+    admin_intro = (
+        f"<strong>Dispute raised by:</strong> {raised_by_name} ({deal['client_email']})<br>"
+        f"<strong>Reason:</strong> {reason}<br><br>"
+        f"Client: {client_name} ({deal['client_email']})<br>"
+        f"Freelancer: {freelancer_name} ({deal['freelancer_email']})"
+    )
+
+    results = await asyncio.gather(
+        send_email(deal["client_email"], client_name, subject, _dispute_html(client_name, party_intro)),
+        send_email(deal["freelancer_email"], freelancer_name, subject, _dispute_html(freelancer_name, party_intro)),
+        send_email(admin_email, "TrustTrade Admin", subject, _dispute_html("Admin", admin_intro)),
+        return_exceptions=True,
+    )
+    return all(r is True for r in results)

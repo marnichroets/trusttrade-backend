@@ -600,6 +600,7 @@ export function SmartDealDetail() {
   const [disputeReason, setDisputeReason] = useState("");
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [actionError, setActionError] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -617,18 +618,27 @@ export function SmartDealDetail() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Poll for messages every 10 seconds
+  // Auto-refresh every 5s while deal is in an active state
   useEffect(() => {
-    const interval = setInterval(() => {
+    const ACTIVE = new Set(["PENDING", "ACCEPTED", "FUNDED", "DELIVERED"]);
+    if (!deal || !ACTIVE.has(deal.status)) return;
+    const id = setInterval(() => {
       apiFetch(`/api/smart-deals/${dealId}`)
-        .then(d => setDeal(prev => prev ? { ...prev, messages: d.messages || [] } : d))
+        .then(d => setDeal(d))
         .catch(() => {});
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [dealId]);
+    }, 5000);
+    return () => clearInterval(id);
+  }, [dealId, deal?.status]);
 
   const isClient     = currentUser && deal && String(deal.client_id)     === String(currentUser.user_id);
   const isFreelancer = currentUser && deal && String(deal.freelancer_id)  === String(currentUser.user_id);
+
+  function copyShareLink() {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   async function handleAccept() {
     setAccepting(true); setActionError(null);
@@ -703,6 +713,35 @@ export function SmartDealDetail() {
       )}
 
       <ProgressTracker status={deal.status} />
+
+      {/* Share link — visible to client */}
+      {isClient && (
+        <div style={card({ marginBottom: 14 })}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: D.textSoft, textTransform: "uppercase", letterSpacing: "0.07em", margin: "0 0 6px" }}>
+            Share with Freelancer
+          </p>
+          <p style={{ fontSize: 12, color: D.textMuted, margin: "0 0 10px" }}>
+            Send this link to your freelancer so they can view and accept the deal.
+          </p>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{
+              flex: 1, padding: "9px 12px", borderRadius: 8,
+              background: D.bg, border: `1px solid ${D.border}`,
+              fontSize: 12, color: D.textMuted,
+              fontFamily: "ui-monospace, monospace",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
+              {window.location.href}
+            </div>
+            <button
+              onClick={copyShareLink}
+              style={{ ...btn(copied ? D.success : D.blue, "#fff", { flexShrink: 0 }) }}
+            >
+              {copied ? <><CheckCircle size={13} /> Copied!</> : "Copy link"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Action panels ── */}
 

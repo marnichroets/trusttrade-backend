@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import api from '../utils/api';
 import TrustLogo from '../components/TrustLogo';
 
-const BACKEND_URL = process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL || '';
+const BACKEND_URL = process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL || 'https://trusttrade-backend-production-3efa.up.railway.app';
 
 export default function LoginPage() {
   const navigate = useNavigate();

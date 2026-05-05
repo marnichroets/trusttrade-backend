@@ -28,6 +28,7 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentCancelled from './pages/PaymentCancelled';
 import BankingSettings from './pages/BankingSettings';
 import { CreateSmartDeal, SmartDealDetail, SmartDealList } from './pages/SmartDeal';
+import Onboarding from './pages/Onboarding';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import EscrowPage from './pages/EscrowPage';
@@ -80,6 +81,7 @@ function AppRouter() {
       <Route path="/admin/user/:userId" element={<ProtectedRoute><AdminUserDetail /></ProtectedRoute>} />
       <Route path="/admin/token-recovery" element={<ProtectedRoute><AdminTokenRecovery /></ProtectedRoute>} />
       
+      <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/profile/:userId" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
       <Route path="/activity" element={<ProtectedRoute><LiveActivity /></ProtectedRoute>} />

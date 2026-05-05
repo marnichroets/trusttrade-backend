@@ -364,6 +364,38 @@ async def resend_phone_otp(request: Request, data: PhoneSubmitRequest):
     return await submit_phone_number(request, data)
 
 
+@router.get("/onboarding-status")
+async def get_onboarding_status(request: Request):
+    """Return whether the user still needs to complete onboarding (phone + banking)."""
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Admins always bypass onboarding
+    if user_doc.get("is_admin"):
+        return {"needs_onboarding": False, "has_phone": True, "has_banking": True}
+
+    has_phone = bool(user_doc.get("phone") and user_doc.get("phone_verified"))
+
+    # Banking may be stored under "banking_details", "banking", or top-level fields
+    bd = user_doc.get("banking_details") or user_doc.get("banking") or {}
+    has_banking = bool(
+        bd.get("bank_name") or bd.get("account_number")
+        or user_doc.get("bank_name")
+    )
+
+    return {
+        "needs_onboarding": not (has_phone and has_banking),
+        "has_phone": has_phone,
+        "has_banking": has_banking,
+    }
+
+
 @router.get("/phone/status")
 async def get_phone_verification_status(request: Request):
     """Get phone verification status"""

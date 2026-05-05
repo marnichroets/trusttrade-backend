@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 function ProtectedRoute({ children }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, needsOnboarding } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const hasRedirected = useRef(false);
 
   // Check localStorage directly as fallback (handles race conditions)
@@ -17,17 +18,21 @@ function ProtectedRoute({ children }) {
   useEffect(() => {
     // Don't redirect while loading
     if (loading) return;
-    
-    // Don't redirect if already authenticated via context OR localStorage
-    if (isAuthenticated || hasLocalAuth) return;
-    
-    // Don't redirect multiple times
-    if (hasRedirected.current) return;
-    
-    console.log('[PROTECTED_ROUTE_REDIRECT] Not authenticated, redirecting to /login');
-    hasRedirected.current = true;
-    navigate('/login', { replace: true });
-  }, [loading, isAuthenticated, hasLocalAuth, navigate]);
+
+    // Not authenticated → go to login
+    if (!isAuthenticated && !hasLocalAuth) {
+      if (hasRedirected.current) return;
+      console.log('[PROTECTED_ROUTE_REDIRECT] Not authenticated, redirecting to /login');
+      hasRedirected.current = true;
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    // Authenticated but onboarding incomplete → go to /onboarding (but not if already there)
+    if (needsOnboarding && location.pathname !== '/onboarding') {
+      navigate('/onboarding', { replace: true });
+    }
+  }, [loading, isAuthenticated, hasLocalAuth, needsOnboarding, location.pathname, navigate]);
 
   // Show loading spinner while auth is being checked
   if (loading) {

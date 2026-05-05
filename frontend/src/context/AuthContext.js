@@ -27,12 +27,13 @@ export function AuthProvider({ children }) {
   });
   
   const [loading, setLoading] = useState(true);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   // Initialize ONCE on mount
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-    
+
     // CRITICAL: If returning from OAuth callback, skip the /me check.
     // AuthCallback will exchange the session_id and establish the session first.
     const h = window.location.hash || '';
@@ -41,16 +42,16 @@ export function AuthProvider({ children }) {
       setLoading(false);
       return;
     }
-    
+
     const token = localStorage.getItem('session_token');
     console.log('[AUTH_STATE_INITIALIZED] token:', token ? 'YES' : 'NO', 'isAuthenticated:', !!(token && localStorage.getItem('user_data')));
-    
+
     if (!token) {
       setLoading(false);
       return;
     }
 
-    // Verify token in background
+    // Verify token and check onboarding status
     api.get('/auth/me')
       .then(response => {
         if (response.data?.user_id) {
@@ -65,7 +66,13 @@ export function AuthProvider({ children }) {
           setUser(userData);
           setIsAuthenticated(true);
           localStorage.setItem('user_data', JSON.stringify(userData));
+
+          // Check if onboarding is needed
+          return api.get('/auth/onboarding-status');
         }
+      })
+      .then(res => {
+        if (res?.data?.needs_onboarding) setNeedsOnboarding(true);
       })
       .catch(error => {
         console.log('[TOKEN_INVALID]', error.response?.status || error.message);
@@ -84,16 +91,21 @@ export function AuthProvider({ children }) {
   // Login function - called after successful OAuth
   const login = useCallback((userData, token) => {
     console.log('[LOGIN_CALLED] user:', userData.email);
-    
+
     // Store in localStorage FIRST
     localStorage.setItem('session_token', token);
     localStorage.setItem('user_data', JSON.stringify(userData));
-    
+
     // Then update state
     setUser(userData);
     setIsAuthenticated(true);
     setLoading(false);
-    
+
+    // Check onboarding status for newly logged-in user
+    api.get('/auth/onboarding-status')
+      .then(res => { if (res?.data?.needs_onboarding) setNeedsOnboarding(true); })
+      .catch(() => {});
+
     console.log('[LOGIN_COMPLETE] isAuthenticated: true');
   }, []);
 
@@ -141,6 +153,8 @@ export function AuthProvider({ children }) {
     user,
     loading,
     isAuthenticated,
+    needsOnboarding,
+    setNeedsOnboarding,
     login,
     logout,
     refreshUser,

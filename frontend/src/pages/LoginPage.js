@@ -76,8 +76,7 @@ export default function LoginPage() {
   const handleGoogleLogin = () => {
     setGoogleLoading(true);
     setAuthError(null);
-    console.log('[GOOGLE_AUTH] Redirecting to /api/auth/google');
-    window.location.href = `${BACKEND_URL}/api/auth/google`;
+    window.location.href = 'https://trusttrade-backend-production-3efa.up.railway.app/api/auth/google';
   };
 
   const handleSubmit = async (e) => {

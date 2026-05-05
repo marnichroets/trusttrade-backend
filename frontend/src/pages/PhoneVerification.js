@@ -59,15 +59,20 @@ function PhoneVerification() {
     return value;
   };
 
+  const isValidSAPhone = (p) => {
+    const cleaned = p.replace(/[\s\-\+\(\)]/g, '');
+    if (cleaned.startsWith('27') && cleaned.length === 11) return true;
+    if (cleaned.startsWith('0') && cleaned.length === 10) return true;
+    if (cleaned.length === 9) return true;
+    return false;
+  };
+
   const handlePhoneChange = (e) => {
-    let value = e.target.value;
-    // Allow only digits and + sign
-    value = value.replace(/[^\d+]/g, '');
-    setPhone(value);
+    setPhone(e.target.value.replace(/[^\d+\s\-()]/g, ''));
   };
 
   const handlePhoneSubmit = async () => {
-    if (!phone || phone.length < 10) {
+    if (!phone || !isValidSAPhone(phone)) {
       toast.error('Please enter a valid phone number');
       return;
     }
@@ -194,7 +199,7 @@ function PhoneVerification() {
 
               <Button
                 onClick={handlePhoneSubmit}
-                disabled={loading || phone.length < 9}
+                disabled={loading || !isValidSAPhone(phone)}
                 className="w-full"
                 data-testid="send-code-btn"
               >

@@ -23,16 +23,12 @@ const V = {
   sans:    "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
-function extractSADigits(raw) {
-  // Strip spaces, dashes, parens; remove + prefix
-  let s = raw.replace(/[\s\-()]/g, '').replace(/^\+/, '');
-  if (s.startsWith('27') && s.length >= 11) s = s.slice(2); // remove 27 country code
-  if (s.startsWith('0')) s = s.slice(1);                     // remove leading 0
-  return s; // expect 9 core digits
-}
-
-function isValidSAPhone(raw) {
-  return /^\d{9}$/.test(extractSADigits(raw));
+function isValidSAPhone(phone) {
+  const cleaned = phone.replace(/[\s\-\+\(\)]/g, '');
+  if (cleaned.startsWith('27') && cleaned.length === 11) return true;
+  if (cleaned.startsWith('0') && cleaned.length === 10) return true;
+  if (cleaned.length === 9) return true;
+  return false;
 }
 
 const SA_BANKS = [

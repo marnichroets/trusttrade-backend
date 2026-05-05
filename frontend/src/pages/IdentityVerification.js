@@ -7,6 +7,14 @@ import { ShieldCheck, Upload, Camera, Phone, CheckCircle, ArrowLeft, FileText, X
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
+function isValidSAPhone(phone) {
+  const cleaned = phone.replace(/[\s\-\+\(\)]/g, '');
+  if (cleaned.startsWith('27') && cleaned.length === 11) return true;
+  if (cleaned.startsWith('0') && cleaned.length === 10) return true;
+  if (cleaned.length === 9) return true;
+  return false;
+}
+
 function SectionHead({ label }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -197,7 +205,7 @@ function IdentityVerification() {
   };
 
   const handleSendOtp = async () => {
-    if (!phoneNumber || phoneNumber.length < 10) { toast.error('Please enter a valid phone number'); return; }
+    if (!phoneNumber || !isValidSAPhone(phoneNumber)) { toast.error('Please enter a valid phone number'); return; }
     setSubmitting(true);
     try {
       await api.post('/verification/phone/send-otp', { phone_number: phoneNumber });
@@ -411,9 +419,9 @@ function IdentityVerification() {
                     </div>
                     <button
                       onClick={handleSendOtp}
-                      disabled={submitting || phoneNumber.length < 9}
+                      disabled={submitting || !isValidSAPhone(phoneNumber)}
                       data-testid="send-otp-btn"
-                      style={btnPrimary(submitting || phoneNumber.length < 9)}
+                      style={btnPrimary(submitting || !isValidSAPhone(phoneNumber))}
                     >
                       <Phone size={14} />
                       {submitting ? 'Sending…' : 'Send Verification Code'}

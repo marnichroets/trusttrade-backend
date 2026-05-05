@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import {
-  ArrowLeft, CheckCircle, Clock, Briefcase,
+  ArrowLeft, CheckCircle, Clock, Briefcase, Shield,
   AlertTriangle, Zap, ArrowRight, Send,
   MessageSquare, Lock, CreditCard, Landmark, Bolt,
 } from "lucide-react";

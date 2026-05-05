@@ -4,7 +4,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL || 'https://trusttrade-backend-production-3efa.up.railway.app';
 const API = `${BACKEND_URL}/api`;
 
 function AuthCallback() {

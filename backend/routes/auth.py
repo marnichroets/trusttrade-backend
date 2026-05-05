@@ -535,15 +535,26 @@ async def google_callback(
             upsert=True,
         )
 
-        logger.info(f"[GOOGLE_AUTH] Login complete: {email}")
+        logger.info(f"[GOOGLE_AUTH] Session created for {email} (user_id={user_id}), token={session_token[:20]}...")
 
-        # Redirect to frontend auth callback with token in URL fragment
-        # (fragment is never sent to the server and is cleared by AuthCallback)
+        # Redirect to frontend with token in URL fragment.
+        # Also set a session cookie so /auth/me works even if the browser sends a
+        # stale cookie from a previous email/password login.
         redirect = RedirectResponse(
             url=f"{frontend_url}/auth/callback#session_token={session_token}",
             status_code=302,
         )
         redirect.delete_cookie("oauth_state", path="/")
+        redirect.set_cookie(
+            key="session_token",
+            value=session_token,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            path="/",
+            max_age=7 * 24 * 60 * 60,
+        )
+        logger.info(f"[GOOGLE_AUTH] Redirecting to {frontend_url}/auth/callback with session cookie set")
         return redirect
 
     except Exception as exc:

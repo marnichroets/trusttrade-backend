@@ -17,65 +17,70 @@ logger = logging.getLogger(__name__)
 async def get_user_from_token(request: Request, db: AsyncIOMotorDatabase) -> Optional[User]:
     """
     Extract and validate user from session token.
-    Checks both cookies and Authorization header.
+    Tries the cookie token first, then falls through to the Authorization: Bearer
+    header. This fallback matters for the Google OAuth callback flow where the
+    browser may still carry a stale cookie from a previous email/password login
+    while the new token arrives only in the Authorization header.
     """
-    # Check cookie first, then Authorization header
-    session_token = request.cookies.get("session_token")
-    if not session_token:
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            session_token = auth_header.split(" ")[1]
-    
-    if not session_token:
+    candidates = []
+    cookie_token = request.cookies.get("session_token")
+    if cookie_token:
+        candidates.append(("cookie", cookie_token))
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        bearer_token = auth_header.split(" ")[1]
+        if bearer_token and bearer_token != cookie_token:
+            candidates.append(("bearer", bearer_token))
+
+    if not candidates:
         logger.debug("No session token found in cookies or Authorization header")
         return None
-    
-    logger.debug(f"Looking up session token: {session_token[:20]}...")
-    
-    # Find session
-    session_doc = await db.user_sessions.find_one(
-        {"session_token": session_token},
-        {"_id": 0}
-    )
-    
-    if not session_doc:
-        logger.info(f"Session not found for token: {session_token[:30]}...")
-        return None
-    
-    logger.info(f"Session found for user_id: {session_doc.get('user_id')}")
-    
-    # Check expiry
-    expires_at = session_doc["expires_at"]
-    if isinstance(expires_at, str):
-        # Handle different date formats
-        expires_str = expires_at.replace('Z', '+00:00')
-        try:
-            expires_at = datetime.fromisoformat(expires_str)
-        except ValueError:
-            # Fallback for formats without timezone
-            expires_at = datetime.strptime(expires_at[:19], '%Y-%m-%dT%H:%M:%S')
+
+    for source, session_token in candidates:
+        logger.debug(f"[{source}] Looking up session token: {session_token[:20]}...")
+
+        session_doc = await db.user_sessions.find_one(
+            {"session_token": session_token},
+            {"_id": 0}
+        )
+
+        if not session_doc:
+            logger.info(f"[{source}] Session not found for token: {session_token[:30]}...")
+            continue
+
+        logger.info(f"[{source}] Session found for user_id: {session_doc.get('user_id')}")
+
+        # Check expiry
+        expires_at = session_doc["expires_at"]
+        if isinstance(expires_at, str):
+            expires_str = expires_at.replace('Z', '+00:00')
+            try:
+                expires_at = datetime.fromisoformat(expires_str)
+            except ValueError:
+                expires_at = datetime.strptime(expires_at[:19], '%Y-%m-%dT%H:%M:%S')
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    
-    if expires_at < datetime.now(timezone.utc):
-        logger.info(f"Session expired: {expires_at} < {datetime.now(timezone.utc)}")
-        return None
-    
-    logger.info(f"Session valid, fetching user: {session_doc['user_id']}")
-    
-    # Get user
-    user_doc = await db.users.find_one(
-        {"user_id": session_doc["user_id"]},
-        {"_id": 0}
-    )
-    
-    if not user_doc:
-        logger.info(f"User not found for user_id: {session_doc['user_id']}")
-        return None
-    
-    logger.info(f"User found: {user_doc.get('email')}")
-    return User(**user_doc)
+
+        if expires_at < datetime.now(timezone.utc):
+            logger.info(f"[{source}] Session expired: {expires_at}")
+            continue
+
+        logger.info(f"[{source}] Session valid, fetching user: {session_doc['user_id']}")
+
+        user_doc = await db.users.find_one(
+            {"user_id": session_doc["user_id"]},
+            {"_id": 0}
+        )
+
+        if not user_doc:
+            logger.info(f"[{source}] User not found for user_id: {session_doc['user_id']}")
+            continue
+
+        logger.info(f"[{source}] User found: {user_doc.get('email')}")
+        return User(**user_doc)
+
+    return None
 
 
 async def require_auth(request: Request, db: AsyncIOMotorDatabase) -> User:

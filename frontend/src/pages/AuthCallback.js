@@ -45,6 +45,7 @@ function AuthCallback() {
 
         // ── Direct Google OAuth flow: session_token in hash ──────────────────
         const directToken = hashParams.get('session_token');
+        console.log('[AuthCallback] session_token extracted from hash:', directToken ? directToken.substring(0, 20) + '...' : 'NULL — hash was: ' + hash);
         if (directToken) {
           console.log('[AuthCallback] Direct Google OAuth token found');
           setStatus('Authenticating...');

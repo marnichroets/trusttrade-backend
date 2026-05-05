@@ -23,6 +23,18 @@ const V = {
   sans:    "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
+function extractSADigits(raw) {
+  // Strip spaces, dashes, parens; remove + prefix
+  let s = raw.replace(/[\s\-()]/g, '').replace(/^\+/, '');
+  if (s.startsWith('27') && s.length >= 11) s = s.slice(2); // remove 27 country code
+  if (s.startsWith('0')) s = s.slice(1);                     // remove leading 0
+  return s; // expect 9 core digits
+}
+
+function isValidSAPhone(raw) {
+  return /^\d{9}$/.test(extractSADigits(raw));
+}
+
 const SA_BANKS = [
   { name: 'ABSA Bank',                 code: '632005' },
   { name: 'African Bank',              code: '430000' },
@@ -116,7 +128,7 @@ function Onboarding() {
   // ── Phone step ──────────────────────────────────────────────────────────────
 
   const handlePhoneSubmit = async () => {
-    if (!phone || phone.length < 9) { toast.error('Enter a valid SA mobile number'); return; }
+    if (!isValidSAPhone(phone)) { toast.error('Enter a valid SA mobile number'); return; }
     setPhoneLoading(true);
     try {
       const res = await api.post('/auth/phone/submit', { phone });
@@ -269,7 +281,7 @@ function Onboarding() {
                 className="ob-input"
                 type="tel"
                 value={phone}
-                onChange={e => setPhone(e.target.value.replace(/[^\d+]/g, ''))}
+                onChange={e => setPhone(e.target.value.replace(/[^\d+\s\-()]/g, ''))}
                 onKeyDown={e => e.key === 'Enter' && handlePhoneSubmit()}
                 placeholder="0821234567"
                 style={inputStyle}
@@ -280,14 +292,14 @@ function Onboarding() {
 
               <button
                 onClick={handlePhoneSubmit}
-                disabled={phoneLoading || phone.length < 9}
+                disabled={phoneLoading || !isValidSAPhone(phone)}
                 style={{
                   width: '100%', padding: '11px', borderRadius: 4, border: 'none',
-                  background: phoneLoading || phone.length < 9 ? V.dim : V.accent,
+                  background: phoneLoading || !isValidSAPhone(phone) ? V.dim : V.accent,
                   color: '#000', fontFamily: V.sans, fontWeight: 700, fontSize: 14,
-                  cursor: phoneLoading || phone.length < 9 ? 'not-allowed' : 'pointer',
+                  cursor: phoneLoading || !isValidSAPhone(phone) ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  boxShadow: phoneLoading || phone.length < 9 ? 'none' : `0 0 16px ${V.accent}40`,
+                  boxShadow: phoneLoading || !isValidSAPhone(phone) ? 'none' : `0 0 16px ${V.accent}40`,
                 }}
               >
                 {phoneLoading ? 'Sending…' : <><span>Send Verification Code</span><ArrowRight size={15} /></>}

@@ -55,7 +55,13 @@ async function apiFetch(path, options = {}) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Unknown error" }));
-    throw new Error(err.detail || "Request failed");
+    const detail = err.detail;
+    let msg;
+    if (typeof detail === "string") msg = detail;
+    else if (Array.isArray(detail)) msg = detail.map(d => d.msg || d.message || JSON.stringify(d)).join("; ");
+    else if (detail && typeof detail === "object") msg = detail.message || detail.msg || JSON.stringify(detail);
+    else msg = err.message || "Request failed";
+    throw new Error(msg);
   }
   return res.json();
 }
@@ -567,7 +573,7 @@ export function CreateSmartDeal() {
           </p>
         </div>
 
-        <button onClick={handleSubmit} disabled={loading} style={{ ...btn(D.blue), width: "100%", opacity: loading ? 0.6 : 1, cursor: loading ? "not-allowed" : "pointer" }}>
+        <button onClick={handleSubmit} disabled={loading} style={{ ...btn(D.accent, "#000"), width: "100%", opacity: loading ? 0.6 : 1, cursor: loading ? "not-allowed" : "pointer" }}>
           {loading ? <><Spinner /> Creating…</> : <><Zap size={14} /> Create Smart Deal</>}
         </button>
       </div>

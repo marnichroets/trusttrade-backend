@@ -52,6 +52,9 @@ function AuthCallback() {
           // Clear the hash immediately to avoid token in browser history
           window.history.replaceState(null, '', window.location.pathname);
 
+          // Save token before the /me call so any interceptors can pick it up
+          localStorage.setItem('session_token', directToken);
+
           // Fetch user data from the backend using the token
           const meResp = await axios.get(`${API}/auth/me`, {
             headers: { Authorization: `Bearer ${directToken}` },
@@ -60,8 +63,6 @@ function AuthCallback() {
 
           const data = meResp.data;
           const token = directToken;
-
-          localStorage.setItem('session_token', token);
           const userData = {
             user_id: data.user_id,
             email: data.email,

@@ -80,8 +80,8 @@ export default function TermsPage() {
             <h2 className="text-xl font-semibold text-slate-900 mb-3">7. Contact</h2>
             <p className="text-slate-600 leading-relaxed">
               For questions about these terms, contact us at{' '}
-              <a href="mailto:support@trusttradesa.co.za" className="text-blue-600 hover:underline">
-                support@trusttradesa.co.za
+              <a href="mailto:trusttrade.register@gmail.com" className="text-blue-600 hover:underline">
+                trusttrade.register@gmail.com
               </a>
             </p>
           </section>

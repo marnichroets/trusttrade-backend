@@ -105,8 +105,8 @@ export default function RefundPage() {
               To request a refund, open a dispute on your transaction page. Provide evidence 
               and description of the issue. Our team will review and process the refund if 
               your claim is valid. For immediate assistance, contact{' '}
-              <a href="mailto:support@trusttradesa.co.za" className="text-blue-600 hover:underline">
-                support@trusttradesa.co.za
+              <a href="mailto:trusttrade.register@gmail.com" className="text-blue-600 hover:underline">
+                trusttrade.register@gmail.com
               </a>
             </p>
           </section>

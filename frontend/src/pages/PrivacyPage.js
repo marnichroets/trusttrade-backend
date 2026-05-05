@@ -61,7 +61,7 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold text-slate-900 mb-3">5. Your Rights</h2>
             <p className="text-slate-600 leading-relaxed">
               You have the right to access, correct, or delete your personal information. 
-              Contact us at support@trusttradesa.co.za to exercise these rights.
+              Contact us at trusttrade.register@gmail.com to exercise these rights.
             </p>
           </section>
           
@@ -69,8 +69,8 @@ export default function PrivacyPage() {
             <h2 className="text-xl font-semibold text-slate-900 mb-3">6. Contact Us</h2>
             <p className="text-slate-600 leading-relaxed">
               For privacy-related inquiries, contact us at{' '}
-              <a href="mailto:support@trusttradesa.co.za" className="text-blue-600 hover:underline">
-                support@trusttradesa.co.za
+              <a href="mailto:trusttrade.register@gmail.com" className="text-blue-600 hover:underline">
+                trusttrade.register@gmail.com
               </a>
             </p>
           </section>

@@ -387,8 +387,8 @@ function LandingPage() {
 
             <div>
               <h4 style={{ color: TEXT }} className="text-sm font-semibold mb-4">Contact</h4>
-              <a href="mailto:support@trusttradesa.co.za" style={{ color: MUTED }} className="hover:text-white text-sm transition-colors">
-                support@trusttradesa.co.za
+              <a href="mailto:trusttrade.register@gmail.com" style={{ color: MUTED }} className="hover:text-white text-sm transition-colors">
+                trusttrade.register@gmail.com
               </a>
             </div>
 

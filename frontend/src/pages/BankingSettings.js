@@ -221,7 +221,7 @@ function BankingSettings() {
                 For security reasons, banking details cannot be changed directly. Please contact our support team.
               </p>
               <a
-                href="mailto:support@trusttradesa.co.za?subject=Banking%20Details%20Change%20Request"
+                href="mailto:trusttrade.register@gmail.com?subject=Banking%20Details%20Change%20Request"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 12, color: V.accent, textDecoration: 'none' }}
               >
                 <Mail size={12} /> Contact Support

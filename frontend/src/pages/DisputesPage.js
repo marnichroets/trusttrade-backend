@@ -104,8 +104,8 @@ export default function DisputesPage() {
               <MessageSquare className="w-6 h-6 text-blue-600" />
               <div>
                 <p className="font-semibold text-slate-900">Contact Support</p>
-                <a href="mailto:support@trusttradesa.co.za" className="text-blue-600 hover:underline">
-                  support@trusttradesa.co.za
+                <a href="mailto:trusttrade.register@gmail.com" className="text-blue-600 hover:underline">
+                  trusttrade.register@gmail.com
                 </a>
               </div>
             </div>

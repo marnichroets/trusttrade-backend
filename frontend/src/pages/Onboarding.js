@@ -23,12 +23,9 @@ const V = {
   sans:    "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
-function isValidSAPhone(phone) {
-  const cleaned = phone.replace(/[\s\-\+\(\)]/g, '');
-  if (cleaned.startsWith('27') && cleaned.length === 11) return true;
-  if (cleaned.startsWith('0') && cleaned.length === 10) return true;
-  if (cleaned.length === 9) return true;
-  return false;
+function isValidPhone(phone) {
+  const digits = phone.replace(/[\s\-\+\(\)]/g, '');
+  return digits.length >= 9 && digits.length <= 12;
 }
 
 const SA_BANKS = [
@@ -124,7 +121,7 @@ function Onboarding() {
   // ── Phone step ──────────────────────────────────────────────────────────────
 
   const handlePhoneSubmit = async () => {
-    if (!isValidSAPhone(phone)) { toast.error('Enter a valid SA mobile number'); return; }
+    if (!isValidPhone(phone)) { toast.error('Enter a valid SA mobile number'); return; }
     setPhoneLoading(true);
     try {
       const res = await api.post('/auth/phone/submit', { phone });
@@ -288,17 +285,28 @@ function Onboarding() {
 
               <button
                 onClick={handlePhoneSubmit}
-                disabled={phoneLoading || !isValidSAPhone(phone)}
+                disabled={phoneLoading || !isValidPhone(phone)}
                 style={{
                   width: '100%', padding: '11px', borderRadius: 4, border: 'none',
-                  background: phoneLoading || !isValidSAPhone(phone) ? V.dim : V.accent,
+                  background: phoneLoading || !isValidPhone(phone) ? V.dim : V.accent,
                   color: '#000', fontFamily: V.sans, fontWeight: 700, fontSize: 14,
-                  cursor: phoneLoading || !isValidSAPhone(phone) ? 'not-allowed' : 'pointer',
+                  cursor: phoneLoading || !isValidPhone(phone) ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  boxShadow: phoneLoading || !isValidSAPhone(phone) ? 'none' : `0 0 16px ${V.accent}40`,
+                  boxShadow: phoneLoading || !isValidPhone(phone) ? 'none' : `0 0 16px ${V.accent}40`,
                 }}
               >
                 {phoneLoading ? 'Sending…' : <><span>Send Verification Code</span><ArrowRight size={15} /></>}
+              </button>
+
+              <button
+                onClick={() => { setNeedsOnboarding(false); navigate('/dashboard', { replace: true }); }}
+                style={{
+                  width: '100%', marginTop: 10, padding: '10px', borderRadius: 4,
+                  border: `1px solid ${V.border}`, background: 'transparent',
+                  color: V.sub, fontFamily: V.sans, fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                Skip for now — add phone later in Profile
               </button>
             </>
           ) : (

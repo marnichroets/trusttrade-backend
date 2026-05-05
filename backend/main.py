@@ -80,6 +80,13 @@ try:
 except Exception as e:
     logger.warning(f"Could not mount uploads directory: {e}")
 
+try:
+    static_dir = Path(__file__).parent / "static"
+    static_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+except Exception as e:
+    logger.warning(f"Could not mount static directory: {e}")
+
 # Simple test email endpoint (no auth required for testing)
 @app.get("/api/test-email")
 async def public_test_email(to: str = "marnichr@gmail.com"):

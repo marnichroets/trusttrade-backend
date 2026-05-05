@@ -112,8 +112,8 @@ async def send_email(
         return False
 
 
-# Logo URL for emails
-EMAIL_LOGO_URL = "https://customer-assets.emergentagent.com/job_trust-trade-pay/artifacts/g0wqdpup_TrustTrade%20Logo.png"
+# Logo URL for emails — served from backend static files
+EMAIL_LOGO_URL = "https://trusttrade-backend-production-3efa.up.railway.app/static/trusttrade-logo.png"
 
 # ============ BASE EMAIL TEMPLATE ============
 

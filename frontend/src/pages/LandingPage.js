@@ -51,7 +51,7 @@ function LandingPage() {
       <nav style={{ background: DARK_BG, borderBottom: `1px solid ${BORDER}` }} className="sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="flex justify-between items-center h-16">
-            <TrustLogo size="small" />
+            <TrustLogo size="small" dark />
             <div className="flex items-center gap-3">
               <button
                 onClick={handleGetStarted}
@@ -356,7 +356,7 @@ function LandingPage() {
 
             <div className="sm:col-span-2">
               <div className="mb-4">
-                <TrustLogo size="small" />
+                <TrustLogo size="small" dark />
               </div>
               <p style={{ color: MUTED }} className="text-sm max-w-xs leading-relaxed">
                 Secure escrow protection for online transactions in South Africa. Buy and sell without the scam risk.

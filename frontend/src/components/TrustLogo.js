@@ -1,43 +1,36 @@
 // TrustTrade Logo Component
-// Uses the official TrustTrade logo (cropped to remove whitespace)
+// dark={true}  → filter:brightness(0)invert(1) makes the logo white for dark backgrounds
+// dark={false} → original colours for light backgrounds (login page, emails)
 
-export function TrustLogo({ size = 'default', className = '' }) {
-  // Size variants - now properly sized since logo is cropped
+export function TrustLogo({ size = 'default', className = '', dark = false }) {
   const sizes = {
-    xs: 'h-8',        // Extra small
-    small: 'h-10',    // Small navbar
-    default: 'h-12',  // Default navbar - PROMINENT
-    large: 'h-14',    // Login page
-    xlarge: 'h-16',   // Large display
-    hero: 'h-20'      // Hero section
+    xs:      'h-8',
+    small:   'h-10',
+    default: 'h-12',
+    large:   'h-14',
+    xlarge:  'h-16',
+    hero:    'h-20',
   };
 
   return (
-    <img 
-      src="/trusttrade-logo-final.png" 
+    <img
+      src="/trusttrade-logo.png"
       alt="TrustTrade"
       className={`${sizes[size]} w-auto object-contain ${className}`}
-      style={{ 
-        backgroundColor: 'transparent'
+      style={{
+        filter: dark ? 'brightness(0) invert(1)' : 'none',
+        maxWidth: 160,
+        backgroundColor: 'transparent',
       }}
       data-testid="trusttrade-logo"
     />
   );
 }
 
-// Text-based fallback logo (if image doesn't load)
+// Text-based fallback (if image doesn't load)
 export function TrustLogoText({ size = 'default', className = '' }) {
-  const textSizes = {
-    small: 'text-xl',
-    default: 'text-2xl',
-    large: 'text-3xl'
-  };
-
-  const iconSizes = {
-    small: 'w-10 h-10',
-    default: 'w-12 h-12',
-    large: 'w-14 h-14'
-  };
+  const textSizes = { small: 'text-xl', default: 'text-2xl', large: 'text-3xl' };
+  const iconSizes = { small: 'w-10 h-10', default: 'w-12 h-12', large: 'w-14 h-14' };
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
@@ -53,5 +46,4 @@ export function TrustLogoText({ size = 'default', className = '' }) {
   );
 }
 
-// Default export - use the image logo
 export default TrustLogo;

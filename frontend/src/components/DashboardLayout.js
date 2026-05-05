@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings, User, Activity, Shield, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
+import TrustLogo from './TrustLogo';
 
 export const V = {
   bg:      '#0A0E14',
@@ -176,31 +177,9 @@ function DashboardLayout({ children, user, loading = false }) {
       {/* ── Sidebar (desktop) ── */}
       <aside className="vault-sidebar">
         {/* Logo */}
-        <div style={{ padding: '18px 14px 14px', borderBottom: `1px solid ${V.border}` }}>
-          <NavLink to="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
-            <div style={{
-              width: 30, height: 30, borderRadius: 4,
-              border: `1px solid rgba(0,209,255,0.4)`,
-              background: 'rgba(0,209,255,0.06)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0,
-            }}>
-              <Shield size={14} color={V.accent} />
-            </div>
-            <div style={{ lineHeight: 1 }}>
-              <div style={{
-                color: V.text, fontWeight: 700, fontSize: 14,
-                letterSpacing: '0.06em', textTransform: 'uppercase',
-              }}>
-                TrustTrade
-              </div>
-              <div style={{
-                color: V.dim, fontSize: 9, letterSpacing: '0.14em',
-                fontFamily: V.mono, textTransform: 'uppercase', marginTop: 2,
-              }}>
-                SECURE VAULT
-              </div>
-            </div>
+        <div style={{ padding: '14px 14px 12px', borderBottom: `1px solid ${V.border}` }}>
+          <NavLink to="/dashboard" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+            <TrustLogo size="small" dark />
           </NavLink>
         </div>
 
@@ -355,11 +334,8 @@ function DashboardLayout({ children, user, loading = false }) {
             position: 'sticky', top: 0, zIndex: 30,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Shield size={14} color={V.accent} />
-            <span style={{ fontWeight: 700, fontSize: 13, color: V.text, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              TrustTrade
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <TrustLogo size="xs" dark />
           </div>
           <div>
             {user?.picture ? (

@@ -24,11 +24,14 @@ SENDER_EMAIL = os.environ.get('POSTMARK_SENDER_EMAIL', 'noreply@trusttradesa.co.
 SENDER_NAME = "TrustTrade"
 
 # Brand Colors
-BRAND_NAVY = "#1a2942"
-BRAND_BLUE = "#2563eb"
-LIGHT_GREY = "#f8f9fa"
-LABEL_GREY = "#6c757d"
-TEXT_DARK = "#212529"
+BRAND_NAVY  = "#0F1E35"   # dark navy — header / footer / accents
+BRAND_BLUE  = "#2563eb"   # kept for badge fallback
+CYAN_LINE   = "#00D1FF"   # 3-px top-border accent
+LIGHT_GREY  = "#f8f9fa"
+LABEL_GREY  = "#6B7280"
+TEXT_DARK   = "#111827"
+TEXT_MUTED  = "#6B7280"
+BORDER_CLR  = "#E5E7EB"
 
 # Initialize Postmark client
 _postmark_client = None
@@ -128,161 +131,147 @@ def get_base_email_template(
     status_badge: str = None,
     status_color: str = None
 ) -> str:
-    """
-    Generate a professional email using the base template.
-    
-    Args:
-        heading: Main heading text (e.g., "New Transaction Created")
-        greeting_name: Name for greeting (e.g., "Marnich")
-        intro_text: Introduction paragraph
-        details: Dict of label-value pairs for transaction details
-        cta_text: Call-to-action button text
-        cta_link: Call-to-action button URL
-        show_how_it_works: Whether to show the "How It Works" section
-        status_badge: Optional status text to show as a badge
-        status_color: Color for status badge (#hex)
-    """
-    
-    # Build details rows
-    details_html = ""
-    for label, value in details.items():
-        details_html += f"""
+    """Generate a professional TrustTrade email with dark navy header/footer."""
+
+    # ── Details rows ──────────────────────────────────────────────────────────
+    details_rows = ""
+    for i, (label, value) in enumerate(details.items()):
+        row_bg = "#F9FAFB" if i % 2 == 0 else "#FFFFFF"
+        details_rows += f"""
         <tr>
-            <td style="padding: 8px 0; font-size: 12px; text-transform: uppercase; color: {LABEL_GREY}; letter-spacing: 0.5px; width: 120px; vertical-align: top;">{label}</td>
-            <td style="padding: 8px 0; font-size: 14px; color: {TEXT_DARK}; font-weight: 500;">{value}</td>
-        </tr>
-        """
-    
-    # CTA Button
-    cta_html = ""
-    if cta_text and cta_link:
-        cta_html = f"""
-        <div style="text-align: center; margin: 30px 0;">
-            <a href="{cta_link}" style="display: inline-block; background-color: {BRAND_NAVY}; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 600; max-width: 200px;">
-                {cta_text}
-            </a>
-        </div>
-        """
-    
-    # Status Badge
+          <td style="padding:10px 16px;background:{row_bg};font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:{TEXT_MUTED};width:38%;vertical-align:top;font-weight:600;border-bottom:1px solid {BORDER_CLR};">{label}</td>
+          <td style="padding:10px 16px;background:{row_bg};font-size:14px;color:{TEXT_DARK};font-weight:500;vertical-align:top;border-bottom:1px solid {BORDER_CLR};">{value}</td>
+        </tr>"""
+
+    # ── Status badge ──────────────────────────────────────────────────────────
     badge_html = ""
     if status_badge:
         badge_color = status_color or BRAND_BLUE
         badge_html = f"""
-        <div style="text-align: center; margin-bottom: 20px;">
-            <span style="display: inline-block; background-color: {badge_color}; color: white; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
-                {status_badge}
-            </span>
-        </div>
-        """
-    
-    # How It Works Section
-    how_it_works_html = ""
+        <div style="margin-bottom:20px;">
+          <span style="display:inline-block;background:{badge_color};color:white;padding:5px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;">{status_badge}</span>
+        </div>"""
+
+    # ── CTA button ────────────────────────────────────────────────────────────
+    cta_html = ""
+    if cta_text and cta_link:
+        cta_html = f"""
+        <div style="text-align:center;margin:32px 0;">
+          <a href="{cta_link}" style="display:inline-block;background:{BRAND_NAVY};color:white;padding:14px 36px;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:0.3px;">
+            {cta_text} &rarr;
+          </a>
+        </div>"""
+
+    # ── How It Works ──────────────────────────────────────────────────────────
+    hiw_html = ""
     if show_how_it_works:
-        how_it_works_html = f"""
-        <div style="background-color: {LIGHT_GREY}; padding: 20px; border-radius: 8px; margin-top: 30px;">
-            <p style="font-size: 12px; text-transform: uppercase; color: {LABEL_GREY}; letter-spacing: 0.5px; margin: 0 0 12px 0; font-weight: 600;">How TrustTrade Works</p>
-            <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                    <td style="padding: 6px 0; font-size: 14px; color: {TEXT_DARK};">
-                        <span style="display: inline-block; width: 20px; height: 20px; background-color: {BRAND_NAVY}; color: white; border-radius: 50%; text-align: center; line-height: 20px; font-size: 11px; margin-right: 10px;">1</span>
-                        Buyer pays into escrow
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 6px 0; font-size: 14px; color: {TEXT_DARK};">
-                        <span style="display: inline-block; width: 20px; height: 20px; background-color: {BRAND_NAVY}; color: white; border-radius: 50%; text-align: center; line-height: 20px; font-size: 11px; margin-right: 10px;">2</span>
-                        Seller delivers item
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 6px 0; font-size: 14px; color: {TEXT_DARK};">
-                        <span style="display: inline-block; width: 20px; height: 20px; background-color: {BRAND_NAVY}; color: white; border-radius: 50%; text-align: center; line-height: 20px; font-size: 11px; margin-right: 10px;">3</span>
-                        Buyer confirms delivery
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 6px 0; font-size: 14px; color: {TEXT_DARK};">
-                        <span style="display: inline-block; width: 20px; height: 20px; background-color: {BRAND_NAVY}; color: white; border-radius: 50%; text-align: center; line-height: 20px; font-size: 11px; margin-right: 10px;">4</span>
-                        Funds released to seller (10:00 or 15:00 daily)
-                    </td>
-                </tr>
-            </table>
-        </div>
-        """
-    
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{heading}</title>
-    </head>
-    <body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
-        <table role="presentation" style="width: 100%; border-collapse: collapse;">
+        steps = [
+            ("01", "Buyer pays into escrow"),
+            ("02", "Seller delivers the item"),
+            ("03", "Buyer confirms delivery"),
+            ("04", "Funds released to seller (10:00 or 15:00 daily)"),
+        ]
+        step_rows = ""
+        for num, step in steps:
+            step_rows += f"""
             <tr>
-                <td style="padding: 20px 16px;">
-                    <table role="presentation" style="max-width: 600px; margin: 0 auto; border-collapse: collapse; width: 100%;">
-                        
-                        <!-- Header -->
-                        <tr>
-                            <td style="background-color: {BRAND_NAVY}; padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
-                                <img src="{EMAIL_LOGO_URL}" alt="TrustTrade" style="height: 40px; max-width: 200px; display: block; margin: 0 auto;">
-                            </td>
-                        </tr>
-                        
-                        <!-- Body -->
-                        <tr>
-                            <td style="background-color: white; padding: 32px 24px;">
-                                
-                                {badge_html}
-                                
-                                <!-- Greeting -->
-                                <p style="font-size: 16px; color: {TEXT_DARK}; margin: 0 0 16px 0;">Hi {greeting_name},</p>
-                                
-                                <!-- Intro Text -->
-                                <p style="font-size: 14px; color: {TEXT_DARK}; margin: 0 0 24px 0; line-height: 1.6;">{intro_text}</p>
-                                
-                                <!-- Transaction Details Box -->
-                                <div style="background-color: {LIGHT_GREY}; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
-                                    <p style="font-size: 12px; text-transform: uppercase; color: {LABEL_GREY}; letter-spacing: 0.5px; margin: 0 0 16px 0; font-weight: 600;">Transaction Details</p>
-                                    <table style="width: 100%; border-collapse: collapse;">
-                                        {details_html}
-                                    </table>
-                                </div>
-                                
-                                {cta_html}
-                                
-                                {how_it_works_html}
-                                
-                            </td>
-                        </tr>
-                        
-                        <!-- Footer -->
-                        <tr>
-                            <td style="background-color: {LIGHT_GREY}; padding: 24px; text-align: center; border-radius: 0 0 8px 8px;">
-                                <p style="margin: 0 0 8px 0; font-size: 12px; color: {LABEL_GREY};">
-                                    &copy; 2026 TrustTrade South Africa
-                                </p>
-                                <p style="margin: 0 0 8px 0; font-size: 12px; color: {LABEL_GREY};">
-                                    <a href="https://www.trusttradesa.co.za" style="color: {BRAND_NAVY}; text-decoration: none;">trusttradesa.co.za</a>
-                                </p>
-                                <p style="margin: 0; font-size: 11px; color: {LABEL_GREY};">
-                                    Secured by TrustTrade Escrow
-                                </p>
-                            </td>
-                        </tr>
-                        
-                    </table>
-                </td>
-            </tr>
+              <td style="padding:8px 0;">
+                <span style="display:inline-block;width:22px;height:22px;background:{BRAND_NAVY};color:white;text-align:center;line-height:22px;font-size:10px;font-weight:700;margin-right:12px;vertical-align:middle;">{num}</span>
+                <span style="font-size:13px;color:{TEXT_DARK};vertical-align:middle;">{step}</span>
+              </td>
+            </tr>"""
+        hiw_html = f"""
+        <table style="width:100%;border-collapse:collapse;border:1px solid {BORDER_CLR};margin-top:28px;">
+          <tr>
+            <td style="padding:10px 16px;background:{BRAND_NAVY};font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.65);font-weight:700;">
+              HOW TRUSTTRADE WORKS
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 20px;background:white;">
+              <table style="width:100%;border-collapse:collapse;">{step_rows}</table>
+            </td>
+          </tr>
+        </table>"""
+
+    # ── Full template ─────────────────────────────────────────────────────────
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{heading}</title>
+</head>
+<body style="margin:0;padding:0;background:#F0F2F5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<table role="presentation" style="width:100%;border-collapse:collapse;background:#F0F2F5;">
+<tr><td style="padding:32px 16px;">
+
+  <table role="presentation" style="max-width:580px;margin:0 auto;border-collapse:collapse;width:100%;">
+
+    <!-- ── HEADER ── -->
+    <tr>
+      <td style="background:{BRAND_NAVY};padding:28px 32px;text-align:center;">
+        <img src="{EMAIL_LOGO_URL}" alt="TrustTrade" style="height:44px;max-width:200px;display:block;margin:0 auto 10px;">
+        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.4);font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
+      </td>
+    </tr>
+
+    <!-- ── HEADING BAND ── -->
+    <tr>
+      <td style="background:white;padding:28px 32px 0;border-top:3px solid {CYAN_LINE};">
+        <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:{BRAND_NAVY};letter-spacing:-0.3px;">{heading}</h1>
+        {badge_html}
+      </td>
+    </tr>
+
+    <!-- ── BODY ── -->
+    <tr>
+      <td style="background:white;padding:0 32px 36px;">
+
+        <p style="font-size:15px;color:{TEXT_DARK};margin:0 0 20px;line-height:1.5;">Hi {greeting_name},</p>
+
+        <div style="font-size:14px;color:{TEXT_DARK};line-height:1.7;margin:0 0 28px;">{intro_text}</div>
+
+        <!-- Transaction Details -->
+        <table style="width:100%;border-collapse:collapse;border:1px solid {BORDER_CLR};margin-bottom:28px;">
+          <tr>
+            <td colspan="2" style="padding:10px 16px;background:{BRAND_NAVY};font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.65);font-weight:700;">
+              TRANSACTION DETAILS
+            </td>
+          </tr>
+          {details_rows}
         </table>
-    </body>
-    </html>
-    """
-    
-    return html_content
+
+        {cta_html}
+
+        {hiw_html}
+
+      </td>
+    </tr>
+
+    <!-- ── FOOTER ── -->
+    <tr>
+      <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;">
+        <p style="margin:0 0 6px;font-size:12px;color:rgba(255,255,255,0.45);">
+          &copy; 2026 TrustTrade South Africa. All rights reserved.
+        </p>
+        <p style="margin:0 0 6px;font-size:12px;">
+          <a href="https://www.trusttradesa.co.za" style="color:rgba(255,255,255,0.55);text-decoration:none;">trusttradesa.co.za</a>
+          &nbsp;&middot;&nbsp;
+          <a href="https://www.trusttradesa.co.za/privacy" style="color:rgba(255,255,255,0.55);text-decoration:none;">Privacy</a>
+          &nbsp;&middot;&nbsp;
+          <a href="https://www.trusttradesa.co.za/terms" style="color:rgba(255,255,255,0.55);text-decoration:none;">Terms</a>
+        </p>
+        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.25);">Secured by TrustTrade Escrow</p>
+      </td>
+    </tr>
+
+  </table>
+
+</td></tr>
+</table>
+</body>
+</html>"""
 
 
 # ============ EMAIL TEMPLATES ============
@@ -571,7 +560,7 @@ def get_funds_released_email(
         <strong>Payout Details:</strong><br><br>
         <table style="width: 100%;">
             <tr><td>Item Amount:</td><td style="text-align: right;">R {amount:,.2f}</td></tr>
-            <tr><td>TrustTrade Fee (1.5%, min R5):</td><td style="text-align: right;">- R {fee_amount:,.2f}</td></tr>
+            <tr><td>TrustTrade Fee (2%, min R5):</td><td style="text-align: right;">- R {fee_amount:,.2f}</td></tr>
             <tr style="font-weight: bold; font-size: 16px;"><td>You Receive:</td><td style="text-align: right; color: #10b981;">R {net_amount:,.2f}</td></tr>
         </table>
     </div>

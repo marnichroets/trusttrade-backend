@@ -96,6 +96,17 @@ function TransactionDetail() {
     }
   }, [transaction?.payment_status, transactionId]);
 
+  // Refresh immediately when user returns to tab after completing payment
+  useEffect(() => {
+    const onVisible = () => { if (!document.hidden) fetchData(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', fetchData);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', fetchData);
+    };
+  }, [transactionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const fetchData = async () => {
     try {
       const userRes = await api.get(`${API}/auth/me`, { withCredentials: true });

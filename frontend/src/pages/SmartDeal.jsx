@@ -347,11 +347,16 @@ function MessageThread({ dealId, messages, currentUserId }) {
   const [sending, setSending] = useState(false);
   const [localMessages, setLocalMessages] = useState(messages);
   const bottomRef = useRef(null);
+  const prevCountRef = useRef(messages.length);
 
   useEffect(() => { setLocalMessages(messages); }, [messages]);
 
+  // Only scroll to bottom when message count grows (new message), not on every refresh
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (localMessages.length > prevCountRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevCountRef.current = localMessages.length;
   }, [localMessages]);
 
   async function send() {
@@ -623,8 +628,12 @@ export function SmartDealDetail() {
     const ACTIVE = new Set(["PENDING", "ACCEPTED", "FUNDED", "DELIVERED"]);
     if (!deal || !ACTIVE.has(deal.status)) return;
     const id = setInterval(() => {
+      const scrollY = window.scrollY;
       apiFetch(`/api/smart-deals/${dealId}`)
-        .then(d => setDeal(d))
+        .then(d => {
+          setDeal(d);
+          requestAnimationFrame(() => window.scrollTo(0, scrollY));
+        })
         .catch(() => {});
     }, 5000);
     return () => clearInterval(id);

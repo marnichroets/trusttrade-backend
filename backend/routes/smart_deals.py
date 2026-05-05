@@ -241,29 +241,25 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
     await db.transactions.update_one(
         {"deal_id": deal_id},
         {"$set": {
-            "status": "FUNDED",
+            "status": "PAYMENT_PENDING",
             "tradesafe_token_id": tradesafe_id,
             "tradesafe_allocation_id": allocation_id,
             "tradesafe_seller_token_id": seller_token_id,
             "payment_method": body.payment_method,
             "payment_link": payment_link,
-            "funded_at": now,
+            "payment_initiated_at": now,
             "updated_at": now,
         }},
     )
     logger.info(
-        f"[SMART_DEAL] {deal_id} funded by {current_user.email},"
+        f"[SMART_DEAL] {deal_id} payment initiated by {current_user.email},"
         f" tradesafe_id={tradesafe_id}, payment_link={bool(payment_link)}"
     )
 
-    import email_service
-    asyncio.create_task(_fire_email(
-        email_service.send_smart_deal_funded(deal, client_name, freelancer_name)
-    ))
-
+    # Deal stays PAYMENT_PENDING until TradeSafe webhook confirms FUNDS_RECEIVED
     return {
         "deal_id": deal_id,
-        "status": "FUNDED",
+        "status": "PAYMENT_PENDING",
         "payment_link": payment_link,
         "payment_method": payment_method_used,
         "tradesafe_id": tradesafe_id,
@@ -444,6 +440,146 @@ async def post_message(deal_id: str, body: MessageRequest, request: Request):
         {"$push": {"messages": message}, "$set": {"updated_at": utcnow()}},
     )
     return message
+
+
+async def _sync_seller_banking(deal: dict, db: AsyncIOMotorDatabase):
+    """Sync freelancer banking details to their TradeSafe token (PAYOUT_SYNC)."""
+    deal_id = deal.get("deal_id", "?")
+    seller_token_id = deal.get("tradesafe_seller_token_id")
+    if not seller_token_id:
+        logger.warning(f"[PAYOUT_SYNC] No seller token for deal {deal_id} — skipping")
+        return
+
+    freelancer = await db.users.find_one({"email": deal["freelancer_email"]})
+    if not freelancer:
+        logger.warning(f"[PAYOUT_SYNC] Freelancer not found for deal {deal_id} — skipping")
+        return
+
+    banking = freelancer.get("banking") or {}
+    bank_name = banking.get("bank_name") or freelancer.get("bank_name")
+    account_number = banking.get("account_number") or freelancer.get("account_number")
+    branch_code = banking.get("branch_code") or freelancer.get("branch_code") or "000000"
+    account_type = banking.get("account_type") or freelancer.get("account_type") or "savings"
+
+    if not bank_name or not account_number:
+        logger.warning(
+            f"[PAYOUT_SYNC] No banking details for {deal['freelancer_email']} — "
+            "token will lack banking info until freelancer sets it up"
+        )
+        return
+
+    from tradesafe_service import sync_banking_to_token
+    try:
+        result = await sync_banking_to_token(
+            token_id=seller_token_id,
+            bank_name=bank_name,
+            account_number=account_number,
+            branch_code=branch_code,
+            account_type=account_type,
+            email=deal["freelancer_email"],
+        )
+        logger.info(f"[PAYOUT_SYNC] Deal {deal_id}: {result.get('success')} — {result}")
+    except Exception as exc:
+        logger.error(f"[PAYOUT_SYNC] Failed for deal {deal_id}: {exc}")
+
+
+@router.post("/webhook/tradesafe")
+async def tradesafe_webhook(request: Request):
+    """
+    Handle TradeSafe state-change webhooks.
+    Marks the deal FUNDED when TradeSafe confirms FUNDS_RECEIVED,
+    then runs PAYOUT_SYNC to attach freelancer banking to their token.
+    """
+    import json as _json
+    import os
+    import hmac
+    import hashlib
+
+    raw_body = await request.body()
+
+    # Optional HMAC signature verification (configure TRADESAFE_WEBHOOK_SECRET in env)
+    secret = os.environ.get("TRADESAFE_WEBHOOK_SECRET")
+    if secret:
+        sig = (
+            request.headers.get("X-TradeSafe-Signature")
+            or request.headers.get("X-Signature")
+            or request.headers.get("X-Hub-Signature-256", "").removeprefix("sha256=")
+        )
+        if sig:
+            expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(sig, expected):
+                logger.warning("[WEBHOOK] Signature mismatch — rejecting request")
+                raise HTTPException(status_code=401, detail="Invalid webhook signature")
+        else:
+            logger.warning("[WEBHOOK] TRADESAFE_WEBHOOK_SECRET set but no signature header received")
+
+    try:
+        data = _json.loads(raw_body)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    state = data.get("state") or data.get("status") or ""
+    reference = data.get("reference")
+    tradesafe_id = data.get("id")
+
+    logger.info(
+        f"[WEBHOOK] TradeSafe event received: state={state!r}, "
+        f"reference={reference!r}, id={tradesafe_id!r}"
+    )
+
+    # Only act on payment-confirmed states
+    FUNDED_STATES = {"FUNDS_RECEIVED", "FUNDS_DEPOSITED"}
+    if state not in FUNDED_STATES:
+        logger.info(f"[WEBHOOK] State {state!r} — no action needed")
+        return {"ok": True, "action": "ignored", "state": state}
+
+    db = get_database()
+
+    # Find the deal by our internal reference (= deal_id) or by stored tradesafe_token_id
+    deal = None
+    if reference:
+        deal = await db.transactions.find_one(
+            {"deal_id": reference, "deal_type": "DIGITAL_WORK"}
+        )
+    if not deal and tradesafe_id:
+        deal = await db.transactions.find_one(
+            {"tradesafe_token_id": tradesafe_id, "deal_type": "DIGITAL_WORK"}
+        )
+
+    if not deal:
+        logger.warning(
+            f"[WEBHOOK] No DIGITAL_WORK deal found for reference={reference!r}, "
+            f"tradesafe_id={tradesafe_id!r}"
+        )
+        return {"ok": True, "action": "no_deal_found"}
+
+    deal_id = deal["deal_id"]
+
+    if deal["status"] not in ("ACCEPTED", "PAYMENT_PENDING"):
+        logger.info(
+            f"[WEBHOOK] Deal {deal_id} already in status={deal['status']!r} — skipping"
+        )
+        return {"ok": True, "action": "already_processed", "deal_id": deal_id}
+
+    now = utcnow()
+    await db.transactions.update_one(
+        {"deal_id": deal_id},
+        {"$set": {"status": "FUNDED", "funded_at": now, "updated_at": now}},
+    )
+    logger.info(f"[WEBHOOK] Deal {deal_id} → FUNDED (tradesafe state={state!r})")
+
+    # PAYOUT_SYNC: attach freelancer banking to their TradeSafe token
+    asyncio.create_task(_fire_email(_sync_seller_banking(deal, db)))
+
+    # Notify both parties that escrow is funded and work can begin
+    client_name = deal.get("client_name") or deal["client_email"]
+    freelancer_name = deal.get("freelancer_name") or deal["freelancer_email"]
+    import email_service
+    asyncio.create_task(_fire_email(
+        email_service.send_smart_deal_funded(deal, client_name, freelancer_name)
+    ))
+
+    return {"ok": True, "action": "funded", "deal_id": deal_id}
 
 
 @router.get("/")

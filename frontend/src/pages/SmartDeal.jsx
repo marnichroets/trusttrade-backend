@@ -27,13 +27,14 @@ const D = {
 };
 
 const STATUS = {
-  PENDING:   { label: "Waiting for freelancer to accept",        color: "#D97706", bg: "#1A1200", dot: "#F59E0B" },
-  ACCEPTED:  { label: "Fund escrow to start work",               color: "#3B82F6", bg: "#071428", dot: "#3B82F6" },
-  FUNDED:    { label: "Freelancer is working",                    color: "#10B981", bg: "#041A0F", dot: "#10B981" },
-  DELIVERED: { label: "Review and approve to release payment",    color: "#8B5CF6", bg: "#100820", dot: "#8B5CF6" },
-  APPROVED:  { label: "Complete",                                color: "#10B981", bg: "#041A0F", dot: "#10B981" },
-  COMPLETE:  { label: "Complete",                                color: "#10B981", bg: "#041A0F", dot: "#10B981" },
-  DISPUTED:  { label: "Admin investigating",                     color: "#EF4444", bg: "#1A0808", dot: "#EF4444" },
+  PENDING:         { label: "Waiting for freelancer to accept",        color: "#D97706", bg: "#1A1200", dot: "#F59E0B" },
+  ACCEPTED:        { label: "Fund escrow to start work",               color: "#3B82F6", bg: "#071428", dot: "#3B82F6" },
+  PAYMENT_PENDING: { label: "Awaiting payment confirmation",           color: "#3B82F6", bg: "#071428", dot: "#60A5FA" },
+  FUNDED:          { label: "Freelancer is working",                   color: "#10B981", bg: "#041A0F", dot: "#10B981" },
+  DELIVERED:       { label: "Review and approve to release payment",   color: "#8B5CF6", bg: "#100820", dot: "#8B5CF6" },
+  APPROVED:        { label: "Complete",                                color: "#10B981", bg: "#041A0F", dot: "#10B981" },
+  COMPLETE:        { label: "Complete",                                color: "#10B981", bg: "#041A0F", dot: "#10B981" },
+  DISPUTED:        { label: "Admin investigating",                     color: "#EF4444", bg: "#1A0808", dot: "#EF4444" },
 };
 
 const PAYMENT_METHODS = [
@@ -138,7 +139,7 @@ function StatusBadge({ status }) {
 function ProgressTracker({ status }) {
   const steps = ["PENDING", "ACCEPTED", "FUNDED", "DELIVERED", "COMPLETE"];
   const stepLabels = { PENDING: "Created", ACCEPTED: "Accepted", FUNDED: "Funded", DELIVERED: "Delivered", COMPLETE: "Done" };
-  const cur = status === "DISPUTED" ? "DELIVERED" : status;
+  const cur = status === "DISPUTED" ? "DELIVERED" : status === "PAYMENT_PENDING" ? "ACCEPTED" : status;
   const curIdx = steps.indexOf(cur);
   return (
     <div style={{ display: "flex", alignItems: "center", padding: "16px 18px", background: D.surfaceHi, borderRadius: 12, marginBottom: 14, border: `1px solid ${D.border}` }}>
@@ -205,6 +206,7 @@ function FundPanel({ deal, onFunded }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
   const [payLink, setPayLink] = useState(null);
+  const [waiting, setWaiting] = useState(false);
 
   const selected = PAYMENT_METHODS.find(m => m.id === method);
   const fee = deal.amount * (selected.fee / 100);
@@ -231,6 +233,24 @@ function FundPanel({ deal, onFunded }) {
   }
 
   if (payLink) {
+    if (waiting) {
+      return (
+        <ActionCard accent={D.blue}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${D.blue}`, borderTopColor: "transparent", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Waiting for payment confirmation</h3>
+          </div>
+          <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 12px", lineHeight: 1.5 }}>
+            TradeSafe will confirm once your payment clears. This page updates automatically — no need to refresh.
+          </p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <a href={payLink} target="_blank" rel="noopener noreferrer" style={{ ...btn(D.surfaceHi, D.textMuted, { border: `1px solid ${D.border}`, textDecoration: "none" }) }}>
+              Open payment page again
+            </a>
+          </div>
+        </ActionCard>
+      );
+    }
     return (
       <ActionCard accent={D.blue}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
@@ -238,20 +258,20 @@ function FundPanel({ deal, onFunded }) {
           <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Complete your payment</h3>
         </div>
         <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 16px", lineHeight: 1.5 }}>
-          Your escrow has been created. Click below to complete payment via <strong style={{ color: D.text }}>{selected.label}</strong>.
+          Your TradeSafe escrow has been created. Click below to complete payment via <strong style={{ color: D.text }}>{selected.label}</strong>.
         </p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <a
             href={payLink}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={onFunded}
+            onClick={() => setWaiting(true)}
             style={{ ...btn(D.accent, "#000"), textDecoration: "none" }}
           >
             <Lock size={14} /> Pay {fmt(total)} Now
           </a>
-          <button onClick={onFunded} style={{ ...btn("transparent", D.textMuted, { border: `1px solid ${D.border}` }) }}>
-            I've paid
+          <button onClick={() => setWaiting(true)} style={{ ...btn("transparent", D.textMuted, { border: `1px solid ${D.border}` }) }}>
+            I've completed payment
           </button>
         </div>
       </ActionCard>
@@ -625,7 +645,7 @@ export function SmartDealDetail() {
 
   // Auto-refresh every 5s while deal is in an active state
   useEffect(() => {
-    const ACTIVE = new Set(["PENDING", "ACCEPTED", "FUNDED", "DELIVERED"]);
+    const ACTIVE = new Set(["PENDING", "ACCEPTED", "PAYMENT_PENDING", "FUNDED", "DELIVERED"]);
     if (!deal || !ACTIVE.has(deal.status)) return;
     const id = setInterval(() => {
       const scrollY = window.scrollY;
@@ -775,6 +795,29 @@ export function SmartDealDetail() {
         <FundPanel deal={deal} onFunded={load} />
       )}
 
+      {/* Client: awaiting TradeSafe payment confirmation */}
+      {isClient && deal.status === "PAYMENT_PENDING" && (
+        <ActionCard accent={D.blue}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${D.blue}`, borderTopColor: "transparent", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Waiting for payment confirmation</h3>
+          </div>
+          <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 14px", lineHeight: 1.5 }}>
+            TradeSafe is waiting for your payment to clear. Once confirmed, the freelancer will be notified to start work. This page updates automatically.
+          </p>
+          {deal.payment_link && (
+            <a
+              href={deal.payment_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ ...btn(D.blue, "#fff"), textDecoration: "none" }}
+            >
+              <Lock size={14} /> Resume payment
+            </a>
+          )}
+        </ActionCard>
+      )}
+
       {/* Freelancer: mark as delivered */}
       {isFreelancer && deal.status === "FUNDED" && (
         <ActionCard accent={D.purple}>
@@ -834,6 +877,12 @@ export function SmartDealDetail() {
 
       {/* ── Status alerts ── */}
 
+      {deal.status === "PAYMENT_PENDING" && isFreelancer && (
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#071428", border: `1px solid ${D.blue}44`, borderLeft: `3px solid ${D.blue}`, marginBottom: 14 }}>
+          <Clock size={15} color={D.blue} style={{ flexShrink: 0, marginTop: 1 }} />
+          <p style={{ fontSize: 13, color: D.blue, margin: 0 }}>Client is processing payment. You'll be notified once funds are secured in escrow.</p>
+        </div>
+      )}
       {deal.status === "PENDING" && isClient && (
         <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#1A1200", border: `1px solid ${D.warning}44`, borderLeft: `3px solid ${D.warning}`, marginBottom: 14 }}>
           <Clock size={15} color={D.warning} style={{ flexShrink: 0, marginTop: 1 }} />

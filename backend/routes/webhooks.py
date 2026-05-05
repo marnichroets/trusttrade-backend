@@ -14,20 +14,93 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Webhooks"])
 
 
+async def _bg(coro):
+    """Fire-and-forget: run a coroutine and swallow/log any exception."""
+    try:
+        await coro
+    except Exception as exc:
+        logger.error(f"[WEBHOOK_BG] {exc}")
+
+
+async def _handle_smart_deal_funded(deal: dict, db) -> None:
+    """Mark a Smart Deal FUNDED, run PAYOUT_SYNC, and send the funded email."""
+    import asyncio
+
+    deal_id = deal["deal_id"]
+    now = datetime.now(timezone.utc)
+
+    await db.transactions.update_one(
+        {"deal_id": deal_id},
+        {"$set": {"status": "FUNDED", "funded_at": now, "updated_at": now}},
+    )
+    logger.info(f"[WEBHOOK] Smart deal {deal_id} → FUNDED")
+
+    # PAYOUT_SYNC: sync freelancer banking details to their TradeSafe token
+    from routes.smart_deals import _sync_seller_banking
+    asyncio.create_task(_bg(_sync_seller_banking(deal, db)))
+
+    # Notify both parties
+    import email_service
+    client_name = deal.get("client_name") or deal["client_email"]
+    freelancer_name = deal.get("freelancer_name") or deal["freelancer_email"]
+    asyncio.create_task(_bg(
+        email_service.send_smart_deal_funded(deal, client_name, freelancer_name)
+    ))
+
+
 @router.post("/tradesafe-webhook")
 async def tradesafe_webhook(request: Request):
     payload = await request.json()
-    print("[WEBHOOK] RECEIVED:", payload)
-    tradesafe_id = payload.get("data", {}).get("id")
-    # find transaction
-    sync_db = _get_sync_db()
-    txn = sync_db.transactions.find_one({"tradesafe_id": tradesafe_id})
-    if txn:
-        sync_db.transactions.update_one(
-            {"_id": txn["_id"]},
-            {"$set": {"status": "FUNDS_RECEIVED"}}
+    logger.info(f"[WEBHOOK] Received: {payload}")
+
+    # TradeSafe sends { "data": { "id": ..., "state": ..., "reference": ... } }
+    data = payload.get("data") or payload
+    tradesafe_id = data.get("id")
+    state = (data.get("state") or "").upper()
+    reference = data.get("reference") or ""
+
+    logger.info(f"[WEBHOOK] state={state!r} reference={reference!r} id={tradesafe_id!r}")
+
+    db = get_database()
+
+    # ── Smart Deal path ─────────────────────────────────────────────────────
+    # Smart Deal references always start with "SD-"; fall back to tradesafe_token_id lookup.
+    smart_deal = None
+    if reference.startswith("SD-"):
+        smart_deal = await db.transactions.find_one(
+            {"deal_id": reference, "deal_type": "DIGITAL_WORK"}
         )
-        print("[WEBHOOK] UPDATED TXN")
+    if smart_deal is None and tradesafe_id:
+        smart_deal = await db.transactions.find_one(
+            {"tradesafe_token_id": tradesafe_id, "deal_type": "DIGITAL_WORK"}
+        )
+
+    if smart_deal:
+        deal_id = smart_deal["deal_id"]
+        FUNDED_STATES = {"FUNDS_RECEIVED", "FUNDS_DEPOSITED"}
+        if state not in FUNDED_STATES:
+            logger.info(f"[WEBHOOK] Smart deal {deal_id}: state={state!r} — no action")
+            return {"ok": True, "action": "ignored"}
+        if smart_deal["status"] not in ("ACCEPTED", "PAYMENT_PENDING"):
+            logger.info(
+                f"[WEBHOOK] Smart deal {deal_id} already in {smart_deal['status']!r} — skipping"
+            )
+            return {"ok": True, "action": "already_processed"}
+        await _handle_smart_deal_funded(smart_deal, db)
+        return {"ok": True, "action": "smart_deal_funded", "deal_id": deal_id}
+
+    # ── Regular transaction path (existing behaviour) ────────────────────────
+    if tradesafe_id:
+        sync_db = _get_sync_db()
+        txn = sync_db.transactions.find_one({"tradesafe_id": tradesafe_id})
+        if txn:
+            sync_db.transactions.update_one(
+                {"_id": txn["_id"]},
+                {"$set": {"status": "FUNDS_RECEIVED"}}
+            )
+            logger.info(f"[WEBHOOK] Regular txn updated: tradesafe_id={tradesafe_id}")
+
+    return {"ok": True}
 
 
 @router.get("/oauth/callback")

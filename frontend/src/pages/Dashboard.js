@@ -205,6 +205,65 @@ function Dashboard() {
           </div>
         </div>
 
+        {/* ── Profile completion banner ── */}
+        {!loading && user && (!user.phone_verified || !user.banking_details_completed) && (
+          <div style={{
+            ...card,
+            padding: '14px 20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            borderLeft: `2px solid ${V.warn}`,
+            flexWrap: 'wrap',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <AlertCircle size={16} color={V.warn} style={{ flexShrink: 0 }} />
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 600, color: V.text, margin: '0 0 2px' }}>
+                  Complete your profile to start transacting
+                </p>
+                <p style={{ fontSize: 12, color: V.sub, margin: 0 }}>
+                  {!user.phone_verified && !user.banking_details_completed
+                    ? 'Add your phone number and banking details to sell and receive payouts'
+                    : !user.phone_verified
+                    ? 'Add your phone number to verify your identity'
+                    : 'Add banking details to receive payouts'}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {!user.phone_verified && (
+                <button
+                  onClick={() => navigate('/verify/phone')}
+                  className="vault-btn"
+                  style={{
+                    padding: '6px 12px', borderRadius: 3,
+                    border: `1px solid rgba(240,180,41,0.4)`,
+                    background: 'rgba(240,180,41,0.08)',
+                    color: V.warn, fontSize: 12, cursor: 'pointer',
+                    fontFamily: V.mono, letterSpacing: '0.04em', fontWeight: 600,
+                  }}
+                >
+                  ADD PHONE
+                </button>
+              )}
+              {!user.banking_details_completed && (
+                <button
+                  onClick={() => navigate('/settings/banking')}
+                  className="vault-btn"
+                  style={{
+                    padding: '6px 12px', borderRadius: 3,
+                    border: `1px solid rgba(240,180,41,0.4)`,
+                    background: 'rgba(240,180,41,0.08)',
+                    color: V.warn, fontSize: 12, cursor: 'pointer',
+                    fontFamily: V.mono, letterSpacing: '0.04em', fontWeight: 600,
+                  }}
+                >
+                  ADD BANKING
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── Escrow protection banner ── */}
         <div style={{
           ...card,

@@ -30,6 +30,8 @@ import BankingSettings from './pages/BankingSettings';
 import { CreateSmartDeal, SmartDealDetail, SmartDealList } from './pages/SmartDeal';
 import Onboarding from './pages/Onboarding';
 import VerifyEmail from './pages/VerifyEmail';
+import FAQPage from './pages/FAQPage';
+import NotFoundPage from './pages/NotFoundPage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
 import EscrowPage from './pages/EscrowPage';
@@ -93,6 +95,8 @@ function AppRouter() {
       <Route path="/smart-deals" element={<ProtectedRoute><DashboardLayout user={null}><SmartDealList /></DashboardLayout></ProtectedRoute>} />
       <Route path="/smart-deals/new" element={<ProtectedRoute><DashboardLayout user={null}><CreateSmartDeal /></DashboardLayout></ProtectedRoute>} />
       <Route path="/smart-deals/:dealId" element={<ProtectedRoute><DashboardLayout user={null}><SmartDealDetail /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/faq" element={<FAQPage />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }

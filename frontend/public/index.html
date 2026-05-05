@@ -30,9 +30,126 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap"
       rel="stylesheet"
     />
+    <style>
+      #tt-loader {
+        position: fixed; inset: 0;
+        background: #0A0E14;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.4s ease;
+      }
+      #tt-loader.fade-out { opacity: 0; pointer-events: none; }
+      #tt-progress {
+        position: absolute; top: 0; left: 0;
+        height: 2px; width: 0%;
+        background: #00D1FF;
+        box-shadow: 0 0 10px #00D1FF;
+        animation: tt-progress 1.8s ease-in-out forwards;
+      }
+      @keyframes tt-progress {
+        0%   { width: 0%; }
+        60%  { width: 75%; }
+        85%  { width: 92%; }
+        100% { width: 100%; }
+      }
+      #tt-shield {
+        width: 58px; height: 58px;
+        margin-bottom: 24px;
+      }
+      #tt-shield-outline {
+        stroke-dasharray: 220;
+        stroke-dashoffset: 220;
+        animation: tt-draw 1s cubic-bezier(0.4,0,0.2,1) forwards 0.15s;
+      }
+      #tt-shield-check {
+        stroke-dasharray: 40;
+        stroke-dashoffset: 40;
+        animation: tt-draw 0.4s ease forwards 1s;
+      }
+      @keyframes tt-draw { to { stroke-dashoffset: 0; } }
+      #tt-brand {
+        display: flex; gap: 1px;
+        font-family: 'Inter', sans-serif;
+        font-size: 21px; font-weight: 800;
+        color: #E8EDF5; letter-spacing: 0.18em;
+        margin-bottom: 8px;
+      }
+      #tt-brand span {
+        opacity: 0;
+        animation: tt-letter 0.08s ease forwards;
+      }
+      #tt-brand span:nth-child(1)  { animation-delay: 0.42s; }
+      #tt-brand span:nth-child(2)  { animation-delay: 0.50s; }
+      #tt-brand span:nth-child(3)  { animation-delay: 0.58s; }
+      #tt-brand span:nth-child(4)  { animation-delay: 0.66s; }
+      #tt-brand span:nth-child(5)  { animation-delay: 0.74s; }
+      #tt-brand span:nth-child(6)  { animation-delay: 0.82s; }
+      #tt-brand span:nth-child(7)  { animation-delay: 0.90s; }
+      #tt-brand span:nth-child(8)  { animation-delay: 0.98s; }
+      #tt-brand span:nth-child(9)  { animation-delay: 1.06s; }
+      #tt-brand span:nth-child(10) { animation-delay: 1.14s; }
+      @keyframes tt-letter { to { opacity: 1; } }
+      #tt-sub {
+        font-family: 'Courier New', monospace;
+        font-size: 9px; color: #00D1FF;
+        letter-spacing: 0.35em;
+        opacity: 0;
+        animation: tt-sub-in 0.4s ease forwards 1.25s;
+      }
+      @keyframes tt-sub-in { to { opacity: 0.65; } }
+    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
+
+    <div id="tt-loader">
+      <div id="tt-progress"></div>
+      <svg id="tt-shield" viewBox="0 0 58 58" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+          id="tt-shield-outline"
+          d="M29 4L7 13V28C7 40 16.5 51 29 55C41.5 51 51 40 51 28V13L29 4Z"
+          stroke="#00D1FF" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round"
+        />
+        <path
+          id="tt-shield-check"
+          d="M20 29L26 35L38 22"
+          stroke="#00D1FF" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round"
+        />
+      </svg>
+      <div id="tt-brand">
+        <span>T</span><span>R</span><span>U</span><span>S</span><span>T</span><span>T</span><span>R</span><span>A</span><span>D</span><span>E</span>
+      </div>
+      <div id="tt-sub">SECURE VAULT</div>
+    </div>
+
     <div id="root"></div>
+    <script>
+      (function () {
+        var loader = document.getElementById('tt-loader');
+        var root = document.getElementById('root');
+        if (!loader || !root) return;
+        var observer = new MutationObserver(function () {
+          if (root.children.length > 0) {
+            observer.disconnect();
+            loader.classList.add('fade-out');
+            setTimeout(function () {
+              if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+            }, 450);
+          }
+        });
+        observer.observe(root, { childList: true });
+        setTimeout(function () {
+          if (loader && loader.parentNode) {
+            loader.classList.add('fade-out');
+            setTimeout(function () {
+              if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+            }, 450);
+          }
+        }, 4000);
+      })();
+    </script>
   </body>
 </html>

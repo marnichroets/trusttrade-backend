@@ -622,6 +622,7 @@ export function SmartDealDetail() {
   const [delivering, setDelivering] = useState(false);
   const [approving, setApproving] = useState(false);
   const [disputing, setDisputing] = useState(false);
+  const [cancellingPayment, setCancellingPayment] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [actionError, setActionError] = useState(null);
@@ -687,6 +688,12 @@ export function SmartDealDetail() {
     setApproving(true); setActionError(null);
     try { await apiFetch(`/api/smart-deals/${dealId}/approve`, { method: "POST" }); await load(); }
     catch (e) { setActionError(e.message); } finally { setApproving(false); }
+  }
+
+  async function handleCancelPayment() {
+    setCancellingPayment(true); setActionError(null);
+    try { await apiFetch(`/api/smart-deals/${dealId}/cancel-payment`, { method: "POST" }); await load(); }
+    catch (e) { setActionError(e.message); } finally { setCancellingPayment(false); }
   }
 
   async function handleDispute() {
@@ -814,16 +821,25 @@ export function SmartDealDetail() {
           <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 14px", lineHeight: 1.5 }}>
             TradeSafe is waiting for your payment to clear. Once confirmed, the freelancer will be notified to start work. This page updates automatically.
           </p>
-          {deal.payment_link && (
-            <a
-              href={deal.payment_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ ...btn(D.blue, "#fff"), textDecoration: "none" }}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {deal.payment_link && (
+              <a
+                href={deal.payment_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ ...btn(D.blue, "#fff"), textDecoration: "none" }}
+              >
+                <Lock size={14} /> Resume payment
+              </a>
+            )}
+            <button
+              onClick={handleCancelPayment}
+              disabled={cancellingPayment}
+              style={{ ...btn("transparent", D.textMuted, { border: `1px solid ${D.border}`, opacity: cancellingPayment ? 0.6 : 1, cursor: cancellingPayment ? "not-allowed" : "pointer" }) }}
             >
-              <Lock size={14} /> Resume payment
-            </a>
-          )}
+              {cancellingPayment ? <><Spinner /> Resetting…</> : "Change Payment Method"}
+            </button>
+          </div>
         </ActionCard>
       )}
 

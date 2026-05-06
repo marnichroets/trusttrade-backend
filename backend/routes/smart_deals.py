@@ -273,6 +273,41 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
     }
 
 
+@router.post("/{deal_id}/cancel-payment")
+async def cancel_payment(deal_id: str, request: Request):
+    """Reset a PAYMENT_PENDING deal to ACCEPTED so the client can choose a different payment method."""
+    db = get_database()
+    current_user = await get_user_from_token(request, db)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    deal = await get_deal_or_404(deal_id, db)
+    assert_participant(deal, str(current_user.user_id), role="client")
+    if deal["status"] != "PAYMENT_PENDING":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel payment — deal is in status: {deal['status']}",
+        )
+
+    now = utcnow()
+    await db.transactions.update_one(
+        {"deal_id": deal_id},
+        {"$set": {
+            "status": "ACCEPTED",
+            "tradesafe_token_id": None,
+            "tradesafe_allocation_id": None,
+            "tradesafe_seller_token_id": None,
+            "payment_link": None,
+            "payment_method": None,
+            "payment_initiated_at": None,
+            "updated_at": now,
+        }},
+    )
+    logger.info(f"[SMART_DEAL] {deal_id} payment cancelled by {current_user.email}, reset to ACCEPTED")
+
+    return {"deal_id": deal_id, "status": "ACCEPTED"}
+
+
 @router.post("/{deal_id}/deliver")
 async def deliver_deal(deal_id: str, request: Request):
     """Freelancer marks work as delivered — FUNDED → DELIVERED."""

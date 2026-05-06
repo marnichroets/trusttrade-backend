@@ -17,7 +17,7 @@ from core.security import get_user_from_token, normalize_email
 from models.user import User
 from sms_service import (
     normalize_phone_number, generate_otp, send_otp_sms,
-    create_otp_record, is_otp_valid, can_resend_otp
+    create_otp_record, is_otp_valid, can_resend_otp, phones_match
 )
 
 logger = logging.getLogger(__name__)
@@ -425,11 +425,15 @@ async def verify_phone_otp(request: Request, data: OTPVerifyRequest):
     
     normalized_phone = normalize_phone_number(data.phone)
     otp_record = await db.phone_otps.find_one({"user_id": user.user_id})
-    
+
     if not otp_record:
         raise HTTPException(status_code=400, detail="No verification code found")
-    
-    if otp_record.get("phone") != normalized_phone:
+
+    stored_phone = otp_record.get("phone", "")
+    logger.info(f"[OTP_VERIFY] stored phone='{stored_phone}' | incoming raw='{data.phone}' | incoming normalized='{normalized_phone}'")
+
+    if not phones_match(stored_phone, normalized_phone):
+        logger.warning(f"[OTP_VERIFY] Phone mismatch: stored='{stored_phone}' vs normalized='{normalized_phone}'")
         raise HTTPException(status_code=400, detail="Phone number does not match")
     
     await db.phone_otps.update_one({"user_id": user.user_id}, {"$inc": {"attempts": 1}})

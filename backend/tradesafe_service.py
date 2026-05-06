@@ -615,7 +615,6 @@ async def create_tradesafe_transaction(
                         "email": TRUSTTRADE_AGENT_EMAIL,  # Agent linked via email, not token
                         "fee": PLATFORM_FEE_PERCENT,  # 2% platform fee
                         "feeType": "PERCENT",  # Fee is a percentage
-                        "feeAllocation": normalized_fee_allocation  # Same as transaction level
                     }
                 ]
             },

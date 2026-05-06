@@ -5,6 +5,7 @@ Handles transaction creation, management, payments, and TradeSafe integration
 
 import os
 import uuid
+import asyncio
 import shutil
 import random
 import string
@@ -1085,6 +1086,23 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
             item_description=transaction["item_description"],
             role="buyer"
         )
+
+        # Release TradeSafe escrow and trigger instant payout (fire-and-forget)
+        allocation_id = transaction.get("tradesafe_allocation_id")
+        seller_token_id = transaction.get("tradesafe_seller_token_id")
+        if allocation_id:
+            async def _tradesafe_release():
+                from tradesafe_service import start_delivery, accept_delivery, withdraw_token_funds
+                try:
+                    await start_delivery(allocation_id)
+                    payout_result = await accept_delivery(allocation_id)
+                    logger.info(f"[TXN_RELEASE] accept_delivery {transaction_id}: {payout_result}")
+                    if payout_result and seller_token_id:
+                        ok = await withdraw_token_funds(seller_token_id, float(net_amount), rtc=True)
+                        logger.info(f"[TXN_RELEASE] withdrawal={ok} token={seller_token_id} R{net_amount}")
+                except Exception as exc:
+                    logger.error(f"[TXN_RELEASE] TradeSafe release failed for {transaction_id}: {exc}")
+            asyncio.create_task(_tradesafe_release())
     
     updated_transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
     

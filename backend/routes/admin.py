@@ -357,8 +357,31 @@ async def admin_release_funds(request: Request, transaction_id: str, release_dat
         amount=item_price,
         net_amount=net_amount
     )
-    
-    return {"message": "Funds released successfully", "transaction_id": transaction_id, "net_amount": net_amount}
+
+    # Release escrow on TradeSafe and trigger instant payout to seller's bank
+    allocation_id = transaction.get("tradesafe_allocation_id")
+    seller_token_id = transaction.get("tradesafe_seller_token_id")
+    withdrawal_success = None
+    if allocation_id:
+        from tradesafe_service import start_delivery, accept_delivery, withdraw_token_funds
+        try:
+            await start_delivery(allocation_id)
+            payout_result = await accept_delivery(allocation_id)
+            logger.info(f"[ADMIN_RELEASE] accept_delivery txn={transaction_id}: {payout_result}")
+            if payout_result and seller_token_id:
+                withdrawal_success = await withdraw_token_funds(seller_token_id, float(net_amount), rtc=True)
+                logger.info(f"[ADMIN_RELEASE] withdrawal={withdrawal_success} token={seller_token_id} R{net_amount}")
+        except Exception as exc:
+            logger.error(f"[ADMIN_RELEASE] TradeSafe release failed for {transaction_id}: {exc}")
+    else:
+        logger.warning(f"[ADMIN_RELEASE] No tradesafe_allocation_id on txn {transaction_id} — skipping TradeSafe release")
+
+    return {
+        "message": "Funds released successfully",
+        "transaction_id": transaction_id,
+        "net_amount": net_amount,
+        "tradesafe_withdrawal": withdrawal_success,
+    }
 
 
 @router.post("/transactions/{transaction_id}/notes")

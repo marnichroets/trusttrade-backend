@@ -1086,23 +1086,45 @@ def _sd_html(heading: str, name: str, intro: str, deal: dict,
     )
 
 
-async def send_smart_deal_created(deal: dict, client_name: str, freelancer_name: str) -> bool:
-    """Email to freelancer when a deal is created."""
-    subject = f"TrustTrade: You've been invited to a Smart Deal — {deal['title']}"
-    html = _sd_html(
+async def send_smart_deal_created(
+    freelancer_email: str,
+    freelancer_name: str,
+    client_name: str,
+    deal_id: str,
+    title: str,
+    amount: float,
+    scope: str,
+    days: int,
+) -> bool:
+    """Email to freelancer when a new Smart Deal is created for them."""
+    logger.info(f"[SMART_DEAL_EMAIL] send_smart_deal_created -> {freelancer_email}, deal={deal_id}")
+    subject = f"TrustTrade: {client_name} wants to hire you — {title}"
+    link = f"https://www.trusttradesa.co.za/smart-deals/{deal_id}"
+    scope_display = scope[:200] + ("..." if len(scope) > 200 else "")
+    details = {
+        "Deal ID": deal_id,
+        "Title": title,
+        "Amount": f"R {amount:,.2f}",
+        "Scope": scope_display,
+        "Days to Deliver": f"{days} days",
+        "Client": client_name,
+    }
+    html = get_base_email_template(
         heading="You've been invited to a Smart Deal",
-        name=freelancer_name,
-        intro=(
-            f"<strong>{client_name}</strong> wants to hire you through TrustTrade's Secure Vault escrow. "
-            f"Review the details below and accept the deal to get started. "
-            f"Once you accept, the client will fund the escrow and work can begin."
+        greeting_name=freelancer_name,
+        intro_text=(
+            f"<strong>{client_name}</strong> wants to hire you through TrustTrade's secure escrow platform. "
+            f"Review the deal details below and click the button to accept. "
+            f"Once you accept, the client funds the escrow — your payment is protected until you deliver and it's approved."
         ),
-        deal=deal,
-        cta_text="Review & Accept Deal",
-        badge="Action Required",
-        badge_color="#f97316",
+        details=details,
+        cta_text="View &amp; Accept Deal",
+        cta_link=link,
+        show_how_it_works=False,
+        status_badge="Action Required",
+        status_color="#f97316",
     )
-    return await send_email(deal["freelancer_email"], freelancer_name, subject, html)
+    return await send_email(freelancer_email, freelancer_name, subject, html)
 
 
 async def send_smart_deal_accepted(deal: dict, client_name: str, freelancer_name: str) -> bool:

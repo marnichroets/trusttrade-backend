@@ -118,7 +118,7 @@ function Onboarding() {
   // ── Phone step ──────────────────────────────────────────────────────────────
 
   const handlePhoneSubmit = async () => {
-    if (!isValidPhone(phone)) { toast.error('Enter a valid SA mobile number'); return; }
+    if (!isValidPhone(phone)) { toast.error('Enter a valid mobile number'); return; }
     setPhoneLoading(true);
     try {
       const res = await api.post('/auth/phone/submit', { phone });

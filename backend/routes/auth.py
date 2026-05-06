@@ -373,8 +373,8 @@ async def submit_phone_number(request: Request, data: PhoneSubmitRequest):
     
     normalized_phone = normalize_phone_number(data.phone)
     
-    if not normalized_phone or len(normalized_phone) < 12:
-        raise HTTPException(status_code=400, detail="Please enter a valid South African mobile number")
+    if not normalized_phone or len(normalized_phone) < 10:
+        raise HTTPException(status_code=400, detail="Please enter a valid mobile number")
     
     # Check if phone is already used
     existing_user = await db.users.find_one({

@@ -1092,14 +1092,15 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
         seller_token_id = transaction.get("tradesafe_seller_token_id")
         if allocation_id:
             async def _tradesafe_release():
-                from tradesafe_service import start_delivery, accept_delivery, withdraw_token_funds
+                from tradesafe_service import start_delivery, accept_delivery
                 try:
                     await start_delivery(allocation_id)
-                    payout_result = await accept_delivery(allocation_id)
+                    payout_result = await accept_delivery(
+                        allocation_id,
+                        seller_token_id=seller_token_id,
+                        amount=float(net_amount) if net_amount else None,
+                    )
                     logger.info(f"[TXN_RELEASE] accept_delivery {transaction_id}: {payout_result}")
-                    if payout_result and seller_token_id:
-                        ok = await withdraw_token_funds(seller_token_id, float(net_amount), rtc=True)
-                        logger.info(f"[TXN_RELEASE] withdrawal={ok} token={seller_token_id} R{net_amount}")
                 except Exception as exc:
                     logger.error(f"[TXN_RELEASE] TradeSafe release failed for {transaction_id}: {exc}")
             asyncio.create_task(_tradesafe_release())

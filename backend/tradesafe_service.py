@@ -932,11 +932,12 @@ async def start_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-async def accept_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
+async def accept_delivery(allocation_id: str, seller_token_id: Optional[str] = None, amount: Optional[float] = None) -> Optional[Dict[str, Any]]:
     """
     Accept delivery for an allocation (buyer confirms receipt).
     Allocation must be in DELIVERY_REQUESTED state first (call start_delivery).
     This triggers fund release to seller.
+    If seller_token_id and amount are provided, immediately triggers instant RTC bank payout.
     """
     mutation = """
     mutation allocationAcceptDelivery($id: ID!) {
@@ -959,8 +960,15 @@ async def accept_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
         return None
 
     if result and "allocationAcceptDelivery" in result:
-        logger.info(f"[ACCEPT_DELIVERY] Success for allocation {allocation_id}: {result['allocationAcceptDelivery']}")
-        return result["allocationAcceptDelivery"]
+        delivery_result = result["allocationAcceptDelivery"]
+        logger.info(f"[ACCEPT_DELIVERY] Success for allocation {allocation_id}: {delivery_result}")
+        if seller_token_id and amount:
+            try:
+                withdrawal_ok = await withdraw_token_funds(seller_token_id, float(amount), rtc=True)
+                logger.info(f"[ACCEPT_DELIVERY] Instant RTC withdrawal: token={seller_token_id} R{amount:.2f} ok={withdrawal_ok}")
+            except Exception as exc:
+                logger.error(f"[ACCEPT_DELIVERY] Withdrawal failed (funds still released): {exc}")
+        return delivery_result
 
     logger.error(f"[ACCEPT_DELIVERY] Unexpected response for allocation {allocation_id}: {result}")
     return None

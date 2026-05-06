@@ -785,14 +785,18 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     )
     logger.info("=" * 60)
 
-    # Call TradeSafe
-    result = await accept_delivery(allocation_id)
+    # Calculate net amount before release so we can trigger instant payout inside accept_delivery
+    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
+
+    # Call TradeSafe — releases funds and triggers instant RTC bank payout
+    result = await accept_delivery(
+        allocation_id,
+        seller_token_id=transaction.get("tradesafe_seller_token_id"),
+        amount=float(net_amount),
+    )
 
     if not result:
         raise HTTPException(status_code=500, detail="Failed to accept delivery on TradeSafe")
-
-    # Calculate net amount using Decimal precision
-    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
 
     # Update timeline
     timeline = transaction.get("timeline", [])
@@ -984,7 +988,14 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         f"sync_attempted={sync_attempted}"
     )
 
-    result = await accept_delivery(allocation_id)
+    # Calculate net amount before release so we can trigger instant payout inside accept_delivery
+    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
+
+    result = await accept_delivery(
+        allocation_id,
+        seller_token_id=seller_token_id,
+        amount=float(net_amount),
+    )
 
     if not result:
         logger.error(f"[PAYOUT_BLOCKED] Manual release: TradeSafe accept_delivery failed for {transaction_id}")
@@ -992,10 +1003,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             status_code=500,
             detail="TradeSafe release call failed. Funds have NOT been released. Please retry."
         )
-    
-    # Calculate net amount using Decimal precision
-    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
-    
+
     timeline = transaction.get("timeline", [])
     timeline.append({
         "status": "Delivery Confirmed (Manual)",
@@ -1009,13 +1017,13 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         "by": "System",
         "details": f"R{net_amount:.2f} released to seller"
     })
-    
+
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
         {"$set": {
             "tradesafe_state": "FUNDS_RELEASED",
             "payment_status": "Completed",
-            "payout_status": "awaiting_bank_payout",  # Update payout status
+            "payout_status": "awaiting_bank_payout",
             "delivery_confirmed": True,
             "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
             "release_status": "Released",
@@ -1026,11 +1034,11 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             "net_amount": net_amount
         }}
     )
-    
+
     # Send notifications
     seller_email = transaction.get("seller_email")
     seller_phone = transaction.get("seller_phone")
-    
+
     if seller_email:
         await send_funds_released_email(
             to_email=seller_email,
@@ -1040,7 +1048,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             amount=transaction["item_price"],
             net_amount=net_amount
         )
-    
+
     if seller_phone:
         try:
             await send_funds_released_sms(
@@ -1049,7 +1057,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             )
         except Exception as e:
             logger.error(f"Failed to send funds released SMS: {e}")
-    
+
     return {
         "status": "funds_released",
         "message": "Delivery confirmed. Funds released to seller.",
@@ -1148,7 +1156,14 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
 
     logger.info(f"[PAYOUT_READY] Manual release proceeding for {transaction_id}")
 
-    result = await accept_delivery(allocation_id)
+    # Calculate net amount before release so we can trigger instant payout inside accept_delivery
+    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
+
+    result = await accept_delivery(
+        allocation_id,
+        seller_token_id=seller_token_id,
+        amount=float(net_amount),
+    )
 
     if not result:
         logger.error(f"[PAYOUT_BLOCKED] Manual release: TradeSafe accept_delivery failed for {transaction_id}")
@@ -1156,10 +1171,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             status_code=500,
             detail="TradeSafe release call failed. Funds have NOT been released. Please retry."
         )
-    
-    # Calculate net amount using Decimal precision
-    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
-    
+
     timeline = transaction.get("timeline", [])
     timeline.append({
         "status": "Delivery Confirmed (Manual)",
@@ -1173,13 +1185,13 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         "by": "System",
         "details": f"R{net_amount:.2f} released to seller"
     })
-    
+
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
         {"$set": {
             "tradesafe_state": "FUNDS_RELEASED",
             "payment_status": "Completed",
-            "payout_status": "awaiting_bank_payout",  # Update payout status
+            "payout_status": "awaiting_bank_payout",
             "delivery_confirmed": True,
             "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
             "release_status": "Released",
@@ -1190,11 +1202,11 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             "net_amount": net_amount
         }}
     )
-    
+
     # Send notifications
     seller_email = transaction.get("seller_email")
     seller_phone = transaction.get("seller_phone")
-    
+
     if seller_email:
         await send_funds_released_email(
             to_email=seller_email,
@@ -1204,7 +1216,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             amount=transaction["item_price"],
             net_amount=net_amount
         )
-    
+
     if seller_phone:
         try:
             await send_funds_released_sms(
@@ -1213,7 +1225,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             )
         except Exception as e:
             logger.error(f"Failed to send funds released SMS: {e}")
-    
+
     return {
         "status": "funds_released",
         "message": "Delivery confirmed. Funds released to seller.",

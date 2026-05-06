@@ -361,16 +361,16 @@ async def admin_release_funds(request: Request, transaction_id: str, release_dat
     # Release escrow on TradeSafe and trigger instant payout to seller's bank
     allocation_id = transaction.get("tradesafe_allocation_id")
     seller_token_id = transaction.get("tradesafe_seller_token_id")
-    withdrawal_success = None
     if allocation_id:
-        from tradesafe_service import start_delivery, accept_delivery, withdraw_token_funds
+        from tradesafe_service import start_delivery, accept_delivery
         try:
             await start_delivery(allocation_id)
-            payout_result = await accept_delivery(allocation_id)
+            payout_result = await accept_delivery(
+                allocation_id,
+                seller_token_id=seller_token_id,
+                amount=float(net_amount) if net_amount else None,
+            )
             logger.info(f"[ADMIN_RELEASE] accept_delivery txn={transaction_id}: {payout_result}")
-            if payout_result and seller_token_id:
-                withdrawal_success = await withdraw_token_funds(seller_token_id, float(net_amount), rtc=True)
-                logger.info(f"[ADMIN_RELEASE] withdrawal={withdrawal_success} token={seller_token_id} R{net_amount}")
         except Exception as exc:
             logger.error(f"[ADMIN_RELEASE] TradeSafe release failed for {transaction_id}: {exc}")
     else:
@@ -380,7 +380,6 @@ async def admin_release_funds(request: Request, transaction_id: str, release_dat
         "message": "Funds released successfully",
         "transaction_id": transaction_id,
         "net_amount": net_amount,
-        "tradesafe_withdrawal": withdrawal_success,
     }
 
 
@@ -1824,13 +1823,20 @@ async def admin_release_transaction(tradesafe_id: str, request: Request):
 
     from tradesafe_service import start_delivery, accept_delivery
 
+    seller_token_id = deal.get("tradesafe_seller_token_id")
+    deal_amount = deal.get("amount")
+
     # Step 1: ensure allocation is in DELIVERY_REQUESTED state.
     # This may have already been called; TradeSafe will reject gracefully if so.
     sd_result = await start_delivery(allocation_id)
     logger.info(f"[ADMIN_RELEASE] start_delivery allocation={allocation_id}: {sd_result}")
 
-    # Step 2: accept delivery — this releases funds to the seller.
-    payout_result = await accept_delivery(allocation_id)
+    # Step 2: accept delivery — releases funds to seller and triggers instant RTC payout.
+    payout_result = await accept_delivery(
+        allocation_id,
+        seller_token_id=seller_token_id,
+        amount=float(deal_amount) if deal_amount else None,
+    )
     logger.info(f"[ADMIN_RELEASE] accept_delivery allocation={allocation_id}: {payout_result}")
 
     if not payout_result:
@@ -1841,14 +1847,6 @@ async def admin_release_transaction(tradesafe_id: str, request: Request):
         {"deal_id": deal["deal_id"]},
         {"$set": {"status": "COMPLETE", "completed_at": now, "updated_at": now, "payout_failed": False}},
     )
-
-    # Trigger instant bank transfer from seller's TradeSafe wallet
-    seller_token_id = deal.get("tradesafe_seller_token_id")
-    deal_amount = deal.get("amount")
-    if seller_token_id and deal_amount:
-        from tradesafe_service import withdraw_token_funds
-        asyncio.create_task(_bg(withdraw_token_funds(seller_token_id, float(deal_amount), rtc=True)))
-        logger.info(f"[ADMIN_RELEASE] Withdrawal queued seller_token={seller_token_id} R{deal_amount}")
 
     logger.info(f"[ADMIN_RELEASE] Deal {deal['deal_id']} released via admin by tradesafe_id={tradesafe_id}")
     return {
@@ -1912,12 +1910,19 @@ async def admin_release_smart_deal_funds(deal_id: str, request: Request):
 
     from tradesafe_service import start_delivery, accept_delivery
 
+    seller_token_id = deal.get("tradesafe_seller_token_id")
+    deal_amount = deal.get("amount")
+
     # Step 1: move allocation to DELIVERY_REQUESTED (idempotent — safe if already called)
     sd_result = await start_delivery(allocation_id)
     logger.info(f"[ADMIN_RELEASE] start_delivery {deal_id} allocation={allocation_id}: {sd_result}")
 
-    # Step 2: accept delivery — releases funds to seller
-    payout_result = await accept_delivery(allocation_id)
+    # Step 2: accept delivery — releases funds to seller and triggers instant RTC payout
+    payout_result = await accept_delivery(
+        allocation_id,
+        seller_token_id=seller_token_id,
+        amount=float(deal_amount) if deal_amount else None,
+    )
     logger.info(f"[ADMIN_RELEASE] accept_delivery {deal_id} allocation={allocation_id}: {payout_result}")
 
     if not payout_result:
@@ -1932,21 +1937,6 @@ async def admin_release_smart_deal_funds(deal_id: str, request: Request):
         {"$set": {"status": "COMPLETE", "completed_at": now, "updated_at": now, "payout_failed": False}},
     )
 
-    # Immediately trigger bank transfer from seller's TradeSafe wallet (rtc=True for instant payout)
-    seller_token_id = deal.get("tradesafe_seller_token_id")
-    deal_amount = deal.get("amount")
-    withdrawal_success = None
-    if seller_token_id and deal_amount:
-        from tradesafe_service import withdraw_token_funds
-        try:
-            withdrawal_success = await withdraw_token_funds(seller_token_id, float(deal_amount), rtc=True)
-            logger.info(f"[ADMIN_RELEASE] Withdrawal result={withdrawal_success} seller_token={seller_token_id} R{deal_amount}")
-        except Exception as exc:
-            logger.error(f"[ADMIN_RELEASE] Withdrawal failed for {deal_id}: {exc}")
-            withdrawal_success = False
-    else:
-        logger.warning(f"[ADMIN_RELEASE] No withdrawal — seller_token_id={seller_token_id} amount={deal_amount}")
-
     logger.info(f"[ADMIN_RELEASE] {deal_id} funds released successfully")
     return {
         "success": True,
@@ -1954,7 +1944,6 @@ async def admin_release_smart_deal_funds(deal_id: str, request: Request):
         "tradesafe_transaction_id": deal.get("tradesafe_transaction_id") or deal.get("tradesafe_token_id"),
         "allocation_id": allocation_id,
         "allocation_state": (payout_result or {}).get("state"),
-        "withdrawal_triggered": withdrawal_success,
         "seller_token_id": seller_token_id,
     }
 

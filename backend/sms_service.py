@@ -101,11 +101,7 @@ async def send_sms(to_phone: str, message: str) -> Dict[str, Any]:
     if not SMS_MESSENGER_API_KEY:
         logger.error("SMS_MESSENGER_API_KEY not configured")
         return {"success": False, "error": "SMS service not configured - missing API key"}
-    
-    if not SMS_MESSENGER_EMAIL:
-        logger.error("SMS_MESSENGER_EMAIL not configured")
-        return {"success": False, "error": "SMS service not configured - missing email"}
-    
+
     # Normalize phone number (27XXXXXXXXX format, no + prefix)
     normalized_phone = normalize_phone_number(to_phone)
     
@@ -116,10 +112,9 @@ async def send_sms(to_phone: str, message: str) -> Dict[str, Any]:
     logger.info("=== SMS SEND ATTEMPT ===")
     logger.info(f"To: {normalized_phone}")
     logger.info(f"Message: {message[:50]}...")
-    logger.info(f"Email: {SMS_MESSENGER_EMAIL}")
-    
+
     try:
-        # SMS Messenger uses email and token headers for auth
+        # SMS Messenger uses Bearer token authentication
         payload = {
             "message": message,
             "recipientNumber": normalized_phone
@@ -131,8 +126,7 @@ async def send_sms(to_phone: str, message: str) -> Dict[str, Any]:
             response = await client.post(
                 f"{SMS_MESSENGER_BASE_URL}/sms/send",
                 headers={
-                    "email": SMS_MESSENGER_EMAIL,
-                    "token": SMS_MESSENGER_API_KEY,
+                    "Authorization": f"Bearer {SMS_MESSENGER_API_KEY}",
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                 },
@@ -189,8 +183,7 @@ async def check_sms_balance() -> Dict[str, Any]:
             response = await client.get(
                 f"{SMS_MESSENGER_BASE_URL}/account/balance",
                 headers={
-                    "email": SMS_MESSENGER_EMAIL,
-                    "token": SMS_MESSENGER_API_KEY
+                    "Authorization": f"Bearer {SMS_MESSENGER_API_KEY}"
                 }
             )
             

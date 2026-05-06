@@ -15,8 +15,8 @@ from typing import Optional, Dict, Any
 logger = logging.getLogger(__name__)
 
 # SMS Messenger Configuration - Uses Zoom Connect platform
-SMS_MESSENGER_API_KEY = os.environ.get('SMS_MESSENGER_API_KEY', '')
-SMS_MESSENGER_EMAIL = os.environ.get('SMS_MESSENGER_EMAIL', '')
+SMS_MESSENGER_API_KEY = os.getenv('SMS_MESSENGER_API_KEY')
+SMS_MESSENGER_EMAIL = os.getenv('SMS_MESSENGER_EMAIL')
 SMS_MESSENGER_BASE_URL = "https://sms1.smsmessenger.co.za/app/api/rest/v1"
 
 # OTP Configuration

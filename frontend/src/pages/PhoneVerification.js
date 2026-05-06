@@ -59,10 +59,7 @@ function PhoneVerification() {
     return value;
   };
 
-  const isValidSAPhone = (p) => {
-    const digits = p.replace(/\D/g, '');
-    return digits.length >= 9;
-  };
+  const isValidSAPhone = (p) => p.replace(/\D/g, '').length >= 9;
 
   const handlePhoneChange = (e) => {
     setPhone(e.target.value.replace(/[^\d+\s\-()]/g, ''));

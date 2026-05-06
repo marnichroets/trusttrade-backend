@@ -23,10 +23,7 @@ const V = {
   sans:    "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
-function isValidPhone(phone) {
-  const digits = phone.replace(/\D/g, '');
-  return digits.length >= 9;
-}
+const isValidPhone = (p) => p.replace(/\D/g, '').length >= 9;
 
 const SA_BANKS = [
   { name: 'ABSA Bank',                 code: '632005' },

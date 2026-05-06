@@ -214,9 +214,9 @@ def get_base_email_template(
 
     <!-- ── HEADER ── -->
     <tr>
-      <td style="background:#ffffff;padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
-        <img src="{EMAIL_LOGO_URL}" alt="TrustTrade" style="height:44px;max-width:200px;display:block;margin:0 auto 10px;">
-        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:{LABEL_GREY};font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
+      <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
+        <img src="{EMAIL_LOGO_URL}" alt="TrustTrade" style="height:44px;max-width:200px;display:block;margin:0 auto 10px;background-color:#0F1E35;padding:10px;">
+        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
       </td>
     </tr>
 
@@ -291,9 +291,9 @@ async def send_verification_email(email: str, name: str, verification_url: str) 
 <tr><td style="padding:32px 16px;">
   <table role="presentation" style="max-width:560px;margin:0 auto;border-collapse:collapse;width:100%;">
     <tr>
-      <td style="background:#ffffff;padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
-        <img src="{EMAIL_LOGO_URL}" alt="TrustTrade" style="height:40px;max-width:180px;display:block;margin:0 auto 8px;">
-        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:{LABEL_GREY};font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
+      <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
+        <img src="{EMAIL_LOGO_URL}" alt="TrustTrade" style="height:40px;max-width:180px;display:block;margin:0 auto 8px;background-color:#0F1E35;padding:10px;">
+        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
       </td>
     </tr>
     <tr>

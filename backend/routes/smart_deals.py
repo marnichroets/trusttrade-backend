@@ -250,6 +250,7 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
         {"$set": {
             "status": "PAYMENT_PENDING",
             "tradesafe_token_id": tradesafe_id,
+            "tradesafe_transaction_id": tradesafe_id,
             "tradesafe_allocation_id": allocation_id,
             "tradesafe_seller_token_id": seller_token_id,
             "payment_method": body.payment_method,
@@ -295,6 +296,7 @@ async def cancel_payment(deal_id: str, request: Request):
         {"$set": {
             "status": "ACCEPTED",
             "tradesafe_token_id": None,
+            "tradesafe_transaction_id": None,
             "tradesafe_allocation_id": None,
             "tradesafe_seller_token_id": None,
             "payment_link": None,

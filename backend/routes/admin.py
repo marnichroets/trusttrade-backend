@@ -1838,6 +1838,77 @@ async def force_fund_smart_deal(deal_id: str, request: Request):
     return {"success": True}
 
 
+@router.post("/smart-deals/{deal_id}/release-funds")
+async def admin_release_smart_deal_funds(deal_id: str, request: Request):
+    """
+    Force-release escrow funds for a Smart Deal by its internal deal_id (e.g. SD-XXXXXXXX).
+    Calls allocationStartDelivery (idempotent) then allocationAcceptDelivery to release funds.
+    Also accepts an optional body {"tradesafe_transaction_id": "..."} to backfill the field
+    on deals created before it was stored.
+    """
+    db = get_database()
+    await require_admin(request, db)
+
+    deal = await db.transactions.find_one({"deal_id": deal_id, "deal_type": "DIGITAL_WORK"})
+    if not deal:
+        raise HTTPException(status_code=404, detail=f"Smart deal {deal_id!r} not found")
+
+    # Allow admin to backfill tradesafe_transaction_id for older deals
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    backfill_tx_id = body.get("tradesafe_transaction_id") if body else None
+    if backfill_tx_id and not deal.get("tradesafe_transaction_id"):
+        await db.transactions.update_one(
+            {"deal_id": deal_id},
+            {"$set": {
+                "tradesafe_transaction_id": backfill_tx_id,
+                "tradesafe_token_id": backfill_tx_id,
+            }},
+        )
+        deal["tradesafe_transaction_id"] = backfill_tx_id
+        logger.info(f"[ADMIN_RELEASE] Backfilled tradesafe_transaction_id={backfill_tx_id} on {deal_id}")
+
+    allocation_id = deal.get("tradesafe_allocation_id")
+    if not allocation_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Deal has no tradesafe_allocation_id — run initiate_payment first or backfill manually",
+        )
+
+    from tradesafe_service import start_delivery, accept_delivery
+
+    # Step 1: move allocation to DELIVERY_REQUESTED (idempotent — safe if already called)
+    sd_result = await start_delivery(allocation_id)
+    logger.info(f"[ADMIN_RELEASE] start_delivery {deal_id} allocation={allocation_id}: {sd_result}")
+
+    # Step 2: accept delivery — releases funds to seller
+    payout_result = await accept_delivery(allocation_id)
+    logger.info(f"[ADMIN_RELEASE] accept_delivery {deal_id} allocation={allocation_id}: {payout_result}")
+
+    if not payout_result:
+        raise HTTPException(
+            status_code=502,
+            detail="TradeSafe allocationAcceptDelivery failed — check server logs for TradeSafe error details",
+        )
+
+    now = datetime.now(timezone.utc)
+    await db.transactions.update_one(
+        {"deal_id": deal_id},
+        {"$set": {"status": "COMPLETE", "completed_at": now, "updated_at": now, "payout_failed": False}},
+    )
+
+    logger.info(f"[ADMIN_RELEASE] {deal_id} funds released successfully")
+    return {
+        "success": True,
+        "deal_id": deal_id,
+        "tradesafe_transaction_id": deal.get("tradesafe_transaction_id") or deal.get("tradesafe_token_id"),
+        "allocation_id": allocation_id,
+        "allocation_state": (payout_result or {}).get("state"),
+    }
+
+
 # ============ TOKEN MANAGEMENT ============
 
 @router.post("/tokens/{token_id}/withdraw")

@@ -214,15 +214,15 @@ def get_base_email_template(
 
     <!-- ── HEADER ── -->
     <tr>
-      <td style="background:{BRAND_NAVY};padding:28px 32px;text-align:center;">
+      <td style="background:#ffffff;padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
         <img src="{EMAIL_LOGO_URL}" alt="TrustTrade" style="height:44px;max-width:200px;display:block;margin:0 auto 10px;">
-        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.4);font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
+        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:{LABEL_GREY};font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
       </td>
     </tr>
 
     <!-- ── HEADING BAND ── -->
     <tr>
-      <td style="background:white;padding:28px 32px 0;border-top:3px solid {CYAN_LINE};">
+      <td style="background:white;padding:28px 32px 0;">
         <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:{BRAND_NAVY};letter-spacing:-0.3px;">{heading}</h1>
         {badge_html}
       </td>
@@ -291,13 +291,13 @@ async def send_verification_email(email: str, name: str, verification_url: str) 
 <tr><td style="padding:32px 16px;">
   <table role="presentation" style="max-width:560px;margin:0 auto;border-collapse:collapse;width:100%;">
     <tr>
-      <td style="background:{BRAND_NAVY};padding:28px 32px;text-align:center;">
+      <td style="background:#ffffff;padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
         <img src="{EMAIL_LOGO_URL}" alt="TrustTrade" style="height:40px;max-width:180px;display:block;margin:0 auto 8px;">
-        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.4);font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
+        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:{LABEL_GREY};font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
       </td>
     </tr>
     <tr>
-      <td style="background:white;padding:32px 32px 8px;border-top:3px solid {CYAN_LINE};">
+      <td style="background:white;padding:32px 32px 8px;">
         <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:{BRAND_NAVY};">Verify your email address</h1>
         <p style="font-size:15px;color:{TEXT_DARK};margin:0 0 24px;line-height:1.5;">Hi {name},</p>
         <p style="font-size:14px;color:{TEXT_DARK};line-height:1.7;margin:0 0 28px;">

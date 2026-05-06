@@ -59,14 +59,14 @@ function PhoneVerification() {
     return value;
   };
 
-  const isValidSAPhone = (p) => p.replace(/\D/g, '').length >= 9;
+  const isValidPhone = (p) => p.replace(/\D/g, '').length >= 9;
 
   const handlePhoneChange = (e) => {
     setPhone(e.target.value.replace(/[^\d+\s\-()]/g, ''));
   };
 
   const handlePhoneSubmit = async () => {
-    if (!phone || !isValidSAPhone(phone)) {
+    if (!phone || !isValidPhone(phone)) {
       toast.error('Please enter a valid phone number');
       return;
     }
@@ -193,7 +193,7 @@ function PhoneVerification() {
 
               <Button
                 onClick={handlePhoneSubmit}
-                disabled={loading || !isValidSAPhone(phone)}
+                disabled={loading || !isValidPhone(phone)}
                 className="w-full"
                 data-testid="send-code-btn"
               >

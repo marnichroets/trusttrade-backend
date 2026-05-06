@@ -49,8 +49,9 @@ function AppRouter() {
   if (location.hash?.includes('session_id=') || location.hash?.includes('session_token=')) {
     return <AuthCallback />;
   }
-  
+
   return (
+    <div key={location.pathname} className="page-fade-in">
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
@@ -98,6 +99,7 @@ function AppRouter() {
       <Route path="/faq" element={<FAQPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </div>
   );
 }
 

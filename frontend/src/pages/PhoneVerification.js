@@ -60,11 +60,8 @@ function PhoneVerification() {
   };
 
   const isValidSAPhone = (p) => {
-    const cleaned = p.replace(/[\s\-\+\(\)]/g, '');
-    if (cleaned.startsWith('27') && cleaned.length === 11) return true;
-    if (cleaned.startsWith('0') && cleaned.length === 10) return true;
-    if (cleaned.length === 9) return true;
-    return false;
+    const digits = p.replace(/[\s\-\+\(\)]/g, '');
+    return digits.length >= 9 && digits.length <= 12;
   };
 
   const handlePhoneChange = (e) => {

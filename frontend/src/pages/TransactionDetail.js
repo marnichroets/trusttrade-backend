@@ -992,7 +992,7 @@ function TransactionDetail() {
                     {transaction.item_photos && transaction.item_photos.length > 0 ? (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
                         {transaction.item_photos.map((photo, index) => {
-                          const photoUrl = photo.startsWith('http') ? photo : `${BASE_URL_LOCAL}/uploads/photos/${photo}`;
+                          const photoUrl = photo.startsWith('http') ? photo : `${BASE_URL}/uploads/photos/${photo}`;
                           return (
                             <div key={index} onClick={() => window.open(photoUrl, '_blank')} style={{ borderRadius: 10, overflow: 'hidden', cursor: 'pointer', position: 'relative', aspectRatio: '1', background: '#f1f5f9' }}>
                               <img src={photoUrl} alt={`Photo ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }}

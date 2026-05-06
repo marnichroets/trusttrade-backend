@@ -293,6 +293,11 @@ async def create_user_token(
                 "idNumber": id_number,
                 "idType": "NATIONAL",
                 "idCountry": "ZAF"
+            },
+            "settings": {
+                "payout": {
+                    "interval": "IMMEDIATE"
+                }
             }
         }
     }

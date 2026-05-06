@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from core.config import settings
 from core.database import get_database
-from core.security import get_user_from_token
+from core.security import get_user_from_token, require_admin
 from models.user import User
 from models.transaction import Transaction
 from models.dispute import Dispute, DisputeStatusUpdate
@@ -37,14 +37,6 @@ async def _bg(coro):
         await coro
     except Exception as exc:
         logger.error(f"[ADMIN_BG] {exc}")
-
-
-async def require_admin(request: Request, db) -> User:
-    """Require admin user"""
-    user = await get_user_from_token(request, db)
-    if not user or not user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return user
 
 
 # ============ USER MANAGEMENT ============

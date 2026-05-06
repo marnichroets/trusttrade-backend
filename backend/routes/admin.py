@@ -28,6 +28,7 @@ from email_service import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
+logger.info("[ADMIN] admin router loaded — POST /api/admin/smart-deals/{deal_id}/release-funds registered")
 
 
 async def _bg(coro):
@@ -1916,13 +1917,20 @@ async def admin_release_smart_deal_funds(deal_id: str, request: Request):
         {"$set": {"status": "COMPLETE", "completed_at": now, "updated_at": now, "payout_failed": False}},
     )
 
-    # Trigger instant bank transfer from seller's TradeSafe wallet
+    # Immediately trigger bank transfer from seller's TradeSafe wallet (rtc=True for instant payout)
     seller_token_id = deal.get("tradesafe_seller_token_id")
     deal_amount = deal.get("amount")
+    withdrawal_success = None
     if seller_token_id and deal_amount:
         from tradesafe_service import withdraw_token_funds
-        asyncio.create_task(_bg(withdraw_token_funds(seller_token_id, float(deal_amount), rtc=True)))
-        logger.info(f"[ADMIN_RELEASE] Withdrawal queued seller_token={seller_token_id} R{deal_amount}")
+        try:
+            withdrawal_success = await withdraw_token_funds(seller_token_id, float(deal_amount), rtc=True)
+            logger.info(f"[ADMIN_RELEASE] Withdrawal result={withdrawal_success} seller_token={seller_token_id} R{deal_amount}")
+        except Exception as exc:
+            logger.error(f"[ADMIN_RELEASE] Withdrawal failed for {deal_id}: {exc}")
+            withdrawal_success = False
+    else:
+        logger.warning(f"[ADMIN_RELEASE] No withdrawal — seller_token_id={seller_token_id} amount={deal_amount}")
 
     logger.info(f"[ADMIN_RELEASE] {deal_id} funds released successfully")
     return {
@@ -1931,6 +1939,8 @@ async def admin_release_smart_deal_funds(deal_id: str, request: Request):
         "tradesafe_transaction_id": deal.get("tradesafe_transaction_id") or deal.get("tradesafe_token_id"),
         "allocation_id": allocation_id,
         "allocation_state": (payout_result or {}).get("state"),
+        "withdrawal_triggered": withdrawal_success,
+        "seller_token_id": seller_token_id,
     }
 
 

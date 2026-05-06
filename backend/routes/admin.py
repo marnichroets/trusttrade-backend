@@ -4,6 +4,7 @@ Handles admin dashboard, user management, monitoring, and system actions
 """
 
 import os
+import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -27,6 +28,14 @@ from email_service import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
+
+
+async def _bg(coro):
+    """Fire-and-forget coroutine wrapper."""
+    try:
+        await coro
+    except Exception as exc:
+        logger.error(f"[ADMIN_BG] {exc}")
 
 
 async def require_admin(request: Request, db) -> User:
@@ -1817,6 +1826,14 @@ async def admin_release_transaction(tradesafe_id: str, request: Request):
         {"$set": {"status": "COMPLETE", "completed_at": now, "updated_at": now, "payout_failed": False}},
     )
 
+    # Trigger instant bank transfer from seller's TradeSafe wallet
+    seller_token_id = deal.get("tradesafe_seller_token_id")
+    deal_amount = deal.get("amount")
+    if seller_token_id and deal_amount:
+        from tradesafe_service import withdraw_token_funds
+        asyncio.create_task(_bg(withdraw_token_funds(seller_token_id, float(deal_amount), rtc=True)))
+        logger.info(f"[ADMIN_RELEASE] Withdrawal queued seller_token={seller_token_id} R{deal_amount}")
+
     logger.info(f"[ADMIN_RELEASE] Deal {deal['deal_id']} released via admin by tradesafe_id={tradesafe_id}")
     return {
         "success": True,
@@ -1898,6 +1915,14 @@ async def admin_release_smart_deal_funds(deal_id: str, request: Request):
         {"deal_id": deal_id},
         {"$set": {"status": "COMPLETE", "completed_at": now, "updated_at": now, "payout_failed": False}},
     )
+
+    # Trigger instant bank transfer from seller's TradeSafe wallet
+    seller_token_id = deal.get("tradesafe_seller_token_id")
+    deal_amount = deal.get("amount")
+    if seller_token_id and deal_amount:
+        from tradesafe_service import withdraw_token_funds
+        asyncio.create_task(_bg(withdraw_token_funds(seller_token_id, float(deal_amount), rtc=True)))
+        logger.info(f"[ADMIN_RELEASE] Withdrawal queued seller_token={seller_token_id} R{deal_amount}")
 
     logger.info(f"[ADMIN_RELEASE] {deal_id} funds released successfully")
     return {

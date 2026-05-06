@@ -1174,7 +1174,8 @@ async def update_token_banking_details(
         "input": {
             "settings": {
                 "payout": {
-                    "interval": payout_interval
+                    "interval": payout_interval,
+                    "refund": "WALLET"
                 }
             },
             "bankAccount": {
@@ -1601,7 +1602,8 @@ async def _sync_banking_to_token_impl(
         },
         "settings": {
             "payout": {
-                "interval": "IMMEDIATE"
+                "interval": "IMMEDIATE",
+                "refund": "WALLET"
             }
         },
     }

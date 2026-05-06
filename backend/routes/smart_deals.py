@@ -403,6 +403,17 @@ async def approve_deal(deal_id: str, request: Request):
             {"deal_id": deal_id},
             {"$set": {"status": "COMPLETE", "completed_at": now, "updated_at": now}},
         )
+        # Trigger instant bank transfer from seller's TradeSafe wallet
+        seller_token_id = deal.get("tradesafe_seller_token_id")
+        deal_amount = deal.get("amount")
+        if seller_token_id and deal_amount:
+            from tradesafe_service import withdraw_token_funds
+            asyncio.create_task(_fire_email(
+                withdraw_token_funds(seller_token_id, float(deal_amount), rtc=True)
+            ))
+            logger.info(f"[SMART_DEAL] Withdrawal queued for seller token {seller_token_id}, R{deal_amount}")
+        else:
+            logger.warning(f"[SMART_DEAL] Cannot trigger withdrawal — seller_token_id={seller_token_id} amount={deal_amount}")
     except Exception as exc:
         logger.error(f"[SMART_DEAL] Payout failed for {deal_id}: {exc}")
         await db.transactions.update_one(

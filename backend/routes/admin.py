@@ -1779,12 +1779,12 @@ async def force_sync_token(
 
 # ============ SMART DEALS ============
 
-@router.post("/transactions/{tradesafe_id}/release")
+@router.post("/smart-deals/tradesafe/{tradesafe_id}/release")
 async def admin_release_transaction(tradesafe_id: str, request: Request):
     """
-    Force-release escrow funds for a Smart Deal by its TradeSafe transaction ID.
+    Force-release escrow funds for a Smart Deal by its TradeSafe transaction ID
+    (the value stored in deal.tradesafe_token_id / deal.tradesafe_transaction_id).
     Calls allocationStartDelivery then allocationAcceptDelivery in sequence.
-    tradesafe_id is the value stored in deal.tradesafe_token_id.
     """
     db = get_database()
     await require_admin(request, db)

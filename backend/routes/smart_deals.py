@@ -137,16 +137,16 @@ async def create_deal(body: CreateDealRequest, request: Request):
     logger.info(f"[SMART_DEAL] Created {deal_id} by {current_user.email} for {freelancer['email']}")
 
     from email_service import send_smart_deal_created
-    asyncio.create_task(send_smart_deal_created(
+    asyncio.create_task(_fire_email(send_smart_deal_created(
         freelancer_email=body.freelancer_email,
-        freelancer_name=freelancer.get('first_name') or body.freelancer_email.split('@')[0],
+        freelancer_name=freelancer.get('name') or body.freelancer_email.split('@')[0],
         client_name=current_user.name or current_user.email.split('@')[0],
         deal_id=deal_id,
         title=body.title,
         amount=body.amount,
         scope=body.description,
         days=body.days_to_deliver,
-    ))
+    )))
 
     return {"deal_id": deal_id, "status": "PENDING"}
 

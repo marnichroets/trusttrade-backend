@@ -3,6 +3,7 @@ TrustTrade Webhook Routes
 Handles TradeSafe webhook notifications and alerts
 """
 
+import json
 import logging
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request
@@ -48,10 +49,26 @@ async def _handle_smart_deal_funded(deal: dict, db) -> None:
     ))
 
 
+@router.get("/webhook-test")
+async def webhook_test():
+    return {"status": "ok"}
+
+
 @router.post("/tradesafe-webhook")
 async def tradesafe_webhook(request: Request):
-    payload = await request.json()
-    logger.info(f"[WEBHOOK] Received: {payload}")
+    raw_body = await request.body()
+    headers = dict(request.headers)
+    logger.info("[WEBHOOK] ========== INCOMING POST /tradesafe-webhook ==========")
+    logger.info(f"[WEBHOOK] Headers: {headers}")
+    logger.info(f"[WEBHOOK] Body ({len(raw_body)} bytes): {raw_body.decode('utf-8', errors='replace')}")
+
+    try:
+        payload = json.loads(raw_body)
+    except Exception as exc:
+        logger.error(f"[WEBHOOK] JSON parse failed: {exc}")
+        return {"ok": False, "error": "invalid json"}
+
+    logger.info(f"[WEBHOOK] Parsed payload: {payload}")
 
     # TradeSafe sends { "data": { "id": ..., "state": ..., "reference": ... } }
     data = payload.get("data") or payload

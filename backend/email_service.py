@@ -91,14 +91,17 @@ async def send_email(
     try:
         # Generate plain text from HTML if not provided
         if not text_content:
-            text_content = re.sub('<[^<]+?>', '', html_content)
+            text_content = re.sub(r'<(?:br|p|div|tr|li|h[1-6])[^>]*>', '\n', html_content, flags=re.IGNORECASE)
+            text_content = re.sub('<[^<]+?>', '', text_content)
             text_content = unescape(text_content)
-            text_content = re.sub(r'\s+', ' ', text_content).strip()
-        
+            text_content = re.sub(r'\n{3,}', '\n\n', text_content)
+            text_content = re.sub(r'[ \t]+', ' ', text_content).strip()
+
         print(f"[EMAIL] Calling Postmark API...")
         response = client.emails.send(
             From=f"{SENDER_NAME} <{SENDER_EMAIL}>",
             To=f"{to_name} <{to_email}>",
+            ReplyTo="trusttrade.register@gmail.com",
             Subject=subject,
             HtmlBody=html_content,
             TextBody=text_content,
@@ -1098,7 +1101,7 @@ async def send_smart_deal_created(
 ) -> bool:
     """Email to freelancer when a new Smart Deal is created for them."""
     logger.info(f"[SMART_DEAL_EMAIL] send_smart_deal_created -> {freelancer_email}, deal={deal_id}")
-    subject = f"TrustTrade: {client_name} wants to hire you — {title}"
+    subject = f"Your Smart Deal is ready to accept — {title}"
     link = f"https://www.trusttradesa.co.za/smart-deals/{deal_id}"
     scope_display = scope[:200] + ("..." if len(scope) > 200 else "")
     details = {
@@ -1148,9 +1151,9 @@ async def send_smart_deal_accepted(deal: dict, client_name: str, freelancer_name
 
 async def send_smart_deal_funded(deal: dict, client_name: str, freelancer_name: str) -> bool:
     """Email to freelancer when escrow is funded."""
-    subject = f"TrustTrade: Escrow funded — you can start work on '{deal['title']}'"
+    subject = f"Payment secured — start your work on {deal['title']}"
     html = _sd_html(
-        heading="Escrow funded — start work",
+        heading="Payment secured — start your work",
         name=freelancer_name,
         intro=(
             f"<strong>{client_name}</strong> has funded the escrow. "

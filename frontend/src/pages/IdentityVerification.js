@@ -8,8 +8,8 @@ import { ShieldCheck, Upload, Camera, Phone, CheckCircle, ArrowLeft, FileText, X
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 function isValidSAPhone(phone) {
-  const digits = phone.replace(/[\s\-\+\(\)]/g, '');
-  return digits.length >= 9 && digits.length <= 12;
+  const digits = phone.replace(/\D/g, '');
+  return digits.length >= 9;
 }
 
 function SectionHead({ label }) {

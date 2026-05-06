@@ -149,7 +149,7 @@ function TransactionDetail() {
 
   const handleSendOtp = async () => {
     setVerificationError(null);
-    if (!phoneNumber || phoneNumber.replace(/[\s\-\+\(\)]/g, '').length < 9) { toast.error('Please enter a valid phone number'); return; }
+    if (!phoneNumber || phoneNumber.replace(/\D/g, '').length < 9) { toast.error('Please enter a valid phone number'); return; }
     if (isLockedOut) { toast.error(`Too many attempts. Please try again in ${lockoutMinutes} minutes.`); return; }
     const maskedPhone = phoneVerificationContext?.maskedPhone;
     if (maskedPhone && !validatePhoneAgainstMask(phoneNumber, maskedPhone)) { setVerificationError(`Phone number doesn't match. Expected ending: ${maskedPhone.slice(-4)}.`); toast.error(`Phone number doesn't match. Expected ending: ${maskedPhone.slice(-4)}`); return; }

@@ -24,8 +24,8 @@ const V = {
 };
 
 function isValidPhone(phone) {
-  const digits = phone.replace(/[\s\-\+\(\)]/g, '');
-  return digits.length >= 9 && digits.length <= 12;
+  const digits = phone.replace(/\D/g, '');
+  return digits.length >= 9;
 }
 
 const SA_BANKS = [

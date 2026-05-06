@@ -1783,7 +1783,7 @@ async def force_sync_token(
 async def force_fund_smart_deal(deal_id: str, request: Request):
     db = get_database()
     await require_admin(request, db)
-    await db.smart_deals.update_one(
+    await db.transactions.update_one(
         {"deal_id": deal_id},
         {"$set": {"status": "FUNDED", "funded_at": datetime.now(timezone.utc)}}
     )

@@ -1779,6 +1779,54 @@ async def force_sync_token(
 
 # ============ SMART DEALS ============
 
+@router.post("/transactions/{tradesafe_id}/release")
+async def admin_release_transaction(tradesafe_id: str, request: Request):
+    """
+    Force-release escrow funds for a Smart Deal by its TradeSafe transaction ID.
+    Calls allocationStartDelivery then allocationAcceptDelivery in sequence.
+    tradesafe_id is the value stored in deal.tradesafe_token_id.
+    """
+    db = get_database()
+    await require_admin(request, db)
+
+    deal = await db.transactions.find_one({"tradesafe_token_id": tradesafe_id, "deal_type": "DIGITAL_WORK"})
+    if not deal:
+        raise HTTPException(status_code=404, detail=f"Smart deal with tradesafe_id={tradesafe_id!r} not found")
+
+    allocation_id = deal.get("tradesafe_allocation_id")
+    if not allocation_id:
+        raise HTTPException(status_code=400, detail="Deal has no tradesafe_allocation_id — cannot release")
+
+    from tradesafe_service import start_delivery, accept_delivery
+
+    # Step 1: ensure allocation is in DELIVERY_REQUESTED state.
+    # This may have already been called; TradeSafe will reject gracefully if so.
+    sd_result = await start_delivery(allocation_id)
+    logger.info(f"[ADMIN_RELEASE] start_delivery allocation={allocation_id}: {sd_result}")
+
+    # Step 2: accept delivery — this releases funds to the seller.
+    payout_result = await accept_delivery(allocation_id)
+    logger.info(f"[ADMIN_RELEASE] accept_delivery allocation={allocation_id}: {payout_result}")
+
+    if not payout_result:
+        raise HTTPException(status_code=502, detail="TradeSafe allocationAcceptDelivery failed — check logs")
+
+    now = datetime.now(timezone.utc)
+    await db.transactions.update_one(
+        {"deal_id": deal["deal_id"]},
+        {"$set": {"status": "COMPLETE", "completed_at": now, "updated_at": now, "payout_failed": False}},
+    )
+
+    logger.info(f"[ADMIN_RELEASE] Deal {deal['deal_id']} released via admin by tradesafe_id={tradesafe_id}")
+    return {
+        "success": True,
+        "deal_id": deal["deal_id"],
+        "tradesafe_id": tradesafe_id,
+        "allocation_id": allocation_id,
+        "allocation_state": (payout_result or {}).get("state"),
+    }
+
+
 @router.post("/smart-deals/{deal_id}/force-fund")
 async def force_fund_smart_deal(deal_id: str, request: Request):
     db = get_database()

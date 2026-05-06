@@ -936,6 +936,7 @@ async def start_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
 async def accept_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
     """
     Accept delivery for an allocation (buyer confirms receipt).
+    Allocation must be in DELIVERY_REQUESTED state first (call start_delivery).
     This triggers fund release to seller.
     """
     mutation = """
@@ -948,13 +949,21 @@ async def accept_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
         }
     }
     """
-    
+
     result = await execute_graphql(mutation, {"id": allocation_id})
-    
-    if result and 'allocationAcceptDelivery' in result:
-        logger.info(f"Accepted delivery for allocation: {allocation_id}")
-        return result['allocationAcceptDelivery']
-    
+    logger.info(f"[ACCEPT_DELIVERY] allocation={allocation_id} raw response: {result}")
+
+    if result and "errors" in result:
+        err = result["errors"][0].get("message", "unknown") if result["errors"] else "unknown"
+        debug = result["errors"][0].get("extensions", {}).get("debugMessage", "") if result["errors"] else ""
+        logger.error(f"[ACCEPT_DELIVERY] TradeSafe error: {err} | debug: {debug}")
+        return None
+
+    if result and "allocationAcceptDelivery" in result:
+        logger.info(f"[ACCEPT_DELIVERY] Success for allocation {allocation_id}: {result['allocationAcceptDelivery']}")
+        return result["allocationAcceptDelivery"]
+
+    logger.error(f"[ACCEPT_DELIVERY] Unexpected response for allocation {allocation_id}: {result}")
     return None
 
 

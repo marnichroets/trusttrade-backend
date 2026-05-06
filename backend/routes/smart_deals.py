@@ -338,6 +338,20 @@ async def deliver_deal(deal_id: str, request: Request):
             "review_window.expires_at": expires_at,
         }},
     )
+
+    # Notify TradeSafe that delivery has started so the allocation moves to
+    # DELIVERY_REQUESTED state — required before allocationAcceptDelivery can run.
+    allocation_id = deal.get("tradesafe_allocation_id")
+    if allocation_id:
+        try:
+            from tradesafe_service import start_delivery
+            sd_result = await start_delivery(allocation_id)
+            logger.info(f"[SMART_DEAL] start_delivery for {deal_id}: {sd_result}")
+        except Exception as exc:
+            logger.error(f"[SMART_DEAL] start_delivery failed for {deal_id}: {exc}")
+    else:
+        logger.warning(f"[SMART_DEAL] {deal_id} has no tradesafe_allocation_id — skipping start_delivery")
+
     logger.info(f"[SMART_DEAL] {deal_id} delivered by {current_user.email}")
 
     import email_service

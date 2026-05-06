@@ -112,27 +112,33 @@ async def send_sms(to_phone: str, message: str) -> Dict[str, Any]:
     logger.info("=== SMS SEND ATTEMPT ===")
     logger.info(f"To: {normalized_phone}")
     logger.info(f"Message: {message[:50]}...")
+    logger.info(f"API key present: {bool(SMS_MESSENGER_API_KEY)}, email present: {bool(SMS_MESSENGER_EMAIL)}")
 
     try:
-        # SMS Messenger uses Bearer token authentication
+        # SMS Messenger (Zoom Connect) authenticates via email + token query params
+        params = {
+            "email": SMS_MESSENGER_EMAIL or "",
+            "token": SMS_MESSENGER_API_KEY or "",
+        }
         payload = {
             "message": message,
             "recipientNumber": normalized_phone
         }
-        
-        logger.info(f"Request payload: {payload}")
-        
+
+        url = f"{SMS_MESSENGER_BASE_URL}/sms/send"
+        logger.info(f"POST {url} | params: email={'***' if SMS_MESSENGER_EMAIL else 'MISSING'}, token={'***' if SMS_MESSENGER_API_KEY else 'MISSING'} | payload: {payload}")
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{SMS_MESSENGER_BASE_URL}/sms/send",
+                url,
+                params=params,
                 headers={
-                    "Authorization": f"Bearer {SMS_MESSENGER_API_KEY}",
                     "Content-Type": "application/json",
                     "Accept": "application/json"
                 },
                 json=payload
             )
-            
+
             logger.info(f"SMS API Response Status: {response.status_code}")
             logger.info(f"SMS API Response Body: {response.text}")
             
@@ -182,8 +188,9 @@ async def check_sms_balance() -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 f"{SMS_MESSENGER_BASE_URL}/account/balance",
-                headers={
-                    "Authorization": f"Bearer {SMS_MESSENGER_API_KEY}"
+                params={
+                    "email": SMS_MESSENGER_EMAIL or "",
+                    "token": SMS_MESSENGER_API_KEY or "",
                 }
             )
             

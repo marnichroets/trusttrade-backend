@@ -1775,3 +1775,16 @@ async def force_sync_token(
         "account_number_last4": account_number[-4:] if len(account_number) >= 4 else "****",
         "result": result,
     }
+
+
+# ============ SMART DEALS ============
+
+@router.post("/smart-deals/{deal_id}/force-fund")
+async def force_fund_smart_deal(deal_id: str, request: Request):
+    db = get_database()
+    await require_admin(request, db)
+    await db.smart_deals.update_one(
+        {"deal_id": deal_id},
+        {"$set": {"status": "FUNDED", "funded_at": datetime.now(timezone.utc)}}
+    )
+    return {"success": True}

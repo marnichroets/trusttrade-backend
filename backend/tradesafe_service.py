@@ -1928,7 +1928,29 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
     
     logger.error(f"[WITHDRAW] Unexpected response: {result}")
     return {
-        "success": False, 
+        "success": False,
         "error": "Unexpected response from TradeSafe",
         "raw_response": result
     }
+
+
+async def withdraw_token_funds(token_id: str, amount: float, rtc: bool = True) -> bool:
+    """Withdraw funds from a TradeSafe token wallet to the linked bank account."""
+    rtc_str = "true" if rtc else "false"
+    mutation = """
+    mutation withdraw {
+        tokenAccountWithdraw(id: "%s", value: %.2f, rtc: %s)
+    }
+    """ % (token_id, amount, rtc_str)
+
+    result = await execute_graphql(mutation)
+    logger.info(f"[WITHDRAW_FUNDS] token={token_id} amount=R{amount:.2f} rtc={rtc} response={result}")
+
+    if result and "errors" in result:
+        logger.error(f"[WITHDRAW_FUNDS] Error: {result['errors']}")
+        return False
+
+    if result and "tokenAccountWithdraw" in result:
+        return bool(result["tokenAccountWithdraw"])
+
+    return False

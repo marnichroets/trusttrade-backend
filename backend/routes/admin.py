@@ -1788,3 +1788,26 @@ async def force_fund_smart_deal(deal_id: str, request: Request):
         {"$set": {"status": "FUNDED", "funded_at": datetime.now(timezone.utc)}}
     )
     return {"success": True}
+
+
+# ============ TOKEN MANAGEMENT ============
+
+@router.post("/tokens/{token_id}/withdraw")
+async def admin_withdraw_token(token_id: str, request: Request):
+    """Manually trigger a withdrawal from a TradeSafe token wallet to its linked bank account."""
+    db = get_database()
+    await require_admin(request, db)
+
+    body = await request.json()
+    amount = body.get("amount")
+    if not amount or float(amount) <= 0:
+        raise HTTPException(status_code=400, detail="amount must be a positive number")
+
+    from tradesafe_service import withdraw_token_funds
+    success = await withdraw_token_funds(token_id, float(amount))
+
+    if not success:
+        raise HTTPException(status_code=502, detail="TradeSafe withdrawal failed — check logs")
+
+    logger.info(f"[ADMIN] withdrawal R{amount} from token {token_id} succeeded")
+    return {"success": True, "token_id": token_id, "amount": float(amount)}

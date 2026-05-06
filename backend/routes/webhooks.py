@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request
 
-from core.database import get_database, _get_sync_db
+from core.database import get_database
 from core.security import get_user_from_token
 
 logger = logging.getLogger(__name__)
@@ -58,66 +58,105 @@ async def webhook_test():
 async def tradesafe_webhook(request: Request):
     raw_body = await request.body()
     headers = dict(request.headers)
-    logger.info("[WEBHOOK] ========== INCOMING POST /tradesafe-webhook ==========")
-    logger.info(f"[WEBHOOK] Headers: {headers}")
-    logger.info(f"[WEBHOOK] Body ({len(raw_body)} bytes): {raw_body.decode('utf-8', errors='replace')}")
+
+    logger.info("=" * 60)
+    logger.info("[WEBHOOK] ===== INCOMING POST /api/tradesafe-webhook =====")
+    logger.info(f"[WEBHOOK] Content-Type: {request.headers.get('content-type', 'not-set')}")
+    logger.info(f"[WEBHOOK] User-Agent: {request.headers.get('user-agent', 'not-set')}")
+    logger.info(f"[WEBHOOK] X-TradeSafe-*: { {k: v for k, v in headers.items() if 'tradesafe' in k.lower()} }")
+    logger.info(f"[WEBHOOK] Body size: {len(raw_body)} bytes")
+    logger.info(f"[WEBHOOK] Raw body: {raw_body.decode('utf-8', errors='replace')}")
+    logger.info("=" * 60)
+
+    # Always return 200 so TradeSafe doesn't keep retrying on parse errors
+    if not raw_body:
+        logger.warning("[WEBHOOK] Empty body received — possibly a connectivity check from TradeSafe")
+        return {"ok": True}
 
     try:
         payload = json.loads(raw_body)
     except Exception as exc:
-        logger.error(f"[WEBHOOK] JSON parse failed: {exc}")
-        return {"ok": False, "error": "invalid json"}
+        logger.error(f"[WEBHOOK] JSON parse failed: {exc} — raw={raw_body[:200]}")
+        return {"ok": True}  # Still 200 to stop retries
 
-    logger.info(f"[WEBHOOK] Parsed payload: {payload}")
+    logger.info(f"[WEBHOOK] Parsed payload keys: {list(payload.keys())}")
+    logger.info(f"[WEBHOOK] Full payload: {json.dumps(payload, default=str)}")
 
     # TradeSafe sends { "data": { "id": ..., "state": ..., "reference": ... } }
+    # or the flat form { "id": ..., "state": ..., "reference": ... }
     data = payload.get("data") or payload
     tradesafe_id = data.get("id")
     state = (data.get("state") or "").upper()
     reference = data.get("reference") or ""
+    event_type = payload.get("event") or payload.get("type") or "unknown"
 
-    logger.info(f"[WEBHOOK] state={state!r} reference={reference!r} id={tradesafe_id!r}")
+    logger.info(f"[WEBHOOK] Extracted — event={event_type!r} state={state!r} reference={reference!r} tradesafe_id={tradesafe_id!r}")
 
     db = get_database()
 
     # ── Smart Deal path ─────────────────────────────────────────────────────
-    # Smart Deal references always start with "SD-"; fall back to tradesafe_token_id lookup.
+    # References start with "SD-"; also try tradesafe_token_id / tradesafe_transaction_id.
     smart_deal = None
     if reference.startswith("SD-"):
         smart_deal = await db.transactions.find_one(
             {"deal_id": reference, "deal_type": "DIGITAL_WORK"}
         )
+        logger.info(f"[WEBHOOK] SD reference lookup deal_id={reference!r}: {'found' if smart_deal else 'not found'}")
     if smart_deal is None and tradesafe_id:
         smart_deal = await db.transactions.find_one(
-            {"tradesafe_token_id": tradesafe_id, "deal_type": "DIGITAL_WORK"}
+            {"$or": [
+                {"tradesafe_token_id": tradesafe_id, "deal_type": "DIGITAL_WORK"},
+                {"tradesafe_transaction_id": tradesafe_id, "deal_type": "DIGITAL_WORK"},
+            ]}
         )
+        logger.info(f"[WEBHOOK] tradesafe_id lookup {tradesafe_id!r}: {'found' if smart_deal else 'not found'}")
 
     if smart_deal:
         deal_id = smart_deal["deal_id"]
         FUNDED_STATES = {"FUNDS_RECEIVED", "FUNDS_DEPOSITED"}
+        logger.info(f"[WEBHOOK] Smart deal {deal_id} found — current status={smart_deal['status']!r} incoming state={state!r}")
         if state not in FUNDED_STATES:
-            logger.info(f"[WEBHOOK] Smart deal {deal_id}: state={state!r} — no action")
-            return {"ok": True, "action": "ignored"}
+            logger.info(f"[WEBHOOK] Smart deal {deal_id}: state={state!r} is not a funded state — no action")
+            return {"ok": True, "action": "ignored", "reason": f"state {state!r} not actionable for smart deals"}
         if smart_deal["status"] not in ("ACCEPTED", "PAYMENT_PENDING"):
-            logger.info(
-                f"[WEBHOOK] Smart deal {deal_id} already in {smart_deal['status']!r} — skipping"
-            )
+            logger.info(f"[WEBHOOK] Smart deal {deal_id} already in {smart_deal['status']!r} — skipping duplicate")
             return {"ok": True, "action": "already_processed"}
         await _handle_smart_deal_funded(smart_deal, db)
+        logger.info(f"[WEBHOOK] Smart deal {deal_id} → FUNDED processing triggered")
         return {"ok": True, "action": "smart_deal_funded", "deal_id": deal_id}
 
-    # ── Regular transaction path (existing behaviour) ────────────────────────
+    # ── Regular transaction path ─────────────────────────────────────────────
+    txn = None
     if tradesafe_id:
-        sync_db = _get_sync_db()
-        txn = sync_db.transactions.find_one({"tradesafe_id": tradesafe_id})
-        if txn:
-            sync_db.transactions.update_one(
-                {"_id": txn["_id"]},
-                {"$set": {"status": "FUNDS_RECEIVED"}}
-            )
-            logger.info(f"[WEBHOOK] Regular txn updated: tradesafe_id={tradesafe_id}")
+        txn = await db.transactions.find_one({"tradesafe_id": tradesafe_id})
+        logger.info(f"[WEBHOOK] Regular txn lookup tradesafe_id={tradesafe_id!r}: {'found' if txn else 'not found'}")
+    if txn is None and reference and not reference.startswith("SD-"):
+        txn = await db.transactions.find_one({"transaction_id": reference})
+        logger.info(f"[WEBHOOK] Regular txn lookup transaction_id={reference!r}: {'found' if txn else 'not found'}")
 
-    return {"ok": True}
+    if txn:
+        txn_id = txn.get("transaction_id", "?")
+        FUNDED_STATES = {"FUNDS_RECEIVED", "FUNDS_DEPOSITED"}
+        if state in FUNDED_STATES:
+            await db.transactions.update_one(
+                {"_id": txn["_id"]},
+                {"$set": {
+                    "payment_status": "Funds Received",
+                    "tradesafe_state": state,
+                    "funds_received_at": datetime.now(timezone.utc).isoformat(),
+                }}
+            )
+            logger.info(f"[WEBHOOK] Regular txn {txn_id} → payment_status=Funds Received (state={state})")
+        else:
+            await db.transactions.update_one(
+                {"_id": txn["_id"]},
+                {"$set": {"tradesafe_state": state}}
+            )
+            logger.info(f"[WEBHOOK] Regular txn {txn_id}: tradesafe_state updated to {state!r}")
+        return {"ok": True, "action": "regular_txn_updated", "transaction_id": txn_id, "state": state}
+
+    logger.warning(f"[WEBHOOK] No matching transaction found — tradesafe_id={tradesafe_id!r} reference={reference!r}")
+    return {"ok": True, "action": "no_match"}
 
 
 @router.get("/oauth/callback")

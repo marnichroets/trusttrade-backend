@@ -86,6 +86,9 @@ class Settings:
     ADMIN_RESET_SECRET: str = os.environ.get('ADMIN_RESET_SECRET', '')
     ADMIN_RESET_SECRET: str = os.environ.get('ADMIN_RESET_SECRET', '')
     
+    # Backend public URL — used to register the TradeSafe webhook callbackUrl
+    BACKEND_URL: str = os.environ.get('BACKEND_URL', 'https://trusttrade-backend-production-3efa.up.railway.app')
+
     # Platform Constants - Beta Launch Limits
     MINIMUM_TRANSACTION_AMOUNT: float = 100.0  # R100 minimum (beta)
     MAXIMUM_TRANSACTION_AMOUNT: float = 10000.0  # R10,000 maximum (beta)

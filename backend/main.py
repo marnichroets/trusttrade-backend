@@ -74,6 +74,8 @@ app.include_router(monitoring_router)
 app.include_router(webhooks_router)
 app.include_router(smart_deals_router, prefix="/api/smart-deals", tags=["smart-deals"])
 
+logger.info(f"[STARTUP] TradeSafe webhook URL: {settings.BACKEND_URL}/api/tradesafe-webhook")
+
 try:
     Path(settings.UPLOAD_BASE_PATH).mkdir(parents=True, exist_ok=True)
     app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_BASE_PATH), name="uploads")

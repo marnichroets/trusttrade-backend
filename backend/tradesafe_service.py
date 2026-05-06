@@ -592,6 +592,10 @@ async def create_tradesafe_transaction(
     # TrustTrade registered email with TradeSafe API
     TRUSTTRADE_AGENT_EMAIL = "marnichroets@gmail.com"  # The email associated with TradeSafe API credentials
     
+    from core.config import settings as _settings
+    _webhook_url = f"{_settings.BACKEND_URL}/api/tradesafe-webhook"
+    logger.info(f"[WEBHOOK_URL] Registering callbackUrl={_webhook_url}")
+
     variables = {
         "input": {
             "title": title,
@@ -600,6 +604,7 @@ async def create_tradesafe_transaction(
             "currency": "ZAR",
             "feeAllocation": normalized_fee_allocation,  # Dynamic fee allocation
             "reference": internal_reference,
+            "callbackUrl": _webhook_url,
             "parties": {
                 "create": [
                     {

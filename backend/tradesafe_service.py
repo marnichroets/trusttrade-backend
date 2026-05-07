@@ -1325,8 +1325,23 @@ async def update_token_banking_details(
 
 
 async def update_token_payout(token_id: str, interval: str = "WALLET") -> Dict[str, Any]:
-    """Update only the payout interval on a TradeSafe token (no banking changes)."""
+    """Update only the payout interval on a TradeSafe token (no banking changes).
+    Fetches existing user fields first — TradeSafe requires user in every tokenUpdate."""
     logger.info(f"[UPDATE_TOKEN_PAYOUT] token={token_id} interval={interval}")
+
+    existing = await get_token_details(token_id)
+    if not existing:
+        return {"success": False, "error": f"Could not fetch token {token_id} before update"}
+    existing_user = existing.get("user") or {}
+
+    user_input = {}
+    for field in ("givenName", "familyName", "email", "mobile"):
+        if existing_user.get(field):
+            user_input[field] = existing_user[field]
+
+    if not user_input:
+        return {"success": False, "error": "Token has no user fields — cannot satisfy TradeSafe tokenUpdate requirement"}
+
     mutation = """
     mutation tokenUpdate($id: ID!, $input: TokenInput!) {
         tokenUpdate(id: $id, input: $input) {
@@ -1344,6 +1359,7 @@ async def update_token_payout(token_id: str, interval: str = "WALLET") -> Dict[s
     variables = {
         "id": token_id,
         "input": {
+            "user": user_input,
             "settings": {
                 "payout": {
                     "interval": interval,

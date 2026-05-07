@@ -137,6 +137,10 @@ async def tradesafe_webhook(request: Request):
     if txn:
         txn_id = txn.get("transaction_id", "?")
         FUNDED_STATES = {"FUNDS_RECEIVED", "FUNDS_DEPOSITED"}
+        # TradeSafe fires FUNDS_RELEASED after allocationCompleteDelivery settles.
+        # This is our signal to trigger the bank withdrawal.
+        RELEASED_STATES = {"FUNDS_RELEASED", "COMPLETE", "COMPLETED"}
+
         if state in FUNDED_STATES:
             now_iso = datetime.now(timezone.utc).isoformat()
             auto_release_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
@@ -150,12 +154,58 @@ async def tradesafe_webhook(request: Request):
                 }}
             )
             logger.info(f"[WEBHOOK] Regular txn {txn_id} → payment_status=Paid, auto_release_at={auto_release_at} (state={state})")
+
+        elif state in RELEASED_STATES and not txn.get("withdrawal_triggered"):
+            # Funds settled in seller token wallet — trigger bank payout now.
+            seller_token_id = txn.get("tradesafe_seller_token_id")
+            net_amount = txn.get("net_amount")
+            now_iso = datetime.now(timezone.utc).isoformat()
+
+            logger.info(
+                f"[WEBHOOK] FUNDS_RELEASED for {txn_id} — "
+                f"seller_token={seller_token_id} net_amount={net_amount}"
+            )
+
+            await db.transactions.update_one(
+                {"_id": txn["_id"]},
+                {"$set": {
+                    "tradesafe_state": state,
+                    "payout_status": "withdrawal_initiated",
+                    "withdrawal_triggered": True,
+                    "withdrawal_triggered_at": now_iso,
+                }}
+            )
+
+            if seller_token_id and net_amount:
+                import asyncio
+                from tradesafe_service import withdraw_token_funds
+                asyncio.create_task(_bg(
+                    withdraw_token_funds(seller_token_id, float(net_amount), rtc=True)
+                ))
+                logger.info(
+                    f"[WEBHOOK] Withdrawal task queued for {txn_id}: "
+                    f"token={seller_token_id} amount=R{net_amount}"
+                )
+            else:
+                logger.warning(
+                    f"[WEBHOOK] FUNDS_RELEASED for {txn_id} but missing seller_token_id "
+                    f"or net_amount — withdrawal skipped. Manual withdrawal required."
+                )
+
+        elif state in RELEASED_STATES and txn.get("withdrawal_triggered"):
+            logger.info(f"[WEBHOOK] {txn_id}: withdrawal already triggered, skipping duplicate {state!r} event")
+            await db.transactions.update_one(
+                {"_id": txn["_id"]},
+                {"$set": {"tradesafe_state": state}}
+            )
+
         else:
             await db.transactions.update_one(
                 {"_id": txn["_id"]},
                 {"$set": {"tradesafe_state": state}}
             )
             logger.info(f"[WEBHOOK] Regular txn {txn_id}: tradesafe_state updated to {state!r}")
+
         return {"ok": True, "action": "regular_txn_updated", "transaction_id": txn_id, "state": state}
 
     logger.warning(f"[WEBHOOK] No matching transaction found — tradesafe_id={tradesafe_id!r} reference={reference!r}")

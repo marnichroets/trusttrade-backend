@@ -971,46 +971,58 @@ async def start_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-async def accept_delivery(allocation_id: str, seller_token_id: Optional[str] = None, amount: Optional[float] = None) -> Optional[Dict[str, Any]]:
+async def complete_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
     """
-    Accept delivery for an allocation (buyer confirms receipt).
-    Allocation must be in DELIVERY_REQUESTED state first (call start_delivery).
-    This triggers fund release to seller.
-    If seller_token_id and amount are provided, immediately triggers instant RTC bank payout.
+    Call allocationCompleteDelivery to mark buyer receipt confirmed.
+
+    Per TradeSafe docs, the correct post-payment flow is:
+      1. allocationStartDelivery  → state: INITIATED
+      2. allocationCompleteDelivery → state: DELIVERY_ACCEPTED
+      3. TradeSafe auto-releases funds (24 hrs) and fires a FUNDS_RELEASED webhook
+         — we trigger bank withdrawal from the webhook, NOT inline here.
+
+    Do NOT call allocationAcceptDelivery after allocationCompleteDelivery —
+    TradeSafe rejects it ("You cannot accept this allocation").
     """
+    logger.info(f"[COMPLETE_DELIVERY] Calling allocationCompleteDelivery — allocation_id={allocation_id!r}")
+
     mutation = """
-    mutation allocationAcceptDelivery($id: ID!) {
-        allocationAcceptDelivery(id: $id) {
+    mutation allocationCompleteDelivery($id: ID!) {
+        allocationCompleteDelivery(id: $id) {
             id
-            title
             state
-            value
         }
     }
     """
 
     result = await execute_graphql(mutation, {"id": allocation_id})
-    logger.info(f"[ACCEPT_DELIVERY] allocation={allocation_id} raw response: {result}")
+    logger.info(f"[COMPLETE_DELIVERY] Raw TradeSafe response: {result}")
 
     if result and "errors" in result:
         err = result["errors"][0].get("message", "unknown") if result["errors"] else "unknown"
-        debug = result["errors"][0].get("extensions", {}).get("debugMessage", "") if result["errors"] else ""
-        logger.error(f"[ACCEPT_DELIVERY] TradeSafe error: {err} | debug: {debug}")
+        debug = (result["errors"][0].get("extensions") or {}).get("debugMessage", "") if result["errors"] else ""
+        logger.error(f"[COMPLETE_DELIVERY] TradeSafe error for allocation {allocation_id!r}: {err} | debug: {debug}")
         return None
 
-    if result and "allocationAcceptDelivery" in result:
-        delivery_result = result["allocationAcceptDelivery"]
-        logger.info(f"[ACCEPT_DELIVERY] Success for allocation {allocation_id}: {delivery_result}")
-        if seller_token_id and amount:
-            try:
-                withdrawal_ok = await withdraw_token_funds(seller_token_id, float(amount), rtc=True)
-                logger.info(f"[ACCEPT_DELIVERY] Instant RTC withdrawal: token={seller_token_id} R{amount:.2f} ok={withdrawal_ok}")
-            except Exception as exc:
-                logger.error(f"[ACCEPT_DELIVERY] Withdrawal failed (funds still released): {exc}")
+    if result and "allocationCompleteDelivery" in result:
+        delivery_result = result["allocationCompleteDelivery"]
+        logger.info(f"[COMPLETE_DELIVERY] Success allocation={allocation_id!r} state={delivery_result.get('state')}")
         return delivery_result
 
-    logger.error(f"[ACCEPT_DELIVERY] Unexpected response for allocation {allocation_id}: {result}")
+    logger.error(f"[COMPLETE_DELIVERY] Unexpected response allocation={allocation_id!r}: {result}")
     return None
+
+
+async def accept_delivery(allocation_id: str, seller_token_id: Optional[str] = None, amount: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    """
+    Buyer confirms receipt of item. Delegates to complete_delivery().
+
+    seller_token_id and amount are kept for call-site compatibility but are no
+    longer used inline — bank withdrawal is now triggered by the TradeSafe
+    FUNDS_RELEASED webhook so it only fires after TradeSafe has actually moved
+    the funds, not speculatively before they are settled.
+    """
+    return await complete_delivery(allocation_id)
 
 
 async def get_transaction_by_reference(reference: str) -> Optional[Dict[str, Any]]:

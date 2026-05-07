@@ -1817,7 +1817,7 @@ async def admin_release_transaction(tradesafe_id: str, request: Request):
     """
     Force-release escrow funds for a Smart Deal by its TradeSafe transaction ID
     (the value stored in deal.tradesafe_token_id / deal.tradesafe_transaction_id).
-    Calls allocationStartDelivery then allocationAcceptDelivery in sequence.
+    Calls allocationStartDelivery then allocationCompleteDelivery in sequence.
     """
     db = get_database()
     await require_admin(request, db)
@@ -1849,7 +1849,7 @@ async def admin_release_transaction(tradesafe_id: str, request: Request):
     logger.info(f"[ADMIN_RELEASE] accept_delivery allocation={allocation_id}: {payout_result}")
 
     if not payout_result:
-        raise HTTPException(status_code=502, detail="TradeSafe allocationAcceptDelivery failed — check logs")
+        raise HTTPException(status_code=502, detail="TradeSafe allocationCompleteDelivery failed — check logs")
 
     now = datetime.now(timezone.utc)
     await db.transactions.update_one(
@@ -1928,7 +1928,7 @@ async def force_fund_smart_deal(deal_id: str, request: Request):
 async def admin_release_smart_deal_funds(deal_id: str, request: Request):
     """
     Force-release escrow funds for a Smart Deal by its internal deal_id (e.g. SD-XXXXXXXX).
-    Calls allocationStartDelivery (idempotent) then allocationAcceptDelivery to release funds.
+    Calls allocationStartDelivery (idempotent) then allocationCompleteDelivery to release funds.
     Also accepts an optional body {"tradesafe_transaction_id": "..."} to backfill the field
     on deals created before it was stored.
     """
@@ -1983,7 +1983,7 @@ async def admin_release_smart_deal_funds(deal_id: str, request: Request):
     if not payout_result:
         raise HTTPException(
             status_code=502,
-            detail="TradeSafe allocationAcceptDelivery failed — check server logs for TradeSafe error details",
+            detail="TradeSafe allocationCompleteDelivery failed — check server logs for TradeSafe error details",
         )
 
     now = datetime.now(timezone.utc)

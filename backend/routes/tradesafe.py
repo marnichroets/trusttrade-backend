@@ -551,23 +551,30 @@ async def start_tradesafe_delivery(request: Request, transaction_id: str):
         raise HTTPException(status_code=401, detail="Not authenticated")
     
     transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
-    
+
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    
+
+    # Log every relevant field so we can diagnose issues without needing DB access
+    logger.info(
+        f"[START_DELIVERY] transaction={transaction_id} "
+        f"status={transaction.get('status')!r} "
+        f"payment_status={transaction.get('payment_status')!r} "
+        f"tradesafe_state={transaction.get('tradesafe_state')!r} "
+        f"tradesafe_id={transaction.get('tradesafe_id')!r} "
+        f"tradesafe_allocation_id={transaction.get('tradesafe_allocation_id')!r} "
+        f"seller_email={transaction.get('seller_email')!r} "
+        f"buyer_email={transaction.get('buyer_email')!r}"
+    )
+
     # Only seller can start delivery
     is_seller = transaction.get("seller_email") == user.email or transaction.get("seller_user_id") == user.user_id
     if not is_seller and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only seller can mark item as delivered")
-    
+
     # Check TradeSafe state — both FUNDS_RECEIVED and FUNDS_DEPOSITED mean payment is confirmed
     FUNDED_STATES = {"FUNDS_RECEIVED", "FUNDS_DEPOSITED"}
     current_ts_state = transaction.get("tradesafe_state")
-    payment_status = transaction.get("payment_status")
-    logger.info(
-        f"[START_DELIVERY] transaction={transaction_id} tradesafe_state={current_ts_state!r} "
-        f"payment_status={payment_status!r}"
-    )
     if current_ts_state not in FUNDED_STATES:
         raise HTTPException(
             status_code=400,
@@ -575,16 +582,22 @@ async def start_tradesafe_delivery(request: Request, transaction_id: str):
         )
 
     allocation_id = transaction.get("tradesafe_allocation_id")
-    logger.info(f"[START_DELIVERY] Using allocation_id={allocation_id!r}")
     if not allocation_id:
         raise HTTPException(status_code=400, detail="Transaction not properly linked to TradeSafe — missing allocation_id")
 
-    # Call TradeSafe
+    # Call TradeSafe — service logs the raw response and any error detail
     result = await start_delivery(allocation_id)
-    logger.info(f"[START_DELIVERY] start_delivery returned: {result}")
+    logger.info(f"[START_DELIVERY] start_delivery result for {transaction_id}: {result}")
 
     if not result:
-        raise HTTPException(status_code=500, detail="Failed to start delivery on TradeSafe — check server logs for TradeSafe error detail")
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Failed to start delivery on TradeSafe — allocation_id={allocation_id!r}, "
+                f"tradesafe_state={current_ts_state!r}. "
+                "Check server logs for the exact TradeSafe error."
+            ),
+        )
     
     # Update timeline
     timeline = transaction.get("timeline", [])

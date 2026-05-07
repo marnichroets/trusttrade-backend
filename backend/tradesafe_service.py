@@ -1015,14 +1015,62 @@ async def complete_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
 
 async def accept_delivery(allocation_id: str, seller_token_id: Optional[str] = None, amount: Optional[float] = None) -> Optional[Dict[str, Any]]:
     """
-    Buyer confirms receipt of item. Delegates to complete_delivery().
+    Buyer confirms receipt — releases funds immediately.
 
-    seller_token_id and amount are kept for call-site compatibility but are no
-    longer used inline — bank withdrawal is now triggered by the TradeSafe
-    FUNDS_RELEASED webhook so it only fires after TradeSafe has actually moved
-    the funds, not speculatively before they are settled.
+    Calls allocationStartDelivery then allocationAcceptDelivery back-to-back
+    in the same request. The sequential pairing is required: TradeSafe needs
+    the allocation in DELIVERY_REQUESTED state (set by allocationStartDelivery)
+    before allocationAcceptDelivery can release the funds.
+
+    If allocationStartDelivery returns an error the allocation may already be
+    in the right state (e.g. seller dispatched earlier), so we still attempt
+    allocationAcceptDelivery regardless.
     """
-    return await complete_delivery(allocation_id)
+    logger.info(f"[ACCEPT_DELIVERY] Back-to-back sequence start — allocation={allocation_id!r}")
+
+    # Step 1 — allocationStartDelivery
+    start_result = await start_delivery(allocation_id)
+    if start_result:
+        logger.info(f"[ACCEPT_DELIVERY] allocationStartDelivery OK: state={start_result.get('state')!r}")
+    else:
+        logger.warning(
+            f"[ACCEPT_DELIVERY] allocationStartDelivery returned None for {allocation_id!r} "
+            "(may already be started) — proceeding to allocationAcceptDelivery anyway"
+        )
+
+    # Step 2 — allocationAcceptDelivery (immediate fund release)
+    mutation = """
+    mutation allocationAcceptDelivery($id: ID!) {
+        allocationAcceptDelivery(id: $id) {
+            id
+            title
+            state
+            value
+        }
+    }
+    """
+    result = await execute_graphql(mutation, {"id": allocation_id})
+    logger.info(f"[ACCEPT_DELIVERY] allocationAcceptDelivery raw response: {result}")
+
+    if result and "errors" in result:
+        err = result["errors"][0].get("message", "unknown") if result["errors"] else "unknown"
+        debug = (result["errors"][0].get("extensions") or {}).get("debugMessage", "") if result["errors"] else ""
+        logger.error(f"[ACCEPT_DELIVERY] TradeSafe error for {allocation_id!r}: {err} | debug: {debug}")
+        return None
+
+    if result and "allocationAcceptDelivery" in result:
+        delivery_result = result["allocationAcceptDelivery"]
+        logger.info(f"[ACCEPT_DELIVERY] Success: allocation={allocation_id!r} state={delivery_result.get('state')!r}")
+        if seller_token_id and amount:
+            try:
+                withdrawal_ok = await withdraw_token_funds(seller_token_id, float(amount), rtc=True)
+                logger.info(f"[ACCEPT_DELIVERY] RTC withdrawal: token={seller_token_id} R{amount:.2f} ok={withdrawal_ok}")
+            except Exception as exc:
+                logger.error(f"[ACCEPT_DELIVERY] Withdrawal failed (funds still released): {exc}")
+        return delivery_result
+
+    logger.error(f"[ACCEPT_DELIVERY] Unexpected response for allocation {allocation_id!r}: {result}")
+    return None
 
 
 async def get_transaction_by_reference(reference: str) -> Optional[Dict[str, Any]]:

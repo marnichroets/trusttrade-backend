@@ -810,8 +810,8 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     # Calculate net amount before release so we can trigger instant payout inside accept_delivery
     net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
 
-    # Call TradeSafe — allocationCompleteDelivery (state → DELIVERY_ACCEPTED).
-    # Bank withdrawal fires when TradeSafe sends the FUNDS_RELEASED webhook.
+    # Call TradeSafe — allocationStartDelivery then allocationAcceptDelivery
+    # back-to-back for immediate fund release.
     result = await accept_delivery(
         allocation_id,
         seller_token_id=transaction.get("tradesafe_seller_token_id"),
@@ -821,28 +821,30 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     if not result:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to complete delivery on TradeSafe — allocation_id={allocation_id!r}. Check server logs."
+            detail=f"Failed to release funds on TradeSafe — allocation_id={allocation_id!r}. Check server logs."
         )
 
     # Update timeline
     timeline = transaction.get("timeline", [])
     timeline.append({
-        "status": "Delivery Accepted",
+        "status": "Delivery Accepted - Funds Released",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "by": user.name,
-        "details": f"Buyer confirmed receipt. R{net_amount:.2f} pending bank payout via TradeSafe."
+        "details": f"Buyer confirmed receipt. R{net_amount:.2f} released to seller."
     })
 
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
         {"$set": {
-            "tradesafe_state": "DELIVERY_ACCEPTED",
+            "tradesafe_state": "FUNDS_RELEASED",
             "payment_status": "Released",
             "release_status": "Released",
             "payout_status": "awaiting_bank_payout",
             "delivery_confirmed": True,
             "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "released_at": datetime.now(timezone.utc).isoformat(),
             "funds_released_at": datetime.now(timezone.utc).isoformat(),
+            "withdrawal_triggered": True,
             "timeline": timeline,
             "net_amount": net_amount
         }}

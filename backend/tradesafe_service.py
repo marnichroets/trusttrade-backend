@@ -537,7 +537,32 @@ async def create_tradesafe_transaction(
         return {"error": "Could not verify seller details. Please check seller information and try again."}
     
     logger.info(f"Tokens created - Buyer: {buyer_token}, Seller: {seller_token}")
-    
+
+    # Pre-sync seller banking details to their TradeSafe token before escrow creation
+    if seller_doc:
+        seller_banking = seller_doc.get("banking_details") or {}
+        seller_bank_name = seller_banking.get("bank_name")
+        seller_account_number = seller_banking.get("account_number")
+        seller_branch_code = seller_banking.get("branch_code", "")
+        seller_account_type = seller_banking.get("account_type", "savings")
+        if seller_bank_name and seller_account_number:
+            logger.info(f"[PRE_SYNC] Syncing seller banking to token {seller_token} before escrow creation")
+            sync_result = await sync_banking_to_token(
+                token_id=seller_token,
+                bank_name=seller_bank_name,
+                account_number=seller_account_number,
+                branch_code=seller_branch_code,
+                account_type=seller_account_type,
+                mobile=seller_mobile,
+                email=seller_email,
+            )
+            if sync_result.get("success"):
+                logger.info("[PRE_SYNC] Seller banking synced successfully")
+            else:
+                logger.warning(f"[PRE_SYNC] Seller banking sync failed (non-blocking): {sync_result.get('error')}")
+        else:
+            logger.info("[PRE_SYNC] Seller has no banking details in profile, skipping pre-sync")
+
     # TradeSafe API expects amount in RANDS (NOT cents)
     amount_rands = float(amount)
     

@@ -1325,6 +1325,68 @@ async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+async def get_all_tokens() -> List[Dict[str, Any]]:
+    """
+    Fetch ALL tokens from TradeSafe using cursor-based pagination.
+    Returns every token with balance info so we can identify stuck funds.
+    """
+    query = """
+    query tokens($first: Int!, $after: String) {
+        tokens(first: $first, after: $after) {
+            data {
+                id
+                name
+                balance
+                valid
+                user {
+                    givenName
+                    familyName
+                    email
+                    mobile
+                }
+                bankAccount {
+                    bank
+                    accountNumber
+                    accountType
+                }
+                settings {
+                    payout {
+                        interval
+                    }
+                }
+            }
+            paginatorInfo {
+                hasMorePages
+                endCursor
+            }
+        }
+    }
+    """
+
+    all_tokens = []
+    after = None
+
+    while True:
+        variables = {"first": 100}
+        if after:
+            variables["after"] = after
+
+        result = await execute_graphql(query, variables)
+
+        if not result or "tokens" not in result:
+            logger.error(f"get_all_tokens: unexpected response: {result}")
+            break
+
+        page = result["tokens"]
+        all_tokens.extend(page.get("data") or [])
+
+        paginator = page.get("paginatorInfo") or {}
+        if not paginator.get("hasMorePages"):
+            break
+        after = paginator.get("endCursor")
+
+    logger.info(f"get_all_tokens: fetched {len(all_tokens)} tokens total")
+    return all_tokens
 
 
 async def check_payout_readiness(seller_token_id: str) -> Dict[str, Any]:

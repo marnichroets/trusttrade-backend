@@ -1858,6 +1858,52 @@ async def admin_release_transaction(tradesafe_id: str, request: Request):
     }
 
 
+@router.get("/tokens/balances")
+async def get_token_balances(request: Request):
+    """
+    Fetch all TradeSafe tokens and their current balances.
+    Returns tokens with balance > 0 first so we can identify stuck funds.
+    """
+    db = get_database()
+    await require_admin(request, db)
+
+    from tradesafe_service import get_all_tokens
+
+    tokens = await get_all_tokens()
+
+    enriched = []
+    for t in tokens:
+        balance_cents = t.get("balance") or 0
+        balance_rands = balance_cents / 100
+        user = t.get("user") or {}
+        bank = t.get("bankAccount")
+        enriched.append({
+            "token_id": t.get("id"),
+            "name": t.get("name"),
+            "email": user.get("email"),
+            "mobile": user.get("mobile"),
+            "balance_cents": balance_cents,
+            "balance_rands": round(balance_rands, 2),
+            "has_balance": balance_cents > 0,
+            "valid": t.get("valid"),
+            "has_banking": bool(bank and bank.get("accountNumber")),
+            "bank": bank.get("bank") if bank else None,
+            "payout_interval": ((t.get("settings") or {}).get("payout") or {}).get("interval"),
+        })
+
+    enriched.sort(key=lambda x: x["balance_cents"], reverse=True)
+
+    with_balance = [t for t in enriched if t["has_balance"]]
+    logger.info(f"[ADMIN] token balances: {len(enriched)} total, {len(with_balance)} with balance > R0")
+
+    return {
+        "total_tokens": len(enriched),
+        "tokens_with_balance": len(with_balance),
+        "total_stuck_rands": round(sum(t["balance_rands"] for t in with_balance), 2),
+        "tokens": enriched,
+    }
+
+
 @router.post("/smart-deals/{deal_id}/force-fund")
 async def force_fund_smart_deal(deal_id: str, request: Request):
     db = get_database()

@@ -616,11 +616,10 @@ async def create_tradesafe_transaction(
     # Fee structure:
     # - feeAllocation on transaction level: determines who pays fees (including agent fee)
     # - AGENT party with fee/feeType: TrustTrade's 2% platform margin
-    # - The AGENT is linked via email (our platform's registered email with TradeSafe)
+    # - The AGENT is linked via token ID (TrustTrade organisation token on TradeSafe)
     #
-    # TrustTrade registered email with TradeSafe API
-    TRUSTTRADE_AGENT_EMAIL = "marnichroets@gmail.com"  # The email associated with TradeSafe API credentials
-    
+    TRUSTTRADE_AGENT_TOKEN = "32fbUbeMWjdor4uHBJdns"  # TrustTrade organisation token
+
     variables = {
         "input": {
             "title": title,
@@ -641,9 +640,9 @@ async def create_tradesafe_transaction(
                     },
                     {
                         "role": "AGENT",
-                        "email": TRUSTTRADE_AGENT_EMAIL,  # Agent linked via email, not token
-                        "fee": PLATFORM_FEE_PERCENT,  # 2% platform fee
-                        "feeType": "PERCENT",  # Fee is a percentage
+                        "token": TRUSTTRADE_AGENT_TOKEN,
+                        "fee": PLATFORM_FEE_PERCENT,
+                        "feeType": "PERCENT",
                     }
                 ]
             },

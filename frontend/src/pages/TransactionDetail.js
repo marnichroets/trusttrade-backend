@@ -525,8 +525,8 @@ function TransactionDetail() {
     transaction.payment_status !== 'Awaiting Payment' &&
     escrowState !== 'CREATED' &&
     escrowState !== 'PENDING';
-  const canAcceptDeliveryTS = hasEscrow && isBuyer && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState);
-  const canManualAcceptDelivery = hasEscrow && isBuyer && (transaction.payment_status === 'Delivery in Progress' || transaction.delivery_started_at || escrowState === 'INITIATED');
+  const canAcceptDeliveryTS = hasEscrow && isBuyer && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState) && !transaction.delivery_confirmed;
+  const canManualAcceptDelivery = hasEscrow && isBuyer && !transaction.delivery_confirmed && (transaction.payment_status === 'Delivery in Progress' || transaction.delivery_started_at || escrowState === 'INITIATED');
   const canConfirmDelivery = !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
   const shareLink = transaction.share_code ? `${window.location.origin}/t/${transaction.share_code}` : null;
   const _fa = (transaction.fee_allocation || 'SELLER_AGENT').toUpperCase();
@@ -1035,11 +1035,11 @@ function TransactionDetail() {
               </div>
             )}
 
-            {/* Delivery confirmed banner */}
+            {/* Transaction complete banner */}
             {transaction.delivery_confirmed && (
               <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 14, padding: '18px 20px', display: 'flex', gap: 12, alignItems: 'center' }}>
                 <CheckCircle2 size={28} color="#10b981" />
-                <div><p style={{ fontSize: 14, fontWeight: 700, color: '#065f46', margin: 0 }}>Delivery Confirmed</p><p style={{ fontSize: 13, color: '#059669', margin: 0 }}>Funds have been released to the seller</p></div>
+                <div><p style={{ fontSize: 14, fontWeight: 700, color: '#065f46', margin: 0 }}>Transaction Complete</p><p style={{ fontSize: 13, color: '#059669', margin: 0 }}>Funds have been released to the seller.</p></div>
               </div>
             )}
 

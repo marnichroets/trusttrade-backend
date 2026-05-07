@@ -141,6 +141,18 @@ _token_cache = {
 }
 
 
+def _normalize_mobile(mobile: str) -> str:
+    """Normalize a South African mobile number to E.164 (+27XXXXXXXXX)."""
+    m = str(mobile).strip()
+    if m.startswith('+27'):
+        return m
+    if m.startswith('27'):
+        return '+' + m
+    if m.startswith('0'):
+        return '+27' + m[1:]
+    return '+27' + m
+
+
 async def get_tradesafe_token() -> Optional[str]:
     """
     Get OAuth access token from TradeSafe using client credentials grant.
@@ -256,17 +268,12 @@ async def create_user_token(
     
     # Validate and format mobile number
     original_mobile = mobile
-    if mobile and not mobile.startswith('+'):
-        if mobile.startswith('0'):
-            mobile = '+27' + mobile[1:]
-        else:
-            mobile = '+27' + mobile
-    
-    # Default mobile if not provided or invalid
-    if not mobile or len(mobile) < 10:
+    if mobile and len(str(mobile).strip()) >= 9:
+        mobile = _normalize_mobile(mobile)
+    else:
         mobile = "+27000000000"
         logger.warning(f"Mobile number missing or invalid, using default: {mobile}")
-    
+
     logger.info(f"Mobile (formatted): {mobile} (original: {original_mobile})")
     
     # Validate ID number format (13 digits for SA)
@@ -372,12 +379,9 @@ async def get_or_create_user_token(
     logger.info(f"Split name: given={given_name}, family={family_name}")
     
     # Ensure mobile is in +27 format
-    if mobile and not mobile.startswith('+'):
-        if mobile.startswith('0'):
-            mobile = '+27' + mobile[1:]
-        else:
-            mobile = '+27' + mobile
-    
+    if mobile and len(str(mobile).strip()) >= 9:
+        mobile = _normalize_mobile(mobile)
+
     # Create a new token
     logger.info(f"CREATING NEW token for {email}")
     token_data = await create_user_token(
@@ -1619,11 +1623,7 @@ async def _sync_banking_to_token_impl(
 
     mobile_normalized = None
     if resolved_mobile:
-        mobile_normalized = str(resolved_mobile).strip()
-        if mobile_normalized.startswith("0"):
-            mobile_normalized = "+27" + mobile_normalized[1:]
-        elif not mobile_normalized.startswith("+"):
-            mobile_normalized = "+27" + mobile_normalized
+        mobile_normalized = _normalize_mobile(str(resolved_mobile))
 
     # Fallback: if no mobile from local sources, fetch mobile already on the
     # TradeSafe token so the tokenUpdate payload can still satisfy the API's
@@ -1640,11 +1640,7 @@ async def _sync_banking_to_token_impl(
 
         existing_mobile = _get(_get(existing_token, "user", {}) or {}, "mobile")
         if existing_mobile:
-            mobile_normalized = str(existing_mobile).strip()
-            if mobile_normalized.startswith("0"):
-                mobile_normalized = "+27" + mobile_normalized[1:]
-            elif not mobile_normalized.startswith("+"):
-                mobile_normalized = "+27" + mobile_normalized
+            mobile_normalized = _normalize_mobile(str(existing_mobile))
             logger.info(
                 f"[PAYOUT_SYNC] Recovered mobile from TradeSafe token {token_id}"
             )

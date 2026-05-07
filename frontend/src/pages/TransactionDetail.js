@@ -521,10 +521,9 @@ function TransactionDetail() {
   const isAwaitingBuyerPayment = hasEscrow && isSeller && !isBuyer && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
   const canStartDelivery = hasEscrow && isSeller && escrowState === 'FUNDS_RECEIVED';
   const canManualStartDelivery = hasEscrow && isSeller &&
-    (escrowState === 'FUNDS_RECEIVED' || transaction.funds_received_at || transaction.payment_status === 'Paid') &&
-    transaction.payment_status !== 'Awaiting Payment' &&
-    escrowState !== 'CREATED' &&
-    escrowState !== 'PENDING';
+    (['Paid', 'Funds Secured'].includes(transaction.payment_status)) &&
+    (['FUNDS_RECEIVED', 'FUNDS_DEPOSITED'].includes(escrowState)) &&
+    !(['INITIATED', 'DELIVERED'].includes(escrowState));
   const canAcceptDeliveryTS = hasEscrow && isBuyer && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState) && !transaction.delivery_confirmed;
   const canManualAcceptDelivery = hasEscrow && isBuyer && !transaction.delivery_confirmed && (transaction.payment_status === 'Delivery in Progress' || transaction.delivery_started_at || escrowState === 'INITIATED');
   const canConfirmDelivery = !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';

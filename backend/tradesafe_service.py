@@ -936,6 +936,8 @@ async def start_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
     Mark allocation as delivery started (seller initiates shipping).
     Call this when seller marks item as dispatched/delivered.
     """
+    logger.info(f"[START_DELIVERY] Calling allocationStartDelivery — allocation_id={allocation_id!r}")
+
     mutation = """
     mutation allocationStartDelivery($id: ID!) {
         allocationStartDelivery(id: $id) {
@@ -947,13 +949,21 @@ async def start_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
         }
     }
     """
-    
+
     result = await execute_graphql(mutation, {"id": allocation_id})
-    
+    logger.info(f"[START_DELIVERY] Raw TradeSafe response: {result}")
+
+    if result and 'errors' in result:
+        err = result['errors'][0].get('message', 'unknown') if result['errors'] else 'unknown'
+        debug = (result['errors'][0].get('extensions') or {}).get('debugMessage', '') if result['errors'] else ''
+        logger.error(f"[START_DELIVERY] TradeSafe error for allocation {allocation_id!r}: {err} | debug: {debug}")
+        return None
+
     if result and 'allocationStartDelivery' in result:
-        logger.info(f"Started delivery for allocation: {allocation_id}")
+        logger.info(f"[START_DELIVERY] Success for allocation {allocation_id!r}: {result['allocationStartDelivery']}")
         return result['allocationStartDelivery']
-    
+
+    logger.error(f"[START_DELIVERY] Unexpected response — no allocationStartDelivery key. allocation={allocation_id!r} result={result}")
     return None
 
 

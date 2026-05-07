@@ -8,8 +8,6 @@ export function TrustLogo({ size = 'default', className = '', dark = false }) {
     hero:    { box: 52, fontSize: 34, gap: 12 },
   }[size] || { box: 32, fontSize: 20, gap: 8 };
 
-  const textColor = dark ? '#E6EDF3' : '#0A0E14';
-
   return (
     <div
       style={{ display: 'flex', alignItems: 'center', gap: s.gap }}
@@ -32,12 +30,11 @@ export function TrustLogo({ size = 'default', className = '', dark = false }) {
         fontFamily: "'Space Grotesk', sans-serif",
         fontWeight: 700,
         fontSize: s.fontSize,
-        color: textColor,
         letterSpacing: '-0.5px',
         lineHeight: 1,
         whiteSpace: 'nowrap',
       }}>
-        Trust<span style={{ color: '#00D1FF' }}>Trade</span>
+        <span style={{ color: '#1a73e8' }}>Trust</span><span style={{ color: '#E6EDF3' }}>Trade</span>
       </span>
     </div>
   );

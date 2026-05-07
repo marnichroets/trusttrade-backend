@@ -138,15 +138,18 @@ async def tradesafe_webhook(request: Request):
         txn_id = txn.get("transaction_id", "?")
         FUNDED_STATES = {"FUNDS_RECEIVED", "FUNDS_DEPOSITED"}
         if state in FUNDED_STATES:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            auto_release_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
             await db.transactions.update_one(
                 {"_id": txn["_id"]},
                 {"$set": {
-                    "payment_status": "Funds Received",
+                    "payment_status": "Paid",
                     "tradesafe_state": state,
-                    "funds_received_at": datetime.now(timezone.utc).isoformat(),
+                    "funds_received_at": now_iso,
+                    "auto_release_at": auto_release_at,
                 }}
             )
-            logger.info(f"[WEBHOOK] Regular txn {txn_id} → payment_status=Funds Received (state={state})")
+            logger.info(f"[WEBHOOK] Regular txn {txn_id} → payment_status=Paid, auto_release_at={auto_release_at} (state={state})")
         else:
             await db.transactions.update_one(
                 {"_id": txn["_id"]},

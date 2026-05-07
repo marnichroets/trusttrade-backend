@@ -519,7 +519,7 @@ async def _sync_seller_banking(deal: dict, db: AsyncIOMotorDatabase):
         logger.warning(f"[PAYOUT_SYNC] Freelancer not found for deal {deal_id} — skipping")
         return
 
-    banking = freelancer.get("banking") or {}
+    banking = freelancer.get("banking_details") or {}
     bank_name = banking.get("bank_name") or freelancer.get("bank_name")
     account_number = banking.get("account_number") or freelancer.get("account_number")
     branch_code = banking.get("branch_code") or freelancer.get("branch_code") or "000000"

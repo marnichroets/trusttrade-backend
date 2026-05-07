@@ -1,5 +1,7 @@
 import sys
+import asyncio
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -25,10 +27,41 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+async def _payment_polling_loop():
+    """Poll TradeSafe every 5 minutes as fallback for missed FUNDS_RECEIVED webhooks."""
+    import background_jobs
+    import tradesafe_service
+    from core.database import get_database
+
+    await asyncio.sleep(60)  # short initial delay so DB is ready
+    while True:
+        try:
+            db = get_database()
+            await background_jobs.verify_pending_payments(db, tradesafe_service)
+        except Exception as exc:
+            logger.error(f"[BG_POLL] Payment polling error: {exc}")
+        await asyncio.sleep(300)  # 5 minutes
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(_payment_polling_loop())
+    logger.info("[STARTUP] Background payment polling loop started (5-min interval)")
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    logger.info("[SHUTDOWN] Background polling loop stopped")
+
+
 app = FastAPI(
     title="TrustTrade API",
     description="Secure escrow platform for peer-to-peer transactions in South Africa",
-    version="2.0.0"
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
 origins = [

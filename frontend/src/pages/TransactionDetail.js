@@ -520,7 +520,11 @@ function TransactionDetail() {
   console.log('Payment Button Debug:', { hasEscrow, isBuyer, isSeller, escrowState, paymentStatus: transaction.payment_status, canMakePayment });
   const isAwaitingBuyerPayment = hasEscrow && isSeller && !isBuyer && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
   const canStartDelivery = hasEscrow && isSeller && escrowState === 'FUNDS_RECEIVED';
-  const canManualStartDelivery = hasEscrow && isSeller && (transaction.payment_status === 'Funds in Escrow' || transaction.payment_status === 'Paid' || transaction.funds_received_at || escrowState === 'FUNDS_RECEIVED');
+  const canManualStartDelivery = hasEscrow && isSeller &&
+    (escrowState === 'FUNDS_RECEIVED' || transaction.funds_received_at || transaction.payment_status === 'Paid') &&
+    transaction.payment_status !== 'Awaiting Payment' &&
+    escrowState !== 'CREATED' &&
+    escrowState !== 'PENDING';
   const canAcceptDeliveryTS = hasEscrow && isBuyer && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState);
   const canManualAcceptDelivery = hasEscrow && isBuyer && (transaction.payment_status === 'Delivery in Progress' || transaction.delivery_started_at || escrowState === 'INITIATED');
   const canConfirmDelivery = !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';

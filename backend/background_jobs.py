@@ -106,8 +106,8 @@ async def verify_single_transaction(
         
         logger.info(f"TradeSafe state for {transaction_id}: {ts_state}")
         
-        # Check if funds have been received
-        if ts_state in ["FUNDS_RECEIVED", "INITIATED", "SENT", "DELIVERED", "FUNDS_RELEASED"]:
+        # Check if funds have been received — only act on confirmed payment states
+        if ts_state in ["FUNDS_RECEIVED", "FUNDS_DEPOSITED"]:
             current_state = txn.get("transaction_state")
             
             # Only update if not already in a more advanced state
@@ -125,15 +125,17 @@ async def verify_single_transaction(
                     "details": f"Payment verified via fallback job. TradeSafe state: {ts_state}"
                 })
                 
+                auto_release_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
                 # Update transaction
                 update_data = {
                     "transaction_state": TransactionState.PAYMENT_SECURED.value,
                     "tradesafe_state": ts_state,
-                    "payment_status": "Funds in Escrow",
+                    "payment_status": "Paid",
                     "payment_verified": True,
                     "payment_verified_at": now,
                     "payment_verified_by": "fallback_job",
                     "funds_received_at": now,
+                    "auto_release_at": auto_release_at,
                     "timeline": timeline
                 }
                 

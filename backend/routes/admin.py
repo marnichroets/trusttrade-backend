@@ -2026,7 +2026,7 @@ async def admin_withdraw_token(token_id: str, request: Request):
     return {"success": True, "token_id": token_id, "amount": float(amount)}
 
 
-@router.post("/admin/tokens/{token_id}/payout-interval")
+@router.post("/tokens/{token_id}/payout-interval")
 async def set_token_payout_interval(token_id: str, request: Request):
     """Update the payout interval on a TradeSafe token (e.g. IMMEDIATE → WALLET)."""
     db = get_database()

@@ -203,7 +203,7 @@ function NewTransaction() {
   };
 
   const itemPrice = parseFloat(formData.item_price) || 0;
-  const trusttradeFee = Math.max(itemPrice * 0.015, 5);
+  const trusttradeFee = Math.max(itemPrice * 0.02, 5);
 
   let sellerPayout = itemPrice;
   if (formData.fee_allocation === 'SELLER_AGENT') {
@@ -605,7 +605,7 @@ function NewTransaction() {
               {/* Fee Allocation */}
               <div style={S.card}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 4px' }}>Who pays the TrustTrade fee?</h3>
-                <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 14px' }}>1.5% fee (min R5) covers escrow protection</p>
+                <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 14px' }}>2% fee (min R5) covers escrow protection</p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
@@ -674,7 +674,7 @@ function NewTransaction() {
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>TrustTrade Fee (1.5%, min R5)</span>
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>TrustTrade Fee (2%, min R5)</span>
                     <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
                       − R {trusttradeFee.toFixed(2)}
                     </span>

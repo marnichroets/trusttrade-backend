@@ -89,12 +89,12 @@ function TransactionDetail() {
 
   useEffect(() => {
     if (!transaction) return;
-    const activeStates = ['Awaiting Payment', 'Pending Seller Confirmation', 'Pending Buyer Confirmation', 'Ready for Payment', 'Funds Secured', 'Delivery in Progress', 'Awaiting Release'];
-    if (activeStates.includes(transaction.payment_status)) {
-      const interval = setInterval(() => fetchData(), 8000);
+    const isComplete = transaction.delivery_confirmed || transaction.payment_status === 'Completed';
+    if (!isComplete) {
+      const interval = setInterval(() => fetchData(), 5000);
       return () => clearInterval(interval);
     }
-  }, [transaction?.payment_status, transactionId]);
+  }, [transaction?.delivery_confirmed, transaction?.payment_status, transactionId]);
 
   // Refresh immediately when user returns to tab after completing payment
   useEffect(() => {

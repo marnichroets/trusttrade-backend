@@ -807,22 +807,41 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     )
     logger.info("=" * 60)
 
-    # Calculate net amount before release so we can trigger instant payout inside accept_delivery
+    # Calculate net amount
     net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
 
-    # Call TradeSafe — allocationStartDelivery then allocationAcceptDelivery
-    # back-to-back for immediate fund release.
-    result = await accept_delivery(
-        allocation_id,
-        seller_token_id=transaction.get("tradesafe_seller_token_id"),
-        amount=float(net_amount),
-    )
+    tradesafe_state = transaction.get("tradesafe_state")
 
-    if not result:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to release funds on TradeSafe — allocation_id={allocation_id!r}. Check server logs."
+    if tradesafe_state == "DELIVERED":
+        # allocationCompleteDelivery was already called for this allocation.
+        # TradeSafe rejects allocationAcceptDelivery after allocationCompleteDelivery,
+        # so skip both mutations and trigger the bank withdrawal directly.
+        logger.info(
+            f"[ACCEPT_DELIVERY] State=DELIVERED — bypassing TradeSafe mutations, "
+            f"triggering direct withdrawal for {transaction_id}"
         )
+        from tradesafe_service import withdraw_token_funds
+        try:
+            withdrawal_ok = await withdraw_token_funds(seller_token_id, float(net_amount), rtc=True)
+            logger.info(
+                f"[ACCEPT_DELIVERY] DELIVERED bypass withdrawal: "
+                f"token={seller_token_id} R{net_amount:.2f} ok={withdrawal_ok}"
+            )
+        except Exception as exc:
+            logger.error(f"[ACCEPT_DELIVERY] DELIVERED bypass withdrawal exception: {exc}")
+    else:
+        # Normal path — allocationStartDelivery → allocationAcceptDelivery back-to-back.
+        result = await accept_delivery(
+            allocation_id,
+            seller_token_id=transaction.get("tradesafe_seller_token_id"),
+            amount=float(net_amount),
+        )
+
+        if not result:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to release funds on TradeSafe — allocation_id={allocation_id!r}. Check server logs."
+            )
 
     # Update timeline
     timeline = transaction.get("timeline", [])

@@ -557,9 +557,9 @@ function NewTransaction() {
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 14px' }}>Delivery Method</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    { value: 'courier', icon: Truck, label: 'Courier / Physical Delivery', desc: '3-day auto-release' },
-                    { value: 'bank_deposit', icon: Banknote, label: 'Bank Deposit / Cash', desc: '2-day auto-release' },
-                    { value: 'digital', icon: Zap, label: 'Digital / Instant', desc: 'Immediate release' },
+                    { value: 'courier', icon: Truck, label: 'Courier / Physical Delivery', desc: 'Funds released when buyer confirms receipt' },
+                    { value: 'bank_deposit', icon: Banknote, label: 'Bank Deposit / Cash', desc: 'Funds released when buyer confirms receipt' },
+                    { value: 'digital', icon: Zap, label: 'Digital / Instant', desc: 'Funds released when buyer confirms receipt' },
                   ].map(opt => {
                     const active = formData.delivery_method === opt.value;
                     return (

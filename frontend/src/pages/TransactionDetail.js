@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import Timeline from '../components/Timeline';
-import { TransactionTimeline, AutoReleaseCountdown } from '../components/TransactionTimeline';
+import { TransactionTimeline } from '../components/TransactionTimeline';
 import TransactionStatusCard from '../components/TransactionStatusCard';
 import StepProgressTracker from '../components/StepProgressTracker';
 import { Textarea } from '../components/ui/textarea';
@@ -974,8 +974,10 @@ function TransactionDetail() {
                     <p style={{ ...S.sectionTitle, marginBottom: 20 }}>Transaction Progress</p>
                     <TransactionTimeline transaction={transaction} currentState={transaction.transaction_state || mapPaymentStatusToState(transaction.payment_status, transaction.tradesafe_state)} timeline={transaction.timeline} />
                     {transaction.transaction_state === 'DELIVERED' && (
-                      <div style={{ marginTop: 20 }}>
-                        <AutoReleaseCountdown autoReleaseAt={transaction.auto_release_at} hasDispute={transaction.has_dispute} />
+                      <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 8, backgroundColor: 'rgba(26,115,232,0.08)' }}>
+                        <p style={{ margin: 0, fontSize: 13, color: '#1a73e8', fontWeight: 500 }}>
+                          Funds released when buyer confirms receipt
+                        </p>
                       </div>
                     )}
                     <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #f1f5f9' }}>

@@ -874,7 +874,7 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         try:
             await send_funds_released_sms(
                 to_phone=seller_phone,
-                message=f"TrustTrade: Great news! The buyer confirmed receipt. R{net_amount:.2f} has been released to your account. Ref: {transaction.get('share_code', transaction_id)}"
+                amount=net_amount,
             )
         except Exception as e:
             logger.error(f"Failed to send funds released SMS: {e}")
@@ -1075,7 +1075,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         try:
             await send_funds_released_sms(
                 to_phone=seller_phone,
-                message=f"TrustTrade: Great news! R{net_amount:.2f} has been released to your account. Ref: {transaction.get('share_code', transaction_id)}"
+                amount=net_amount,
             )
         except Exception as e:
             logger.error(f"Failed to send funds released SMS: {e}")
@@ -1243,7 +1243,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         try:
             await send_funds_released_sms(
                 to_phone=seller_phone,
-                message=f"TrustTrade: Great news! R{net_amount:.2f} has been released to your account. Ref: {transaction.get('share_code', transaction_id)}"
+                amount=net_amount,
             )
         except Exception as e:
             logger.error(f"Failed to send funds released SMS: {e}")

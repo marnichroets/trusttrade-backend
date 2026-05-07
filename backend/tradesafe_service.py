@@ -1625,30 +1625,42 @@ async def _sync_banking_to_token_impl(
     if resolved_mobile:
         mobile_normalized = _normalize_mobile(str(resolved_mobile))
 
-    # Fallback: if no mobile from local sources, fetch mobile already on the
-    # TradeSafe token so the tokenUpdate payload can still satisfy the API's
-    # mobile requirement without clobbering it with nothing.
-    if not mobile_normalized:
-        logger.info(
-            f"[PAYOUT_SYNC] No mobile from local sources - fetching from TradeSafe token {token_id}"
-        )
+    # If any user field is missing, fetch the existing token so we can fill
+    # in the gaps. This ensures tokenUpdate always receives a complete user
+    # object and never clears fields that are already set on TradeSafe.
+    needs_token_fetch = (
+        not mobile_normalized
+        or not resolved_given_name
+        or not resolved_family_name
+        or not resolved_email
+    )
+    existing_token_user: Dict[str, Any] = {}
+    if needs_token_fetch:
+        logger.info(f"[PAYOUT_SYNC] Fetching existing token to fill missing user fields for {token_id}")
         try:
             existing_token = await get_token_details(token_id)
+            existing_token_user = _get(existing_token, "user") or {}
         except Exception as e:
-            existing_token = None
             logger.error(f"[PAYOUT_SYNC] Failed to fetch existing token {token_id}: {e}")
 
-        existing_mobile = _get(_get(existing_token, "user", {}) or {}, "mobile")
+    if not mobile_normalized:
+        existing_mobile = existing_token_user.get("mobile")
         if existing_mobile:
             mobile_normalized = _normalize_mobile(str(existing_mobile))
-            logger.info(
-                f"[PAYOUT_SYNC] Recovered mobile from TradeSafe token {token_id}"
-            )
+            logger.info(f"[PAYOUT_SYNC] Recovered mobile from TradeSafe token {token_id}")
         else:
             logger.warning(
                 f"[PAYOUT_SYNC] No mobile found anywhere for token {token_id} - "
-                f"will send tokenUpdate without mobile field"
+                "will send tokenUpdate without mobile field"
             )
+
+    # Fill in name/email from the existing token when not available locally
+    if not resolved_given_name:
+        resolved_given_name = existing_token_user.get("givenName")
+    if not resolved_family_name:
+        resolved_family_name = existing_token_user.get("familyName")
+    if not resolved_email:
+        resolved_email = existing_token_user.get("email")
 
     # Log masked payload
     masked_account = f"***{account_number[-4:]}" if account_number and len(account_number) >= 4 else "****"

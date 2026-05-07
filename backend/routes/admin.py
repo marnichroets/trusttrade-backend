@@ -1517,40 +1517,49 @@ async def sync_banking_to_token_admin(request: Request, data: BankingSyncRequest
     db = get_database()
     admin = await require_admin(request, db)
     
+    masked_mobile = (
+        f"{data.mobile[:6]}***{data.mobile[-2:]}" if data.mobile and len(data.mobile) > 6
+        else data.mobile or "not provided"
+    )
     logger.info("=" * 60)
     logger.info("[BANKING_SYNC] Admin banking sync request")
     logger.info(f"[BANKING_SYNC] Admin: {admin.email}")
     logger.info(f"[BANKING_SYNC] Token: {data.token_id}")
     logger.info(f"[BANKING_SYNC] Bank: {data.bank_name}")
     logger.info(f"[BANKING_SYNC] Account: ***{data.account_number[-4:] if len(data.account_number) >= 4 else '****'}")
+    logger.info(f"[BANKING_SYNC] Mobile: {masked_mobile}")
     logger.info("=" * 60)
-    
-    # Sync the banking details
+
+    # Sync the banking details (mobile is included in the tokenUpdate user object)
     result = await sync_banking_to_token(
         token_id=data.token_id,
         bank_name=data.bank_name,
         account_number=data.account_number,
         branch_code=data.branch_code,
         account_type=data.account_type,
-        mobile=data.mobile
+        mobile=data.mobile,
     )
-    
+
     if not result.get("success"):
         return {
             "success": False,
             "error": result.get("error", "Unknown error"),
-            "token_id": data.token_id
+            "token_id": data.token_id,
         }
-    
+
     # Check payout readiness after sync
     payout_check = await check_payout_readiness(data.token_id)
-    
+
+    updated_token = result.get("token") or {}
+    updated_mobile = (updated_token.get("user") or {}).get("mobile")
+
     return {
         "success": True,
         "message": "Banking details synced successfully",
         "token_id": data.token_id,
+        "mobile_on_token": updated_mobile,
         "payout_ready": payout_check.get("ready", False),
-        "payout_check": payout_check
+        "payout_check": payout_check,
     }
 
 

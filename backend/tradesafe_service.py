@@ -1327,12 +1327,13 @@ async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
 
 async def get_all_tokens() -> List[Dict[str, Any]]:
     """
-    Fetch ALL tokens from TradeSafe using cursor-based pagination.
-    Returns every token with balance info so we can identify stuck funds.
+    Fetch ALL tokens from TradeSafe using page-based pagination (Laravel style).
+    TradeSafe uses page/first variables, not cursor-based pagination.
     """
+    # TradeSafe uses Laravel GraphQL pagination: page + first, paginatorInfo has currentPage/lastPage
     query = """
-    query tokens($first: Int!, $after: String) {
-        tokens(first: $first, after: $after) {
+    query tokens($first: Int!, $page: Int) {
+        tokens(first: $first, page: $page) {
             data {
                 id
                 name
@@ -1356,36 +1357,41 @@ async def get_all_tokens() -> List[Dict[str, Any]]:
                 }
             }
             paginatorInfo {
+                currentPage
+                lastPage
                 hasMorePages
-                endCursor
+                total
             }
         }
     }
     """
 
     all_tokens = []
-    after = None
+    current_page = 1
 
     while True:
-        variables = {"first": 100}
-        if after:
-            variables["after"] = after
+        variables = {"first": 50, "page": current_page}
+        logger.info(f"get_all_tokens: fetching page {current_page} (first=50)")
 
         result = await execute_graphql(query, variables)
+        logger.info(f"get_all_tokens: raw TradeSafe response page {current_page}: {result}")
 
         if not result or "tokens" not in result:
-            logger.error(f"get_all_tokens: unexpected response: {result}")
+            logger.error(f"get_all_tokens: unexpected/empty response on page {current_page}: {result}")
             break
 
-        page = result["tokens"]
-        all_tokens.extend(page.get("data") or [])
+        page_data = result["tokens"]
+        batch = page_data.get("data") or []
+        all_tokens.extend(batch)
 
-        paginator = page.get("paginatorInfo") or {}
+        paginator = page_data.get("paginatorInfo") or {}
+        logger.info(f"get_all_tokens: page {current_page} — got {len(batch)} tokens, paginatorInfo={paginator}")
+
         if not paginator.get("hasMorePages"):
             break
-        after = paginator.get("endCursor")
+        current_page += 1
 
-    logger.info(f"get_all_tokens: fetched {len(all_tokens)} tokens total")
+    logger.info(f"get_all_tokens: fetched {len(all_tokens)} tokens total across {current_page} page(s)")
     return all_tokens
 
 

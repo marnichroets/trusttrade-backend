@@ -2024,3 +2024,25 @@ async def admin_withdraw_token(token_id: str, request: Request):
 
     logger.info(f"[ADMIN] withdrawal R{amount} from token {token_id} succeeded")
     return {"success": True, "token_id": token_id, "amount": float(amount)}
+
+
+@router.post("/admin/tokens/{token_id}/payout-interval")
+async def set_token_payout_interval(token_id: str, request: Request):
+    """Update the payout interval on a TradeSafe token (e.g. IMMEDIATE → WALLET)."""
+    db = get_database()
+    await require_admin(request, db)
+
+    body = await request.json()
+    interval = (body.get("interval") or "WALLET").upper()
+    valid = {"IMMEDIATE", "WALLET", "ACCOUNT", "DAILY", "WEEKLY", "BIMONTHLY", "MONTHLY"}
+    if interval not in valid:
+        raise HTTPException(status_code=400, detail=f"Invalid interval. Must be one of: {sorted(valid)}")
+
+    from tradesafe_service import update_token_payout
+    result = await update_token_payout(token_id, interval)
+
+    if not result.get("success"):
+        raise HTTPException(status_code=502, detail=result.get("error", "TradeSafe tokenUpdate failed"))
+
+    logger.info(f"[ADMIN] payout interval for token {token_id} set to {interval}")
+    return result

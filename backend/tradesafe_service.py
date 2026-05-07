@@ -1324,6 +1324,50 @@ async def update_token_banking_details(
     return {"success": False, "error": "Unexpected response"}
 
 
+async def update_token_payout(token_id: str, interval: str = "WALLET") -> Dict[str, Any]:
+    """Update only the payout interval on a TradeSafe token (no banking changes)."""
+    logger.info(f"[UPDATE_TOKEN_PAYOUT] token={token_id} interval={interval}")
+    mutation = """
+    mutation tokenUpdate($id: ID!, $input: TokenInput!) {
+        tokenUpdate(id: $id, input: $input) {
+            id
+            name
+            balance
+            settings {
+                payout {
+                    interval
+                }
+            }
+        }
+    }
+    """
+    variables = {
+        "id": token_id,
+        "input": {
+            "settings": {
+                "payout": {
+                    "interval": interval,
+                }
+            }
+        }
+    }
+    result = await execute_graphql(mutation, variables)
+    logger.info(f"[UPDATE_TOKEN_PAYOUT] response: {result}")
+    if result and "errors" in result:
+        error_msg = result["errors"][0].get("message", "Unknown error") if result["errors"] else "Unknown error"
+        logger.error(f"[UPDATE_TOKEN_PAYOUT] failed: {error_msg}")
+        return {"success": False, "error": error_msg}
+    if result and "tokenUpdate" in result:
+        updated = result["tokenUpdate"]
+        return {
+            "success": True,
+            "token_id": updated.get("id"),
+            "balance": updated.get("balance"),
+            "payout_interval": (updated.get("settings") or {}).get("payout", {}).get("interval"),
+        }
+    return {"success": False, "error": "Unexpected response"}
+
+
 async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
     """
     Get details of a TradeSafe token including balance, banking info, and settings.

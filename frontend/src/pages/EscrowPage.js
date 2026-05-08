@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck, Lock, CheckCircle, Clock } from 'lucide-react';
+import PremiumEscrowFlow from '../components/PremiumEscrowFlow';
 
 export default function EscrowPage() {
   return (
@@ -28,6 +29,8 @@ export default function EscrowPage() {
               fraud and sellers from non-payment.
             </p>
           </section>
+
+          <PremiumEscrowFlow />
           
           <section>
             <h2 className="text-xl font-semibold text-slate-900 mb-4">How TrustTrade Escrow Works</h2>

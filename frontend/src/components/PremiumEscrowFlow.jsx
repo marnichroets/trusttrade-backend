@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { CheckCircle2, CreditCard, PackageCheck, ShieldCheck, Truck } from 'lucide-react';
 
 const steps = [

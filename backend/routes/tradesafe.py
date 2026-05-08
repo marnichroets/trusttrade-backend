@@ -829,6 +829,10 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
             )
         except Exception as exc:
             logger.error(f"[ACCEPT_DELIVERY] DELIVERED bypass withdrawal exception: {exc}")
+            withdrawal_ok = False
+            withdrawal_error = str(exc)
+        else:
+            withdrawal_error = None if withdrawal_ok else "TradeSafe tokenAccountWithdraw returned false"
     else:
         # Normal path — allocationStartDelivery → allocationAcceptDelivery back-to-back.
         result = await accept_delivery(
@@ -852,21 +856,38 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         "details": f"Buyer confirmed receipt. R{net_amount:.2f} released to seller."
     })
 
+    now_iso = datetime.now(timezone.utc).isoformat()
+    update_fields = {
+        "tradesafe_state": "FUNDS_RELEASED",
+        "payment_status": "Released",
+        "release_status": "Released",
+        "payout_status": "awaiting_bank_payout" if withdrawal_ok is None else ("payout_completed" if withdrawal_ok else "payout_failed"),
+        "withdrawal_status": "pending" if withdrawal_ok is None else ("succeeded" if withdrawal_ok else "failed"),
+        "delivery_confirmed": True,
+        "delivery_confirmed_at": now_iso,
+        "released_at": now_iso,
+        "funds_released_at": now_iso,
+        "timeline": timeline,
+        "net_amount": net_amount
+    }
+
+    if withdrawal_ok is True:
+        update_fields.update({
+            "withdrawal_triggered": True,
+            "withdrawal_triggered_at": now_iso,
+            "withdrawal_completed_at": now_iso,
+            "withdrawal_error": None,
+        })
+    elif withdrawal_ok is False:
+        update_fields.update({
+            "withdrawal_triggered": False,
+            "withdrawal_failed_at": now_iso,
+            "withdrawal_error": withdrawal_error,
+        })
+
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
-        {"$set": {
-            "tradesafe_state": "FUNDS_RELEASED",
-            "payment_status": "Released",
-            "release_status": "Released",
-            "payout_status": "awaiting_bank_payout",
-            "delivery_confirmed": True,
-            "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
-            "released_at": datetime.now(timezone.utc).isoformat(),
-            "funds_released_at": datetime.now(timezone.utc).isoformat(),
-            "withdrawal_triggered": True,
-            "timeline": timeline,
-            "net_amount": net_amount
-        }}
+        {"$set": update_fields}
     )
 
     # Send notifications
@@ -1070,6 +1091,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             "tradesafe_state": "FUNDS_RELEASED",
             "payment_status": "Completed",
             "payout_status": "awaiting_bank_payout",
+            "withdrawal_status": "pending",
             "delivery_confirmed": True,
             "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
             "release_status": "Released",
@@ -1238,6 +1260,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             "tradesafe_state": "FUNDS_RELEASED",
             "payment_status": "Completed",
             "payout_status": "awaiting_bank_payout",
+            "withdrawal_status": "pending",
             "delivery_confirmed": True,
             "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
             "release_status": "Released",

@@ -1668,6 +1668,70 @@ async def update_payout_status(request: Request, transaction_id: str):
     transaction = await db.transactions.find_one({"transaction_id": transaction_id})
 
 
+@router.post("/transactions/{transaction_id}/retry-withdrawal")
+async def retry_transaction_withdrawal(request: Request, transaction_id: str):
+    """
+    ADMIN ONLY: Retry a failed or pending bank withdrawal for a released transaction.
+    Idempotency is enforced by withdrawal_status in attempt_transaction_withdrawal.
+    """
+    db = get_database()
+    admin = await require_admin(request, db)
+
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if transaction.get("tradesafe_state") not in ("FUNDS_RELEASED", "COMPLETE", "COMPLETED"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot retry withdrawal while TradeSafe state is {transaction.get('tradesafe_state')!r}"
+        )
+
+    withdrawal_status = transaction.get("withdrawal_status")
+    if withdrawal_status in ("in_progress", "succeeded"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Withdrawal already {withdrawal_status}"
+        )
+
+    if not transaction.get("tradesafe_seller_token_id"):
+        raise HTTPException(status_code=400, detail="Transaction has no seller token ID")
+
+    try:
+        net_amount = float(transaction.get("net_amount"))
+    except (TypeError, ValueError):
+        net_amount = 0
+
+    if net_amount <= 0:
+        raise HTTPException(status_code=400, detail="Transaction has no valid net_amount")
+
+    from routes.webhooks import attempt_transaction_withdrawal
+
+    result = await attempt_transaction_withdrawal(db, transaction, source=f"admin:{admin.email}")
+
+    await db.admin_actions.insert_one({
+        "admin_email": admin.email,
+        "admin_name": admin.name,
+        "action": "retry_withdrawal",
+        "transaction_id": transaction_id,
+        "result": result,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+    if not result.get("success"):
+        return {
+            "success": False,
+            "transaction_id": transaction_id,
+            "result": result,
+        }
+
+    return {
+        "success": True,
+        "transaction_id": transaction_id,
+        "result": result,
+    }
+
+
 @router.post("/transactions/{transaction_id}/resync-banking")
 async def resync_banking_to_transaction(request: Request, transaction_id: str):
     """

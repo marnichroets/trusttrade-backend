@@ -1060,12 +1060,6 @@ async def accept_delivery(allocation_id: str, seller_token_id: Optional[str] = N
     if result and "allocationAcceptDelivery" in result:
         delivery_result = result["allocationAcceptDelivery"]
         logger.info(f"[ACCEPT_DELIVERY] Success: allocation={allocation_id!r} state={delivery_result.get('state')!r}")
-        if seller_token_id and amount:
-            try:
-                withdrawal_ok = await withdraw_token_funds(seller_token_id, float(amount), rtc=True)
-                logger.info(f"[ACCEPT_DELIVERY] RTC withdrawal: token={seller_token_id} R{amount:.2f} ok={withdrawal_ok}")
-            except Exception as exc:
-                logger.error(f"[ACCEPT_DELIVERY] Withdrawal failed (funds still released): {exc}")
         return delivery_result
 
     logger.error(f"[ACCEPT_DELIVERY] Unexpected response for allocation {allocation_id!r}: {result}")

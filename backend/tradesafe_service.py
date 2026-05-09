@@ -1426,13 +1426,20 @@ async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
         token = result['token']
         logger.info(f"Token details: {token}")
         
-        # Add derived fields for admin convenience
+        # Add derived fields for admin convenience. TradeSafe returns token
+        # balances as ZAR decimal values, not cents.
         has_banking = bool(token.get('bankAccount') and token['bankAccount'].get('accountNumber'))
-        balance_rands = (token.get('balance') or 0) / 100  # Convert cents to rands
+        raw_balance = token.get('balance') or 0
+        try:
+            balance_rands = round(float(raw_balance), 2)
+        except (TypeError, ValueError):
+            balance_rands = None
         
         return {
             **token,
             'has_banking_details': has_banking,
+            'balance_raw': raw_balance,
+            'balance_unit': 'ZAR',
             'balance_rands': balance_rands,
             'is_active': token.get('valid', True),  # 'valid' indicates if token is usable
             'is_reusable': True  # Tokens are designed to be reusable per user
@@ -1626,9 +1633,12 @@ async def check_payout_readiness(seller_token_id: str) -> Dict[str, Any]:
     user_info = token_details.get('user', {})
     has_mobile = bool(user_info.get('mobile'))
     
-    # Get balance
-    balance_cents = token_details.get('balance', 0)
-    balance_rands = balance_cents / 100 if balance_cents else 0
+    # TradeSafe returns token.balance as ZAR decimal, not cents.
+    balance_raw = token_details.get('balance', 0)
+    try:
+        balance_rands = round(float(balance_raw), 2)
+    except (TypeError, ValueError):
+        balance_rands = 0
     
     # Build issues list
     if not has_banking:
@@ -1661,7 +1671,9 @@ async def check_payout_readiness(seller_token_id: str) -> Dict[str, Any]:
         "token_id": seller_token_id,
         "has_banking": has_banking,
         "has_mobile": has_mobile,
-        "balance_cents": balance_cents,
+        "balance": balance_rands,
+        "balance_raw": balance_raw,
+        "balance_unit": "ZAR",
         "balance_rands": balance_rands,
         "bank_account": bank_account,
         "user": user_info,

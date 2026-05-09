@@ -7,7 +7,7 @@ import os
 import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from core.config import settings
@@ -1154,21 +1154,21 @@ async def get_token_recovery_details(request: Request, token: str):
         if result and 'token' in result:
             token_data = result['token']
             
-            # Derive useful fields
-            balance_cents = token_data.get('balance') or 0
-            balance_rands = balance_cents / 100
+            # TradeSafe returns token.balance as ZAR decimal, not cents.
+            balance = _as_money(token_data.get('balance')) or 0
             has_banking = bool(token_data.get('bankAccount') and token_data['bankAccount'].get('accountNumber'))
             has_mobile = bool(token_data.get('user') and token_data['user'].get('mobile'))
             is_valid = token_data.get('valid', False)
             
             # Determine payout readiness
-            payout_ready = is_valid and has_banking and has_mobile and balance_cents > 0
+            payout_ready = is_valid and has_banking and has_mobile and balance > 0
             
             return {
                 "success": True,
                 "token": token,
-                "balance_cents": balance_cents,
-                "balance_rands": balance_rands,
+                "balance": balance,
+                "balance_raw": token_data.get('balance'),
+                "balance_unit": "ZAR",
                 "valid": is_valid,
                 "complete": has_banking and has_mobile,
                 "payout_ready": payout_ready,
@@ -1314,15 +1314,14 @@ async def update_token_for_recovery(request: Request, data: TokenRecoveryUpdateR
         
         if result and 'tokenUpdate' in result:
             updated = result['tokenUpdate']
-            balance_cents = updated.get('balance') or 0
-            balance_rands = balance_cents / 100
+            balance = _as_money(updated.get('balance')) or 0
             has_banking = bool(updated.get('bankAccount') and updated['bankAccount'].get('accountNumber'))
             has_mobile = bool(updated.get('user') and updated['user'].get('mobile'))
             is_valid = updated.get('valid', False)
             
             logger.info("[TOKEN_RECOVERY] === UPDATE SUCCESSFUL ===")
             logger.info(f"Token: {updated.get('id')}")
-            logger.info(f"Balance: R{balance_rands:.2f}")
+            logger.info(f"Balance: R{balance:.2f}")
             logger.info(f"Valid: {is_valid}")
             logger.info(f"Has Banking: {has_banking}")
             logger.info(f"Has Mobile: {has_mobile}")
@@ -1331,8 +1330,9 @@ async def update_token_for_recovery(request: Request, data: TokenRecoveryUpdateR
                 "success": True,
                 "message": "Token updated successfully. Review details before any withdrawal.",
                 "token": updated.get('id'),
-                "balance_cents": balance_cents,
-                "balance_rands": balance_rands,
+                "balance": balance,
+                "balance_raw": updated.get('balance'),
+                "balance_unit": "ZAR",
                 "valid": is_valid,
                 "complete": has_banking and has_mobile,
                 "user": updated.get('user'),
@@ -1643,7 +1643,9 @@ async def get_transaction_tradesafe_details(request: Request, transaction_id: st
                 "has_mobile": has_token_mobile,
                 "payout_ready": has_token_banking and has_token_mobile,
                 "bank_name": token_details.get("bankAccount", {}).get("bank") if token_details.get("bankAccount") else None,
-                "balance_cents": token_details.get("balance", 0)
+                "balance": _token_balance_rands(token_details),
+                "balance_raw": token_details.get("balance", 0),
+                "balance_unit": "ZAR"
             }
     
     # Get buyer token details
@@ -1947,6 +1949,219 @@ def _matching_statement_entries(entries: list, amount, references: list):
     return matches
 
 
+def _as_money(value) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return None
+
+
+def _token_balance_rands(token: Optional[dict]) -> Optional[float]:
+    """TradeSafe token.balance is already a ZAR decimal value."""
+    return _as_money((token or {}).get("balance"))
+
+
+def _statement_category(entry: dict) -> str:
+    entry_type = str(entry.get("type") or "").upper()
+    reference = str(entry.get("reference") or "").lower()
+    amount = _as_money(entry.get("amount")) or 0
+
+    if "payout from allocation:" in reference:
+        return "seller_payout_credit"
+    if "payout for allocation:" in reference:
+        return "withdrawal_debit"
+    if "requested funds to be withdrawn" in reference or "admin requested funds to be withdrawn" in reference:
+        return "withdrawal_debit"
+    if "fee for eft request" in reference or "fee for" in reference:
+        return "tradesafe_fee"
+    if "allocated funds to transaction:" in reference:
+        return "allocation_debit"
+    if "payout from transaction:" in reference or "payout for transaction:" in reference:
+        return "agent_fee" if amount < 0 else "seller_payout_credit"
+    if "refund" in reference:
+        return "refund"
+    if entry_type == "DEBIT" and amount < 0:
+        return "agent_fee"
+    return "unknown"
+
+
+def _normalize_statement_entry(entry: dict) -> dict:
+    amount = _as_money(entry.get("amount"))
+    return {
+        **entry,
+        "amount_normalized": amount,
+        "amount_unit": "ZAR",
+        "category": _statement_category(entry),
+    }
+
+
+async def _get_all_token_statement_entries(token_id: str, first: int = 100) -> Dict[str, Any]:
+    from tradesafe_service import get_token_statement
+
+    page = 1
+    entries: List[dict] = []
+    paginator = None
+    while True:
+        statement = await get_token_statement(token_id, first=first, page=page)
+        paginator = statement.get("paginator")
+        entries.extend(_normalize_statement_entry(entry) for entry in (statement.get("entries") or []))
+        if not paginator or not paginator.get("hasMorePages"):
+            break
+        page += 1
+        if page > 20:
+            logger.warning(f"[FINANCE_LEDGER] stopping tokenStatement pagination at page={page} token={token_id}")
+            break
+    return {"entries": entries, "paginator": paginator}
+
+
+def _statement_summary(entries: List[dict]) -> Dict[str, Any]:
+    categories = {}
+    statuses = {}
+    totals = {
+        "credits": 0.0,
+        "debits": 0.0,
+        "seller_payout_credits": 0.0,
+        "seller_withdrawals": 0.0,
+        "tradesafe_fees": 0.0,
+        "agent_fees": 0.0,
+        "allocation_debits": 0.0,
+        "pdng_amount": 0.0,
+        "acsp_amount": 0.0,
+    }
+
+    for entry in entries:
+        amount = _as_money(entry.get("amount_normalized")) or 0.0
+        entry_type = str(entry.get("type") or "").upper()
+        status = str(entry.get("status") or "UNKNOWN").upper()
+        category = entry.get("category") or "unknown"
+
+        categories[category] = categories.get(category, 0) + 1
+        statuses[status] = statuses.get(status, 0) + 1
+
+        if entry_type == "CREDIT":
+            totals["credits"] += amount
+        elif entry_type == "DEBIT":
+            totals["debits"] += amount
+        if category == "seller_payout_credit":
+            totals["seller_payout_credits"] += amount
+        elif category == "withdrawal_debit":
+            totals["seller_withdrawals"] += amount
+        elif category == "tradesafe_fee":
+            totals["tradesafe_fees"] += amount
+        elif category == "agent_fee":
+            totals["agent_fees"] += amount
+        elif category == "allocation_debit":
+            totals["allocation_debits"] += amount
+        if status == "PDNG":
+            totals["pdng_amount"] += amount
+        elif status == "ACSP":
+            totals["acsp_amount"] += amount
+
+    return {
+        "totals": {key: round(value, 2) for key, value in totals.items()},
+        "categories": categories,
+        "statuses": statuses,
+        "pdng_entries": [entry for entry in entries if str(entry.get("status") or "").upper() == "PDNG"],
+        "negative_entries": [entry for entry in entries if (_as_money(entry.get("amount_normalized")) or 0) < 0],
+    }
+
+
+def _token_finance_analysis(token: Optional[dict], entries: List[dict]) -> Dict[str, Any]:
+    balance = _token_balance_rands(token)
+    summary = _statement_summary(entries)
+    pending = summary["statuses"].get("PDNG", 0)
+    valid = bool((token or {}).get("valid"))
+    has_banking = bool(((token or {}).get("bankAccount") or {}).get("accountNumber"))
+
+    if balance is None:
+        residue_owner = "unknown"
+        safe_to_withdraw = False
+    elif balance < 0:
+        residue_owner = "negative_balance_or_fee_adjustment"
+        safe_to_withdraw = False
+    elif balance == 0:
+        residue_owner = "none"
+        safe_to_withdraw = False
+    else:
+        residue_owner = "undetermined_from_statement"
+        safe_to_withdraw = valid and has_banking and pending == 0
+
+    return {
+        "current_balance": balance,
+        "current_balance_unit": "ZAR",
+        "credits": summary["totals"]["credits"],
+        "debits": summary["totals"]["debits"],
+        "withdrawals": summary["totals"]["seller_withdrawals"],
+        "allocation_debits": summary["totals"]["allocation_debits"],
+        "tradesafe_fees": summary["totals"]["tradesafe_fees"],
+        "agent_fees": summary["totals"]["agent_fees"],
+        "residue_balance": balance,
+        "residue_owner": residue_owner,
+        "safely_withdrawable": safe_to_withdraw,
+        "safe_withdrawal_note": (
+            "Token has positive balance, banking, and no PDNG entries; ownership still needs finance approval."
+            if safe_to_withdraw else
+            "Do not withdraw without resolving owner/source, negative balance, missing banking, or pending entries."
+        ),
+        "summary": summary,
+    }
+
+
+def _match_transaction_statement(txn: dict, entries: List[dict]) -> Dict[str, Any]:
+    tradesafe_id = txn.get("tradesafe_id") or txn.get("tradesafe_transaction_id") or txn.get("tradesafe_token_id")
+    allocation_id = txn.get("tradesafe_allocation_id")
+    expected_amount, amount_source = _payout_amount(txn)
+
+    references = [txn.get("transaction_id"), txn.get("deal_id"), txn.get("share_code"), tradesafe_id, allocation_id]
+    reference_terms = [str(ref).lower() for ref in references if ref]
+
+    matched = []
+    for entry in entries:
+        reference = str(entry.get("reference") or "").lower()
+        reference_match = any(term in reference for term in reference_terms)
+        amount_match = False
+        amount = _as_money(entry.get("amount_normalized"))
+        if expected_amount is not None and amount is not None:
+            amount_match = abs(abs(float(amount)) - abs(float(expected_amount))) <= 1.00
+        if reference_match or (amount_match and entry.get("category") in {"seller_payout_credit", "withdrawal_debit"}):
+            matched.append(entry)
+
+    credit_rows = [entry for entry in matched if entry.get("category") == "seller_payout_credit"]
+    withdrawal_rows = [entry for entry in matched if entry.get("category") == "withdrawal_debit"]
+    fee_rows = [entry for entry in matched if entry.get("category") in {"tradesafe_fee", "agent_fee"}]
+    allocation_rows = [entry for entry in matched if entry.get("category") == "allocation_debit"]
+
+    final_state = "missing_statement_entry"
+    if withdrawal_rows and any(str(row.get("status") or "").upper() == "PDNG" for row in withdrawal_rows):
+        final_state = "pending_bank_settlement"
+    elif withdrawal_rows and all(str(row.get("status") or "").upper() == "ACSP" for row in withdrawal_rows):
+        final_state = "reconciled"
+    elif credit_rows and not withdrawal_rows:
+        final_state = "token_residue"
+    elif allocation_rows and not withdrawal_rows:
+        final_state = "needs_tradesafe_support"
+
+    return {
+        "transaction_id": txn.get("transaction_id"),
+        "deal_id": txn.get("deal_id"),
+        "share_code": txn.get("share_code"),
+        "tradesafe_transaction_id": tradesafe_id,
+        "allocation_id": allocation_id,
+        "tradesafe_reference": txn.get("tradesafe_reference"),
+        "seller_token": txn.get("tradesafe_seller_token_id"),
+        "expected_seller_amount": _as_money(expected_amount),
+        "expected_amount_source": amount_source,
+        "credit_rows": credit_rows,
+        "withdrawal_rows": withdrawal_rows,
+        "fee_rows": fee_rows,
+        "allocation_rows": allocation_rows,
+        "statement_rows": matched,
+        "final_state": final_state,
+    }
+
+
 @router.get("/tokens/{token_id}/statement")
 async def get_admin_token_statement(request: Request, token_id: str, first: int = 50, page: int = 1):
     """Read-only TradeSafe token ledger: debits, credits, PDNG/ACSP status, references, and dates."""
@@ -1957,19 +2172,174 @@ async def get_admin_token_statement(request: Request, token_id: str, first: int 
 
     token = await get_token_details(token_id)
     statement = await get_token_statement(token_id, first=first, page=page)
+    rows = [_normalize_statement_entry(entry) for entry in (statement.get("entries") or [])]
 
     return {
         "token_id": token_id,
         "token": {
             "name": (token or {}).get("name"),
             "email": ((token or {}).get("user") or {}).get("email"),
-            "balance": (token or {}).get("balance"),
-            "balance_rands": (token or {}).get("balance_rands"),
+            "balance": _token_balance_rands(token),
+            "balance_raw": (token or {}).get("balance"),
+            "balance_unit": "ZAR",
             "valid": (token or {}).get("valid"),
             "bank": (((token or {}).get("bankAccount") or {}).get("bank")),
             "payout_interval": ((((token or {}).get("settings") or {}).get("payout") or {}).get("interval")),
         },
-        "statement": statement,
+        "statement": {**statement, "entries": rows},
+        "summary": _statement_summary(rows),
+    }
+
+
+@router.get("/token-statement/{token_id}")
+async def get_admin_token_statement_alias(request: Request, token_id: str, first: int = 50, page: int = 1):
+    """Canonical read-only finance statement endpoint for a TradeSafe token."""
+    return await get_admin_token_statement(request, token_id, first=first, page=page)
+
+
+@router.get("/finance-ledger")
+async def get_admin_finance_ledger(
+    request: Request,
+    token_ids: Optional[str] = None,
+    limit: int = 100,
+):
+    """
+    Read-only finance ledger built from TradeSafe tokenStatement. This endpoint
+    does not trigger withdrawals, retries, releases, or payout state changes.
+    """
+    db = get_database()
+    await require_admin(request, db)
+
+    from tradesafe_service import get_token_details
+
+    default_tokens = [
+        "32fbUbeMWjdor4uHBJdns",  # TrustTrade org token
+        "32xbU6asjfrBnNHfeg57I",
+        "32xFiEGGNCp46dyQtLuCH",
+    ]
+    requested_tokens = [item.strip() for item in (token_ids or "").split(",") if item.strip()] or default_tokens
+
+    token_rows = []
+    statement_entries_by_token: Dict[str, List[dict]] = {}
+    all_entries = []
+
+    for token_id in requested_tokens:
+        token = await get_token_details(token_id)
+        statement = await _get_all_token_statement_entries(token_id)
+        entries = statement["entries"]
+        statement_entries_by_token[token_id] = entries
+        all_entries.extend({**entry, "token_id": token_id} for entry in entries)
+
+        token_rows.append({
+            "token_id": token_id,
+            "name": (token or {}).get("name"),
+            "email": ((token or {}).get("user") or {}).get("email"),
+            "balance": _token_balance_rands(token),
+            "balance_raw": (token or {}).get("balance"),
+            "balance_unit": "ZAR",
+            "valid": (token or {}).get("valid"),
+            "bank": (((token or {}).get("bankAccount") or {}).get("bank")),
+            "payout_interval": ((((token or {}).get("settings") or {}).get("payout") or {}).get("interval")),
+            "analysis": _token_finance_analysis(token, entries),
+        })
+
+    org_token_id = "32fbUbeMWjdor4uHBJdns"
+    org_token = next((row for row in token_rows if row["token_id"] == org_token_id), None)
+    org_entries = statement_entries_by_token.get(org_token_id, [])
+    org_negative_entries = [entry for entry in org_entries if (_as_money(entry.get("amount_normalized")) or 0) < 0]
+    org_analysis = {
+        "token_id": org_token_id,
+        "balance": (org_token or {}).get("balance"),
+        "balance_unit": "ZAR",
+        "negative_balance_explanation": (
+            "The org token statement contains negative agent/platform fee movements. "
+            "These are not seller payout balances and should be reconciled with TradeSafe fee configuration."
+        ),
+        "negative_entries": org_negative_entries,
+        "trusttrade_fee_setup_assessment": (
+            "Needs TradeSafe support review if agent fees are expected to settle as positive platform income. "
+            "Current statement evidence shows negative fee movements on the org token."
+        ),
+    }
+
+    tx_projection = {
+        "_id": 0,
+        "transaction_id": 1,
+        "deal_id": 1,
+        "share_code": 1,
+        "deal_type": 1,
+        "tradesafe_id": 1,
+        "tradesafe_transaction_id": 1,
+        "tradesafe_token_id": 1,
+        "tradesafe_reference": 1,
+        "tradesafe_allocation_id": 1,
+        "tradesafe_seller_token_id": 1,
+        "item_price": 1,
+        "amount": 1,
+        "net_amount": 1,
+        "seller_email": 1,
+        "freelancer_email": 1,
+        "payment_status": 1,
+        "release_status": 1,
+        "tradesafe_state": 1,
+        "withdrawal_status": 1,
+        "payout_status": 1,
+        "funds_released_at": 1,
+        "created_at": 1,
+    }
+    txns = await db.transactions.find(
+        {"tradesafe_seller_token_id": {"$in": requested_tokens}},
+        tx_projection,
+    ).sort("created_at", -1).limit(max(1, min(limit, 500))).to_list(max(1, min(limit, 500)))
+
+    transaction_matches = [
+        {
+            **_match_transaction_statement(txn, statement_entries_by_token.get(txn.get("tradesafe_seller_token_id"), [])),
+            "seller_email": txn.get("seller_email") or txn.get("freelancer_email"),
+            "payment_status": txn.get("payment_status"),
+            "release_status": txn.get("release_status"),
+            "tradesafe_state": txn.get("tradesafe_state"),
+            "withdrawal_status": txn.get("withdrawal_status"),
+            "payout_status": txn.get("payout_status"),
+        }
+        for txn in txns
+    ]
+
+    summary = _statement_summary(all_entries)
+    outstanding_wallet_residues = [
+        {
+            "token_id": row["token_id"],
+            "balance": row["balance"],
+            "residue_owner": row["analysis"]["residue_owner"],
+            "safely_withdrawable": row["analysis"]["safely_withdrawable"],
+            "note": row["analysis"]["safe_withdrawal_note"],
+        }
+        for row in token_rows
+        if (row.get("balance") or 0) != 0
+    ]
+
+    return {
+        "source_of_truth": "TradeSafe tokenStatement",
+        "balance_unit": "ZAR",
+        "tokens": token_rows,
+        "summary": {
+            "seller_payout_credits": summary["totals"]["seller_payout_credits"],
+            "seller_withdrawals": summary["totals"]["seller_withdrawals"],
+            "tradesafe_fees": summary["totals"]["tradesafe_fees"],
+            "trusttrade_agent_platform_fee_entries": summary["totals"]["agent_fees"],
+            "allocation_debits": summary["totals"]["allocation_debits"],
+            "pdng_entries": summary["statuses"].get("PDNG", 0),
+            "acsp_entries": summary["statuses"].get("ACSP", 0),
+            "negative_balances": [row for row in token_rows if (row.get("balance") or 0) < 0],
+            "outstanding_wallet_residues": outstanding_wallet_residues,
+        },
+        "org_token_revenue_analysis": org_analysis,
+        "transaction_statement_matches": transaction_matches,
+        "recent_statement_entries": sorted(
+            all_entries,
+            key=lambda entry: str(entry.get("createdAt") or ""),
+            reverse=True,
+        )[:100],
     }
 
 
@@ -2028,7 +2398,7 @@ async def get_payout_reconciliation(request: Request, limit: int = 100):
     for txn in txns:
         token_id = txn.get("tradesafe_seller_token_id")
         token_balance = None
-        token_balance_cents = None
+        token_balance_raw = None
 
         if token_id:
             if token_id not in token_cache:
@@ -2039,9 +2409,8 @@ async def get_payout_reconciliation(request: Request, limit: int = 100):
                     token_cache[token_id] = None
             token = token_cache.get(token_id) or {}
             if token:
-                token_balance_cents = token.get("balance")
-                if token_balance_cents is not None:
-                    token_balance = round(float(token_balance_cents) / 100, 2)
+                token_balance_raw = token.get("balance")
+                token_balance = _token_balance_rands(token)
 
         amount, amount_source = _payout_amount(txn)
         safe_to_retry, recommended_action = _payout_recommendation(txn, amount, token_balance)
@@ -2056,7 +2425,8 @@ async def get_payout_reconciliation(request: Request, limit: int = 100):
             "expected_amount_source": amount_source,
             "tradesafe_state": txn.get("tradesafe_state"),
             "token_balance": token_balance,
-            "token_balance_cents": token_balance_cents,
+            "token_balance_raw": token_balance_raw,
+            "token_balance_unit": "ZAR",
             "withdrawal_status": txn.get("withdrawal_status"),
             "withdrawal_triggered": txn.get("withdrawal_triggered", False),
             "withdrawal_error": txn.get("withdrawal_error"),
@@ -2112,6 +2482,7 @@ async def get_payout_settlement_trace(request: Request, ids: str):
         seller_token_id = txn.get("tradesafe_seller_token_id")
         token = await get_token_details(seller_token_id) if seller_token_id else None
         statement = await get_token_statement(seller_token_id, first=50, page=1) if seller_token_id else {"entries": []}
+        statement["entries"] = [_normalize_statement_entry(entry) for entry in (statement.get("entries") or [])]
         ts_transaction = await get_tradesafe_transaction(tradesafe_id) if tradesafe_id else None
 
         webhook_terms = [
@@ -2150,9 +2521,7 @@ async def get_payout_settlement_trace(request: Request, ids: str):
             (ts_transaction or {}).get("reference"),
         ]
         matching_statement_entries = _matching_statement_entries(statement.get("entries") or [], amount, references)
-        token_balance = None
-        if token and token.get("balance") is not None:
-            token_balance = round(float(token.get("balance")) / 100, 2)
+        token_balance = _token_balance_rands(token)
 
         rows.append({
             "transaction_id": transaction_id,
@@ -2163,6 +2532,7 @@ async def get_payout_settlement_trace(request: Request, ids: str):
             "expected_seller_amount": round(float(amount), 2) if amount is not None else None,
             "expected_amount_source": amount_source,
             "token_balance": token_balance,
+            "token_balance_unit": "ZAR",
             "tradesafe_state": txn.get("tradesafe_state"),
             "tradesafe_transaction_state": (ts_transaction or {}).get("state"),
             "tradesafe_transaction_reference": (ts_transaction or {}).get("reference"),
@@ -2203,15 +2573,18 @@ async def get_payout_token_statements(request: Request, token_ids: str, first: i
     for token_id in requested_tokens:
         token = await get_token_details(token_id)
         statement = await get_token_statement(token_id, first=first, page=page)
+        rows = [_normalize_statement_entry(entry) for entry in (statement.get("entries") or [])]
         rows.append({
             "token_id": token_id,
             "email": ((token or {}).get("user") or {}).get("email"),
             "name": (token or {}).get("name"),
-            "balance": (token or {}).get("balance"),
-            "balance_rands": (token or {}).get("balance_rands"),
+            "balance": _token_balance_rands(token),
+            "balance_raw": (token or {}).get("balance"),
+            "balance_unit": "ZAR",
             "bank": (((token or {}).get("bankAccount") or {}).get("bank")),
             "payout_interval": ((((token or {}).get("settings") or {}).get("payout") or {}).get("interval")),
-            "statement": statement,
+            "statement": {**statement, "entries": rows},
+            "summary": _statement_summary(rows),
         })
 
     return {"count": len(rows), "rows": rows}
@@ -2286,8 +2659,7 @@ async def get_token_balances(request: Request):
 
     enriched = []
     for t in tokens:
-        balance_cents = t.get("balance") or 0
-        balance_rands = balance_cents / 100
+        balance_rands = _as_money(t.get("balance")) or 0
         user = t.get("user") or {}
         bank = t.get("bankAccount")
         enriched.append({
@@ -2295,16 +2667,17 @@ async def get_token_balances(request: Request):
             "name": t.get("name"),
             "email": user.get("email"),
             "mobile": user.get("mobile"),
-            "balance_cents": balance_cents,
-            "balance_rands": round(balance_rands, 2),
-            "has_balance": balance_cents > 0,
+            "balance": balance_rands,
+            "balance_raw": t.get("balance"),
+            "balance_unit": "ZAR",
+            "has_balance": balance_rands > 0,
             "valid": t.get("valid"),
             "has_banking": bool(bank and bank.get("accountNumber")),
             "bank": bank.get("bank") if bank else None,
             "payout_interval": ((t.get("settings") or {}).get("payout") or {}).get("interval"),
         })
 
-    enriched.sort(key=lambda x: x["balance_cents"], reverse=True)
+    enriched.sort(key=lambda x: x["balance"], reverse=True)
 
     with_balance = [t for t in enriched if t["has_balance"]]
     logger.info(f"[ADMIN] token balances: {len(enriched)} total, {len(with_balance)} with balance > R0")
@@ -2312,7 +2685,7 @@ async def get_token_balances(request: Request):
     return {
         "total_tokens": len(enriched),
         "tokens_with_balance": len(with_balance),
-        "total_stuck_rands": round(sum(t["balance_rands"] for t in with_balance), 2),
+        "total_stuck_rands": round(sum(t["balance"] for t in with_balance), 2),
         "tokens": enriched,
     }
 

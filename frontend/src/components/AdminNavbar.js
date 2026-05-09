@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, LogOut, Activity } from 'lucide-react';
+import { Menu, X, LogOut, Activity, Landmark } from 'lucide-react';
 
 export function AdminNavbar({ user, onLogout }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -9,6 +9,7 @@ export function AdminNavbar({ user, onLogout }) {
   const navLinks = [
     { href: '/admin', label: 'Dashboard', exact: true },
     { href: '/admin/monitoring', label: 'Monitoring', icon: Activity },
+    { href: '/admin/finance', label: 'Finance', icon: Landmark },
     { href: '/admin/transactions', label: 'Transactions' },
     { href: '/admin/users', label: 'Users' },
     { href: '/admin/disputes', label: 'Disputes' },

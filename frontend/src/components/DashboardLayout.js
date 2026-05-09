@@ -158,6 +158,14 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
           border-color: ${V.accent} !important;
           box-shadow: 0 0 0 2px rgba(0,209,255,0.12);
         }
+        .vault-mobile-nav {
+          overflow-x: auto;
+          overflow-y: hidden;
+          scrollbar-width: none;
+          -webkit-overflow-scrolling: touch;
+        }
+        .vault-mobile-nav::-webkit-scrollbar { display: none; }
+        .vault-mobile-link { min-width: 64px; flex: 0 0 auto; }
       `}</style>
 
       {/* ── Linear progress bar ── */}
@@ -362,22 +370,23 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
 
       {/* ── Mobile bottom nav ── */}
       <nav
-        className="lg:hidden"
+        className="vault-mobile-nav lg:hidden"
         style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
           background: V.surface, borderTop: `1px solid ${V.border}`,
-          display: 'flex', justifyContent: 'space-around', alignItems: 'center',
+          display: 'flex', justifyContent: 'flex-start', alignItems: 'center',
           height: 56, padding: '0 8px',
         }}
       >
-        {navItems.slice(0, 4).map((item) => (
+        {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
+            className="vault-mobile-link"
             data-testid={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
             style={({ isActive }) => ({
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-              padding: '6px 10px', textDecoration: 'none',
+              padding: '6px 8px', textDecoration: 'none',
               color: isActive ? V.accent : V.sub,
               transition: 'color 0.1s',
             })}
@@ -391,9 +400,10 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
         <button
           data-testid="mobile-logout-btn"
           onClick={handleLogout}
+          className="vault-mobile-link"
           style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-            padding: '6px 10px', background: 'none', border: 'none',
+            padding: '6px 8px', background: 'none', border: 'none',
             cursor: 'pointer', color: V.error, transition: 'color 0.1s',
           }}
         >

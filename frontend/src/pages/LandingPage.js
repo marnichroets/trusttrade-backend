@@ -181,8 +181,97 @@ function LandingPage() {
   return (
     <div
       style={{ background: DARK_BG, color: INK, fontFamily: "'Space Grotesk', sans-serif" }}
-      className="min-h-screen overflow-hidden"
+      className="tt-landing min-h-screen overflow-x-hidden"
     >
+      <style>{`
+        html, body, #root { overflow-x: hidden; }
+        .tt-landing { width: 100%; max-width: 100vw; overflow-x: hidden; }
+        .tt-hero-stage { min-width: 0; overflow: hidden; }
+        .tt-hero-visual { inset: 0; overflow: hidden; }
+        .tt-visual-core { max-width: calc(100vw - 2rem); max-height: 650px; }
+        .tt-escrow-console { width: min(100%, 590px); max-width: calc(100vw - 2rem); }
+        .tt-endpoint { max-width: min(42vw, 170px); }
+        .tt-flow-svg { overflow: hidden; }
+
+        @media (max-width: 1023px) {
+          .tt-hero-copy { text-align: center; }
+          .tt-hero-copy p { margin-left: auto; margin-right: auto; }
+          .tt-hero-actions { justify-content: center; }
+          .tt-hero-stage { min-height: 660px; margin-top: 0; }
+          .tt-hero-visual { position: relative !important; min-height: 660px; }
+          .tt-visual-core {
+            width: min(560px, calc(100vw - 2rem)) !important;
+            height: min(560px, calc(100vw - 2rem)) !important;
+            top: 0.75rem !important;
+          }
+          .tt-escrow-console { bottom: 0 !important; }
+        }
+
+        @media (max-width: 768px) {
+          .tt-hero-stage { min-height: 590px; }
+          .tt-hero-visual { min-height: 590px; }
+          .tt-visual-core {
+            width: min(430px, calc(100vw - 1.5rem)) !important;
+            height: min(430px, calc(100vw - 1.5rem)) !important;
+          }
+          .tt-visual-core > .tt-endpoint { transform: scale(0.78); transform-origin: center; }
+          .tt-visual-core > .tt-endpoint:first-of-type { left: 0 !important; }
+          .tt-visual-core > .tt-endpoint:nth-of-type(2) { right: 0 !important; }
+          .tt-escrow-console { max-width: calc(100vw - 1.5rem); }
+        }
+
+        @media (max-width: 480px) {
+          .tt-landing section { max-width: 100vw; }
+          .tt-hero-stage { min-height: 545px; }
+          .tt-hero-visual { min-height: 545px; }
+          .tt-visual-core {
+            width: min(360px, calc(100vw - 1rem)) !important;
+            height: min(360px, calc(100vw - 1rem)) !important;
+            top: 0.5rem !important;
+          }
+          .tt-visual-core svg { transform: scale(0.94); transform-origin: center; }
+          .tt-visual-core .tt-endpoint { display: none; }
+          .tt-visual-core [class*="h-[380px]"] {
+            width: 240px !important;
+            height: 240px !important;
+          }
+          .tt-visual-core [class*="h-[300px]"] {
+            width: 200px !important;
+            height: 200px !important;
+          }
+          .tt-visual-core [class*="h-[250px]"] {
+            width: 180px !important;
+            height: 180px !important;
+            filter: blur(34px) !important;
+          }
+          .tt-visual-core [class*="h-[205px]"] {
+            width: 148px !important;
+            height: 148px !important;
+          }
+          .tt-visual-core [class*="h-32"] {
+            width: 86px !important;
+            height: 86px !important;
+          }
+          .tt-visual-core [class*="h-16"] {
+            width: 42px !important;
+            height: 42px !important;
+          }
+          .tt-escrow-console {
+            max-width: calc(100vw - 1rem);
+            left: 50% !important;
+          }
+          .tt-escrow-console > div { padding: 0.5rem !important; }
+          .tt-escrow-console .tt-console-inner { padding: 0.875rem !important; }
+          .tt-escrow-console h2 { font-size: 1.15rem !important; }
+          .tt-escrow-console .tt-mini-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 0.5rem !important; }
+          .tt-escrow-console .tt-mini-signal { padding: 0.625rem !important; min-width: 0; }
+          .tt-escrow-console .tt-state-row { gap: 0.5rem !important; }
+          .tt-escrow-console .tt-state-label { font-size: 0.78rem !important; }
+          .tt-escrow-console .tt-state-code { font-size: 0.58rem !important; }
+          .tt-pipeline-card { min-height: auto !important; }
+          .tt-pipeline-card h3 { font-size: 1.6rem !important; }
+        }
+      `}</style>
       <motion.div style={{ y: meshY }} className="pointer-events-none fixed inset-0 z-0">
         <CinematicMesh reduceMotion={reduceMotion} />
       </motion.div>
@@ -217,7 +306,7 @@ function LandingPage() {
               initial={{ opacity: 0, y: reduceMotion ? 0 : 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, ease: 'easeOut' }}
-              className="relative z-20"
+              className="tt-hero-copy relative z-20 min-w-0"
             >
               <div className="inline-flex items-center gap-2 rounded-full border border-sky-300/25 bg-sky-300/10 px-3 py-1.5 text-xs font-bold text-sky-100 shadow-[0_0_44px_rgba(56,189,248,0.22)] backdrop-blur-2xl">
                 <motion.span
@@ -237,7 +326,7 @@ function LandingPage() {
                 TrustTrade turns risky marketplace deals into protected escrow transactions, with payment locked, delivery tracked, and bank settlement handled after escrow release.
               </p>
 
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <div className="tt-hero-actions mt-8 flex flex-col gap-3 sm:flex-row">
                 <button
                   onClick={handleGetStarted}
                   className="group inline-flex min-h-[3.35rem] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-300 via-cyan-300 to-emerald-300 px-7 text-base font-bold text-slate-950 shadow-[0_22px_70px_rgba(16,185,129,0.24)] transition hover:-translate-y-0.5 hover:shadow-[0_28px_92px_rgba(56,189,248,0.36)] focus:outline-none focus:ring-2 focus:ring-emerald-300/70"
@@ -258,7 +347,7 @@ function LandingPage() {
               <LiveTrustStrip reduceMotion={reduceMotion} />
             </motion.div>
 
-            <div className="relative min-h-[620px] sm:min-h-[720px] lg:min-h-[760px]">
+            <div className="tt-hero-stage relative min-h-[620px] sm:min-h-[720px] lg:min-h-[760px]">
               <SignatureEscrowVisual
                 depthX={heroDepthX}
                 depthY={heroDepthY}
@@ -315,8 +404,8 @@ function CinematicMesh({ reduceMotion }) {
 
 function SignatureEscrowVisual({ depthX, depthY, counterX, counterY, reduceMotion }) {
   return (
-    <div className="absolute inset-0">
-      <motion.div style={{ x: depthX, y: depthY }} className="absolute left-1/2 top-3 h-[540px] w-[540px] -translate-x-1/2 sm:h-[650px] sm:w-[650px]">
+    <div className="tt-hero-visual absolute inset-0">
+      <motion.div style={{ x: depthX, y: depthY }} className="tt-visual-core absolute left-1/2 top-3 h-[540px] w-[540px] -translate-x-1/2 sm:h-[650px] sm:w-[650px]">
         <ParticleField reduceMotion={reduceMotion} />
         <AnimatedFlowSvg reduceMotion={reduceMotion} />
         <FlowArc className="left-[6%] top-[39%] w-[36%] -rotate-6" delay={0} reduceMotion={reduceMotion} />
@@ -354,7 +443,7 @@ function SignatureEscrowVisual({ depthX, depthY, counterX, counterY, reduceMotio
         </div>
       </motion.div>
 
-      <motion.div style={{ x: counterX, y: counterY }} className="absolute bottom-0 left-1/2 z-20 w-full max-w-[590px] -translate-x-1/2">
+      <motion.div style={{ x: counterX, y: counterY }} className="tt-escrow-console absolute bottom-0 left-1/2 z-20 w-full max-w-[590px] -translate-x-1/2">
         <LiveEscrowConsole reduceMotion={reduceMotion} />
       </motion.div>
     </div>
@@ -363,7 +452,7 @@ function SignatureEscrowVisual({ depthX, depthY, counterX, counterY, reduceMotio
 
 function AnimatedFlowSvg({ reduceMotion }) {
   return (
-    <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 690 690" aria-hidden="true">
+    <svg className="tt-flow-svg absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 690 690" aria-hidden="true">
       <defs>
         <linearGradient id="escrowFlowGradient" x1="0" x2="1" y1="0" y2="0">
           <stop offset="0%" stopColor="rgba(56,189,248,0)" />
@@ -432,7 +521,7 @@ function FlowArc({ className, delay, reduceMotion, reverse = false }) {
 
 function Endpoint({ label, amount, icon, className, tone }) {
   return (
-    <div className={`absolute z-10 border border-white/12 bg-slate-950/72 p-3 shadow-[0_18px_60px_rgba(2,6,23,0.55)] backdrop-blur-2xl ${className}`}>
+    <div className={`tt-endpoint absolute z-10 border border-white/12 bg-slate-950/72 p-3 shadow-[0_18px_60px_rgba(2,6,23,0.55)] backdrop-blur-2xl ${className}`}>
       <div className="flex items-center gap-3">
         <div style={{ color: tone, background: `${tone}18`, borderColor: `${tone}45` }} className="flex h-11 w-11 items-center justify-center rounded-lg border">
           <IconGlyph name={icon} className="h-5 w-5" />
@@ -449,7 +538,7 @@ function Endpoint({ label, amount, icon, className, tone }) {
 function LiveEscrowConsole({ reduceMotion }) {
   return (
     <div className="border border-white/12 bg-white/[0.075] p-3 shadow-[0_36px_140px_rgba(0,0,0,0.72)] backdrop-blur-2xl">
-      <div className="border border-sky-300/18 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.22),transparent_34%),linear-gradient(145deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-5">
+      <div className="tt-console-inner border border-sky-300/18 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.22),transparent_34%),linear-gradient(145deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-5">
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p style={{ color: MUTED }} className="text-xs font-semibold">Live escrow transaction</p>
@@ -464,7 +553,7 @@ function LiveEscrowConsole({ reduceMotion }) {
           </motion.div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="tt-mini-grid grid grid-cols-2 gap-3 sm:grid-cols-4">
           <MiniSignal label="Amount" value="R 18,500" icon="WalletCards" tone={BLUE} />
           <MiniSignal label="Escrow" value="Locked" icon="Lock" tone={GREEN} />
           <MiniSignal label="Dispute" value="Armed" icon="Scale" tone="#fb7185" />
@@ -473,7 +562,7 @@ function LiveEscrowConsole({ reduceMotion }) {
 
         <div className="mt-5">
           {simulationStates.map((stage, index) => (
-            <div key={stage.label} className="relative flex items-center gap-3 py-2">
+            <div key={stage.label} className="tt-state-row relative flex items-center gap-3 py-2">
               {index < simulationStates.length - 1 && <div className="absolute left-4 top-10 h-5 w-px bg-gradient-to-b from-sky-300/50 to-emerald-300/20" />}
               <motion.div
                 animate={reduceMotion ? {} : stage.state === 'locked' || stage.state === 'protected' ? { scale: [1, 1.12, 1] } : {}}
@@ -484,8 +573,8 @@ function LiveEscrowConsole({ reduceMotion }) {
                 <IconGlyph name={stage.icon} className="h-4 w-4" />
               </motion.div>
               <div className="flex min-w-0 flex-1 items-center justify-between border border-white/8 bg-slate-950/34 px-3 py-2">
-                <span className="truncate text-sm font-semibold text-white">{stage.label}</span>
-                <span style={{ color: stage.tone, fontFamily: "'JetBrains Mono', monospace" }} className="text-[10px] font-bold uppercase">{stage.state}</span>
+                <span className="tt-state-label truncate text-sm font-semibold text-white">{stage.label}</span>
+                <span style={{ color: stage.tone, fontFamily: "'JetBrains Mono', monospace" }} className="tt-state-code text-[10px] font-bold uppercase">{stage.state}</span>
               </div>
             </div>
           ))}
@@ -497,7 +586,7 @@ function LiveEscrowConsole({ reduceMotion }) {
 
 function MiniSignal({ label, value, icon, tone }) {
   return (
-    <div className="border border-white/10 bg-white/[0.045] p-3">
+    <div className="tt-mini-signal border border-white/10 bg-white/[0.045] p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <IconGlyph name={icon} style={{ color: tone }} className="h-4 w-4" />
         <span style={{ color: tone, fontFamily: "'JetBrains Mono', monospace" }} className="text-sm font-bold">{value}</span>
@@ -592,11 +681,11 @@ function EscrowPipeline({ reduceMotion }) {
               A payment pipeline with a lock at the center.
             </h2>
             <p style={{ color: MUTED }} className="mt-5 max-w-xl text-lg leading-8">
-              The core interaction is simple: money flows in, escrow holds it, delivery creates proof, and funds release only after the right confirmation. Bank settlement may take 1-2 business days.
+              The core interaction is simple: money flows in, escrow holds it, delivery creates proof, and funds release only after the right confirmation. Bank settlement may take up to 2 business days.
             </p>
           </motion.div>
 
-          <div className="relative min-h-[470px] overflow-hidden border border-white/10 bg-white/[0.045] p-5 shadow-[0_36px_120px_rgba(2,6,23,0.48)] backdrop-blur-2xl sm:p-6">
+          <div className="tt-pipeline-card relative min-h-[470px] overflow-hidden border border-white/10 bg-white/[0.045] p-5 shadow-[0_36px_120px_rgba(2,6,23,0.48)] backdrop-blur-2xl sm:p-6">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(56,189,248,0.22),transparent_30%),radial-gradient(circle_at_80%_70%,rgba(34,197,94,0.16),transparent_32%)]" />
             <div className="relative flex h-full min-h-[425px] flex-col justify-center">
               <div className="relative hidden min-h-[240px] items-center lg:block">
@@ -862,7 +951,7 @@ function FinalCta({ handleGetStarted }) {
               Build the deal around escrow from the first click.
             </h2>
             <p style={{ color: MUTED }} className="mt-4 max-w-2xl text-lg leading-8">
-              Create a secure transaction and give both sides a cleaner way to trade. Funds released from escrow settle through the bank in 1-2 business days.
+              Create a secure transaction and give both sides a cleaner way to trade. Once funds are released from escrow, payouts are processed as quickly as possible and may take up to 2 business days.
             </p>
           </div>
           <button

@@ -71,11 +71,19 @@ const flowStages = [
   },
 ];
 
+const simulationStates = [
+  { label: 'Buyer funds enter', state: 'captured', icon: 'CreditCard', tone: BLUE },
+  { label: 'Escrow vault locks', state: 'locked', icon: 'Lock', tone: GREEN },
+  { label: 'Delivery verification', state: 'watching', icon: 'PackageCheck', tone: GOLD },
+  { label: 'Dispute hold available', state: 'protected', icon: 'Scale', tone: '#fb7185' },
+  { label: 'Payout unlock', state: 'released', icon: 'Banknote', tone: '#34d399' },
+];
+
 const proofSignals = [
-  { value: 'SA', label: 'Built for local buyers and sellers', icon: 'Landmark' },
-  { value: '2%', label: 'Simple escrow fee model', icon: 'ReceiptText' },
-  { value: '0', label: 'Early release before confirmation', icon: 'Lock' },
-  { value: '24h', label: 'Dispute support before release', icon: 'Clock' },
+  { value: 'SA', label: 'Banking-ready local escrow rails', icon: 'Landmark' },
+  { value: 'LOCK', label: 'Escrow lock active before release', icon: 'Lock' },
+  { value: 'VERIFY', label: 'Delivery verification monitored', icon: 'Fingerprint' },
+  { value: 'HOLD', label: 'Dispute protection before payout', icon: 'Scale' },
 ];
 
 const buyerProof = [
@@ -95,6 +103,8 @@ const liveSignals = [
   ['Funds secured', 'Lock'],
   ['Delivery watch active', 'PackageCheck'],
   ['Payout held', 'Banknote'],
+  ['Dispute hold armed', 'Scale'],
+  ['SA payout routing', 'Landmark'],
 ];
 
 function IconGlyph({ name, className, style }) {
@@ -308,6 +318,7 @@ function SignatureEscrowVisual({ depthX, depthY, counterX, counterY, reduceMotio
     <div className="absolute inset-0">
       <motion.div style={{ x: depthX, y: depthY }} className="absolute left-1/2 top-2 h-[560px] w-[560px] -translate-x-1/2 sm:h-[690px] sm:w-[690px]">
         <ParticleField reduceMotion={reduceMotion} />
+        <AnimatedFlowSvg reduceMotion={reduceMotion} />
         <FlowArc className="left-[6%] top-[39%] w-[36%] -rotate-6" delay={0} reduceMotion={reduceMotion} />
         <FlowArc className="right-[6%] top-[39%] w-[36%] rotate-6" delay={0.45} reduceMotion={reduceMotion} reverse />
         <FlowArc className="left-[36%] top-[75%] w-[30%] rotate-90" delay={0.9} reduceMotion={reduceMotion} />
@@ -347,6 +358,47 @@ function SignatureEscrowVisual({ depthX, depthY, counterX, counterY, reduceMotio
         <LiveEscrowConsole reduceMotion={reduceMotion} />
       </motion.div>
     </div>
+  );
+}
+
+function AnimatedFlowSvg({ reduceMotion }) {
+  return (
+    <svg className="absolute inset-0 h-full w-full overflow-visible" viewBox="0 0 690 690" aria-hidden="true">
+      <defs>
+        <linearGradient id="escrowFlowGradient" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0%" stopColor="rgba(56,189,248,0)" />
+          <stop offset="45%" stopColor="rgba(125,211,252,0.95)" />
+          <stop offset="100%" stopColor="rgba(52,211,153,0)" />
+        </linearGradient>
+        <filter id="escrowFlowGlow">
+          <feGaussianBlur stdDeviation="4" result="coloredBlur" />
+          <feMerge>
+            <feMergeNode in="coloredBlur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      {[
+        'M80 300 C190 210 250 230 345 345 C445 465 520 455 610 320',
+        'M96 392 C205 480 270 468 345 345 C430 210 515 215 594 385',
+        'M345 610 C310 520 300 440 345 345 C390 430 402 522 345 610',
+      ].map((path, index) => (
+        <motion.path
+          key={path}
+          d={path}
+          fill="none"
+          stroke="url(#escrowFlowGradient)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray="70 420"
+          filter="url(#escrowFlowGlow)"
+          initial={false}
+          animate={reduceMotion ? {} : { strokeDashoffset: [index * -120, index * -120 - 490] }}
+          transition={{ duration: 4.6 + index * 0.5, repeat: Infinity, ease: 'linear' }}
+          opacity="0.82"
+        />
+      ))}
+    </svg>
   );
 }
 
@@ -412,18 +464,19 @@ function LiveEscrowConsole({ reduceMotion }) {
           </motion.div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <MiniSignal label="Amount" value="R 18,500" icon="WalletCards" tone={BLUE} />
-          <MiniSignal label="Fee" value="2%" icon="ReceiptText" tone={GREEN} />
-          <MiniSignal label="Release" value="Locked" icon="Lock" tone={GOLD} />
+          <MiniSignal label="Escrow" value="Locked" icon="Lock" tone={GREEN} />
+          <MiniSignal label="Dispute" value="Armed" icon="Scale" tone="#fb7185" />
+          <MiniSignal label="Payout" value="Held" icon="Banknote" tone={GOLD} />
         </div>
 
         <div className="mt-5">
-          {flowStages.map((stage, index) => (
+          {simulationStates.map((stage, index) => (
             <div key={stage.label} className="relative flex items-center gap-3 py-2">
-              {index < flowStages.length - 1 && <div className="absolute left-4 top-10 h-5 w-px bg-gradient-to-b from-sky-300/50 to-emerald-300/20" />}
+              {index < simulationStates.length - 1 && <div className="absolute left-4 top-10 h-5 w-px bg-gradient-to-b from-sky-300/50 to-emerald-300/20" />}
               <motion.div
-                animate={reduceMotion ? {} : stage.state === 'locked' ? { scale: [1, 1.12, 1] } : {}}
+                animate={reduceMotion ? {} : stage.state === 'locked' || stage.state === 'protected' ? { scale: [1, 1.12, 1] } : {}}
                 transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
                 style={{ color: stage.tone, borderColor: `${stage.tone}55`, background: `${stage.tone}16` }}
                 className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full border"
@@ -494,7 +547,7 @@ function TrustRail({ reduceMotion }) {
           <p style={{ color: MUTED }} className="max-w-xl text-sm font-semibold">
             A continuous money state from capture to confirmation to payout.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             {liveSignals.map(([label, icon], index) => (
               <motion.div
                 key={label}

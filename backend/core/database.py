@@ -121,6 +121,18 @@ async def create_indexes(db: AsyncIOMotorDatabase):
         await db.alerts.create_index("alert_id", unique=True)
         await db.alerts.create_index("resolved")
         await db.alerts.create_index("timestamp")
+
+        # Finance reconciliation and audit collections
+        await db.finance_reconciliation_logs.create_index("transaction_id")
+        await db.finance_reconciliation_logs.create_index("token_id")
+        await db.finance_reconciliation_logs.create_index("reconciliation_state")
+        await db.finance_reconciliation_logs.create_index("created_at")
+        await db.finance_reconciliation_runs.create_index("completed_at")
+        await db.finance_alerts.create_index("alert_id", unique=True)
+        await db.finance_alerts.create_index("resolved")
+        await db.finance_alerts.create_index("created_at")
+        await db.finance_audit_trail.create_index("created_at")
+        await db.finance_audit_trail.create_index("transaction_id")
         
         # Admin actions audit trail
         await db.admin_actions.create_index("timestamp")

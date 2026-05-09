@@ -8,7 +8,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 
 from core.config import settings
 from core.database import get_database
@@ -1688,6 +1688,13 @@ async def retry_transaction_withdrawal(request: Request, transaction_id: str):
     """
     db = get_database()
     admin = await require_admin(request, db)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    confirmation_reason = (body or {}).get("reason") or (body or {}).get("confirmation_reason")
+    if not confirmation_reason or len(str(confirmation_reason).strip()) < 12:
+        raise HTTPException(status_code=400, detail="Admin confirmation reason is required before retrying withdrawal")
 
     transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
     if not transaction:
@@ -1709,6 +1716,9 @@ async def retry_transaction_withdrawal(request: Request, transaction_id: str):
     if not transaction.get("tradesafe_seller_token_id"):
         raise HTTPException(status_code=400, detail="Transaction has no seller token ID")
 
+    if transaction.get("settlement_reference") or transaction.get("bank_reference"):
+        raise HTTPException(status_code=400, detail="Transaction already has settlement/bank reference evidence")
+
     try:
         net_amount = float(transaction.get("net_amount"))
     except (TypeError, ValueError):
@@ -1717,7 +1727,33 @@ async def retry_transaction_withdrawal(request: Request, transaction_id: str):
     if net_amount <= 0:
         raise HTTPException(status_code=400, detail="Transaction has no valid net_amount")
 
+    from tradesafe_service import get_token_details, get_token_statement
+    token_id = transaction.get("tradesafe_seller_token_id")
+    token = await get_token_details(token_id)
+    token_balance = _token_balance_rands(token) or 0
+    if token_balance + 0.01 < net_amount:
+        raise HTTPException(status_code=400, detail=f"Token balance R{token_balance:.2f} is below expected payout R{net_amount:.2f}")
+
+    statement = await get_token_statement(token_id, first=100, page=1)
+    rows = [_normalize_statement_entry(entry) for entry in (statement.get("entries") or [])]
+    references = [
+        transaction.get("transaction_id"),
+        transaction.get("deal_id"),
+        transaction.get("share_code"),
+        transaction.get("tradesafe_id"),
+        transaction.get("tradesafe_transaction_id"),
+        transaction.get("tradesafe_allocation_id"),
+    ]
+    matches = _matching_statement_entries(rows, net_amount, references)
+    existing_acsp_withdrawal = [
+        row for row in matches
+        if row.get("category") == "withdrawal_debit" and str(row.get("status") or "").upper() == "ACSP"
+    ]
+    if existing_acsp_withdrawal:
+        raise HTTPException(status_code=400, detail="Existing ACSP withdrawal evidence found in tokenStatement; retry blocked")
+
     from routes.webhooks import attempt_transaction_withdrawal
+    from services.reconciliation_service import write_audit_record
 
     result = await attempt_transaction_withdrawal(db, transaction, source=f"admin:{admin.email}")
 
@@ -1726,9 +1762,24 @@ async def retry_transaction_withdrawal(request: Request, transaction_id: str):
         "admin_name": admin.name,
         "action": "retry_withdrawal",
         "transaction_id": transaction_id,
+        "confirmation_reason": confirmation_reason,
+        "token_balance_checked": token_balance,
+        "existing_acsp_withdrawal": False,
         "result": result,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
+    await write_audit_record(
+        db,
+        "retry_withdrawal",
+        admin.email,
+        transaction_id=transaction_id,
+        details={
+            "confirmation_reason": confirmation_reason,
+            "token_balance": token_balance,
+            "net_amount": net_amount,
+            "result": result,
+        },
+    )
 
     if not result.get("success"):
         return {
@@ -2143,6 +2194,27 @@ def _match_transaction_statement(txn: dict, entries: List[dict]) -> Dict[str, An
     elif allocation_rows and not withdrawal_rows:
         final_state = "needs_tradesafe_support"
 
+    release_value = txn.get("funds_released_at") or txn.get("released_at") or txn.get("completed_at")
+    age_hours = None
+    if release_value:
+        try:
+            release_text = str(release_value).replace("Z", "+00:00")
+            if " " in release_text and "T" not in release_text:
+                release_text = release_text.replace(" ", "T")
+            release_dt = datetime.fromisoformat(release_text)
+            if release_dt.tzinfo is None:
+                release_dt = release_dt.replace(tzinfo=timezone.utc)
+            age_hours = round((datetime.now(timezone.utc) - release_dt).total_seconds() / 3600, 2)
+        except Exception:
+            age_hours = None
+
+    payout_sla_status = "healthy"
+    if final_state != "reconciled" and age_hours is not None:
+        if age_hours >= 48:
+            payout_sla_status = "critical"
+        elif age_hours >= 24:
+            payout_sla_status = "delayed"
+
     return {
         "transaction_id": txn.get("transaction_id"),
         "deal_id": txn.get("deal_id"),
@@ -2159,6 +2231,8 @@ def _match_transaction_statement(txn: dict, entries: List[dict]) -> Dict[str, An
         "allocation_rows": allocation_rows,
         "statement_rows": matched,
         "final_state": final_state,
+        "age_hours": age_hours,
+        "payout_sla_status": payout_sla_status,
     }
 
 
@@ -2285,6 +2359,8 @@ async def get_admin_finance_ledger(
         "withdrawal_status": 1,
         "payout_status": 1,
         "funds_released_at": 1,
+        "released_at": 1,
+        "completed_at": 1,
         "created_at": 1,
     }
     txns = await db.transactions.find(
@@ -2341,6 +2417,94 @@ async def get_admin_finance_ledger(
             reverse=True,
         )[:100],
     }
+
+
+@router.get("/finance-metrics")
+async def get_admin_finance_metrics(request: Request):
+    """Read-only production finance metrics from the latest reconciliation run."""
+    db = get_database()
+    await require_admin(request, db)
+
+    from services.reconciliation_service import get_finance_metrics
+
+    return await get_finance_metrics(db)
+
+
+@router.get("/finance-reconciliation-status")
+async def get_admin_finance_reconciliation_status(request: Request):
+    """Read-only status for reconciliation scheduler, active alerts, and recent logs."""
+    db = get_database()
+    await require_admin(request, db)
+
+    latest_run = await db.finance_reconciliation_runs.find_one({}, {"_id": 0}, sort=[("completed_at", -1)])
+    recent_runs = await db.finance_reconciliation_runs.find({}, {"_id": 0}).sort("completed_at", -1).limit(10).to_list(10)
+    alerts = await db.finance_alerts.find({"resolved": {"$ne": True}}, {"_id": 0}).sort("created_at", -1).limit(50).to_list(50)
+    recent_logs = await db.finance_reconciliation_logs.find({}, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
+
+    return {
+        "last_successful_reconciliation_at": (latest_run or {}).get("completed_at"),
+        "daily_reconciliation_status": "healthy" if latest_run else "not_started",
+        "latest_run": latest_run,
+        "recent_runs": recent_runs,
+        "active_alerts": alerts,
+        "recent_logs": recent_logs,
+    }
+
+
+@router.post("/finance-reconciliation/run")
+async def run_admin_finance_reconciliation(request: Request, mode: str = "recent"):
+    """Admin-triggered read-only reconciliation run. Does not retry or withdraw funds."""
+    db = get_database()
+    admin = await require_admin(request, db)
+
+    from services.reconciliation_service import run_reconciliation, write_audit_record
+
+    result = await run_reconciliation(db, mode=mode if mode in {"recent", "nightly"} else "recent", limit=1000 if mode == "nightly" else 150)
+    await write_audit_record(db, "manual_reconciliation_run", admin.email, details={"mode": mode, "metrics": result.get("metrics")})
+    return result
+
+
+@router.get("/finance-alerts")
+async def get_admin_finance_alerts(request: Request, active_only: bool = True, limit: int = 100):
+    """Read finance-specific alerts for dashboard banners and operations review."""
+    db = get_database()
+    await require_admin(request, db)
+
+    query = {"resolved": {"$ne": True}} if active_only else {}
+    alerts = await db.finance_alerts.find(query, {"_id": 0}).sort("created_at", -1).limit(max(1, min(limit, 500))).to_list(max(1, min(limit, 500)))
+    return {"count": len(alerts), "alerts": alerts}
+
+
+@router.get("/finance-audit-trail")
+async def get_admin_finance_audit_trail(request: Request, limit: int = 100):
+    """Immutable finance audit records for retries, withdrawals, failures, and reconciliation state changes."""
+    db = get_database()
+    await require_admin(request, db)
+
+    rows = await db.finance_audit_trail.find({}, {"_id": 0}).sort("created_at", -1).limit(max(1, min(limit, 500))).to_list(max(1, min(limit, 500)))
+    return {"count": len(rows), "rows": rows}
+
+
+@router.get("/finance-export/{report}")
+async def export_admin_finance_report(request: Request, report: str, format: str = "json"):
+    """Export unresolved payouts, token residues, org movements, or payout aging as JSON/CSV."""
+    db = get_database()
+    await require_admin(request, db)
+
+    valid_reports = {"unresolved-payouts", "token-residues", "org-token-movements", "payout-aging"}
+    if report not in valid_reports:
+        raise HTTPException(status_code=400, detail=f"report must be one of {sorted(valid_reports)}")
+
+    from services.reconciliation_service import export_finance_report
+
+    exported = await export_finance_report(db, report, fmt=format)
+    if format.lower() == "csv":
+        return Response(
+            content=exported,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{report}.csv"'},
+        )
+    return exported
 
 
 @router.get("/payout-reconciliation")

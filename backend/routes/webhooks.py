@@ -62,6 +62,13 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
     if not txn_id:
         return {"success": False, "error": "Missing transaction_id"}
 
+    async def _audit(action: str, details: dict):
+        try:
+            from services.reconciliation_service import write_audit_record
+            await write_audit_record(db, action, source, transaction_id=txn_id, details=details)
+        except Exception as exc:
+            logger.error(f"[FINANCE_AUDIT] failed action={action} txn={txn_id}: {exc}")
+
     if txn.get("withdrawal_status") in ("in_progress", "succeeded"):
         return {
             "success": txn.get("withdrawal_status") == "succeeded",
@@ -94,6 +101,7 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
                 "settlement_checked_at": now_iso,
             }}
         )
+        await _audit("payout_failure", {"error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount})
         return {"success": False, "error": error}
 
     claim = await db.transactions.update_one(
@@ -113,7 +121,10 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
     )
 
     if claim.modified_count != 1:
+        await _audit("withdrawal_duplicate_prevented", {"seller_token_id": seller_token_id, "amount": withdrawal_amount})
         return {"success": False, "skipped": True, "reason": "withdrawal already claimed"}
+
+    await _audit("withdrawal_requested", {"seller_token_id": seller_token_id, "amount": withdrawal_amount})
 
     try:
         from tradesafe_service import withdraw_token_funds
@@ -143,6 +154,7 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
                 "settlement_reference": None,
             }}
         )
+        await _audit("withdrawal_succeeded", {"seller_token_id": seller_token_id, "amount": withdrawal_amount})
         return {"success": True, "seller_token_id": seller_token_id, "amount": withdrawal_amount}
 
     await db.transactions.update_one(
@@ -157,6 +169,7 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
             "settlement_checked_at": finished_at,
         }}
     )
+    await _audit("payout_failure", {"error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount})
     return {"success": False, "error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount}
 
 

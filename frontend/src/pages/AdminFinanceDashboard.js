@@ -143,6 +143,14 @@ function fetchTokenStatement(tokenId) {
   return api.get(`/admin/token-statement/${tokenId}`);
 }
 
+function fetchFinanceMetrics() {
+  return api.get('/admin/finance-metrics');
+}
+
+function fetchReconciliationStatus() {
+  return api.get('/admin/finance-reconciliation-status');
+}
+
 function StatusPill({ state }) {
   const meta = stateMeta(state);
   return (
@@ -263,6 +271,8 @@ function DetailModal({ row, tokenStatement, onClose }) {
 export default function AdminFinanceDashboard() {
   const { user, logout } = useAuth();
   const [ledger, setLedger] = useState(null);
+  const [metrics, setMetrics] = useState(null);
+  const [reconciliationStatus, setReconciliationStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filters, setFilters] = useState({
@@ -279,8 +289,14 @@ export default function AdminFinanceDashboard() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetchFinanceLedger();
-      setLedger(res.data);
+      const [ledgerRes, metricsRes, statusRes] = await Promise.all([
+        fetchFinanceLedger(),
+        fetchFinanceMetrics().catch(() => ({ data: null })),
+        fetchReconciliationStatus().catch(() => ({ data: null })),
+      ]);
+      setLedger(ledgerRes.data);
+      setMetrics(metricsRes.data);
+      setReconciliationStatus(statusRes.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load finance ledger');
     } finally {
@@ -317,6 +333,7 @@ export default function AdminFinanceDashboard() {
   const transactionRows = useMemo(() => ledger?.transaction_statement_matches || [], [ledger]);
   const summary = ledger?.summary || {};
   const orgAnalysis = ledger?.org_token_revenue_analysis || {};
+  const activeAlerts = metrics?.active_alerts || reconciliationStatus?.active_alerts || [];
 
   const stateCounts = useMemo(() => {
     const counts = {
@@ -367,6 +384,29 @@ export default function AdminFinanceDashboard() {
   const tradeSafeFeeChart = groupByDay(entries, 'tradesafe_fee');
   const unresolvedChart = groupCountsByDay(transactionRows.filter((row) => rowState(row) !== 'reconciled'));
   const orgMovementChart = groupByDay(entries.filter((entry) => entry.token_id === '32fbUbeMWjdor4uHBJdns'));
+  const agingBuckets = useMemo(() => {
+    const buckets = [
+      { age: '< 24h', count: 0 },
+      { age: '24-48h', count: 0 },
+      { age: '> 48h', count: 0 },
+    ];
+    transactionRows
+      .filter((row) => rowState(row) !== 'reconciled')
+      .forEach((row) => {
+        const age = Number(row.age_hours || 0);
+        if (age >= 48) buckets[2].count += 1;
+        else if (age >= 24) buckets[1].count += 1;
+        else buckets[0].count += 1;
+      });
+    return buckets;
+  }, [transactionRows]);
+
+  const payoutAgingRows = useMemo(() => {
+    return transactionRows
+      .filter((row) => rowState(row) !== 'reconciled')
+      .sort((a, b) => Number(b.age_hours || 0) - Number(a.age_hours || 0))
+      .slice(0, 12);
+  }, [transactionRows]);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -404,6 +444,24 @@ export default function AdminFinanceDashboard() {
           <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-600">Loading finance ledger...</div>
         ) : (
           <>
+            {activeAlerts.length > 0 && (
+              <section className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
+                  <div>
+                    <h2 className="font-bold text-amber-950">Live finance alerts</h2>
+                    <div className="mt-2 grid gap-2">
+                      {activeAlerts.slice(0, 5).map((alert, index) => (
+                        <p key={alert.alert_id || index} className="text-sm text-amber-900">
+                          <span className="font-semibold">{alert.severity || alert.priority || 'alert'}:</span> {alert.message}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
             <section className="mb-6">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-lg font-bold text-slate-950">Platform Revenue</h2>
@@ -423,6 +481,33 @@ export default function AdminFinanceDashboard() {
                 <MetricCard label="Pending settlements" value={pendingSettlements} tone={pendingSettlements > 0 ? 'yellow' : 'green'} icon={FileSearch} />
                 <MetricCard label="Unsettled transactions" value={unresolvedCount} tone={unresolvedCount > 0 ? 'yellow' : 'green'} icon={AlertTriangle} />
               </div>
+            </section>
+
+            <section className="mb-6 grid gap-3 md:grid-cols-4">
+              <MetricCard
+                label="Finance health score"
+                value={metrics?.reconciliation_health_score ?? 'Not available'}
+                tone={(metrics?.reconciliation_health_score ?? 0) >= 80 ? 'green' : (metrics?.reconciliation_health_score ?? 0) >= 60 ? 'yellow' : 'red'}
+                note="Score reflects unresolved count, PDNG age, failed withdrawals, negative balances, and statement consistency."
+                icon={CheckCircle2}
+              />
+              <MetricCard
+                label="Last reconciliation"
+                value={formatDate(metrics?.last_successful_reconciliation_at || reconciliationStatus?.last_successful_reconciliation_at)}
+                note={reconciliationStatus?.daily_reconciliation_status || metrics?.daily_reconciliation_status || 'Status unknown'}
+                icon={RefreshCcw}
+              />
+              <MetricCard
+                label="Average payout time"
+                value={metrics?.avg_payout_time === null || metrics?.avg_payout_time === undefined ? 'Not available' : `${metrics.avg_payout_time}h`}
+                icon={Wallet}
+              />
+              <MetricCard
+                label="Payout success rate"
+                value={metrics?.payout_success_rate === null || metrics?.payout_success_rate === undefined ? 'Not available' : `${metrics.payout_success_rate}%`}
+                tone={(metrics?.payout_success_rate ?? 100) >= 95 ? 'green' : 'yellow'}
+                icon={CheckCircle2}
+              />
             </section>
 
             <section className="mb-6 grid gap-3 lg:grid-cols-5">
@@ -533,6 +618,17 @@ export default function AdminFinanceDashboard() {
                   </BarChart>
                 </ResponsiveContainer>
               </ChartPanel>
+              <ChartPanel title="Unresolved By Age">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={agingBuckets}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="age" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="count" fill="#ca8a04" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartPanel>
               <div className="lg:col-span-2">
                 <ChartPanel title="Org Token Movement">
                   <ResponsiveContainer width="100%" height="100%">
@@ -549,6 +645,50 @@ export default function AdminFinanceDashboard() {
                     </BarChart>
                   </ResponsiveContainer>
                 </ChartPanel>
+              </div>
+            </section>
+
+            <section className="mb-6 rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="border-b border-slate-200 p-4">
+                <h2 className="text-lg font-bold text-slate-950">Payout Aging</h2>
+                <p className="mt-1 text-sm text-slate-600">Oldest unresolved payouts by reconciliation age and SLA status.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-[900px] w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Transaction</th>
+                      <th className="px-4 py-3">Seller</th>
+                      <th className="px-4 py-3">Amount</th>
+                      <th className="px-4 py-3">Age</th>
+                      <th className="px-4 py-3">SLA</th>
+                      <th className="px-4 py-3">State</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {payoutAgingRows.map((row, index) => (
+                      <tr key={`aging-${index}`}>
+                        <td className="px-4 py-3 font-mono text-blue-700">{row.transaction_id || row.deal_id || 'Unknown'}</td>
+                        <td className="px-4 py-3">{row.seller_email || 'Not available'}</td>
+                        <td className="px-4 py-3">{money(row.expected_seller_amount)}</td>
+                        <td className="px-4 py-3">{row.age_hours === null || row.age_hours === undefined ? 'Not available' : `${row.age_hours}h`}</td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            row.payout_sla_status === 'critical' ? 'bg-red-50 text-red-700' :
+                            row.payout_sla_status === 'delayed' ? 'bg-amber-50 text-amber-700' :
+                            'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {row.payout_sla_status || 'unknown'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3"><StatusPill state={rowState(row)} /></td>
+                      </tr>
+                    ))}
+                    {payoutAgingRows.length === 0 && (
+                      <tr><td colSpan="6" className="px-4 py-6 text-center text-slate-500">No unresolved payout aging rows.</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </section>
 

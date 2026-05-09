@@ -44,14 +44,44 @@ async def _payment_polling_loop():
         await asyncio.sleep(300)  # 5 minutes
 
 
+async def _finance_reconciliation_loop():
+    """Run finance reconciliation every 15 minutes and a nightly full sweep."""
+    from core.database import get_database
+    from services.reconciliation_service import cleanup_finance_records, run_reconciliation
+
+    await asyncio.sleep(120)
+    last_nightly_date = None
+    while True:
+        try:
+            db = get_database()
+            await run_reconciliation(db, mode="recent", limit=150)
+
+            from datetime import datetime, timezone
+            current = datetime.now(timezone.utc)
+            if current.hour == 1 and last_nightly_date != current.date().isoformat():
+                await run_reconciliation(db, mode="nightly", limit=1000)
+                await cleanup_finance_records(db)
+                last_nightly_date = current.date().isoformat()
+        except Exception as exc:
+            logger.error(f"[FINANCE_RECON] Reconciliation loop error: {exc}")
+        await asyncio.sleep(900)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     task = asyncio.create_task(_payment_polling_loop())
+    finance_task = asyncio.create_task(_finance_reconciliation_loop())
     logger.info("[STARTUP] Background payment polling loop started (5-min interval)")
+    logger.info("[STARTUP] Finance reconciliation loop started (15-min interval)")
     yield
     task.cancel()
+    finance_task.cancel()
     try:
         await task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await finance_task
     except asyncio.CancelledError:
         pass
     logger.info("[SHUTDOWN] Background polling loop stopped")

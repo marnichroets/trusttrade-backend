@@ -1442,6 +1442,57 @@ async def get_token_details(token_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+async def get_token_statement(token_id: str, first: int = 50, page: int = 1) -> Dict[str, Any]:
+    """
+    Fetch the TradeSafe ledger for a token. This is read-only and is used for
+    payout reconciliation: debits, credits, PDNG/ACSP status, references, dates.
+    """
+    first = max(1, min(int(first or 50), 100))
+    page = max(1, int(page or 1))
+
+    query = """
+    query statement($id: ID!, $first: Int!, $page: Int) {
+        tokenStatement(id: $id, first: $first, page: $page) {
+            data {
+                type
+                amount
+                status
+                reference
+                createdAt
+                updatedAt
+            }
+            paginatorInfo {
+                currentPage
+                lastPage
+                hasMorePages
+                total
+                count
+            }
+        }
+    }
+    """
+
+    result = await execute_graphql(query, {"id": token_id, "first": first, "page": page})
+    logger.info(f"[TOKEN_STATEMENT] token={token_id} page={page} first={first} response={result}")
+
+    if result and "errors" in result:
+        return {
+            "success": False,
+            "token_id": token_id,
+            "entries": [],
+            "paginator": None,
+            "error": result["errors"],
+        }
+
+    statement = (result or {}).get("tokenStatement") or {}
+    return {
+        "success": bool(statement),
+        "token_id": token_id,
+        "entries": statement.get("data") or [],
+        "paginator": statement.get("paginatorInfo"),
+    }
+
+
 async def get_all_tokens() -> List[Dict[str, Any]]:
     """
     Fetch ALL tokens from TradeSafe using page-based pagination (Laravel style).

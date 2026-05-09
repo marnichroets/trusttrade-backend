@@ -1919,6 +1919,60 @@ def _payout_recommendation(txn: dict, amount, token_balance):
     return True, "Retry withdrawal via POST /api/admin/transactions/{transaction_id}/retry-withdrawal"
 
 
+def _matching_statement_entries(entries: list, amount, references: list):
+    matches = []
+    reference_terms = [str(ref).lower() for ref in references if ref]
+    expected = float(amount) if amount is not None else None
+
+    for entry in entries or []:
+        entry_amount = entry.get("amount")
+        entry_reference = str(entry.get("reference") or "")
+        is_debit = str(entry.get("type") or "").upper() == "DEBIT"
+        amount_matches = False
+        reference_matches = False
+
+        if expected is not None and entry_amount is not None:
+            try:
+                amount_matches = abs(float(entry_amount) - expected) <= 1.00
+            except (TypeError, ValueError):
+                amount_matches = False
+
+        if reference_terms:
+            reference_lower = entry_reference.lower()
+            reference_matches = any(term in reference_lower for term in reference_terms)
+
+        if is_debit and (amount_matches or reference_matches):
+            matches.append(entry)
+
+    return matches
+
+
+@router.get("/tokens/{token_id}/statement")
+async def get_admin_token_statement(request: Request, token_id: str, first: int = 50, page: int = 1):
+    """Read-only TradeSafe token ledger: debits, credits, PDNG/ACSP status, references, and dates."""
+    db = get_database()
+    await require_admin(request, db)
+
+    from tradesafe_service import get_token_details, get_token_statement
+
+    token = await get_token_details(token_id)
+    statement = await get_token_statement(token_id, first=first, page=page)
+
+    return {
+        "token_id": token_id,
+        "token": {
+            "name": (token or {}).get("name"),
+            "email": ((token or {}).get("user") or {}).get("email"),
+            "balance": (token or {}).get("balance"),
+            "balance_rands": (token or {}).get("balance_rands"),
+            "valid": (token or {}).get("valid"),
+            "bank": (((token or {}).get("bankAccount") or {}).get("bank")),
+            "payout_interval": ((((token or {}).get("settings") or {}).get("payout") or {}).get("interval")),
+        },
+        "statement": statement,
+    }
+
+
 @router.get("/payout-reconciliation")
 async def get_payout_reconciliation(request: Request, limit: int = 100):
     """
@@ -2039,7 +2093,7 @@ async def get_payout_settlement_trace(request: Request, ids: str):
     if not requested_ids:
         raise HTTPException(status_code=400, detail="Provide comma-separated ids")
 
-    from tradesafe_service import get_token_details, get_tradesafe_transaction
+    from tradesafe_service import get_token_details, get_token_statement, get_tradesafe_transaction
 
     txns = await db.transactions.find(
         {"$or": [
@@ -2057,6 +2111,7 @@ async def get_payout_settlement_trace(request: Request, ids: str):
         tradesafe_id = txn.get("tradesafe_id") or txn.get("tradesafe_transaction_id") or txn.get("tradesafe_token_id")
         seller_token_id = txn.get("tradesafe_seller_token_id")
         token = await get_token_details(seller_token_id) if seller_token_id else None
+        statement = await get_token_statement(seller_token_id, first=50, page=1) if seller_token_id else {"entries": []}
         ts_transaction = await get_tradesafe_transaction(tradesafe_id) if tradesafe_id else None
 
         webhook_terms = [
@@ -2086,6 +2141,15 @@ async def get_payout_settlement_trace(request: Request, ids: str):
         ).sort("timestamp", -1).limit(20).to_list(20)
 
         amount, amount_source = _payout_amount(txn)
+        references = [
+            transaction_id,
+            deal_id,
+            txn.get("share_code"),
+            tradesafe_id,
+            txn.get("tradesafe_allocation_id"),
+            (ts_transaction or {}).get("reference"),
+        ]
+        matching_statement_entries = _matching_statement_entries(statement.get("entries") or [], amount, references)
         token_balance = None
         if token and token.get("balance") is not None:
             token_balance = round(float(token.get("balance")) / 100, 2)
@@ -2114,8 +2178,40 @@ async def get_payout_settlement_trace(request: Request, ids: str):
             "withdrawal_completed_at": txn.get("withdrawal_completed_at"),
             "settlement_status": txn.get("settlement_status"),
             "settlement_checked_at": txn.get("settlement_checked_at"),
+            "token_statement": statement,
+            "matching_statement_entries": matching_statement_entries,
             "matching_webhooks": webhooks,
             "matching_admin_actions": admin_actions,
+        })
+
+    return {"count": len(rows), "rows": rows}
+
+
+@router.get("/payout-token-statements")
+async def get_payout_token_statements(request: Request, token_ids: str, first: int = 50, page: int = 1):
+    """Read-only statement lookup for multiple seller tokens used during reconciliation."""
+    db = get_database()
+    await require_admin(request, db)
+
+    requested_tokens = [item.strip() for item in (token_ids or "").split(",") if item.strip()]
+    if not requested_tokens:
+        raise HTTPException(status_code=400, detail="Provide comma-separated token_ids")
+
+    from tradesafe_service import get_token_details, get_token_statement
+
+    rows = []
+    for token_id in requested_tokens:
+        token = await get_token_details(token_id)
+        statement = await get_token_statement(token_id, first=first, page=page)
+        rows.append({
+            "token_id": token_id,
+            "email": ((token or {}).get("user") or {}).get("email"),
+            "name": (token or {}).get("name"),
+            "balance": (token or {}).get("balance"),
+            "balance_rands": (token or {}).get("balance_rands"),
+            "bank": (((token or {}).get("bankAccount") or {}).get("bank")),
+            "payout_interval": ((((token or {}).get("settings") or {}).get("payout") or {}).get("interval")),
+            "statement": statement,
         })
 
     return {"count": len(rows), "rows": rows}

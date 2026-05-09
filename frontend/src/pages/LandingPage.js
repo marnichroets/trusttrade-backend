@@ -230,7 +230,7 @@ function LandingPage() {
                 SOUTH AFRICA'S ESCROW ENGINE
               </div>
 
-              <h1 className="mt-7 max-w-5xl text-5xl font-bold leading-[0.94] text-white sm:text-6xl lg:text-7xl xl:text-8xl" data-testid="hero-headline">
+              <h1 className="mt-7 max-w-4xl text-5xl font-bold leading-[0.98] text-white sm:text-6xl lg:text-[4.75rem] xl:text-[5.4rem]" data-testid="hero-headline">
                 Money moves only when trust is earned.
               </h1>
               <p style={{ color: MUTED }} className="mt-7 max-w-2xl text-lg leading-8 sm:text-xl">
@@ -288,17 +288,17 @@ function CinematicMesh({ reduceMotion }) {
       <motion.div
         animate={reduceMotion ? {} : { x: [0, 80, -45, 0], y: [0, -55, 35, 0], scale: [1, 1.08, 0.96, 1] }}
         transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute left-[-18%] top-[-28%] h-[760px] w-[760px] rounded-full bg-sky-500/23 blur-[125px]"
+        className="absolute left-[-16%] top-[-24%] h-[620px] w-[620px] rounded-full bg-sky-500/16 blur-[150px]"
       />
       <motion.div
         animate={reduceMotion ? {} : { x: [0, -70, 60, 0], y: [0, 55, -35, 0], scale: [1, 0.96, 1.1, 1] }}
         transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute right-[-16%] top-[5%] h-[720px] w-[720px] rounded-full bg-emerald-400/18 blur-[135px]"
+        className="absolute right-[-14%] top-[12%] h-[560px] w-[560px] rounded-full bg-emerald-400/12 blur-[155px]"
       />
       <motion.div
         animate={reduceMotion ? {} : { x: [0, 50, -70, 0], y: [0, -30, 70, 0] }}
         transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute bottom-[-20%] left-[18%] h-[580px] w-[820px] rounded-full bg-blue-700/16 blur-[145px]"
+        className="absolute bottom-[-18%] left-[22%] h-[430px] w-[720px] rounded-full bg-blue-700/10 blur-[165px]"
       />
       <div
         className="absolute inset-0 opacity-[0.16]"
@@ -330,12 +330,12 @@ function SignatureEscrowVisual({ depthX, depthY, counterX, counterY, reduceMotio
         <motion.div
           animate={reduceMotion ? {} : { rotate: 360 }}
           transition={{ duration: 32, repeat: Infinity, ease: 'linear' }}
-          className="absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-sky-300/16 bg-[conic-gradient(from_90deg,rgba(56,189,248,0),rgba(56,189,248,0.62),rgba(34,197,94,0.52),rgba(250,204,21,0.22),rgba(56,189,248,0))]"
+          className="absolute left-1/2 top-1/2 h-[380px] w-[380px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-sky-300/14 bg-[conic-gradient(from_90deg,rgba(56,189,248,0),rgba(56,189,248,0.48),rgba(34,197,94,0.42),rgba(250,204,21,0.18),rgba(56,189,248,0))]"
         />
         <motion.div
           animate={reduceMotion ? {} : { rotate: -360 }}
           transition={{ duration: 44, repeat: Infinity, ease: 'linear' }}
-          className="absolute left-1/2 top-1/2 h-[330px] w-[330px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-300/20 bg-[conic-gradient(from_180deg,rgba(34,197,94,0.38),rgba(37,99,235,0.28),rgba(34,197,94,0))]"
+          className="absolute left-1/2 top-1/2 h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-300/18 bg-[conic-gradient(from_180deg,rgba(34,197,94,0.3),rgba(37,99,235,0.22),rgba(34,197,94,0))]"
         />
         <motion.div
           animate={reduceMotion ? {} : { scale: [1, 1.07, 1], opacity: [0.52, 0.92, 0.52] }}
@@ -580,7 +580,7 @@ function EscrowPipeline({ reduceMotion }) {
   return (
     <section id="how-it-works" className="relative px-4 py-20 sm:py-24">
       <div className="mx-auto max-w-7xl">
-        <div className="grid gap-10 lg:grid-cols-[0.72fr_1.28fr] lg:items-center">
+        <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
           <motion.div
             initial={{ opacity: 0, y: reduceMotion ? 0 : 24 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -596,19 +596,21 @@ function EscrowPipeline({ reduceMotion }) {
             </p>
           </motion.div>
 
-          <div className="relative min-h-[520px] overflow-hidden border border-white/10 bg-white/[0.045] p-5 shadow-[0_36px_120px_rgba(2,6,23,0.48)] backdrop-blur-2xl">
+          <div className="relative min-h-[500px] overflow-hidden border border-white/10 bg-white/[0.045] p-5 shadow-[0_36px_120px_rgba(2,6,23,0.48)] backdrop-blur-2xl sm:p-6">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(56,189,248,0.22),transparent_30%),radial-gradient(circle_at_80%_70%,rgba(34,197,94,0.16),transparent_32%)]" />
-            <div className="relative flex h-full min-h-[480px] flex-col justify-center">
-              <div className="relative hidden h-44 items-center lg:flex">
-                <div className="absolute left-10 right-10 top-1/2 h-px bg-gradient-to-r from-sky-300/30 via-emerald-300/80 to-emerald-300/25" />
+            <div className="relative flex h-full min-h-[455px] flex-col justify-center">
+              <div className="relative hidden min-h-[250px] items-center lg:block">
+                <div className="absolute left-[7%] right-[7%] top-[5.4rem] h-px bg-gradient-to-r from-sky-300/30 via-emerald-300/80 to-emerald-300/25" />
                 <motion.div
-                  animate={reduceMotion ? {} : { x: ['0%', '630%'], opacity: [0, 1, 1, 0] }}
+                  animate={reduceMotion ? {} : { left: ['7%', '93%'], opacity: [0, 1, 1, 0] }}
                   transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
-                  className="absolute left-10 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-sky-100 shadow-[0_0_34px_rgba(56,189,248,0.9)]"
+                  className="absolute top-[5.4rem] h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-100 shadow-[0_0_34px_rgba(56,189,248,0.9)]"
                 />
-                {flowStages.map((stage, index) => (
-                  <PipelineNode key={stage.label} stage={stage} index={index} reduceMotion={reduceMotion} />
-                ))}
+                <div className="relative grid grid-cols-4 gap-3 pt-10">
+                  {flowStages.map((stage, index) => (
+                    <PipelineNode key={stage.label} stage={stage} index={index} reduceMotion={reduceMotion} />
+                  ))}
+                </div>
               </div>
 
               <div className="grid gap-4 lg:hidden">
@@ -639,26 +641,24 @@ function EscrowPipeline({ reduceMotion }) {
 }
 
 function PipelineNode({ stage, index, reduceMotion }) {
-  const leftPositions = ['5%', '34%', '63%', '88%'];
   return (
     <motion.div
       initial={{ opacity: 0, y: reduceMotion ? 0 : 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ duration: 0.55, delay: reduceMotion ? 0 : index * 0.12 }}
-      className="absolute top-1/2 w-40 -translate-x-1/2 -translate-y-1/2 text-center"
-      style={{ left: leftPositions[index] }}
+      className="relative min-w-0 text-center"
     >
       <motion.div
         animate={reduceMotion ? {} : stage.state === 'released' ? { boxShadow: ['0 0 0 rgba(34,197,94,0)', '0 0 54px rgba(34,197,94,0.4)', '0 0 0 rgba(34,197,94,0)'] } : {}}
         transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
         style={{ color: stage.tone, borderColor: `${stage.tone}55`, background: `${stage.tone}14` }}
-        className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border backdrop-blur-2xl"
+        className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border backdrop-blur-2xl"
       >
-        <IconGlyph name={stage.icon} className="h-7 w-7" />
+        <IconGlyph name={stage.icon} className="h-6 w-6" />
       </motion.div>
-      <h3 className="mt-4 text-base font-bold text-white">{stage.label}</h3>
-      <p style={{ color: MUTED }} className="mt-2 text-xs leading-5">{stage.detail}</p>
+      <h3 className="mx-auto mt-4 max-w-[9rem] text-sm font-bold leading-snug text-white">{stage.label}</h3>
+      <p style={{ color: MUTED }} className="mx-auto mt-2 max-w-[9.5rem] text-[11px] leading-5">{stage.detail}</p>
       <p style={{ color: stage.tone, fontFamily: "'JetBrains Mono', monospace" }} className="mt-3 text-[10px] font-bold uppercase">{stage.state}</p>
     </motion.div>
   );

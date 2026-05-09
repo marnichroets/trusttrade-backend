@@ -40,6 +40,8 @@ function AdminDashboard() {
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [recentUsers, setRecentUsers] = useState([]);
   const [recentDisputes, setRecentDisputes] = useState([]);
+  const [financeMetrics, setFinanceMetrics] = useState(null);
+  const [profitability, setProfitability] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,12 +50,14 @@ function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const [userRes, statsRes, txnRes, usersRes, disputesRes] = await Promise.all([
+      const [userRes, statsRes, txnRes, usersRes, disputesRes, financeRes, profitabilityRes] = await Promise.all([
         api.get('/auth/me'),
         api.get('/admin/stats'),
         api.get('/admin/transactions'),
         api.get('/admin/users'),
-        api.get('/admin/disputes')
+        api.get('/admin/disputes'),
+        api.get('/admin/finance-metrics').catch(() => ({ data: null })),
+        api.get('/admin/profitability').catch(() => ({ data: null }))
       ]);
       
       if (!userRes.data.is_admin) {
@@ -67,6 +71,8 @@ function AdminDashboard() {
       setRecentTransactions(txnRes.data.slice(0, 5));
       setRecentUsers(usersRes.data.slice(0, 5));
       setRecentDisputes(disputesRes.data.slice(0, 5));
+      setFinanceMetrics(financeRes.data);
+      setProfitability(profitabilityRes.data);
     } catch (error) {
       console.error('Failed to fetch:', error);
       toast.error('Failed to load admin data');
@@ -74,6 +80,46 @@ function AdminDashboard() {
       setLoading(false);
     }
   };
+
+  const formatMoney = (value) => {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return 'Not available';
+    return `R ${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
+  const grossPlatformFees = profitability?.total_revenue;
+  const netPlatformProfit = profitability?.total_net_profit;
+  const tradesafeCosts = profitability?.total_tradesafe_costs;
+  const pendingSettlementExposure = financeMetrics?.unresolved_value;
+  const orgTokenBalance = financeMetrics?.org_token_balance;
+  const estimatedMargin = profitability?.profit_margin_percent;
+  const tradeSafeCostsIncomplete = profitability?.transaction_count > 0 && Number(tradesafeCosts || 0) === 0;
+  const unresolvedSettlementsExist = Number(financeMetrics?.unresolved_count || 0) > 0;
+  const orgTokenNegative = Number(orgTokenBalance || 0) < 0;
+  const profitabilityEstimateIncomplete = tradeSafeCostsIncomplete || unresolvedSettlementsExist || orgTokenNegative;
+  const financeConsistencyWarning = Number(grossPlatformFees || 0) > 0 && orgTokenNegative;
+  const marginIndicator = (() => {
+    const margin = Number(estimatedMargin);
+    if (Number.isNaN(margin)) return { label: 'unknown', color: COLORS.subtext };
+    if (margin < 0) return { label: 'negative', color: COLORS.error };
+    if (margin < 10) return { label: 'risky', color: COLORS.error };
+    if (margin < 20) return { label: 'thin', color: COLORS.warning };
+    return { label: 'healthy', color: COLORS.green };
+  })();
+
+  const FinanceCard = ({ label, value, help, color = COLORS.primary, onClick }) => (
+    <Card className={`p-5 hover:shadow-lg transition-shadow ${onClick ? 'cursor-pointer' : ''}`} style={{ backgroundColor: color }} onClick={onClick} title={help}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs text-white/80 mb-1">{label}</p>
+          <p className="text-2xl font-bold text-white">{value}</p>
+          {help && <p className="text-[11px] text-white/70 mt-2 leading-snug">{help}</p>}
+        </div>
+        <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-white/20">
+          <DollarSign className="w-6 h-6 text-white" />
+        </div>
+      </div>
+    </Card>
+  );
 
   const handleLogout = async () => {
     try {
@@ -142,17 +188,12 @@ function AdminDashboard() {
               </div>
             </Card>
 
-            <Card className="p-5 hover:shadow-lg transition-shadow" style={{ backgroundColor: COLORS.green }}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs text-white/80 mb-1">Total Revenue (2%)</p>
-                  <p className="text-2xl font-bold text-white">R {(stats.total_volume * 0.02)?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) || '0.00'}</p>
-                </div>
-                <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-white/20">
-                  <DollarSign className="w-6 h-6 text-white" />
-                </div>
-              </div>
-            </Card>
+            <FinanceCard
+              label="Gross Platform Fees"
+              value={formatMoney(grossPlatformFees)}
+              color={COLORS.green}
+              help="Total fees charged to transactions before operational costs."
+            />
 
             <Card className="p-5 hover:shadow-lg transition-shadow cursor-pointer" style={{ backgroundColor: stats.pending_disputes > 0 ? COLORS.error : COLORS.primary }} onClick={() => navigate('/admin/disputes')}>
               <div className="flex items-start justify-between">
@@ -179,6 +220,37 @@ function AdminDashboard() {
             </Card>
           </div>
         )}
+
+        {/* Finance Source-of-Truth Summary */}
+        <div className="mb-8 space-y-3">
+          {profitabilityEstimateIncomplete && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-center justify-between gap-3">
+              <span className="font-semibold">Profitability estimate incomplete</span>
+              <span className="text-xs">TradeSafe costs incomplete: {tradeSafeCostsIncomplete ? 'yes' : 'no'} · unresolved settlements: {financeMetrics?.unresolved_count || 0} · org token: {formatMoney(orgTokenBalance)}</span>
+            </div>
+          )}
+          {financeConsistencyWarning && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              Revenue collected exceeds currently reconciled operational balance. Finance reconciliation still in progress.
+            </div>
+          )}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm" style={{ color: COLORS.subtext }}>
+              Last finance reconciliation: {financeMetrics?.last_successful_reconciliation_at ? new Date(financeMetrics.last_successful_reconciliation_at).toLocaleString() : 'Not available'}
+            </p>
+            <Badge style={{ backgroundColor: marginIndicator.color, color: 'white' }}>
+              Margin: {marginIndicator.label}
+            </Badge>
+          </div>
+          <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <FinanceCard label="Gross Platform Fees" value={formatMoney(grossPlatformFees)} color={COLORS.green} help="Total fees charged to transactions before operational costs." onClick={() => navigate('/admin/finance')} />
+            <FinanceCard label="Net Platform Profit" value={formatMoney(netPlatformProfit)} color={Number(netPlatformProfit || 0) >= 0 ? COLORS.primary : COLORS.error} help="Estimated profit after matched payout and provider costs." onClick={() => navigate('/admin/finance')} />
+            <FinanceCard label="TradeSafe Costs" value={formatMoney(tradesafeCosts)} color={tradeSafeCostsIncomplete ? COLORS.warning : COLORS.primary} help="Matched provider, withdrawal, and payment-method costs currently reconciled." onClick={() => navigate('/admin/finance')} />
+            <FinanceCard label="Pending Settlement Exposure" value={formatMoney(pendingSettlementExposure)} color={unresolvedSettlementsExist ? COLORS.warning : COLORS.primary} help="Value of unresolved payouts or settlement states requiring reconciliation." onClick={() => navigate('/admin/finance')} />
+            <FinanceCard label="Org Token Balance" value={formatMoney(orgTokenBalance)} color={orgTokenNegative ? COLORS.error : COLORS.primary} help="Current reconciled TradeSafe org token balance." onClick={() => navigate('/admin/finance')} />
+            <FinanceCard label="Estimated Margin %" value={estimatedMargin === null || estimatedMargin === undefined ? 'Not available' : `${estimatedMargin}%`} color={marginIndicator.color} help="Net platform profit divided by gross transaction amount." onClick={() => navigate('/admin/finance')} />
+          </div>
+        </div>
 
         {/* Quick Links */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">

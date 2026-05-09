@@ -100,12 +100,49 @@ function groupCountsByDay(rows) {
     .map(([date, count]) => ({ date, count }));
 }
 
+function groupProfitByDay(rows, key = 'net_platform_profit') {
+  const byDay = {};
+  rows.forEach((row) => {
+    const day = String(row.created_at || '').slice(0, 10) || 'Unknown';
+    byDay[day] = (byDay[day] || 0) + (Number(row[key]) || 0);
+  });
+  return Object.entries(byDay)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, amount]) => ({ date, amount: Number(amount.toFixed(2)) }));
+}
+
+function marginBySize(rows) {
+  const buckets = [
+    { size: '< R250', min: 0, max: 250 },
+    { size: 'R250-R500', min: 250, max: 500 },
+    { size: 'R500-R1k', min: 500, max: 1000 },
+    { size: 'R1k-R5k', min: 1000, max: 5000 },
+    { size: '> R5k', min: 5000, max: Infinity },
+  ];
+  return buckets.map((bucket) => {
+    const rowsInBucket = rows.filter((row) => {
+      const gross = Number(row.gross_transaction_amount || 0);
+      return gross >= bucket.min && gross < bucket.max;
+    });
+    const avg = rowsInBucket.length
+      ? rowsInBucket.reduce((sum, row) => sum + (Number(row.profit_margin_percent) || 0), 0) / rowsInBucket.length
+      : 0;
+    return { size: bucket.size, margin: Number(avg.toFixed(2)), count: rowsInBucket.length };
+  });
+}
+
 function downloadCsv(filename, rows) {
   const columns = [
     'transaction_id',
     'deal_id',
     'seller_email',
     'expected_seller_amount',
+    'gross_transaction_amount',
+    'trusttrade_fee_earned',
+    'tradesafe_fees',
+    'net_platform_profit',
+    'profit_margin_percent',
+    'profitable',
     'tradesafe_transaction_id',
     'allocation_id',
     'statement_status',
@@ -117,7 +154,7 @@ function downloadCsv(filename, rows) {
   const escape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
   const csv = [
     columns.join(','),
-    ...rows.map((row) => columns.map((col) => escape(row[col] || (col === 'statement_status' ? statementStatus(row) : ''))).join(',')),
+    ...rows.map((row) => columns.map((col) => escape(row[col] ?? row.profitability?.[col] ?? (col === 'statement_status' ? statementStatus(row) : ''))).join(',')),
   ].join('\n');
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -149,6 +186,10 @@ function fetchFinanceMetrics() {
 
 function fetchReconciliationStatus() {
   return api.get('/admin/finance-reconciliation-status');
+}
+
+function fetchProfitability() {
+  return api.get('/admin/profitability');
 }
 
 function StatusPill({ state }) {
@@ -246,6 +287,15 @@ function DetailModal({ row, tokenStatement, onClose }) {
             <MetricCard label="Payout status" value={row.payout_status || 'Not available'} />
             <MetricCard label="Settlement status" value={row.settlement_status || 'Not available'} />
           </div>
+          {row.profitability && (
+            <div className="grid gap-3 md:grid-cols-5">
+              <MetricCard label="Gross amount" value={money(row.profitability.gross_transaction_amount)} />
+              <MetricCard label="TT fee" value={money(row.profitability.trusttrade_fee_earned)} />
+              <MetricCard label="TradeSafe costs" value={money(row.profitability.total_costs)} />
+              <MetricCard label="Net profit" value={money(row.profitability.net_platform_profit)} tone={row.profitability.net_platform_profit >= 0 ? 'green' : 'red'} />
+              <MetricCard label="Recommendation" value={row.profitability.recommendation || 'N/A'} tone={row.profitability.profitable ? 'green' : 'red'} />
+            </div>
+          )}
 
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <h3 className="text-sm font-semibold text-slate-900">Raw TradeSafe references</h3>
@@ -273,6 +323,7 @@ export default function AdminFinanceDashboard() {
   const [ledger, setLedger] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [reconciliationStatus, setReconciliationStatus] = useState(null);
+  const [profitability, setProfitability] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filters, setFilters] = useState({
@@ -289,14 +340,16 @@ export default function AdminFinanceDashboard() {
     setLoading(true);
     setError('');
     try {
-      const [ledgerRes, metricsRes, statusRes] = await Promise.all([
+      const [ledgerRes, metricsRes, statusRes, profitabilityRes] = await Promise.all([
         fetchFinanceLedger(),
         fetchFinanceMetrics().catch(() => ({ data: null })),
         fetchReconciliationStatus().catch(() => ({ data: null })),
+        fetchProfitability().catch(() => ({ data: null })),
       ]);
       setLedger(ledgerRes.data);
       setMetrics(metricsRes.data);
       setReconciliationStatus(statusRes.data);
+      setProfitability(profitabilityRes.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load finance ledger');
     } finally {
@@ -334,6 +387,15 @@ export default function AdminFinanceDashboard() {
   const summary = ledger?.summary || {};
   const orgAnalysis = ledger?.org_token_revenue_analysis || {};
   const activeAlerts = metrics?.active_alerts || reconciliationStatus?.active_alerts || [];
+  const profitabilityRows = useMemo(() => profitability?.transactions || [], [profitability]);
+  const profitabilityById = useMemo(() => {
+    const byId = {};
+    profitabilityRows.forEach((row) => {
+      if (row.transaction_id) byId[row.transaction_id] = row;
+      if (row.deal_id) byId[row.deal_id] = row;
+    });
+    return byId;
+  }, [profitabilityRows]);
 
   const stateCounts = useMemo(() => {
     const counts = {
@@ -351,7 +413,10 @@ export default function AdminFinanceDashboard() {
   }, [transactionRows]);
 
   const filteredRows = useMemo(() => {
-    return transactionRows.filter((row) => {
+    return transactionRows.map((row) => ({
+      ...row,
+      profitability: profitabilityById[row.transaction_id] || profitabilityById[row.deal_id] || null,
+    })).filter((row) => {
       const statuses = (row.statement_rows || []).map((entry) => String(entry.status || '').toUpperCase());
       if (filters.status === 'PDNG' && !statuses.includes('PDNG')) return false;
       if (filters.status === 'ACSP' && !statuses.includes('ACSP')) return false;
@@ -360,7 +425,7 @@ export default function AdminFinanceDashboard() {
       if (filters.seller && !String(row.seller_email || '').toLowerCase().includes(filters.seller.toLowerCase())) return false;
       return true;
     });
-  }, [transactionRows, filters]);
+  }, [transactionRows, filters, profitabilityById]);
 
   const visibleTokens = useMemo(() => {
     return tokens.filter((token) => {
@@ -384,6 +449,30 @@ export default function AdminFinanceDashboard() {
   const tradeSafeFeeChart = groupByDay(entries, 'tradesafe_fee');
   const unresolvedChart = groupCountsByDay(transactionRows.filter((row) => rowState(row) !== 'reconciled'));
   const orgMovementChart = groupByDay(entries.filter((entry) => entry.token_id === '32fbUbeMWjdor4uHBJdns'));
+  const profitChart = groupProfitByDay(profitabilityRows, 'net_platform_profit');
+  const profitabilityFeeChart = groupProfitByDay(profitabilityRows, 'tradesafe_fees');
+  const marginSizeChart = marginBySize(profitabilityRows);
+  const profitableSplit = [
+    { name: 'Profitable', value: profitability?.profitable_transaction_count || 0 },
+    { name: 'Loss-making', value: profitability?.loss_making_transaction_count || 0 },
+  ];
+  const segmentChart = (profitability?.transaction_segments || []).map((segment) => ({
+    segment: segment.segment,
+    profit: segment.net_profit || 0,
+    margin: segment.margin_percent || 0,
+    lossCount: segment.loss_making_count || 0,
+  }));
+  const recommendedModel = profitability?.recommendation_engine?.recommended_model || 'Not available';
+  const riskyModels = (profitability?.fee_strategy_presets || []).filter((model) => (model.projected_margin_percent ?? 0) < 10);
+  const testChecklist = [
+    'Create test transaction',
+    'Confirm payment',
+    'Confirm delivery',
+    'Verify payout',
+    'Verify reconciliation',
+    'Verify settlement',
+    'Verify profitability',
+  ];
   const agingBuckets = useMemo(() => {
     const buckets = [
       { age: '< 24h', count: 0 },
@@ -510,6 +599,23 @@ export default function AdminFinanceDashboard() {
               />
             </section>
 
+            <section className="mb-6">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-lg font-bold text-slate-950">Unit Economics</h2>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  {profitability?.basis || 'Profitability data unavailable'}
+                </span>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-6">
+                <MetricCard label="Total revenue" value={money(profitability?.total_revenue)} icon={Landmark} />
+                <MetricCard label="TradeSafe costs" value={money(profitability?.total_tradesafe_costs)} icon={CircleDollarSign} />
+                <MetricCard label="Net profit" value={money(profitability?.total_net_profit)} tone={(profitability?.total_net_profit ?? 0) >= 0 ? 'green' : 'red'} />
+                <MetricCard label="Avg profit / txn" value={money(profitability?.average_profit_per_transaction)} />
+                <MetricCard label="Profit margin" value={profitability?.profit_margin_percent === null || profitability?.profit_margin_percent === undefined ? 'Not available' : `${profitability.profit_margin_percent}%`} />
+                <MetricCard label="Loss-making txns" value={profitability?.loss_making_transaction_count ?? 'Not available'} tone={(profitability?.loss_making_transaction_count || 0) > 0 ? 'red' : 'green'} />
+              </div>
+            </section>
+
             <section className="mb-6 grid gap-3 lg:grid-cols-5">
               {Object.entries(stateCounts).map(([state, count]) => {
                 const meta = stateMeta(state);
@@ -574,6 +680,69 @@ export default function AdminFinanceDashboard() {
             </section>
 
             <section className="mb-6 grid gap-4 lg:grid-cols-2">
+              <ChartPanel title="Profit Over Time">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={profitChart}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(value) => money(value)} />
+                    <Area type="monotone" dataKey="amount" stroke="#16a34a" fill="#dcfce7" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ChartPanel>
+              <ChartPanel title="Profitability Fees Over Time">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={profitabilityFeeChart}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(value) => money(value)} />
+                    <Line type="monotone" dataKey="amount" stroke="#dc2626" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartPanel>
+              <ChartPanel title="Margin By Transaction Size">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={marginSizeChart}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="size" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="margin" fill="#0f172a" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartPanel>
+              <ChartPanel title="Profitable vs Loss-making">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={profitableSplit}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                      {profitableSplit.map((entry, index) => (
+                        <Cell key={`profit-split-${index}`} fill={entry.name === 'Profitable' ? '#16a34a' : '#dc2626'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartPanel>
+              <ChartPanel title="Profitability By Segment">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={segmentChart}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="segment" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(value) => money(value)} />
+                    <Bar dataKey="profit" radius={[4, 4, 0, 0]}>
+                      {segmentChart.map((entry, index) => (
+                        <Cell key={`segment-${index}`} fill={entry.profit >= 0 ? '#16a34a' : '#dc2626'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartPanel>
               <ChartPanel title="Fees Earned Over Time">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={feeChart}>
@@ -728,6 +897,121 @@ export default function AdminFinanceDashboard() {
               </div>
             </section>
 
+            <section className="mb-6 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-950">Fee Simulation</h2>
+                <p className="mt-1 text-sm text-slate-600">Live simulation comparison for fee strategy presets and projected monthly economics.</p>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-[920px] w-full text-left text-sm">
+                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2">Model</th>
+                        <th className="px-3 py-2">Revenue</th>
+                        <th className="px-3 py-2">Profit</th>
+                        <th className="px-3 py-2">Margin</th>
+                        <th className="px-3 py-2">Monthly profit</th>
+                        <th className="px-3 py-2">Payout costs</th>
+                        <th className="px-3 py-2">Loss rate</th>
+                        <th className="px-3 py-2">Loss txns</th>
+                        <th className="px-3 py-2">Warning</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(profitability?.fee_strategy_presets || profitability?.fee_simulations || []).map((model, index) => (
+                        <tr key={`sim-${index}`}>
+                          <td className="px-3 py-2 font-semibold">{model.label || `${model.percent}% / min ${money(model.minimum_fee)}`}</td>
+                          <td className="px-3 py-2">{money(model.projected_revenue)}</td>
+                          <td className={`px-3 py-2 font-semibold ${(model.projected_profit || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{money(model.projected_profit)}</td>
+                          <td className="px-3 py-2">{model.projected_margin_percent ?? 'N/A'}%</td>
+                          <td className="px-3 py-2">{money(model.estimated_monthly_profit)}</td>
+                          <td className="px-3 py-2">{money(model.estimated_payout_costs)}</td>
+                          <td className="px-3 py-2">{model.estimated_loss_rate ?? 0}%</td>
+                          <td className="px-3 py-2">{model.loss_making_transaction_count}</td>
+                          <td className="px-3 py-2">
+                            {model.pricing_warning ? (
+                              <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">pricing model risky</span>
+                            ) : (
+                              <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">acceptable</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-950">Pricing Analysis</h2>
+                <p className="mt-1 text-sm text-slate-600">Break-even fee percentage by payment rail and transaction size.</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {Object.entries(profitability?.pricing_analysis?.by_payment_method || {}).map(([method, rows]) => (
+                    <div key={method} className="rounded-lg border border-slate-200 p-3">
+                      <h3 className="text-sm font-bold uppercase text-slate-700">{method}</h3>
+                      <div className="mt-2 space-y-1 text-xs text-slate-600">
+                        {rows.slice(0, 4).map((row) => (
+                          <p key={`${method}-${row.transaction_size}`}>
+                            R{row.transaction_size}: <span className="font-semibold text-slate-900">{row.break_even_fee_percent}%</span> break-even
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
+                  {(profitability?.recommendations || []).map((item, index) => (
+                    <p key={`rec-${index}`} className="mb-1 last:mb-0">{item}</p>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="mb-6 grid gap-4 lg:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-950">Recommendation Engine</h2>
+                <div className="mt-4 space-y-3 text-sm text-slate-700">
+                  <p><span className="font-semibold">Recommended model:</span> {recommendedModel}</p>
+                  <p><span className="font-semibold">Minimum fee:</span> {money(profitability?.recommendation_engine?.recommended_minimum_fee)}</p>
+                  <p><span className="font-semibold">Safer fee %:</span> {profitability?.recommendation_engine?.recommended_fee_percent ?? 'N/A'}%</p>
+                  <p><span className="font-semibold">Surcharge methods:</span> {(profitability?.recommendation_engine?.surcharge_payment_methods || []).join(', ') || 'None flagged'}</p>
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-950">Operational Recommendations</h2>
+                <div className="mt-4 space-y-2 text-sm text-slate-700">
+                  {(profitability?.recommendation_engine?.operational_recommendations || profitability?.recommendations || []).slice(0, 6).map((item, index) => (
+                    <p key={`op-rec-${index}`}>{item}</p>
+                  ))}
+                  {riskyModels.length > 0 && <p className="font-semibold text-red-700">Some projected models are below 10% margin: pricing model risky.</p>}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-950">Production Test Checklist</h2>
+                <div className="mt-4 space-y-2">
+                  {testChecklist.map((item, index) => (
+                    <label key={item} className="flex items-center gap-2 text-sm text-slate-700">
+                      <input type="checkbox" className="rounded border-slate-300" />
+                      <span>{index + 1}. {item}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <h2 className="text-lg font-bold text-slate-950">Transaction Segmentation</h2>
+              <div className="mt-4 grid gap-3 md:grid-cols-4">
+                {(profitability?.transaction_segments || []).map((segment) => (
+                  <div key={segment.segment} className={`rounded-lg border p-3 ${segment.loss_making ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                    <p className="text-sm font-bold text-slate-950">{segment.segment}</p>
+                    <p className="mt-2 text-xs text-slate-600">Transactions: {segment.transaction_count}</p>
+                    <p className="text-xs text-slate-600">Net profit: {money(segment.net_profit)}</p>
+                    <p className="text-xs text-slate-600">Margin: {segment.margin_percent ?? 'N/A'}%</p>
+                    {segment.loss_making && <p className="mt-2 text-xs font-semibold text-red-700">loss-making segment</p>}
+                  </div>
+                ))}
+              </div>
+            </section>
+
             <section className="mb-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-col justify-between gap-3 border-b border-slate-200 p-4 md:flex-row md:items-center">
                 <div>
@@ -740,12 +1024,18 @@ export default function AdminFinanceDashboard() {
                 </button>
               </div>
               <div className="overflow-x-auto">
-                <table className="min-w-[1180px] w-full text-left text-sm">
+                <table className="min-w-[1580px] w-full text-left text-sm">
                   <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                     <tr>
                       <th className="px-4 py-3">Transaction ID</th>
                       <th className="px-4 py-3">Seller</th>
                       <th className="px-4 py-3">Amount</th>
+                      <th className="px-4 py-3">Gross amount</th>
+                      <th className="px-4 py-3">TT fee</th>
+                      <th className="px-4 py-3">TS fees</th>
+                      <th className="px-4 py-3">Net profit</th>
+                      <th className="px-4 py-3">Margin</th>
+                      <th className="px-4 py-3">Profitable</th>
                       <th className="px-4 py-3">Expected payout</th>
                       <th className="px-4 py-3">TradeSafe reference</th>
                       <th className="px-4 py-3">Statement status</th>
@@ -765,6 +1055,18 @@ export default function AdminFinanceDashboard() {
                         </td>
                         <td className="px-4 py-3 text-slate-700">{row.seller_email || 'Not available'}</td>
                         <td className="px-4 py-3">{money(row.expected_seller_amount)}</td>
+                        <td className="px-4 py-3">{money(row.profitability?.gross_transaction_amount)}</td>
+                        <td className="px-4 py-3">{money(row.profitability?.trusttrade_fee_earned)}</td>
+                        <td className="px-4 py-3">{money(row.profitability?.tradesafe_fees)}</td>
+                        <td className={`px-4 py-3 font-semibold ${(row.profitability?.net_platform_profit || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                          {money(row.profitability?.net_platform_profit)}
+                        </td>
+                        <td className="px-4 py-3">{row.profitability?.profit_margin_percent ?? 'N/A'}%</td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.profitability?.profitable ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                            {row.profitability?.profitable ? 'Yes' : row.profitability ? 'No · fee too low' : 'N/A'}
+                          </span>
+                        </td>
                         <td className="px-4 py-3">{money(row.expected_seller_amount)}</td>
                         <td className="px-4 py-3 font-mono text-xs">{shortId(row.tradesafe_transaction_id || row.allocation_id)}</td>
                         <td className="px-4 py-3">{statementStatus(row)}</td>
@@ -776,7 +1078,7 @@ export default function AdminFinanceDashboard() {
                     ))}
                     {filteredRows.length === 0 && (
                       <tr>
-                        <td colSpan="10" className="px-4 py-8 text-center text-slate-500">No finance rows match the current filters.</td>
+                        <td colSpan="16" className="px-4 py-8 text-center text-slate-500">No finance rows match the current filters.</td>
                       </tr>
                     )}
                   </tbody>

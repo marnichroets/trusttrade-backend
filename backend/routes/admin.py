@@ -2430,6 +2430,17 @@ async def get_admin_finance_metrics(request: Request):
     return await get_finance_metrics(db)
 
 
+@router.get("/profitability")
+async def get_admin_profitability(request: Request, limit: int = 500):
+    """Read-only unit economics and profitability analysis."""
+    db = get_database()
+    await require_admin(request, db)
+
+    from services.reconciliation_service import get_profitability_analysis
+
+    return await get_profitability_analysis(db, limit=max(1, min(limit, 1000)))
+
+
 @router.get("/finance-reconciliation-status")
 async def get_admin_finance_reconciliation_status(request: Request):
     """Read-only status for reconciliation scheduler, active alerts, and recent logs."""

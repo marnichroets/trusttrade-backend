@@ -27,14 +27,14 @@ const D = {
 };
 
 const STATUS = {
-  PENDING:         { label: "Waiting for freelancer to accept",        color: "#D97706", bg: "#1A1200", dot: "#F59E0B" },
-  ACCEPTED:        { label: "Fund escrow to start work",               color: "#3B82F6", bg: "#071428", dot: "#3B82F6" },
-  PAYMENT_PENDING: { label: "Awaiting payment confirmation",           color: "#3B82F6", bg: "#071428", dot: "#60A5FA" },
-  FUNDED:          { label: "Freelancer is working",                   color: "#10B981", bg: "#041A0F", dot: "#10B981" },
-  DELIVERED:       { label: "Review and approve to release payment",   color: "#8B5CF6", bg: "#100820", dot: "#8B5CF6" },
-  APPROVED:        { label: "Complete",                                color: "#10B981", bg: "#041A0F", dot: "#10B981" },
-  COMPLETE:        { label: "Complete",                                color: "#10B981", bg: "#041A0F", dot: "#10B981" },
-  DISPUTED:        { label: "Admin investigating",                     color: "#EF4444", bg: "#1A0808", dot: "#EF4444" },
+  PENDING:         { label: "Awaiting agreement",                      color: "#D97706", bg: "#1A1200", dot: "#F59E0B" },
+  ACCEPTED:        { label: "Awaiting payment",                        color: "#3B82F6", bg: "#071428", dot: "#3B82F6" },
+  PAYMENT_PENDING: { label: "Awaiting payment",                        color: "#3B82F6", bg: "#071428", dot: "#60A5FA" },
+  FUNDED:          { label: "Funds secured in escrow",                 color: "#10B981", bg: "#041A0F", dot: "#10B981" },
+  DELIVERED:       { label: "Awaiting buyer confirmation",             color: "#8B5CF6", bg: "#100820", dot: "#8B5CF6" },
+  APPROVED:        { label: "Payout processing · 1-2 business days",    color: "#10B981", bg: "#041A0F", dot: "#10B981" },
+  COMPLETE:        { label: "Completed",                               color: "#10B981", bg: "#041A0F", dot: "#10B981" },
+  DISPUTED:        { label: "Disputed / protection hold",              color: "#EF4444", bg: "#1A0808", dot: "#EF4444" },
 };
 
 const PAYMENT_METHODS = [
@@ -138,7 +138,7 @@ function StatusBadge({ status }) {
 
 function ProgressTracker({ status }) {
   const steps = ["PENDING", "ACCEPTED", "FUNDED", "DELIVERED", "COMPLETE"];
-  const stepLabels = { PENDING: "Created", ACCEPTED: "Accepted", FUNDED: "Funded", DELIVERED: "Delivered", COMPLETE: "Done" };
+    const stepLabels = { PENDING: "Agreement", ACCEPTED: "Payment", FUNDED: "Escrow", DELIVERED: "Confirm", COMPLETE: "Complete" };
   const cur = status === "DISPUTED" ? "DELIVERED" : status === "PAYMENT_PENDING" ? "ACCEPTED" : status;
   const curIdx = steps.indexOf(cur);
   return (
@@ -285,7 +285,7 @@ function FundPanel({ deal, onFunded }) {
         <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Fund Secure Vault Escrow</h3>
       </div>
       <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 16px", lineHeight: 1.5 }}>
-        Choose a payment method. Funds are held in TradeSafe Escrow and only released when <strong style={{ color: D.text }}>you approve</strong> the delivery.
+          Choose a payment method. Funds are held in TradeSafe Escrow and only released when <strong style={{ color: D.text }}>you approve</strong> the delivery. Bank settlement may take 1-2 business days.
       </p>
 
       {/* Payment method selection */}
@@ -516,7 +516,7 @@ export function CreateSmartDeal() {
           <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>New Smart Deal</h1>
         </div>
         <p style={{ fontSize: 13, color: D.textMuted, margin: 0 }}>
-          Funds held in Secure Vault escrow. Payment is only released when you approve the delivery.
+          Funds held in Secure Vault escrow. Funds release only when you approve delivery. Bank settlement may take 1-2 business days.
         </p>
       </div>
 
@@ -594,7 +594,7 @@ export function CreateSmartDeal() {
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#070D18", border: `1px solid ${D.accent}33`, marginBottom: 18 }}>
           <Shield size={15} color={D.accent} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 12, color: D.textMuted, margin: 0, lineHeight: 1.5 }}>
-            Your freelancer will accept, you fund the Secure Vault, they deliver, and you approve to release payment. No auto-release — you stay in control.
+            Your freelancer will accept, you fund the Secure Vault, they deliver, and you approve to release funds from escrow. Disputes pause payout before release.
           </p>
         </div>
 
@@ -684,7 +684,7 @@ export function SmartDealDetail() {
   }
 
   async function handleApprove() {
-    if (!window.confirm("Approve this deliverable and release payment to the freelancer?")) return;
+    if (!window.confirm("Approve this deliverable and release funds from escrow? Bank settlement may take 1-2 business days.")) return;
     setApproving(true); setActionError(null);
     try { await apiFetch(`/api/smart-deals/${dealId}/approve`, { method: "POST" }); await load(); }
     catch (e) { setActionError(e.message); } finally { setApproving(false); }
@@ -851,7 +851,7 @@ export function SmartDealDetail() {
             <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Mark as delivered</h3>
           </div>
           <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 14px", lineHeight: 1.5 }}>
-            When your work is complete, mark it as delivered. The client will review and manually approve to release payment.
+            When your work is complete, mark it as delivered. The client will review and manually approve escrow release.
           </p>
           <button onClick={handleDeliver} disabled={delivering} style={{ ...btn(D.purple), opacity: delivering ? 0.6 : 1 }}>
             {delivering ? <><Spinner /> Submitting…</> : <><CheckCircle size={14} /> Mark as delivered</>}
@@ -867,11 +867,11 @@ export function SmartDealDetail() {
             <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Review the deliverable</h3>
           </div>
           <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 14px", lineHeight: 1.5 }}>
-            Approve to release payment to the freelancer. Not satisfied? Raise a dispute and admin will investigate.
+            Approve to release funds from escrow. Bank settlement may take 1-2 business days. Not satisfied? Raise a dispute to pause payout before release.
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button onClick={handleApprove} disabled={approving} style={{ ...btn(D.success), flex: 1, minWidth: 160, opacity: approving ? 0.6 : 1 }}>
-              {approving ? <><Spinner /> Releasing…</> : <><CheckCircle size={14} /> Approve & release payment</>}
+              {approving ? <><Spinner /> Releasing…</> : <><CheckCircle size={14} /> Approve release</>}
             </button>
             <button onClick={() => setShowDisputeForm(v => !v)} style={{ ...btn(D.danger), minWidth: 100 }}>
               <AlertTriangle size={14} /> Dispute
@@ -935,7 +935,7 @@ export function SmartDealDetail() {
       {(deal.status === "COMPLETE" || deal.status === "APPROVED") && (
         <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#041A0F", border: `1px solid ${D.success}44`, borderLeft: `3px solid ${D.success}`, marginBottom: 14 }}>
           <CheckCircle size={15} color={D.success} style={{ flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: 13, color: D.success, margin: 0, fontWeight: 500 }}>Deal complete — payment has been released to the freelancer.</p>
+          <p style={{ fontSize: 13, color: D.success, margin: 0, fontWeight: 500 }}>Funds released from escrow. Bank settlement may take 1-2 business days.</p>
         </div>
       )}
       {deal.dispute && (

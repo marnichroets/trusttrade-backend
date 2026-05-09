@@ -234,7 +234,7 @@ function LandingPage() {
                 Money moves only when trust is earned.
               </h1>
               <p style={{ color: MUTED }} className="mt-7 max-w-2xl text-lg leading-8 sm:text-xl">
-                TrustTrade turns risky marketplace deals into protected escrow transactions, with payment locked, delivery tracked, and payout released at the right moment.
+                TrustTrade turns risky marketplace deals into protected escrow transactions, with payment locked, delivery tracked, and bank settlement handled after escrow release.
               </p>
 
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -286,19 +286,19 @@ function CinematicMesh({ reduceMotion }) {
   return (
     <div className="absolute inset-0 overflow-hidden">
       <motion.div
-        animate={reduceMotion ? {} : { x: [0, 80, -45, 0], y: [0, -55, 35, 0], scale: [1, 1.08, 0.96, 1] }}
+        animate={reduceMotion ? {} : { x: [0, 34, -22, 0], y: [0, -24, 18, 0], scale: [1, 1.035, 0.98, 1] }}
         transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute left-[-16%] top-[-24%] h-[620px] w-[620px] rounded-full bg-sky-500/16 blur-[150px]"
+        className="absolute left-[-12%] top-[-18%] h-[560px] w-[560px] rounded-full bg-sky-500/9 blur-[180px]"
       />
       <motion.div
-        animate={reduceMotion ? {} : { x: [0, -70, 60, 0], y: [0, 55, -35, 0], scale: [1, 0.96, 1.1, 1] }}
+        animate={reduceMotion ? {} : { x: [0, -34, 28, 0], y: [0, 26, -18, 0], scale: [1, 0.98, 1.04, 1] }}
         transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute right-[-14%] top-[12%] h-[560px] w-[560px] rounded-full bg-emerald-400/12 blur-[155px]"
+        className="absolute right-[-10%] top-[16%] h-[500px] w-[500px] rounded-full bg-emerald-400/7 blur-[185px]"
       />
       <motion.div
-        animate={reduceMotion ? {} : { x: [0, 50, -70, 0], y: [0, -30, 70, 0] }}
+        animate={reduceMotion ? {} : { x: [0, 24, -32, 0], y: [0, -18, 34, 0] }}
         transition={{ duration: 26, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute bottom-[-18%] left-[22%] h-[430px] w-[720px] rounded-full bg-blue-700/10 blur-[165px]"
+        className="absolute bottom-[-16%] left-[24%] h-[390px] w-[660px] rounded-full bg-blue-700/6 blur-[195px]"
       />
       <div
         className="absolute inset-0 opacity-[0.16]"
@@ -468,7 +468,7 @@ function LiveEscrowConsole({ reduceMotion }) {
           <MiniSignal label="Amount" value="R 18,500" icon="WalletCards" tone={BLUE} />
           <MiniSignal label="Escrow" value="Locked" icon="Lock" tone={GREEN} />
           <MiniSignal label="Dispute" value="Armed" icon="Scale" tone="#fb7185" />
-          <MiniSignal label="Payout" value="Held" icon="Banknote" tone={GOLD} />
+          <MiniSignal label="Payout" value="1-2 days" icon="Banknote" tone={GOLD} />
         </div>
 
         <div className="mt-5">
@@ -592,7 +592,7 @@ function EscrowPipeline({ reduceMotion }) {
               A payment pipeline with a lock at the center.
             </h2>
             <p style={{ color: MUTED }} className="mt-5 max-w-xl text-lg leading-8">
-              The core interaction is simple: money flows in, escrow holds it, delivery creates proof, and payout unlocks only after the right confirmation.
+              The core interaction is simple: money flows in, escrow holds it, delivery creates proof, and funds release only after the right confirmation. Bank settlement may take 1-2 business days.
             </p>
           </motion.div>
 
@@ -862,7 +862,7 @@ function FinalCta({ handleGetStarted }) {
               Build the deal around escrow from the first click.
             </h2>
             <p style={{ color: MUTED }} className="mt-4 max-w-2xl text-lg leading-8">
-              Create a secure transaction and give both sides a cleaner way to trade.
+              Create a secure transaction and give both sides a cleaner way to trade. Funds released from escrow settle through the bank in 1-2 business days.
             </p>
           </div>
           <button

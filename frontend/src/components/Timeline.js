@@ -1,14 +1,16 @@
 import { CheckCircle, Circle, Clock } from 'lucide-react';
+import { resolveEscrowUiState } from './transactionState';
 
 function Timeline({ transaction }) {
   const steps = [
-    { label: 'Transaction Created', key: 'created' },
-    { label: 'Seller Confirmed', key: 'seller_confirmed' },
-    { label: 'Payment Received', key: 'payment_received' },
-    { label: 'Item Shipped', key: 'item_shipped' },
-    { label: 'Delivery Confirmed', key: 'delivery_confirmed' },
-    { label: 'Funds Released', key: 'funds_released' }
+    { label: 'Awaiting agreement', key: 'created' },
+    { label: 'Awaiting payment', key: 'payment_received' },
+    { label: 'Funds secured in escrow', key: 'funds_secured' },
+    { label: 'Delivery in progress', key: 'item_shipped' },
+    { label: 'Awaiting buyer confirmation', key: 'delivery_confirmed' },
+    { label: 'Funds released', key: 'funds_released' }
   ];
+  const uiState = resolveEscrowUiState(transaction);
 
   const getStepStatus = (key) => {
     switch(key) {
@@ -17,25 +19,22 @@ function Timeline({ transaction }) {
       case 'seller_confirmed':
         return transaction.seller_confirmed ? 'complete' : 'pending';
       case 'payment_received':
-        return transaction.payment_status === 'Ready for Payment' || transaction.payment_status === 'Released' ? 'complete' : 'pending';
+        return uiState.progressIndex >= 2 ? 'complete' : 'pending';
+      case 'funds_secured':
+        return uiState.progressIndex >= 3 ? 'complete' : 'pending';
       case 'item_shipped':
-        return transaction.payment_status === 'Released' ? 'complete' : 'pending';
+        return uiState.progressIndex >= 4 ? 'complete' : 'pending';
       case 'delivery_confirmed':
-        return transaction.delivery_confirmed ? 'complete' : 'pending';
+        return uiState.progressIndex >= 5 ? 'complete' : 'pending';
       case 'funds_released':
-        return transaction.release_status === 'Released' ? 'complete' : 'pending';
+        return uiState.terminal ? 'complete' : 'pending';
       default:
         return 'pending';
     }
   };
 
   const getCurrentStep = () => {
-    if (transaction.release_status === 'Released') return 5;
-    if (transaction.delivery_confirmed) return 4;
-    if (transaction.payment_status === 'Released') return 3;
-    if (transaction.payment_status === 'Ready for Payment') return 2;
-    if (transaction.seller_confirmed) return 1;
-    return 0;
+    return Math.min(uiState.progressIndex, steps.length - 1);
   };
 
   const currentStep = getCurrentStep();
@@ -76,7 +75,7 @@ function Timeline({ transaction }) {
                 'text-slate-400'
               }`}>{step.label}</p>
               {isActive && (
-                <p className="text-sm text-slate-500 mt-1">In Progress</p>
+                <p className="text-sm text-slate-500 mt-1">{uiState.secondaryLabel || 'In progress'}</p>
               )}
             </div>
           </div>

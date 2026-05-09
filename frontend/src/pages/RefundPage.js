@@ -71,7 +71,7 @@ export default function RefundPage() {
               </div>
               <div className="flex items-start gap-3">
                 <XCircle className="w-5 h-5 text-red-500 mt-0.5" />
-                <p className="text-slate-600">Funds already released to seller after delivery confirmation</p>
+                <p className="text-slate-600">Funds already released from escrow after delivery confirmation. Bank settlement may take 1-2 business days.</p>
               </div>
             </div>
           </section>

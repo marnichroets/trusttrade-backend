@@ -1,7 +1,7 @@
 import { Shield, CheckCircle2, Truck, Clock, AlertTriangle, XCircle, CreditCard, Banknote, Lock, ArrowRight } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
-import { resolveEscrowUiState } from './transactionState';
+import { PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from './transactionState';
 
 // Main transaction status card - shows current state prominently with clear next action
 export function TransactionStatusCard({ transaction, userRole }) {
@@ -102,8 +102,8 @@ function getStatusConfig(state, userRole, transaction) {
   const configs = {
     CREATED: {
       icon: Clock,
-      title: 'Transaction Created',
-      badge: 'Pending',
+      title: 'Awaiting agreement',
+      badge: 'Awaiting agreement',
       description: 'Waiting for both parties to review and confirm the transaction details.',
       nextAction: isSeller ? 'Confirm the transaction details to proceed' : 'Waiting for seller to confirm',
       bgColor: '#f8fafc',
@@ -115,7 +115,7 @@ function getStatusConfig(state, userRole, transaction) {
     },
     PENDING_CONFIRMATION: {
       icon: Clock,
-      title: 'Awaiting Confirmation',
+      title: 'Awaiting agreement',
       badge: 'Action Needed',
       description: 'Both buyer and seller must confirm the transaction details before payment.',
       nextAction: isSeller 
@@ -150,7 +150,7 @@ function getStatusConfig(state, userRole, transaction) {
     },
     AWAITING_PAYMENT: {
       icon: CreditCard,
-      title: 'Awaiting Payment',
+      title: 'Awaiting payment',
       badge: 'Pay Now',
       description: isBuyer 
         ? 'Escrow is ready. Complete payment to secure your purchase.' 
@@ -168,7 +168,7 @@ function getStatusConfig(state, userRole, transaction) {
     },
     PAYMENT_SECURED: {
       icon: Shield,
-      title: 'Funds Secured in Escrow',
+      title: 'Funds secured in escrow',
       badge: 'Protected',
       description: isBuyer 
         ? 'Your payment is safely held in escrow. Seller can now ship the item.'
@@ -176,7 +176,7 @@ function getStatusConfig(state, userRole, transaction) {
       nextAction: isSeller 
         ? 'Ship the item and click "Start Delivery"'
         : 'Waiting for seller to ship',
-      escrowNotice: 'Funds only released when buyer confirms receipt. Bank payout: 1-2 business days.',
+      escrowNotice: 'Funds release from escrow only when release conditions are met.',
       bgColor: '#d1fae5',
       borderClass: 'border-emerald-300',
       iconBgClass: 'bg-emerald-100',
@@ -186,13 +186,13 @@ function getStatusConfig(state, userRole, transaction) {
     },
     DELIVERY_IN_PROGRESS: {
       icon: Truck,
-      title: 'Delivery in Progress',
+      title: 'Delivery in progress',
       badge: 'Shipped',
       description: isBuyer 
         ? 'Item has been shipped. Confirm receipt once delivered.'
         : 'Item shipped. Waiting for buyer to confirm receipt.',
       nextAction: isBuyer 
-        ? 'Click "Confirm Receipt" once you receive the item'
+        ? 'Confirm receipt once you receive the item'
         : 'Waiting for buyer confirmation',
       escrowNotice: 'Funds remain protected until buyer confirms delivery.',
       bgColor: '#e0e7ff',
@@ -204,11 +204,11 @@ function getStatusConfig(state, userRole, transaction) {
     },
     DELIVERED: {
       icon: CheckCircle2,
-      title: 'Delivery Confirmed',
-      badge: 'Complete',
-      description: 'Buyer confirmed receipt. Funds are being released.',
-      nextAction: isSeller ? 'Funds will arrive in 1-2 business days' : null,
-      escrowNotice: 'Bank payouts processed at 10:00 and 15:00 daily.',
+      title: 'Awaiting buyer confirmation',
+      badge: 'Awaiting confirmation',
+      description: 'Delivery has been marked complete. Buyer confirmation is required before funds release.',
+      nextAction: isBuyer ? 'Confirm receipt only when satisfied' : 'Waiting for buyer confirmation',
+      escrowNotice: 'Disputes pause payout before release.',
       bgColor: '#d1fae5',
       borderClass: 'border-emerald-300',
       iconBgClass: 'bg-emerald-100',
@@ -218,12 +218,10 @@ function getStatusConfig(state, userRole, transaction) {
     },
     COMPLETED: {
       icon: Banknote,
-      title: 'Transaction Complete',
-      badge: 'Funds Released',
-      description: isSeller 
-        ? 'Funds have been released to your bank account.'
-        : 'Transaction complete. Thank you for using TrustTrade!',
-      escrowNotice: 'Thank you for trusting TrustTrade for your secure transaction.',
+      title: 'Completed',
+      badge: PAYOUT_TIMING_SHORT,
+      description: PAYOUT_TIMING_COPY,
+      escrowNotice: 'No further action required.',
       bgColor: '#d1fae5',
       borderClass: 'border-green-300',
       iconBgClass: 'bg-green-100',
@@ -233,9 +231,9 @@ function getStatusConfig(state, userRole, transaction) {
     },
     DISPUTED: {
       icon: AlertTriangle,
-      title: 'Dispute Opened',
+      title: 'Disputed / protection hold',
       badge: 'Under Review',
-      description: 'This transaction is under review by TrustTrade support.',
+      description: 'Disputes pause payout before release while TrustTrade reviews the case.',
       nextAction: 'Our team will contact both parties within 24 hours',
       escrowNotice: 'Funds remain protected while we investigate.',
       bgColor: '#fef3c7',

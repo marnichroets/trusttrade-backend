@@ -9,11 +9,11 @@ const FAQS = [
     items: [
       {
         q: 'What is escrow and how does TrustTrade work?',
-        a: 'Escrow is a secure holding arrangement where funds are kept by a neutral third party until both buyer and seller fulfil their obligations. When you create a transaction on TrustTrade, the buyer pays into a secure escrow account. The seller ships or delivers the item. Once the buyer confirms receipt, the funds are released to the seller — protecting both parties from fraud.',
+        a: 'Escrow is a secure holding arrangement where funds are kept by a neutral third party until both buyer and seller fulfil their obligations. When you create a transaction on TrustTrade, the buyer pays into a secure escrow account. The seller ships or delivers the item. Once the buyer confirms receipt, funds are released from escrow. Bank settlement may take 1-2 business days.',
       },
       {
         q: 'How do I start a transaction?',
-        a: 'Log in and click "New Transaction". Enter the item description, price, and add the other party\'s email or TrustTrade username. Share the transaction link with your buyer or seller. The buyer pays via EFT or card — funds are held securely. Once delivery is confirmed, funds are released.',
+        a: 'Log in and click "New Transaction". Enter the item description, price, and add the other party\'s email or TrustTrade username. Share the transaction link with your buyer or seller. The buyer pays via EFT or card, funds are held securely, and delivery confirmation releases funds from escrow.',
       },
       {
         q: 'What is a Smart Deal?',
@@ -38,7 +38,7 @@ const FAQS = [
       },
       {
         q: 'How long does it take to receive my payout?',
-        a: 'Once the buyer confirms delivery and funds are released, payouts are processed at 10:00 and 15:00 on business days. Bank transfers typically arrive within 1–2 business days depending on your bank.',
+        a: 'Funds released from escrow. Bank settlement may take 1-2 business days depending on your bank.',
       },
       {
         q: 'Which banks are supported for payouts?',

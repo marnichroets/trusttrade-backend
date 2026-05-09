@@ -153,7 +153,7 @@ function ShareTransaction() {
           <p className="text-slate-600">Review the details below and join to participate</p>
           <div className="mt-3 inline-flex items-center gap-2 text-slate-500 text-sm">
             <Clock className="w-4 h-4" />
-            Funds released daily at 10:00 & 15:00
+            Funds released from escrow. Bank settlement may take 1-2 business days.
           </div>
         </div>
 

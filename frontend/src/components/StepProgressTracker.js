@@ -3,12 +3,12 @@ import { CheckCircle } from 'lucide-react';
 import { resolveEscrowUiState } from './transactionState';
 
 const STEPS = [
-  { key: 'CREATED', label: 'Created', short: 'Created' },
-  { key: 'CONFIRMED', label: 'Confirmed', short: 'Confirmed' },
-  { key: 'PAID', label: 'Paid', short: 'Paid' },
-  { key: 'SECURED', label: 'Secured', short: 'Secured' },
-  { key: 'DELIVERED', label: 'Delivered', short: 'Delivered' },
-  { key: 'RELEASED', label: 'Released', short: 'Released' }
+  { key: 'CREATED', label: 'Awaiting agreement', short: 'Agreement' },
+  { key: 'CONFIRMED', label: 'Awaiting payment', short: 'Payment' },
+  { key: 'PAID', label: 'Funds secured in escrow', short: 'Secured' },
+  { key: 'SECURED', label: 'Delivery in progress', short: 'Delivery' },
+  { key: 'DELIVERED', label: 'Awaiting buyer confirmation', short: 'Confirm' },
+  { key: 'RELEASED', label: 'Funds released', short: 'Released' }
 ];
 
 // Map transaction states to step index

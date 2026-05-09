@@ -259,7 +259,7 @@ function BankingSettings() {
             Banking Details Verified
           </h2>
           <p style={{ color: V.sub, fontSize: 13, marginBottom: 6 }}>
-            Your banking details are securely saved. Payouts will be sent to your verified account.
+            Your banking details are securely saved. Funds released from escrow settle to your verified account in 1-2 business days.
           </p>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, color: V.dim, fontSize: 12, fontFamily: V.mono, marginBottom: 24 }}>
             <Lock size={12} /> Details stored securely with our payment processor

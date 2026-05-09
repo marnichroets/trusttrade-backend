@@ -5,7 +5,7 @@ import Timeline from '../components/Timeline';
 import { TransactionTimeline } from '../components/TransactionTimeline';
 import TransactionStatusCard from '../components/TransactionStatusCard';
 import StepProgressTracker from '../components/StepProgressTracker';
-import { mapEscrowUiStateToTimelineState, resolveEscrowUiState } from '../components/transactionState';
+import { mapEscrowUiStateToTimelineState, PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from '../components/transactionState';
 import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
 import api from '../utils/api';
@@ -60,15 +60,15 @@ function FinalizedEscrowState({ transaction, uiState }) {
         </div>
         <div style={{ flex: 1 }}>
           <p style={{ fontSize: 15, fontWeight: 800, color: '#064e3b', margin: '0 0 5px' }}>
-            {uiState.state === 'COMPLETED' ? 'Transaction finalized' : 'Funds released successfully'}
+            Funds released from escrow
           </p>
           <p style={{ fontSize: 13, color: '#047857', margin: '0 0 14px', lineHeight: 1.6 }}>
-            Funds have passed escrow release checks. No further confirmation or release action is required.
+            {PAYOUT_TIMING_COPY} No further action required.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
             {[
               ['Escrow state', uiState.label],
-              ['Payout ETA', 'Completed'],
+              ['Settlement', PAYOUT_TIMING_SHORT],
               ['Completed', formatDetailDate(completedAt)],
               ['Protection', 'TrustTrade escrow'],
             ].map(([label, value]) => (
@@ -272,7 +272,7 @@ function TransactionDetail() {
   const handleConfirmDelivery = async () => {
     if (!window.confirm('Are you sure you want to confirm delivery and release the funds to the seller?')) return;
     setConfirming(true);
-    try { await api.patch(`${API}/transactions/${transactionId}/delivery`, { delivery_confirmed: true }, { withCredentials: true }); toast.success('Delivery confirmed and funds released!'); fetchData(); }
+    try { await api.patch(`${API}/transactions/${transactionId}/delivery`, { delivery_confirmed: true }, { withCredentials: true }); toast.success(PAYOUT_TIMING_COPY); fetchData(); }
     catch (error) { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery'); }
     finally { setConfirming(false); }
   };
@@ -348,17 +348,17 @@ function TransactionDetail() {
 
   const handleAcceptDelivery = async () => {
     if (!payoutReadiness?.payout_ready) { await checkPayoutReadiness(); if (!payoutReadiness?.payout_ready) { const issues = payoutReadiness?.issues?.join(', ') || 'Unknown issue'; toast.warning(`Seller payout setup incomplete. ${issues}`); } }
-    if (!window.confirm('Confirm you have received the item? This will release funds to the seller. This action cannot be undone.')) return;
+    if (!window.confirm('Confirm you have received the item? This will release funds from escrow. Bank settlement may take 1-2 business days. This action cannot be undone.')) return;
     setAcceptingDelivery(true);
-    try { const response = await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(`Delivery confirmed! R${response.data.net_amount?.toFixed(2) || ''} released to seller.`); fetchData(); }
+    try { await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(PAYOUT_TIMING_COPY); fetchData(); }
     catch (error) { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); }
     finally { setAcceptingDelivery(false); }
   };
 
   const handleManualAcceptDelivery = async () => {
-    if (!window.confirm('MANUAL OVERRIDE: Confirm receipt and release funds?')) return;
+    if (!window.confirm('MANUAL OVERRIDE: Confirm receipt and release funds from escrow? Bank settlement may take 1-2 business days.')) return;
     setAcceptingDelivery(true);
-    try { const response = await api.post(`${API}/tradesafe/manual-accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(`Delivery confirmed! R${response.data.net_amount?.toFixed(2) || ''} released to seller.`); fetchData(); }
+    try { await api.post(`${API}/tradesafe/manual-accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(PAYOUT_TIMING_COPY); fetchData(); }
     catch (error) { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); }
     finally { setAcceptingDelivery(false); }
   };
@@ -646,7 +646,7 @@ function TransactionDetail() {
               <div>
                 <p style={{ fontSize: 13, fontWeight: 600, color: '#fff', margin: '0 0 6px' }}>TrustTrade Escrow Protection</p>
                 <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {['Funds held securely in escrow', 'Seller paid only after buyer confirms delivery', 'Bank payout within 1–2 business days after release'].map((t, i) => (
+                  {['Funds held securely in escrow', 'Seller paid only after release conditions are met', PAYOUT_TIMING_COPY].map((t, i) => (
                     <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
                       <CheckCircle2 size={11} color={i < 2 ? '#10b981' : '#60a5fa'} />
                       {t}
@@ -895,7 +895,7 @@ function TransactionDetail() {
                     <CheckCircle2 size={18} color="#059669" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: '0 0 4px' }}>Confirm Receipt</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: '0 0 4px' }}>Confirm receipt</p>
                     <p style={{ fontSize: 13, color: '#059669', margin: '0 0 4px' }}>Seller has dispatched. Confirm when you've received the item.</p>
                     <p style={{ fontSize: 12, color: '#047857', background: '#d1fae5', padding: '6px 10px', borderRadius: 6, margin: '0 0 14px' }}><strong>Important:</strong> Only confirm if satisfied. This cannot be undone.</p>
                     {payoutReadiness && !payoutReadiness.payout_ready && (
@@ -907,7 +907,7 @@ function TransactionDetail() {
                     )}
                     {checkingPayoutReadiness && <p style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}><Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> Checking payout readiness…</p>}
                     <button onClick={handleAcceptDelivery} disabled={acceptingDelivery || checkingPayoutReadiness} data-testid="accept-delivery-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: (acceptingDelivery || checkingPayoutReadiness) ? 0.6 : 1 }}>
-                      {acceptingDelivery ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : <><CheckCircle2 size={13} /> Confirm Receipt & Release Funds</>}
+                      {acceptingDelivery ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : <><CheckCircle2 size={13} /> Confirm receipt</>}
                     </button>
                   </div>
                 </div>
@@ -922,15 +922,15 @@ function TransactionDetail() {
                     <CheckCircle2 size={18} color="#059669" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: '0 0 4px' }}>Confirm Receipt</p>
-                    <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Confirm delivery to release funds to the seller.</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: '0 0 4px' }}>Confirm receipt</p>
+                    <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Confirm delivery to release funds from escrow. Bank settlement may take 1-2 business days.</p>
                     {payoutReadiness && !payoutReadiness.payout_ready && (
                       <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
                         <p style={{ fontSize: 12, color: '#b45309', margin: 0 }}>{payoutReadiness.issues?.join('. ') || 'Seller must complete payout setup.'}</p>
                       </div>
                     )}
                     <button onClick={handleManualAcceptDelivery} disabled={acceptingDelivery || checkingPayoutReadiness} data-testid="manual-accept-delivery-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: (acceptingDelivery || checkingPayoutReadiness) ? 0.6 : 1 }}>
-                      {acceptingDelivery ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : <><CheckCircle2 size={13} /> Confirm Receipt & Release Funds</>}
+                      {acceptingDelivery ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : <><CheckCircle2 size={13} /> Confirm receipt</>}
                     </button>
                   </div>
                 </div>
@@ -947,7 +947,7 @@ function TransactionDetail() {
             {isActionable && !hasEscrow && transaction.payment_status === 'Paid' && !transaction.delivery_confirmed && (
               <div style={S.actionCard('#f59e0b', '#fffbeb')}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>Payment Received — Awaiting Delivery</p>
-                <p style={{ fontSize: 13, color: '#92400e', margin: 0 }}>{isSeller ? 'Deliver the item. Funds released after buyer confirms.' : 'Payment held in escrow. Confirm delivery once received.'}</p>
+                <p style={{ fontSize: 13, color: '#92400e', margin: 0 }}>{isSeller ? 'Deliver the item. Funds release from escrow after buyer confirmation.' : 'Payment held in escrow. Confirm delivery once received.'}</p>
               </div>
             )}
 
@@ -1050,7 +1050,7 @@ function TransactionDetail() {
                     {uiState.state === 'DELIVERED' && (
                       <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 8, backgroundColor: 'rgba(26,115,232,0.08)' }}>
                         <p style={{ margin: 0, fontSize: 13, color: '#1a73e8', fontWeight: 500 }}>
-                          Funds released when buyer confirms receipt
+                          Funds release from escrow when buyer confirms receipt. Bank settlement may take 1-2 business days.
                         </p>
                       </div>
                     )}
@@ -1092,9 +1092,9 @@ function TransactionDetail() {
             {canConfirmDelivery && (
               <div style={S.actionCard('#10b981', '#ecfdf5')}>
                 <p style={{ fontSize: 15, fontWeight: 700, color: '#064e3b', margin: '0 0 6px' }}>Final Step: Confirm Delivery</p>
-                <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Have you received the item and are satisfied? Confirming releases funds to the seller. This cannot be undone.</p>
+                <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Have you received the item and are satisfied? Confirming releases funds from escrow. Bank settlement may take 1-2 business days. This cannot be undone.</p>
                 <button onClick={handleConfirmDelivery} disabled={confirming} data-testid="confirm-delivery-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: confirming ? 0.6 : 1 }}>
-                  {confirming ? 'Processing…' : 'Confirm Delivery & Release Funds'}
+                  {confirming ? 'Processing…' : 'Confirm Delivery'}
                 </button>
               </div>
             )}

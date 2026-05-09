@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout, { V } from '../components/DashboardLayout';
-import { fieldText, resolveEscrowUiState } from '../components/transactionState';
+import { fieldText, PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from '../components/transactionState';
 import api from '../utils/api';
 import {
   Activity,
@@ -292,7 +292,7 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues }) 
             {greeting}
           </h1>
           <p style={{ margin: '8px 0 0', color: V.sub, fontSize: 12, fontFamily: V.mono, fontWeight: 700, letterSpacing: '0.02em' }}>
-            Secure escrow dashboard &middot; {dateLabel} &middot; {timeLabel}
+            Secure escrow dashboard &middot; {dateLabel} &middot; {timeLabel} &middot; Escrow system online
           </p>
         </div>
         {user?.is_admin && (
@@ -324,7 +324,7 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues }) 
           ['SA banking ready', Landmark, V.accent],
           ['Escrow system online', ShieldCheck, V.success],
           ['Verification active', Fingerprint, '#A78BFA'],
-          ['Payout windows 10:00 / 15:00', RadioTower, V.warn],
+          [PAYOUT_TIMING_SHORT, RadioTower, V.warn],
         ].map(([label, Icon, color]) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.035)', padding: '8px 11px', borderRadius: 999 }}>
             <Icon size={13} color={color} />
@@ -351,7 +351,7 @@ function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDispute
               LIVE ESCROW ENGINE
             </p>
             <h2 style={{ margin: 0, maxWidth: 610, color: V.text, fontSize: 'clamp(30px, 4vw, 54px)', lineHeight: 0.96, fontWeight: 800, letterSpacing: '-0.045em' }}>
-              Protected money flow, visible from capture to payout.
+              Protected money flow, visible from agreement to settlement.
             </h2>
           </div>
           <button
@@ -366,7 +366,7 @@ function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDispute
 
         <div style={{ position: 'relative', minHeight: 255, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <FlowEndpoint label="Buyer" value="funds captured" icon={CreditCard} side="left" />
-          <FlowEndpoint label="Seller" value="payout controlled" icon={PackageCheck} side="right" />
+          <FlowEndpoint label="Seller" value="settlement controlled" icon={PackageCheck} side="right" />
           <motion.div
             animate={reduceMotion ? {} : { x: ['-230px', '0px', '230px'], opacity: [0, 1, 1, 0] }}
             transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
@@ -474,7 +474,7 @@ function WalletCommand({ walletData, walletSegments, pendingDisputes, navigate }
         </div>
 
         <div style={{ display: 'grid', gap: 10 }}>
-          <WalletLine label="Available for payout" value={walletSegments.hasWallet ? money(walletSegments.available, 2) : 'Not available'} helper="Released funds ready for payout." color={walletSegments.hasWallet ? V.success : V.sub} />
+          <WalletLine label="Available for payout" value={walletSegments.hasWallet ? money(walletSegments.available, 2) : 'Not available'} helper={PAYOUT_TIMING_SHORT} color={walletSegments.hasWallet ? V.success : V.sub} />
           <WalletLine label="Protected in escrow" value={protectedAmount} helper="Locked until release conditions are met." color={V.warn} />
           <WalletLine label="Awaiting confirmation" value={money(walletSegments.pending, 2)} helper="Delivery confirmation still required." color="#A78BFA" />
           <WalletLine label="Dispute hold" value={pendingDisputes.length > 0 ? money(walletSegments.disputeHold, 2) : money(0, 2)} helper="Paused until a dispute is resolved." color={pendingDisputes.length > 0 ? V.error : V.success} />
@@ -653,6 +653,9 @@ function TransactionRail({ transaction, pendingDisputes, index, user, navigate, 
           <span style={{ display: 'inline-flex', marginTop: 8, color: meta.color, background: meta.bg, border: `1px solid ${meta.color}55`, padding: '5px 8px', borderRadius: 999, fontSize: 10, fontFamily: V.mono, fontWeight: 800, textTransform: 'uppercase' }}>
             {meta.label}
           </span>
+          {meta.secondaryLabel && (
+            <p style={{ margin: '6px 0 0', color: V.sub, fontSize: 10, fontFamily: V.mono }}>{meta.secondaryLabel}</p>
+          )}
         </div>
       </div>
     </div>
@@ -699,8 +702,8 @@ function TrustOperations({ activeTransactions, pendingConfirmations, pendingDisp
           ))}
         </div>
         <div style={{ marginTop: 18, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.025)', padding: 14 }}>
-          <p style={{ margin: 0, color: V.text, fontWeight: 800 }}>Bank payout windows</p>
-          <p style={{ margin: '6px 0 0', color: V.sub, fontSize: 12 }}>Released funds route through controlled windows at 10:00 and 15:00.</p>
+          <p style={{ margin: 0, color: V.text, fontWeight: 800 }}>Payout timing</p>
+          <p style={{ margin: '6px 0 0', color: V.sub, fontSize: 12 }}>{PAYOUT_TIMING_COPY}</p>
         </div>
       </div>
     </section>
@@ -723,11 +726,11 @@ function RecentLedger({ recentTransactions, pendingDisputes, navigate }) {
           <EmptyState navigate={navigate} />
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${V.border}` }}>
-                  {['REF', 'PARTIES', 'FLOW STATE', 'AMOUNT', 'OPEN'].map((head, index) => (
-                    <th key={head} style={{ padding: '11px 10px', color: V.sub, fontSize: 10, fontFamily: V.mono, fontWeight: 800, letterSpacing: '0.12em', textAlign: index === 3 ? 'right' : 'left' }}>{head}</th>
+                  {['REF', 'PARTIES', 'FLOW STATE', 'SETTLEMENT', 'AMOUNT', 'OPEN'].map((head, index) => (
+                    <th key={head} style={{ padding: '11px 10px', color: V.sub, fontSize: 10, fontFamily: V.mono, fontWeight: 800, letterSpacing: '0.12em', textAlign: index === 4 ? 'right' : 'left' }}>{head}</th>
                   ))}
                 </tr>
               </thead>
@@ -741,6 +744,7 @@ function RecentLedger({ recentTransactions, pendingDisputes, navigate }) {
                       <td style={{ padding: '13px 10px' }}>
                         <span style={{ color: meta.color, background: meta.bg, border: `1px solid ${meta.color}55`, borderRadius: 999, padding: '5px 8px', fontFamily: V.mono, fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>{meta.label}</span>
                       </td>
+                      <td style={{ padding: '13px 10px', color: meta.terminal ? V.success : V.sub, fontSize: 11, fontFamily: V.mono, fontWeight: 700 }}>{meta.secondaryLabel || (meta.state === 'DISPUTED' ? 'Payout paused' : 'Active escrow')}</td>
                       <td style={{ padding: '13px 10px', color: V.success, fontFamily: V.mono, fontWeight: 800, textAlign: 'right' }}>{money(getTransactionValue(transaction), 2)}</td>
                       <td style={{ padding: '13px 10px' }}><ArrowUpRight size={13} color={V.dim} /></td>
                     </tr>

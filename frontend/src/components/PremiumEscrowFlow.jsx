@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { CheckCircle2, CreditCard, PackageCheck, ShieldCheck, Truck } from 'lucide-react';
+import { PAYOUT_TIMING_COPY } from './transactionState';
 
 const steps = [
   {
@@ -23,7 +24,7 @@ const steps = [
   },
   {
     title: 'Funds Released',
-    description: 'After delivery confirmation, funds move from escrow to the seller payout flow.',
+    description: PAYOUT_TIMING_COPY,
     icon: PackageCheck,
     accent: 'from-green-500 to-emerald-400',
   },

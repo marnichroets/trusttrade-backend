@@ -7,13 +7,16 @@ const COLORS = {
   sub: '#8B949E',
 };
 
+export const PAYOUT_TIMING_COPY = 'Funds released from escrow. Bank settlement may take 1-2 business days.';
+export const PAYOUT_TIMING_SHORT = 'Payout processing · 1-2 business days';
+
 export const ESCROW_FLOW_STEPS = [
-  { key: 'CREATED', label: 'Created' },
-  { key: 'FUNDED', label: 'Funded' },
-  { key: 'ESCROW_LOCKED', label: 'Locked' },
-  { key: 'DELIVERY_PENDING', label: 'Delivery' },
-  { key: 'DELIVERED', label: 'Delivered' },
-  { key: 'RELEASED', label: 'Released' },
+  { key: 'CREATED', label: 'Awaiting agreement' },
+  { key: 'FUNDED', label: 'Awaiting payment' },
+  { key: 'ESCROW_LOCKED', label: 'Funds secured' },
+  { key: 'DELIVERY_PENDING', label: 'Delivery in progress' },
+  { key: 'DELIVERED', label: 'Awaiting buyer confirmation' },
+  { key: 'RELEASED', label: 'Funds released' },
 ];
 
 export function fieldText(...values) {
@@ -89,7 +92,8 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
     return {
       state: 'COMPLETED',
       label: 'Completed',
-      description: 'Transaction finalized and escrow release conditions are complete.',
+      description: `No further action required. ${PAYOUT_TIMING_COPY}`,
+      secondaryLabel: PAYOUT_TIMING_SHORT,
       color: COLORS.success,
       bg: 'rgba(0,255,163,0.1)',
       progressIndex: ESCROW_FLOW_STEPS.length,
@@ -102,7 +106,8 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
     return {
       state: 'RELEASED',
       label: 'Funds released',
-      description: 'Funds have been released to the seller payout flow.',
+      description: PAYOUT_TIMING_COPY,
+      secondaryLabel: PAYOUT_TIMING_SHORT,
       color: COLORS.success,
       bg: 'rgba(0,255,163,0.1)',
       progressIndex: ESCROW_FLOW_STEPS.length,
@@ -115,7 +120,7 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
     return {
       state: 'DISPUTED',
       label: 'Disputed / protection hold',
-      description: 'Payout is paused while the dispute is reviewed.',
+      description: 'Disputes pause payout before release while TrustTrade reviews the case.',
       color: COLORS.error,
       bg: 'rgba(255,59,48,0.1)',
       progressIndex: 4,
@@ -140,7 +145,7 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
   if (!fundsSecured || payment.includes('awaiting') || payment.includes('ready') || payment.includes('pending') || tradesafe.includes('created') || tradesafe.includes('pending')) {
     return {
       state: 'FUNDED',
-      label: 'Payment pending',
+      label: 'Awaiting payment',
       description: 'Waiting for buyer payment into escrow.',
       color: COLORS.accent,
       bg: 'rgba(0,209,255,0.1)',
@@ -153,7 +158,7 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
   if (fundsSecured && !deliveryStarted) {
     return {
       state: 'ESCROW_LOCKED',
-      label: 'Paid / funds secured',
+      label: 'Funds secured in escrow',
       description: 'Funds are locked in escrow until delivery is confirmed.',
       color: COLORS.success,
       bg: 'rgba(0,255,163,0.1)',
@@ -166,8 +171,8 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
   if (deliveryStarted && !deliveryConfirmed) {
     return {
       state: 'DELIVERY_PENDING',
-      label: 'Awaiting buyer confirmation',
-      description: 'Delivery is in progress. Buyer confirmation controls release.',
+      label: 'Delivery in progress',
+      description: 'Delivery is in progress. Buyer confirmation controls escrow release.',
       color: COLORS.purple,
       bg: 'rgba(167,139,250,0.12)',
       progressIndex: 4,
@@ -178,8 +183,8 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
 
   return {
     state: 'DELIVERED',
-    label: 'Delivered',
-    description: 'Delivery has been confirmed and release is being finalized.',
+    label: 'Awaiting buyer confirmation',
+    description: 'Delivery has been marked complete. Buyer confirmation is required before release.',
     color: COLORS.success,
     bg: 'rgba(0,255,163,0.1)',
     progressIndex: 5,

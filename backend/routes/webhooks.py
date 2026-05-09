@@ -90,6 +90,8 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
                 "withdrawal_error": error,
                 "withdrawal_failed_at": now_iso,
                 "payout_status": "payout_failed",
+                "settlement_status": "withdrawal_failed",
+                "settlement_checked_at": now_iso,
             }}
         )
         return {"success": False, "error": error}
@@ -105,6 +107,8 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
             "withdrawal_started_at": now_iso,
             "withdrawal_source": source,
             "payout_status": "withdrawal_initiated",
+            "settlement_status": "withdrawal_initiated",
+            "settlement_checked_at": now_iso,
         }}
     )
 
@@ -132,6 +136,11 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
                 "withdrawal_completed_at": finished_at,
                 "withdrawal_error": None,
                 "payout_status": "payout_completed",
+                "settlement_status": "bank_processing",
+                "settlement_checked_at": finished_at,
+                "tradesafe_withdrawal_id": None,
+                "bank_reference": None,
+                "settlement_reference": None,
             }}
         )
         return {"success": True, "seller_token_id": seller_token_id, "amount": withdrawal_amount}
@@ -144,6 +153,8 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
             "withdrawal_failed_at": finished_at,
             "withdrawal_error": error,
             "payout_status": "payout_failed",
+            "settlement_status": "withdrawal_failed",
+            "settlement_checked_at": finished_at,
         }}
     )
     return {"success": False, "error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount}

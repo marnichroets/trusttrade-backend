@@ -1500,6 +1500,16 @@ async def get_payout_status(request: Request, transaction_id: str):
         "tradesafe_state": transaction.get("tradesafe_state"),
         "payment_status": transaction.get("payment_status"),
         "payout_status": transaction.get("payout_status", "unknown"),
+        "withdrawal_status": transaction.get("withdrawal_status"),
+        "withdrawal_triggered": transaction.get("withdrawal_triggered", False),
+        "withdrawal_error": transaction.get("withdrawal_error"),
+        "withdrawal_triggered_at": transaction.get("withdrawal_triggered_at"),
+        "withdrawal_completed_at": transaction.get("withdrawal_completed_at"),
+        "tradesafe_withdrawal_id": transaction.get("tradesafe_withdrawal_id"),
+        "bank_reference": transaction.get("bank_reference"),
+        "settlement_reference": transaction.get("settlement_reference"),
+        "settlement_status": transaction.get("settlement_status"),
+        "settlement_checked_at": transaction.get("settlement_checked_at"),
         "delivery_confirmed": transaction.get("delivery_confirmed", False),
         "funds_released_at": transaction.get("funds_released_at"),
         "payout_readiness": payout_check
@@ -1943,6 +1953,12 @@ async def get_payout_reconciliation(request: Request, limit: int = 100):
         "withdrawal_status": 1,
         "withdrawal_triggered": 1,
         "withdrawal_error": 1,
+        "tradesafe_withdrawal_id": 1,
+        "bank_reference": 1,
+        "settlement_reference": 1,
+        "withdrawal_completed_at": 1,
+        "settlement_status": 1,
+        "settlement_checked_at": 1,
         "payout_status": 1,
         "release_status": 1,
         "funds_released_at": 1,
@@ -1990,6 +2006,12 @@ async def get_payout_reconciliation(request: Request, limit: int = 100):
             "withdrawal_status": txn.get("withdrawal_status"),
             "withdrawal_triggered": txn.get("withdrawal_triggered", False),
             "withdrawal_error": txn.get("withdrawal_error"),
+            "tradesafe_withdrawal_id": txn.get("tradesafe_withdrawal_id"),
+            "bank_reference": txn.get("bank_reference"),
+            "settlement_reference": txn.get("settlement_reference"),
+            "withdrawal_completed_at": txn.get("withdrawal_completed_at"),
+            "settlement_status": txn.get("settlement_status"),
+            "settlement_checked_at": txn.get("settlement_checked_at"),
             "payout_status": txn.get("payout_status"),
             "funds_released_at": txn.get("funds_released_at"),
             "safe_to_retry": safe_to_retry,
@@ -2001,6 +2023,102 @@ async def get_payout_reconciliation(request: Request, limit: int = 100):
         "safe_to_retry_count": sum(1 for row in rows if row["safe_to_retry"]),
         "rows": rows,
     }
+
+
+@router.get("/payout-settlement-trace")
+async def get_payout_settlement_trace(request: Request, ids: str):
+    """
+    Read-only settlement trace for specific transactions/deals. It combines
+    local payout fields, TradeSafe transaction state/reference, token balance,
+    matching webhook payloads, and matching admin retry actions.
+    """
+    db = get_database()
+    await require_admin(request, db)
+
+    requested_ids = [item.strip() for item in (ids or "").split(",") if item.strip()]
+    if not requested_ids:
+        raise HTTPException(status_code=400, detail="Provide comma-separated ids")
+
+    from tradesafe_service import get_token_details, get_tradesafe_transaction
+
+    txns = await db.transactions.find(
+        {"$or": [
+            {"transaction_id": {"$in": requested_ids}},
+            {"share_code": {"$in": requested_ids}},
+            {"deal_id": {"$in": requested_ids}},
+        ]},
+        {"_id": 0}
+    ).to_list(len(requested_ids))
+
+    rows = []
+    for txn in txns:
+        transaction_id = txn.get("transaction_id")
+        deal_id = txn.get("deal_id")
+        tradesafe_id = txn.get("tradesafe_id") or txn.get("tradesafe_transaction_id") or txn.get("tradesafe_token_id")
+        seller_token_id = txn.get("tradesafe_seller_token_id")
+        token = await get_token_details(seller_token_id) if seller_token_id else None
+        ts_transaction = await get_tradesafe_transaction(tradesafe_id) if tradesafe_id else None
+
+        webhook_terms = [
+            transaction_id,
+            deal_id,
+            txn.get("share_code"),
+            tradesafe_id,
+            txn.get("tradesafe_allocation_id"),
+        ]
+        webhook_terms = [term for term in webhook_terms if term]
+        webhook_query = {"$or": [{"transaction_id": {"$in": webhook_terms}}]}
+        webhook_query["$or"].extend([
+            {"payload.id": {"$in": webhook_terms}},
+            {"payload.reference": {"$in": webhook_terms}},
+            {"payload.data.id": {"$in": webhook_terms}},
+            {"payload.data.reference": {"$in": webhook_terms}},
+        ])
+
+        webhooks = await db.webhook_events.find(
+            webhook_query,
+            {"_id": 0, "event_id": 1, "transaction_id": 1, "status": 1, "timestamp": 1, "payload": 1, "error": 1}
+        ).sort("timestamp", -1).limit(20).to_list(20)
+
+        admin_actions = await db.admin_actions.find(
+            {"transaction_id": transaction_id},
+            {"_id": 0}
+        ).sort("timestamp", -1).limit(20).to_list(20)
+
+        amount, amount_source = _payout_amount(txn)
+        token_balance = None
+        if token and token.get("balance") is not None:
+            token_balance = round(float(token.get("balance")) / 100, 2)
+
+        rows.append({
+            "transaction_id": transaction_id,
+            "share_code": txn.get("share_code"),
+            "deal_id": deal_id,
+            "seller_email": txn.get("seller_email") or txn.get("freelancer_email"),
+            "seller_token_id": seller_token_id,
+            "expected_seller_amount": round(float(amount), 2) if amount is not None else None,
+            "expected_amount_source": amount_source,
+            "token_balance": token_balance,
+            "tradesafe_state": txn.get("tradesafe_state"),
+            "tradesafe_transaction_state": (ts_transaction or {}).get("state"),
+            "tradesafe_transaction_reference": (ts_transaction or {}).get("reference"),
+            "tradesafe_transaction_id": tradesafe_id,
+            "tradesafe_allocation_id": txn.get("tradesafe_allocation_id"),
+            "withdrawal_status": txn.get("withdrawal_status"),
+            "withdrawal_triggered": txn.get("withdrawal_triggered", False),
+            "withdrawal_error": txn.get("withdrawal_error"),
+            "payout_status": txn.get("payout_status"),
+            "tradesafe_withdrawal_id": txn.get("tradesafe_withdrawal_id"),
+            "bank_reference": txn.get("bank_reference"),
+            "settlement_reference": txn.get("settlement_reference"),
+            "withdrawal_completed_at": txn.get("withdrawal_completed_at"),
+            "settlement_status": txn.get("settlement_status"),
+            "settlement_checked_at": txn.get("settlement_checked_at"),
+            "matching_webhooks": webhooks,
+            "matching_admin_actions": admin_actions,
+        })
+
+    return {"count": len(rows), "rows": rows}
 
 @router.post("/smart-deals/tradesafe/{tradesafe_id}/release")
 async def admin_release_transaction(tradesafe_id: str, request: Request):

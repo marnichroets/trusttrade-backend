@@ -65,6 +65,15 @@ class Transaction(BaseModel):
     tradesafe_fee_allocation: Optional[str] = None  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
     payout_status: Optional[str] = None  # "pending", "awaiting_bank_payout", "payout_completed", "payout_failed"
     payout_ready: Optional[bool] = None  # Whether seller token has banking details
+    tradesafe_withdrawal_id: Optional[str] = None
+    bank_reference: Optional[str] = None
+    settlement_reference: Optional[str] = None
+    withdrawal_status: Optional[str] = None
+    withdrawal_triggered: Optional[bool] = None
+    withdrawal_error: Optional[str] = None
+    withdrawal_completed_at: Optional[str] = None
+    settlement_status: Optional[str] = None
+    settlement_checked_at: Optional[str] = None
     funds_received_at: Optional[str] = None
     delivery_started_at: Optional[str] = None
     delivery_confirmed_at: Optional[str] = None

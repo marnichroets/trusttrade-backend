@@ -879,12 +879,19 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
             "withdrawal_triggered_at": now_iso,
             "withdrawal_completed_at": now_iso,
             "withdrawal_error": None,
+            "settlement_status": "bank_processing",
+            "settlement_checked_at": now_iso,
+            "tradesafe_withdrawal_id": None,
+            "bank_reference": None,
+            "settlement_reference": None,
         })
     elif withdrawal_ok is False:
         update_fields.update({
             "withdrawal_triggered": False,
             "withdrawal_failed_at": now_iso,
             "withdrawal_error": withdrawal_error,
+            "settlement_status": "withdrawal_failed",
+            "settlement_checked_at": now_iso,
         })
 
     await db.transactions.update_one(

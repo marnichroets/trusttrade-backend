@@ -149,6 +149,29 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
     return {"success": False, "error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount}
 
 
+async def handle_released_transaction(db, txn: dict, state: str = "FUNDS_RELEASED", source: str = "webhook") -> dict:
+    """Persist released state, then run the idempotent withdrawal helper."""
+    txn_id = txn.get("transaction_id") or txn.get("deal_id")
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    await db.transactions.update_one(
+        {"_id": txn["_id"]},
+        {"$set": {
+            "tradesafe_state": state,
+            "release_status": "Released",
+            "payout_status": txn.get("payout_status") or "awaiting_bank_payout",
+            "withdrawal_status": txn.get("withdrawal_status") or "pending",
+            "funds_released_at": txn.get("funds_released_at") or now_iso,
+            "last_funds_released_webhook_at": now_iso,
+        }}
+    )
+
+    latest = await db.transactions.find_one({"_id": txn["_id"]}, {"_id": 0})
+    result = await attempt_transaction_withdrawal(db, latest or txn, source=source)
+    logger.info(f"[WITHDRAWAL] released-state withdrawal result txn={txn_id}: {result}")
+    return result
+
+
 @router.get("/webhook-test")
 async def webhook_test():
     return {"status": "ok"}
@@ -214,7 +237,23 @@ async def tradesafe_webhook(request: Request):
     if smart_deal:
         deal_id = smart_deal["deal_id"]
         FUNDED_STATES = {"FUNDS_RECEIVED", "FUNDS_DEPOSITED"}
+        RELEASED_STATES = {"FUNDS_RELEASED", "COMPLETE", "COMPLETED"}
         logger.info(f"[WEBHOOK] Smart deal {deal_id} found — current status={smart_deal['status']!r} incoming state={state!r}")
+        if state in RELEASED_STATES:
+            if smart_deal.get("withdrawal_status") in ("in_progress", "succeeded"):
+                await db.transactions.update_one(
+                    {"_id": smart_deal["_id"]},
+                    {"$set": {"tradesafe_state": state}}
+                )
+                return {"ok": True, "action": "smart_deal_release_already_processed", "deal_id": deal_id}
+
+            import asyncio
+            asyncio.create_task(_bg(
+                handle_released_transaction(db, smart_deal, state=state, source="webhook:smart_deal")
+            ))
+            logger.info(f"[WEBHOOK] Smart deal {deal_id} {state} - withdrawal task queued")
+            return {"ok": True, "action": "smart_deal_withdrawal_queued", "deal_id": deal_id, "state": state}
+
         if state not in FUNDED_STATES:
             logger.info(f"[WEBHOOK] Smart deal {deal_id}: state={state!r} is not a funded state — no action")
             return {"ok": True, "action": "ignored", "reason": f"state {state!r} not actionable for smart deals"}
@@ -277,7 +316,7 @@ async def tradesafe_webhook(request: Request):
 
             import asyncio
             asyncio.create_task(_bg(
-                attempt_transaction_withdrawal(db, txn, source="webhook")
+                handle_released_transaction(db, txn, state=state, source="webhook")
             ))
             logger.info(
                 f"[WEBHOOK] Withdrawal task queued for {txn_id}: "

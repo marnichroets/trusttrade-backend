@@ -1876,6 +1876,132 @@ async def force_sync_token(
 
 # ============ SMART DEALS ============
 
+def _payout_amount(txn: dict):
+    if txn.get("net_amount") is not None:
+        return txn.get("net_amount"), "net_amount"
+    if txn.get("deal_type") == "DIGITAL_WORK" and txn.get("amount") is not None:
+        return txn.get("amount"), "amount"
+    if txn.get("item_price") is not None:
+        return txn.get("item_price"), "item_price"
+    return None, None
+
+
+def _payout_recommendation(txn: dict, amount, token_balance):
+    released_states = {"FUNDS_RELEASED", "COMPLETE", "COMPLETED"}
+    withdrawal_status = txn.get("withdrawal_status")
+    seller_token_id = txn.get("tradesafe_seller_token_id")
+    tradesafe_state = txn.get("tradesafe_state")
+
+    if withdrawal_status == "succeeded":
+        return False, "No action - withdrawal already succeeded"
+    if withdrawal_status == "in_progress":
+        return False, "Wait - withdrawal is already in progress"
+    if tradesafe_state not in released_states and txn.get("release_status") != "Released":
+        return False, "Do not retry - escrow is not marked released"
+    if not seller_token_id:
+        return False, "Fix transaction - missing seller token id"
+    if amount is None or float(amount or 0) <= 0:
+        return False, "Backfill expected seller amount before retry"
+    if token_balance is None:
+        return False, "Check TradeSafe token balance before retry"
+    if float(token_balance) + 0.01 < float(amount):
+        return False, "Do not retry - token balance is below expected amount"
+    return True, "Retry withdrawal via POST /api/admin/transactions/{transaction_id}/retry-withdrawal"
+
+
+@router.get("/payout-reconciliation")
+async def get_payout_reconciliation(request: Request, limit: int = 100):
+    """
+    Read-only reconciliation view for released escrows whose bank withdrawal has
+    not succeeded. Does not trigger withdrawal or mutate payout state.
+    """
+    db = get_database()
+    await require_admin(request, db)
+
+    from tradesafe_service import get_token_details
+
+    query = {
+        "$or": [
+            {"tradesafe_state": {"$in": ["FUNDS_RELEASED", "COMPLETE", "COMPLETED"]}},
+            {"release_status": "Released"},
+            {"status": "COMPLETE", "deal_type": "DIGITAL_WORK"},
+        ],
+        "withdrawal_status": {"$ne": "succeeded"},
+    }
+
+    projection = {
+        "_id": 0,
+        "transaction_id": 1,
+        "deal_id": 1,
+        "deal_type": 1,
+        "tradesafe_state": 1,
+        "tradesafe_seller_token_id": 1,
+        "tradesafe_allocation_id": 1,
+        "item_price": 1,
+        "amount": 1,
+        "net_amount": 1,
+        "withdrawal_status": 1,
+        "withdrawal_triggered": 1,
+        "withdrawal_error": 1,
+        "payout_status": 1,
+        "release_status": 1,
+        "funds_released_at": 1,
+        "seller_email": 1,
+        "freelancer_email": 1,
+        "status": 1,
+    }
+
+    txns = await db.transactions.find(query, projection).sort("funds_released_at", -1).limit(limit).to_list(limit)
+    token_cache = {}
+    rows = []
+
+    for txn in txns:
+        token_id = txn.get("tradesafe_seller_token_id")
+        token_balance = None
+        token_balance_cents = None
+
+        if token_id:
+            if token_id not in token_cache:
+                try:
+                    token_cache[token_id] = await get_token_details(token_id)
+                except Exception as exc:
+                    logger.error(f"[PAYOUT_RECON] token lookup failed token={token_id}: {exc}")
+                    token_cache[token_id] = None
+            token = token_cache.get(token_id) or {}
+            if token:
+                token_balance_cents = token.get("balance")
+                if token_balance_cents is not None:
+                    token_balance = round(float(token_balance_cents) / 100, 2)
+
+        amount, amount_source = _payout_amount(txn)
+        safe_to_retry, recommended_action = _payout_recommendation(txn, amount, token_balance)
+        identifier = txn.get("transaction_id") or txn.get("deal_id")
+
+        rows.append({
+            "transaction_id": txn.get("transaction_id"),
+            "deal_id": txn.get("deal_id"),
+            "seller_email": txn.get("seller_email") or txn.get("freelancer_email"),
+            "seller_token_id": token_id,
+            "expected_seller_amount": round(float(amount), 2) if amount is not None else None,
+            "expected_amount_source": amount_source,
+            "tradesafe_state": txn.get("tradesafe_state"),
+            "token_balance": token_balance,
+            "token_balance_cents": token_balance_cents,
+            "withdrawal_status": txn.get("withdrawal_status"),
+            "withdrawal_triggered": txn.get("withdrawal_triggered", False),
+            "withdrawal_error": txn.get("withdrawal_error"),
+            "payout_status": txn.get("payout_status"),
+            "funds_released_at": txn.get("funds_released_at"),
+            "safe_to_retry": safe_to_retry,
+            "recommended_action": recommended_action.format(transaction_id=identifier),
+        })
+
+    return {
+        "count": len(rows),
+        "safe_to_retry_count": sum(1 for row in rows if row["safe_to_retry"]),
+        "rows": rows,
+    }
+
 @router.post("/smart-deals/tradesafe/{tradesafe_id}/release")
 async def admin_release_transaction(tradesafe_id: str, request: Request):
     """

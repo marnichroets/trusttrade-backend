@@ -397,18 +397,37 @@ async def approve_deal(deal_id: str, request: Request):
             raise ValueError("tradesafe_allocation_id missing — deal not linked to escrow")
         seller_token_id = deal.get("tradesafe_seller_token_id")
         deal_amount = deal.get("amount")
+        net_amount = deal.get("net_amount") or deal_amount
         payout_result = await accept_delivery(
             allocation_id,
             seller_token_id=seller_token_id,
-            amount=float(deal_amount) if deal_amount else None,
+            amount=float(net_amount) if net_amount else None,
         )
         if not payout_result:
             raise ValueError("TradeSafe accept_delivery returned no result")
         logger.info(f"[SMART_DEAL] Payout released for {deal_id}, allocation={allocation_id}")
         await db.transactions.update_one(
             {"deal_id": deal_id},
-            {"$set": {"status": "COMPLETE", "completed_at": now, "updated_at": now}},
+            {"$set": {
+                "status": "COMPLETE",
+                "completed_at": now,
+                "updated_at": now,
+                "tradesafe_state": "FUNDS_RELEASED",
+                "release_status": "Released",
+                "payout_status": "awaiting_bank_payout",
+                "withdrawal_status": "pending",
+                "funds_released_at": now,
+                "net_amount": net_amount,
+            }},
         )
+        latest_deal = await db.transactions.find_one({"deal_id": deal_id}, {"_id": 0})
+        from routes.webhooks import attempt_transaction_withdrawal
+        withdrawal_result = await attempt_transaction_withdrawal(
+            db,
+            latest_deal or {**deal, "net_amount": net_amount},
+            source="smart_deal_approve",
+        )
+        logger.info(f"[SMART_DEAL] withdrawal result for {deal_id}: {withdrawal_result}")
     except Exception as exc:
         logger.error(f"[SMART_DEAL] Payout failed for {deal_id}: {exc}")
         await db.transactions.update_one(

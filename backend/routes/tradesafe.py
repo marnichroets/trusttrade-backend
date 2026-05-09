@@ -811,6 +811,8 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
 
     tradesafe_state = transaction.get("tradesafe_state")
+    withdrawal_ok = None
+    withdrawal_error = None
 
     if tradesafe_state == "DELIVERED":
         # allocationCompleteDelivery was already called for this allocation.
@@ -889,6 +891,16 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         {"transaction_id": transaction_id},
         {"$set": update_fields}
     )
+
+    if withdrawal_ok is None:
+        latest_transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+        from routes.webhooks import attempt_transaction_withdrawal
+        withdrawal_result = await attempt_transaction_withdrawal(
+            db,
+            latest_transaction or {**transaction, **update_fields},
+            source="accept_delivery",
+        )
+        logger.info(f"[ACCEPT_DELIVERY] withdrawal result txn={transaction_id}: {withdrawal_result}")
 
     # Send notifications
     logger.info("=" * 60)

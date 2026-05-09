@@ -212,7 +212,7 @@ function LandingPage() {
 
       <main className="relative z-10">
         <section onMouseMove={handleHeroMove} className="relative px-4 pb-12 pt-12 sm:pb-16 sm:pt-16 lg:min-h-[calc(100vh-4rem)]">
-          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.78fr_1.22fr] lg:items-center">
+          <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.86fr_1.14fr] lg:items-center">
             <motion.div
               initial={{ opacity: 0, y: reduceMotion ? 0 : 24 }}
               animate={{ opacity: 1, y: 0 }}
@@ -230,7 +230,7 @@ function LandingPage() {
                 SOUTH AFRICA'S ESCROW ENGINE
               </div>
 
-              <h1 className="mt-7 max-w-4xl text-5xl font-bold leading-[0.98] text-white sm:text-6xl lg:text-[4.75rem] xl:text-[5.4rem]" data-testid="hero-headline">
+              <h1 className="mt-7 max-w-4xl text-5xl font-bold leading-[0.98] text-white sm:text-6xl lg:text-[4.15rem] xl:text-[4.65rem]" data-testid="hero-headline">
                 Money moves only when trust is earned.
               </h1>
               <p style={{ color: MUTED }} className="mt-7 max-w-2xl text-lg leading-8 sm:text-xl">
@@ -258,7 +258,7 @@ function LandingPage() {
               <LiveTrustStrip reduceMotion={reduceMotion} />
             </motion.div>
 
-            <div className="relative min-h-[650px] sm:min-h-[760px] lg:min-h-[800px]">
+            <div className="relative min-h-[620px] sm:min-h-[720px] lg:min-h-[760px]">
               <SignatureEscrowVisual
                 depthX={heroDepthX}
                 depthY={heroDepthY}
@@ -316,15 +316,15 @@ function CinematicMesh({ reduceMotion }) {
 function SignatureEscrowVisual({ depthX, depthY, counterX, counterY, reduceMotion }) {
   return (
     <div className="absolute inset-0">
-      <motion.div style={{ x: depthX, y: depthY }} className="absolute left-1/2 top-2 h-[560px] w-[560px] -translate-x-1/2 sm:h-[690px] sm:w-[690px]">
+      <motion.div style={{ x: depthX, y: depthY }} className="absolute left-1/2 top-3 h-[540px] w-[540px] -translate-x-1/2 sm:h-[650px] sm:w-[650px]">
         <ParticleField reduceMotion={reduceMotion} />
         <AnimatedFlowSvg reduceMotion={reduceMotion} />
         <FlowArc className="left-[6%] top-[39%] w-[36%] -rotate-6" delay={0} reduceMotion={reduceMotion} />
         <FlowArc className="right-[6%] top-[39%] w-[36%] rotate-6" delay={0.45} reduceMotion={reduceMotion} reverse />
         <FlowArc className="left-[36%] top-[75%] w-[30%] rotate-90" delay={0.9} reduceMotion={reduceMotion} />
 
-        <Endpoint label="Buyer" amount="R 18,500" icon="CreditCard" className="left-0 top-[32%]" tone={BLUE} />
-        <Endpoint label="Seller" amount="Payout ready" icon="PackageCheck" className="right-0 top-[32%]" tone={GREEN} />
+        <Endpoint label="Buyer" amount="R 18,500" icon="CreditCard" className="left-[2%] top-[32%]" tone={BLUE} />
+        <Endpoint label="Seller" amount="Payout ready" icon="PackageCheck" className="right-[2%] top-[32%]" tone={GREEN} />
         <Endpoint label="Release" amount="Locked" icon="Banknote" className="left-1/2 top-[84%] -translate-x-1/2" tone={GOLD} />
 
         <motion.div
@@ -354,7 +354,7 @@ function SignatureEscrowVisual({ depthX, depthY, counterX, counterY, reduceMotio
         </div>
       </motion.div>
 
-      <motion.div style={{ x: counterX, y: counterY }} className="absolute bottom-0 left-1/2 z-20 w-full max-w-[620px] -translate-x-1/2">
+      <motion.div style={{ x: counterX, y: counterY }} className="absolute bottom-0 left-1/2 z-20 w-full max-w-[590px] -translate-x-1/2">
         <LiveEscrowConsole reduceMotion={reduceMotion} />
       </motion.div>
     </div>
@@ -580,7 +580,7 @@ function EscrowPipeline({ reduceMotion }) {
   return (
     <section id="how-it-works" className="relative px-4 py-20 sm:py-24">
       <div className="mx-auto max-w-7xl">
-        <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
+        <div className="grid gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
           <motion.div
             initial={{ opacity: 0, y: reduceMotion ? 0 : 24 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -588,7 +588,7 @@ function EscrowPipeline({ reduceMotion }) {
             transition={{ duration: 0.65 }}
           >
             <p style={{ color: BLUE, fontFamily: "'JetBrains Mono', monospace" }} className="text-xs font-bold">// MONEY PROTECTION SYSTEM</p>
-            <h2 className="mt-5 text-4xl font-bold leading-tight text-white sm:text-6xl">
+            <h2 className="mt-5 max-w-2xl text-4xl font-bold leading-tight text-white sm:text-5xl">
               A payment pipeline with a lock at the center.
             </h2>
             <p style={{ color: MUTED }} className="mt-5 max-w-xl text-lg leading-8">
@@ -596,15 +596,15 @@ function EscrowPipeline({ reduceMotion }) {
             </p>
           </motion.div>
 
-          <div className="relative min-h-[500px] overflow-hidden border border-white/10 bg-white/[0.045] p-5 shadow-[0_36px_120px_rgba(2,6,23,0.48)] backdrop-blur-2xl sm:p-6">
+          <div className="relative min-h-[470px] overflow-hidden border border-white/10 bg-white/[0.045] p-5 shadow-[0_36px_120px_rgba(2,6,23,0.48)] backdrop-blur-2xl sm:p-6">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(56,189,248,0.22),transparent_30%),radial-gradient(circle_at_80%_70%,rgba(34,197,94,0.16),transparent_32%)]" />
-            <div className="relative flex h-full min-h-[455px] flex-col justify-center">
-              <div className="relative hidden min-h-[250px] items-center lg:block">
-                <div className="absolute left-[7%] right-[7%] top-[5.4rem] h-px bg-gradient-to-r from-sky-300/30 via-emerald-300/80 to-emerald-300/25" />
+            <div className="relative flex h-full min-h-[425px] flex-col justify-center">
+              <div className="relative hidden min-h-[240px] items-center lg:block">
+                <div className="absolute left-[8%] right-[8%] top-[5.2rem] h-px bg-gradient-to-r from-sky-300/30 via-emerald-300/80 to-emerald-300/25" />
                 <motion.div
-                  animate={reduceMotion ? {} : { left: ['7%', '93%'], opacity: [0, 1, 1, 0] }}
+                  animate={reduceMotion ? {} : { left: ['8%', '92%'], opacity: [0, 1, 1, 0] }}
                   transition={{ duration: 4.2, repeat: Infinity, ease: 'easeInOut' }}
-                  className="absolute top-[5.4rem] h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-100 shadow-[0_0_34px_rgba(56,189,248,0.9)]"
+                  className="absolute top-[5.2rem] h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-100 shadow-[0_0_34px_rgba(56,189,248,0.9)]"
                 />
                 <div className="relative grid grid-cols-4 gap-3 pt-10">
                   {flowStages.map((stage, index) => (

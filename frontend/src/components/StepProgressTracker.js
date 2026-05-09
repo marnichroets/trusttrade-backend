@@ -1,5 +1,6 @@
 // Step Progress Tracker for Transaction Detail Page
-import { CheckCircle, Circle } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
+import { resolveEscrowUiState } from './transactionState';
 
 const STEPS = [
   { key: 'CREATED', label: 'Created', short: 'Created' },
@@ -39,12 +40,15 @@ function getStepIndex(paymentStatus, tradesafeState, buyerConfirmed, sellerConfi
 }
 
 export function StepProgressTracker({ transaction }) {
-  const currentStep = getStepIndex(
-    transaction.payment_status,
-    transaction.tradesafe_state,
-    transaction.buyer_confirmed,
-    transaction.seller_confirmed
-  );
+  const uiState = resolveEscrowUiState(transaction);
+  const currentStep = uiState.terminal
+    ? STEPS.length - 1
+    : getStepIndex(
+      transaction.payment_status,
+      transaction.tradesafe_state,
+      transaction.buyer_confirmed,
+      transaction.seller_confirmed
+    );
 
   return (
     <div className="w-full">

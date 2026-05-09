@@ -5,6 +5,7 @@ import Timeline from '../components/Timeline';
 import { TransactionTimeline } from '../components/TransactionTimeline';
 import TransactionStatusCard from '../components/TransactionStatusCard';
 import StepProgressTracker from '../components/StepProgressTracker';
+import { mapEscrowUiStateToTimelineState, resolveEscrowUiState } from '../components/transactionState';
 import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
 import api from '../utils/api';
@@ -25,6 +26,62 @@ function parseErrorMessage(error) {
   if (Array.isArray(detail)) return detail.map(e => e.msg || e.message || JSON.stringify(e)).join(', ');
   if (typeof detail === 'object') return detail.msg || detail.message || JSON.stringify(detail);
   return 'An error occurred';
+}
+
+function formatDetailDate(value) {
+  if (!value) return 'Recorded by TrustTrade';
+  return new Date(value).toLocaleString('en-ZA', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function FinalizedEscrowState({ transaction, uiState }) {
+  const completedAt = transaction.completed_at ||
+    transaction.released_at ||
+    transaction.delivery_confirmed_at ||
+    transaction.updated_at;
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg,#ecfdf5,#f8fafc)',
+      border: '1px solid #a7f3d0',
+      borderLeft: '3px solid #10b981',
+      borderRadius: 14,
+      padding: '20px 22px',
+      boxShadow: '0 12px 34px rgba(16,185,129,0.1)',
+    }}>
+      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+        <div style={{ width: 42, height: 42, borderRadius: 12, background: '#d1fae5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <CheckCircle2 size={22} color="#059669" />
+        </div>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 15, fontWeight: 800, color: '#064e3b', margin: '0 0 5px' }}>
+            {uiState.state === 'COMPLETED' ? 'Transaction finalized' : 'Funds released successfully'}
+          </p>
+          <p style={{ fontSize: 13, color: '#047857', margin: '0 0 14px', lineHeight: 1.6 }}>
+            Funds have passed escrow release checks. No further confirmation or release action is required.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+            {[
+              ['Escrow state', uiState.label],
+              ['Payout ETA', 'Completed'],
+              ['Completed', formatDetailDate(completedAt)],
+              ['Protection', 'TrustTrade escrow'],
+            ].map(([label, value]) => (
+              <div key={label} style={{ background: 'rgba(255,255,255,0.72)', border: '1px solid #d1fae5', borderRadius: 10, padding: '10px 12px' }}>
+                <p style={{ fontSize: 10, color: '#047857', fontWeight: 700, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</p>
+                <p style={{ fontSize: 12, color: '#064e3b', fontWeight: 700, margin: 0 }}>{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function TransactionDetail() {
@@ -76,7 +133,8 @@ function TransactionDetail() {
     const isBuyerUser = transaction.buyer_email === user.email || transaction.buyer_user_id === user.user_id;
     const escrowState = transaction.tradesafe_state;
     const hasEscrow = !!transaction.tradesafe_id;
-    const canRelease = hasEscrow && isBuyerUser && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState);
+    const uiState = resolveEscrowUiState(transaction);
+    const canRelease = uiState.actionable && hasEscrow && isBuyerUser && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState);
     if (canRelease && !payoutReadiness) checkPayoutReadiness();
   }, [transaction, user]);
 
@@ -89,7 +147,7 @@ function TransactionDetail() {
 
   useEffect(() => {
     if (!transaction) return;
-    const isComplete = transaction.delivery_confirmed || transaction.payment_status === 'Completed';
+    const isComplete = resolveEscrowUiState(transaction).terminal;
     if (!isComplete) {
       const interval = setInterval(() => fetchData(), 5000);
       return () => clearInterval(interval);
@@ -513,20 +571,23 @@ function TransactionDetail() {
   const buyerConfirmed = transaction.buyer_confirmed;
   const sellerConfirmed = transaction.seller_confirmed;
   const bothConfirmed = buyerConfirmed && sellerConfirmed;
-  const canBuyerConfirm = isBuyer && !buyerConfirmed;
-  const canSellerConfirm = isSeller && !sellerConfirmed;
-  const canCreateEscrow = isSeller && bothConfirmed && !hasEscrow && transaction.item_price >= 100;
-  const canMakePayment = hasEscrow && isBuyer && !isSeller && bothConfirmed && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
+  const uiState = resolveEscrowUiState(transaction);
+  const isFinalized = ['COMPLETED', 'RELEASED'].includes(uiState.state);
+  const isActionable = uiState.actionable && !uiState.terminal;
+  const canBuyerConfirm = isActionable && isBuyer && !buyerConfirmed;
+  const canSellerConfirm = isActionable && isSeller && !sellerConfirmed;
+  const canCreateEscrow = isActionable && isSeller && bothConfirmed && !hasEscrow && transaction.item_price >= 100;
+  const canMakePayment = isActionable && hasEscrow && isBuyer && !isSeller && bothConfirmed && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
   console.log('Payment Button Debug:', { hasEscrow, isBuyer, isSeller, escrowState, paymentStatus: transaction.payment_status, canMakePayment });
-  const isAwaitingBuyerPayment = hasEscrow && isSeller && !isBuyer && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
-  const canStartDelivery = hasEscrow && isSeller && escrowState === 'FUNDS_RECEIVED';
-  const canManualStartDelivery = hasEscrow && isSeller &&
+  const isAwaitingBuyerPayment = isActionable && hasEscrow && isSeller && !isBuyer && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
+  const canStartDelivery = isActionable && hasEscrow && isSeller && escrowState === 'FUNDS_RECEIVED';
+  const canManualStartDelivery = isActionable && hasEscrow && isSeller &&
     (['Paid', 'Funds Secured'].includes(transaction.payment_status)) &&
     (['FUNDS_RECEIVED', 'FUNDS_DEPOSITED'].includes(escrowState)) &&
     !(['INITIATED', 'DELIVERED'].includes(escrowState));
-  const canAcceptDeliveryTS = hasEscrow && isBuyer && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState) && !transaction.delivery_confirmed;
-  const canManualAcceptDelivery = hasEscrow && isBuyer && !transaction.delivery_confirmed && (transaction.payment_status === 'Delivery in Progress' || transaction.delivery_started_at || escrowState === 'INITIATED');
-  const canConfirmDelivery = !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
+  const canAcceptDeliveryTS = isActionable && hasEscrow && isBuyer && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState) && !transaction.delivery_confirmed;
+  const canManualAcceptDelivery = isActionable && hasEscrow && isBuyer && !transaction.delivery_confirmed && (transaction.payment_status === 'Delivery in Progress' || transaction.delivery_started_at || escrowState === 'INITIATED');
+  const canConfirmDelivery = isActionable && !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
   const shareLink = transaction.share_code ? `${window.location.origin}/t/${transaction.share_code}` : null;
   const _fa = (transaction.fee_allocation || 'SELLER_AGENT').toUpperCase();
   const totalSecurePayment = transaction.item_price + (
@@ -629,6 +690,10 @@ function TransactionDetail() {
                   ))}
                 </div>
               </div>
+            )}
+
+            {isFinalized && (
+              <FinalizedEscrowState transaction={transaction} uiState={uiState} />
             )}
 
             {/* Buyer confirm */}
@@ -873,13 +938,13 @@ function TransactionDetail() {
             )}
 
             {/* Legacy status hints */}
-            {!hasEscrow && sellerConfirmed && transaction.payment_status === 'Ready for Payment' && (
+            {isActionable && !hasEscrow && sellerConfirmed && transaction.payment_status === 'Ready for Payment' && (
               <div style={S.actionCard('#3b82f6', '#eff6ff')}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: '#1e3a5f', margin: '0 0 4px' }}>Awaiting Payment</p>
                 <p style={{ fontSize: 13, color: '#3b82f6', margin: 0 }}>{isBuyer ? 'Make payment to the escrow account.' : 'Waiting for buyer payment.'}</p>
               </div>
             )}
-            {!hasEscrow && transaction.payment_status === 'Paid' && !transaction.delivery_confirmed && (
+            {isActionable && !hasEscrow && transaction.payment_status === 'Paid' && !transaction.delivery_confirmed && (
               <div style={S.actionCard('#f59e0b', '#fffbeb')}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>Payment Received — Awaiting Delivery</p>
                 <p style={{ fontSize: 13, color: '#92400e', margin: 0 }}>{isSeller ? 'Deliver the item. Funds released after buyer confirms.' : 'Payment held in escrow. Confirm delivery once received.'}</p>
@@ -981,8 +1046,8 @@ function TransactionDetail() {
                 {activeTab === 'timeline' && (
                   <div>
                     <p style={{ ...S.sectionTitle, marginBottom: 20 }}>Transaction Progress</p>
-                    <TransactionTimeline transaction={transaction} currentState={transaction.transaction_state || mapPaymentStatusToState(transaction.payment_status, transaction.tradesafe_state)} timeline={transaction.timeline} />
-                    {transaction.transaction_state === 'DELIVERED' && (
+                    <TransactionTimeline transaction={transaction} currentState={mapEscrowUiStateToTimelineState(uiState) || transaction.transaction_state || mapPaymentStatusToState(transaction.payment_status, transaction.tradesafe_state)} timeline={transaction.timeline} />
+                    {uiState.state === 'DELIVERED' && (
                       <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 8, backgroundColor: 'rgba(26,115,232,0.08)' }}>
                         <p style={{ margin: 0, fontSize: 13, color: '#1a73e8', fontWeight: 500 }}>
                           Funds released when buyer confirms receipt
@@ -1034,16 +1099,8 @@ function TransactionDetail() {
               </div>
             )}
 
-            {/* Transaction complete banner */}
-            {transaction.delivery_confirmed && (
-              <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 14, padding: '18px 20px', display: 'flex', gap: 12, alignItems: 'center' }}>
-                <CheckCircle2 size={28} color="#10b981" />
-                <div><p style={{ fontSize: 14, fontWeight: 700, color: '#065f46', margin: 0 }}>Transaction Complete</p><p style={{ fontSize: 13, color: '#059669', margin: 0 }}>Funds have been released to the seller.</p></div>
-              </div>
-            )}
-
             {/* Rating */}
-            {transaction.delivery_confirmed && (
+            {isFinalized && (
               <div style={{ ...S.card, padding: '22px 24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                   <Star size={16} color="#fbbf24" fill="#fbbf24" />
@@ -1070,7 +1127,7 @@ function TransactionDetail() {
             )}
 
             {/* Raise dispute */}
-            {!transaction.delivery_confirmed && sellerConfirmed && (
+            {isActionable && !transaction.delivery_confirmed && sellerConfirmed && (
               <div style={{ ...S.card, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Having issues with this transaction?</p>
                 <button onClick={() => navigate('/disputes-dashboard', { state: { transactionId: transaction.transaction_id } })} style={{ ...S.btnOutline, fontSize: 12 }}>

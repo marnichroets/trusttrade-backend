@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout, { V } from '../components/DashboardLayout';
+import { fieldText, resolveEscrowUiState } from '../components/transactionState';
 import api from '../utils/api';
 import {
   Activity,
@@ -33,66 +34,6 @@ const money = (value, decimals = 0) =>
   })}`;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-
-const fieldText = (...values) => values.filter(Boolean).join(' ').toLowerCase();
-
-const transactionHasDispute = (transaction, pendingDisputes = []) => {
-  const localDisputeState = fieldText(transaction?.dispute_status, transaction?.dispute?.status, transaction?.status);
-  if (localDisputeState.includes('dispute')) return true;
-  return pendingDisputes.some((dispute) =>
-    dispute.transaction_id && dispute.transaction_id === transaction?.transaction_id
-  );
-};
-
-const resolveTransactionState = (transaction = {}, pendingDisputes = []) => {
-  const combined = fieldText(
-    transaction.payment_status,
-    transaction.release_status,
-    transaction.transaction_status,
-    transaction.delivery_status,
-    transaction.payout_status,
-    transaction.tradesafe_state
-  );
-  const payment = fieldText(transaction.payment_status);
-  const release = fieldText(transaction.release_status);
-  const transactionStatus = fieldText(transaction.transaction_status);
-  const delivery = fieldText(transaction.delivery_status);
-  const payout = fieldText(transaction.payout_status);
-  const tradesafe = fieldText(transaction.tradesafe_state);
-  const buyerConfirmed = Boolean(transaction.buyer_confirmed);
-  const sellerConfirmed = Boolean(transaction.seller_confirmed);
-  const deliveryConfirmed = Boolean(transaction.delivery_confirmed) || delivery.includes('delivered') || delivery.includes('confirmed') || tradesafe.includes('delivered');
-  const deliveryStarted = Boolean(transaction.delivery_started_at) || delivery.includes('progress') || delivery.includes('transit') || delivery.includes('sent') || tradesafe.includes('initiated') || tradesafe.includes('sent') || tradesafe.includes('delivered') || payment.includes('delivery');
-  const fundsSecured = payment.includes('paid') || payment.includes('secured') || payment.includes('completed') || payment.includes('released') || tradesafe.includes('funds_received') || tradesafe.includes('funds_deposited') || tradesafe.includes('funds_released');
-  const released = release.includes('released') || payment.includes('released') || payout.includes('paid') || payout.includes('released') || tradesafe.includes('funds_released');
-  const completed = transactionStatus.includes('completed') || payment.includes('completed');
-
-  if (combined.includes('cancel') || combined.includes('refund')) {
-    return { key: 'cancelled', label: combined.includes('refund') ? 'Refunded' : 'Cancelled', color: V.error, bg: 'rgba(255,59,48,0.1)', phase: 0, terminal: true };
-  }
-  if (transactionHasDispute(transaction, pendingDisputes)) {
-    return { key: 'disputed', label: 'Disputed / protection hold', color: V.error, bg: 'rgba(255,59,48,0.1)', phase: 3 };
-  }
-  if (completed) {
-    return { key: 'completed', label: 'Completed', color: V.success, bg: 'rgba(0,255,163,0.1)', phase: 5, terminal: true };
-  }
-  if (released) {
-    return { key: 'released', label: 'Funds released', color: V.success, bg: 'rgba(0,255,163,0.1)', phase: 5, terminal: true };
-  }
-  if (!buyerConfirmed || !sellerConfirmed) {
-    return { key: 'agreement', label: 'Awaiting confirmation', color: V.warn, bg: 'rgba(240,180,41,0.1)', phase: 1 };
-  }
-  if (!fundsSecured || payment.includes('awaiting') || payment.includes('ready') || payment.includes('pending')) {
-    return { key: 'payment_pending', label: 'Payment pending', color: V.accent, bg: 'rgba(0,209,255,0.1)', phase: 2 };
-  }
-  if (fundsSecured && !deliveryStarted) {
-    return { key: 'seller_delivery', label: 'Awaiting seller delivery', color: V.success, bg: 'rgba(0,255,163,0.1)', phase: 3 };
-  }
-  if (deliveryStarted && !deliveryConfirmed) {
-    return { key: 'buyer_confirmation', label: 'Awaiting buyer confirmation', color: '#A78BFA', bg: 'rgba(167,139,250,0.12)', phase: 4 };
-  }
-  return { key: 'funds_secured', label: 'Paid / funds secured', color: V.success, bg: 'rgba(0,255,163,0.1)', phase: 4 };
-};
 
 const getTransactionValue = (transaction) =>
   transaction?.item_price ?? transaction?.total ?? transaction?.amount ?? 0;
@@ -151,17 +92,21 @@ function Dashboard() {
   useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
 
   const pendingDisputes = disputes.filter(d => fieldText(d.status).includes('pending') || fieldText(d.status).includes('open'));
-  const activeTransactions = transactions.filter(t => !resolveTransactionState(t, pendingDisputes).terminal);
+  const activeTransactions = transactions.filter(t => !resolveEscrowUiState(t, pendingDisputes).terminal);
   const pendingConfirmations = transactions.filter(t => {
-    const state = resolveTransactionState(t, pendingDisputes);
-    return ['agreement', 'buyer_confirmation'].includes(state.key);
+    const state = resolveEscrowUiState(t, pendingDisputes);
+    return ['CREATED', 'DELIVERY_PENDING'].includes(state.state);
   });
   const recentTransactions = transactions.slice(0, 6);
   const totalEscrowValue = transactions
-    .filter(t => ['seller_delivery', 'buyer_confirmation', 'funds_secured', 'disputed'].includes(resolveTransactionState(t, pendingDisputes).key))
+    .filter(t => ['ESCROW_LOCKED', 'DELIVERY_PENDING', 'DELIVERED', 'DISPUTED'].includes(resolveEscrowUiState(t, pendingDisputes).state))
     .reduce((sum, t) => sum + (t.total || getTransactionValue(t)), 0);
   const pendingConfirmationValue = transactions
-    .filter(t => resolveTransactionState(t, pendingDisputes).key === 'buyer_confirmation')
+    .filter(t => resolveEscrowUiState(t, pendingDisputes).state === 'DELIVERY_PENDING')
+    .reduce((sum, t) => sum + (t.total || getTransactionValue(t)), 0);
+
+  const disputeHoldValue = transactions
+    .filter(t => resolveEscrowUiState(t, pendingDisputes).state === 'DISPUTED')
     .reduce((sum, t) => sum + (t.total || getTransactionValue(t)), 0);
 
   const walletSegments = useMemo(() => {
@@ -169,19 +114,19 @@ function Dashboard() {
     const walletPending = Number(walletData?.pending_balance || 0);
     const held = totalEscrowValue || walletPending;
     const pending = pendingConfirmationValue;
-    const earned = Number(walletData?.total_earned || 0);
-    const total = Math.max(available + held + pending, 1);
+    const disputeHold = disputeHoldValue;
+    const total = Math.max(available + held + pending + disputeHold, 1);
     return {
       available,
       held,
       pending,
-      earned,
+      disputeHold,
       heldPct: clamp((held / total) * 100, 8, 88),
       pendingPct: pending ? clamp((pending / total) * 100, 6, 70) : 0,
       availablePct: clamp((available / total) * 100, 6, 70),
       hasWallet: Boolean(walletData),
     };
-  }, [walletData, pendingConfirmationValue, totalEscrowValue]);
+  }, [disputeHoldValue, walletData, pendingConfirmationValue, totalEscrowValue]);
 
   const greeting = loading
     ? 'Loading'
@@ -328,6 +273,10 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues }) 
     day: '2-digit',
     month: 'short',
   });
+  const timeLabel = new Date().toLocaleTimeString('en-ZA', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   return (
     <div style={{ position: 'relative', display: 'grid', gap: 14 }}>
@@ -343,7 +292,7 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues }) 
             {greeting}
           </h1>
           <p style={{ margin: '8px 0 0', color: V.sub, fontSize: 12, fontFamily: V.mono, fontWeight: 700, letterSpacing: '0.02em' }}>
-            Secure escrow dashboard &middot; {dateLabel}
+            Secure escrow dashboard &middot; {dateLabel} &middot; {timeLabel}
           </p>
         </div>
         {user?.is_admin && (
@@ -373,9 +322,9 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues }) 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {[
           ['SA banking ready', Landmark, V.accent],
-          ['Protected payout routing', ShieldCheck, V.success],
+          ['Escrow system online', ShieldCheck, V.success],
           ['Verification active', Fingerprint, '#A78BFA'],
-          ['Monitored transaction state', RadioTower, V.warn],
+          ['Payout windows 10:00 / 15:00', RadioTower, V.warn],
         ].map(([label, Icon, color]) => (
           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.035)', padding: '8px 11px', borderRadius: 999 }}>
             <Icon size={13} color={color} />
@@ -492,14 +441,15 @@ function MetricCell({ icon: Icon, label, value, sub, color, testId }) {
 }
 
 function WalletCommand({ walletData, walletSegments, pendingDisputes, navigate }) {
-  const ring = `conic-gradient(${V.success} 0 ${walletSegments.availablePct}%, ${V.warn} ${walletSegments.availablePct}% ${walletSegments.availablePct + walletSegments.heldPct}%, #A78BFA ${walletSegments.availablePct + walletSegments.heldPct}% ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct}%, rgba(255,255,255,0.08) ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct}% 100%)`;
+  const protectedAmount = walletSegments.hasWallet || walletSegments.held > 0 ? money(walletSegments.held, 2) : 'Not available';
+  const ring = `conic-gradient(${V.success} 0 ${walletSegments.availablePct}%, ${V.warn} ${walletSegments.availablePct}% ${walletSegments.availablePct + walletSegments.heldPct}%, #A78BFA ${walletSegments.availablePct + walletSegments.heldPct}% ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct}%, ${V.error} ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct}% ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct + (walletSegments.disputeHold ? 8 : 0)}%, rgba(255,255,255,0.08) ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct + (walletSegments.disputeHold ? 8 : 0)}% 100%)`;
   return (
     <section className="tt-command-panel" style={{ padding: 20, overflow: 'hidden' }}>
       <div style={{ position: 'relative', zIndex: 1 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 18 }}>
           <div>
-            <p style={{ margin: '0 0 5px', color: V.sub, fontFamily: V.mono, fontSize: 11, fontWeight: 800, letterSpacing: '0.12em' }}>WALLET INFRASTRUCTURE</p>
-            <h2 style={{ margin: 0, color: V.text, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em' }}>Funds state</h2>
+            <p style={{ margin: '0 0 5px', color: V.sub, fontFamily: V.mono, fontSize: 11, fontWeight: 800, letterSpacing: '0.12em' }}>ESCROW PROTECTION</p>
+            <h2 style={{ margin: 0, color: V.text, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em' }}>Escrow Protection Summary</h2>
           </div>
           <button
             onClick={() => navigate('/settings/banking')}
@@ -515,30 +465,34 @@ function WalletCommand({ walletData, walletSegments, pendingDisputes, navigate }
             <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: V.bg, display: 'grid', placeItems: 'center', border: `1px solid ${V.border}` }}>
               <div style={{ textAlign: 'center' }}>
                 <WalletCards size={31} color={V.accent} style={{ margin: '0 auto 8px' }} />
-                <p style={{ margin: 0, color: V.sub, fontSize: 10, fontFamily: V.mono, fontWeight: 800 }}>HELD IN ESCROW</p>
-                <p style={{ margin: '5px 0 0', color: V.warn, fontSize: 22, fontFamily: V.mono, fontWeight: 800 }}>{money(walletSegments.held, 2)}</p>
+                <p style={{ margin: 0, color: V.sub, fontSize: 10, fontFamily: V.mono, fontWeight: 800 }}>PROTECTED IN ESCROW</p>
+                <p style={{ margin: '5px 0 0', color: V.warn, fontSize: 22, fontFamily: V.mono, fontWeight: 800 }}>{protectedAmount}</p>
+                <p style={{ margin: '7px auto 0', maxWidth: 130, color: V.sub, fontSize: 10, lineHeight: 1.4 }}>Not available until release conditions are met</p>
               </div>
             </div>
           </div>
         </div>
 
         <div style={{ display: 'grid', gap: 10 }}>
-          <WalletLine label="Available for payout" value={walletSegments.hasWallet ? money(walletSegments.available, 2) : 'Wallet unavailable'} color={walletSegments.hasWallet ? V.success : V.sub} />
-          <WalletLine label="Held in escrow" value={money(walletSegments.held, 2)} color={V.warn} />
-          <WalletLine label="Pending confirmation" value={money(walletSegments.pending, 2)} color="#A78BFA" />
-          <WalletLine label="Total earned" value={walletSegments.hasWallet ? money(walletSegments.earned, 2) : 'Wallet unavailable'} color={walletSegments.hasWallet ? V.accent : V.sub} />
-          <WalletLine label="Disputes" value={pendingDisputes.length} color={pendingDisputes.length > 0 ? V.error : V.success} />
+          <WalletLine label="Available for payout" value={walletSegments.hasWallet ? money(walletSegments.available, 2) : 'Not available'} helper="Released funds ready for payout." color={walletSegments.hasWallet ? V.success : V.sub} />
+          <WalletLine label="Protected in escrow" value={protectedAmount} helper="Locked until release conditions are met." color={V.warn} />
+          <WalletLine label="Awaiting confirmation" value={money(walletSegments.pending, 2)} helper="Delivery confirmation still required." color="#A78BFA" />
+          <WalletLine label="Dispute hold" value={pendingDisputes.length > 0 ? money(walletSegments.disputeHold, 2) : money(0, 2)} helper="Paused until a dispute is resolved." color={pendingDisputes.length > 0 ? V.error : V.success} />
         </div>
+        <p style={{ margin: '14px 0 0', color: V.sub, fontSize: 12, lineHeight: 1.6 }}>
+          Protected funds remain locked until delivery is confirmed or a dispute is resolved.
+        </p>
       </div>
     </section>
   );
 }
 
-function WalletLine({ label, value, color }) {
+function WalletLine({ label, value, helper, color }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', borderTop: `1px solid ${V.border}`, paddingTop: 10 }}>
-      <span style={{ color: V.sub, fontSize: 12, fontWeight: 700 }}>{label}</span>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '3px 12px', alignItems: 'start', borderTop: `1px solid ${V.border}`, paddingTop: 10 }}>
+      <span style={{ color: V.text, fontSize: 12, fontWeight: 800 }}>{label}</span>
       <span style={{ color, fontSize: 12, fontFamily: V.mono, fontWeight: 800 }}>{value}</span>
+      <span style={{ gridColumn: '1 / -1', color: V.sub, fontSize: 11 }}>{helper}</span>
     </div>
   );
 }
@@ -639,8 +593,8 @@ function LiveTransactionFeed({ activeTransactions, pendingDisputes, user, naviga
 function TransactionRail({ transaction, pendingDisputes, index, user, navigate, reduceMotion }) {
   const isUserBuyer = transaction.buyer_user_id === user?.user_id;
   const otherParty = isUserBuyer ? transaction.seller_name : transaction.buyer_name;
-  const meta = resolveTransactionState(transaction, pendingDisputes);
-  const progress = (meta.phase / flowSteps.length) * 100;
+  const meta = resolveEscrowUiState(transaction, pendingDisputes);
+  const progress = (meta.progressIndex / flowSteps.length) * 100;
 
   return (
     <div
@@ -675,7 +629,7 @@ function TransactionRail({ transaction, pendingDisputes, index, user, navigate, 
             <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${flowSteps.length}, 1fr)` }}>
               {flowSteps.map((step, stepIndex) => {
                 const Icon = step.icon;
-                const active = stepIndex < meta.phase;
+                const active = stepIndex < meta.progressIndex;
                 return (
                   <div key={step.label} style={{ display: 'flex', justifyContent: stepIndex === 0 ? 'flex-start' : stepIndex === flowSteps.length - 1 ? 'flex-end' : 'center' }}>
                     <div title={step.label} style={{ width: 25, height: 25, display: 'grid', placeItems: 'center', borderRadius: '50%', border: `1px solid ${active ? meta.color : V.border}`, background: active ? meta.bg : V.bg }}>
@@ -687,7 +641,7 @@ function TransactionRail({ transaction, pendingDisputes, index, user, navigate, 
             </div>
             <div className="tt-hide-sm" style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${flowSteps.length}, 1fr)`, marginTop: 5 }}>
               {flowSteps.map((step, stepIndex) => (
-                <span key={step.label} style={{ color: stepIndex < meta.phase ? V.sub : V.dim, fontSize: 9, fontFamily: V.mono, textAlign: stepIndex === 0 ? 'left' : stepIndex === flowSteps.length - 1 ? 'right' : 'center' }}>
+                <span key={step.label} style={{ color: stepIndex < meta.progressIndex ? V.sub : V.dim, fontSize: 9, fontFamily: V.mono, textAlign: stepIndex === 0 ? 'left' : stepIndex === flowSteps.length - 1 ? 'right' : 'center' }}>
                   {step.label}
                 </span>
               ))}
@@ -779,7 +733,7 @@ function RecentLedger({ recentTransactions, pendingDisputes, navigate }) {
               </thead>
               <tbody>
                 {recentTransactions.map((transaction) => {
-                  const meta = resolveTransactionState(transaction, pendingDisputes);
+                  const meta = resolveEscrowUiState(transaction, pendingDisputes);
                   return (
                     <tr key={transaction.transaction_id} data-testid={`transaction-row-${transaction.transaction_id}`} onClick={() => navigate(`/transactions/${transaction.transaction_id}`)} className="vault-tr" style={{ borderBottom: `1px solid ${V.border}`, cursor: 'pointer' }}>
                       <td style={{ padding: '13px 10px', color: V.accent, fontFamily: V.mono, fontWeight: 800, fontSize: 12 }}>{transaction.share_code || '-'}</td>

@@ -1,11 +1,13 @@
 import { Shield, CheckCircle2, Truck, Clock, AlertTriangle, XCircle, CreditCard, Banknote, Lock, ArrowRight } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
+import { resolveEscrowUiState } from './transactionState';
 
 // Main transaction status card - shows current state prominently with clear next action
 export function TransactionStatusCard({ transaction, userRole }) {
-  const state = transaction.transaction_state || 
-                mapLegacyStatus(transaction.payment_status, transaction.tradesafe_state);
+  const uiState = resolveEscrowUiState(transaction);
+  const state = mapUiStateToStatusCardState(uiState) || transaction.transaction_state ||
+    mapLegacyStatus(transaction.payment_status, transaction.tradesafe_state);
   
   const statusConfig = getStatusConfig(state, userRole, transaction);
   const Icon = statusConfig.icon;
@@ -48,6 +50,31 @@ export function TransactionStatusCard({ transaction, userRole }) {
       </div>
     </Card>
   );
+}
+
+function mapUiStateToStatusCardState(uiState) {
+  switch (uiState?.state) {
+    case 'COMPLETED':
+    case 'RELEASED':
+      return 'COMPLETED';
+    case 'DISPUTED':
+      return 'DISPUTED';
+    case 'DELIVERED':
+      return 'DELIVERED';
+    case 'DELIVERY_PENDING':
+      return 'DELIVERY_IN_PROGRESS';
+    case 'ESCROW_LOCKED':
+      return 'PAYMENT_SECURED';
+    case 'FUNDED':
+      return 'AWAITING_PAYMENT';
+    case 'CANCELLED':
+      return 'CANCELLED';
+    case 'REFUNDED':
+      return 'REFUNDED';
+    case 'CREATED':
+    default:
+      return 'PENDING_CONFIRMATION';
+  }
 }
 
 function mapLegacyStatus(paymentStatus, tradesafeState) {

@@ -8,6 +8,26 @@ import { useAuth } from '../context/AuthContext';
 const BACKEND_URL = process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL || 'https://trusttrade-backend-production-3efa.up.railway.app';
 const API = `${BACKEND_URL}/api`;
 
+function consumeAuthRedirect() {
+  const pendingShareCode = sessionStorage.getItem('pendingShareCode');
+  const redirectAfterLogin = sessionStorage.getItem('redirectAfterLogin');
+  const intendedRoute = localStorage.getItem('intendedRoute');
+  let destination = '/dashboard';
+
+  if (intendedRoute && intendedRoute.startsWith('/') && !intendedRoute.startsWith('//') && !intendedRoute.startsWith('/login') && !intendedRoute.startsWith('/auth/callback')) {
+    destination = intendedRoute;
+  } else if (pendingShareCode) {
+    destination = `/t/${pendingShareCode}`;
+  } else if (redirectAfterLogin && redirectAfterLogin.startsWith('/') && !redirectAfterLogin.startsWith('//')) {
+    destination = redirectAfterLogin;
+  }
+
+  localStorage.removeItem('intendedRoute');
+  sessionStorage.removeItem('pendingShareCode');
+  sessionStorage.removeItem('redirectAfterLogin');
+  return destination;
+}
+
 function AuthCallback() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -77,7 +97,7 @@ function AuthCallback() {
 
           setStatus('Login successful!');
           toast.success(`Welcome, ${userData.name || userData.email}!`);
-          window.location.replace('/dashboard');
+          window.location.replace(consumeAuthRedirect());
           return;
         }
 
@@ -149,17 +169,7 @@ function AuthCallback() {
         window.history.replaceState(null, '', window.location.pathname);
 
         // Determine redirect destination
-        const pendingShareCode = sessionStorage.getItem('pendingShareCode');
-        const redirectAfterLogin = sessionStorage.getItem('redirectAfterLogin');
-        
-        let destination = '/dashboard';
-        if (pendingShareCode) {
-          sessionStorage.removeItem('pendingShareCode');
-          destination = `/t/${pendingShareCode}`;
-        } else if (redirectAfterLogin) {
-          sessionStorage.removeItem('redirectAfterLogin');
-          destination = redirectAfterLogin;
-        }
+        const destination = consumeAuthRedirect();
 
         console.log('[NAVIGATE_CALLED] destination:', destination);
         console.log('[AuthCallback] ========== END ==========');

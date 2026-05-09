@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const hasRedirected = useRef(false);
 
   // Check localStorage directly as fallback (handles race conditions)
@@ -20,8 +21,18 @@ function ProtectedRoute({ children }) {
     if (hasRedirected.current) return;
     console.log('[PROTECTED_ROUTE_REDIRECT] Not authenticated, redirecting to /login');
     hasRedirected.current = true;
-    navigate('/login', { replace: true });
-  }, [loading, isAuthenticated, hasLocalAuth, navigate]);
+    const intendedRoute = `${location.pathname}${location.search || ''}${location.hash || ''}`;
+    if (
+      intendedRoute &&
+      intendedRoute !== '/login' &&
+      intendedRoute !== '/' &&
+      !intendedRoute.startsWith('/auth/callback')
+    ) {
+      localStorage.setItem('intendedRoute', intendedRoute);
+      sessionStorage.setItem('redirectAfterLogin', intendedRoute);
+    }
+    navigate(`/login?redirect=${encodeURIComponent(intendedRoute)}`, { replace: true });
+  }, [loading, isAuthenticated, hasLocalAuth, navigate, location.pathname, location.search, location.hash]);
 
   // Show loading spinner while auth is being checked
   if (loading) {

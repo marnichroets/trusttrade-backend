@@ -12,6 +12,23 @@ import TrustLogo from '../components/TrustLogo';
 
 const BACKEND_URL = process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL || 'https://trusttrade-backend-production-3efa.up.railway.app';
 
+function getSafeRedirect(search) {
+  const params = new URLSearchParams(search || '');
+  const queryRedirect = params.get('redirect');
+  const storedRedirect = localStorage.getItem('intendedRoute') || sessionStorage.getItem('redirectAfterLogin');
+  const destination = queryRedirect || storedRedirect;
+  if (!destination || !destination.startsWith('/') || destination.startsWith('//') || destination.startsWith('/login') || destination.startsWith('/auth/callback')) {
+    return '/dashboard';
+  }
+  return destination;
+}
+
+function clearStoredRedirect() {
+  localStorage.removeItem('intendedRoute');
+  sessionStorage.removeItem('redirectAfterLogin');
+  sessionStorage.removeItem('pendingShareCode');
+}
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -56,9 +73,11 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/dashboard', { replace: true });
+      const destination = getSafeRedirect(location.search);
+      clearStoredRedirect();
+      navigate(destination, { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, location.search]);
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
@@ -77,6 +96,11 @@ export default function LoginPage() {
   const handleGoogleLogin = () => {
     setGoogleLoading(true);
     setAuthError(null);
+    const destination = getSafeRedirect(location.search);
+    if (destination !== '/dashboard') {
+      localStorage.setItem('intendedRoute', destination);
+      sessionStorage.setItem('redirectAfterLogin', destination);
+    }
     window.location.href = 'https://trusttrade-backend-production-3efa.up.railway.app/api/auth/google';
   };
 
@@ -107,7 +131,9 @@ export default function LoginPage() {
 
       login(userData, token);
       toast.success(isLoginMode ? 'Welcome back!' : 'Account created successfully!');
-      navigate('/dashboard', { replace: true });
+      const destination = getSafeRedirect(location.search);
+      clearStoredRedirect();
+      navigate(destination, { replace: true });
     } catch (error) {
       const detail = error.response?.data?.detail || 'Authentication failed';
       if (detail === 'EMAIL_NOT_VERIFIED') {

@@ -44,9 +44,12 @@ function ShareTransaction() {
   };
 
   const handleLogin = () => {
-    // Store the share code to redirect back after login
+    // Store the share route to redirect back after login
+    const intendedRoute = `/t/${shareCode}`;
+    localStorage.setItem('intendedRoute', intendedRoute);
+    sessionStorage.setItem('redirectAfterLogin', intendedRoute);
     sessionStorage.setItem('pendingShareCode', shareCode);
-    navigate('/login');
+    navigate(`/login?redirect=${encodeURIComponent(intendedRoute)}`);
   };
 
   const handleJoinTransaction = async () => {
@@ -153,7 +156,7 @@ function ShareTransaction() {
           <p className="text-slate-600">Review the details below and join to participate</p>
           <div className="mt-3 inline-flex items-center gap-2 text-slate-500 text-sm">
             <Clock className="w-4 h-4" />
-            Funds released from escrow. Bank settlement may take 1-2 business days.
+            Payouts are processed as quickly as possible after escrow release. Bank settlement may take up to 2 business days.
           </div>
         </div>
 
@@ -250,11 +253,11 @@ function ShareTransaction() {
                 className="px-8"
                 data-testid="sign-in-to-join-btn"
               >
-                Sign In to Join
+                Review and Pay into Escrow
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
               <p className="text-sm text-slate-500">
-                You need to sign in with your email to participate in this transaction
+                Sign in with the invited email to open this transaction and fund escrow securely.
               </p>
             </div>
           )}

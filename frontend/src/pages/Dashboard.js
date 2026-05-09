@@ -38,6 +38,15 @@ const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const getTransactionValue = (transaction) =>
   transaction?.item_price ?? transaction?.total ?? transaction?.amount ?? 0;
 
+const isUserBuyerForTransaction = (transaction, user) =>
+  transaction?.buyer_user_id === user?.user_id ||
+  (transaction?.buyer_email && user?.email && transaction.buyer_email.toLowerCase() === user.email.toLowerCase());
+
+const isUserSellerForTransaction = (transaction, user) =>
+  transaction?.seller_user_id === user?.user_id ||
+  (transaction?.seller_email && user?.email && transaction.seller_email.toLowerCase() === user.email.toLowerCase()) ||
+  (transaction?.freelancer_email && user?.email && transaction.freelancer_email.toLowerCase() === user.email.toLowerCase());
+
 const flowSteps = [
   { label: 'Confirm', icon: CheckCircle },
   { label: 'Payment', icon: CreditCard },
@@ -93,6 +102,7 @@ function Dashboard() {
 
   const pendingDisputes = disputes.filter(d => fieldText(d.status).includes('pending') || fieldText(d.status).includes('open'));
   const activeTransactions = transactions.filter(t => !resolveEscrowUiState(t, pendingDisputes).terminal);
+  const actionItems = useMemo(() => buildActionItems(transactions, pendingDisputes, user), [transactions, pendingDisputes, user]);
   const pendingConfirmations = transactions.filter(t => {
     const state = resolveEscrowUiState(t, pendingDisputes);
     return ['CREATED', 'DELIVERY_PENDING'].includes(state.state);
@@ -211,6 +221,16 @@ function Dashboard() {
           setShowExactValues={setShowExactValues}
         />
 
+        <ActionRequiredPanel actionItems={actionItems} navigate={navigate} />
+
+        <LiveTransactionFeed
+          activeTransactions={activeTransactions}
+          pendingDisputes={pendingDisputes}
+          user={user}
+          navigate={navigate}
+          reduceMotion={reduceMotion}
+        />
+
         <div className="tt-grid">
           <EscrowEngine
             activeTransactions={activeTransactions}
@@ -235,22 +255,13 @@ function Dashboard() {
 
         <ActionDock navigate={navigate} />
 
-        <div className="tt-grid">
-          <LiveTransactionFeed
-            activeTransactions={activeTransactions}
-            pendingDisputes={pendingDisputes}
-            user={user}
-            navigate={navigate}
-            reduceMotion={reduceMotion}
-          />
-          <TrustOperations
-            activeTransactions={activeTransactions}
-            pendingConfirmations={pendingConfirmations}
-            pendingDisputes={pendingDisputes}
-            platformStats={platformStats}
-            totalEscrowValue={totalEscrowValue}
-          />
-        </div>
+        <TrustOperations
+          activeTransactions={activeTransactions}
+          pendingConfirmations={pendingConfirmations}
+          pendingDisputes={pendingDisputes}
+          platformStats={platformStats}
+          totalEscrowValue={totalEscrowValue}
+        />
 
         <RecentLedger recentTransactions={recentTransactions} pendingDisputes={pendingDisputes} navigate={navigate} />
 
@@ -554,6 +565,88 @@ function ActionDock({ navigate }) {
           <ArrowRight size={14} color={V.sub} />
         </button>
       ))}
+    </section>
+  );
+}
+
+function buildActionItems(transactions, pendingDisputes, user) {
+  return transactions
+    .map((transaction) => {
+      const meta = resolveEscrowUiState(transaction, pendingDisputes);
+      const isBuyer = isUserBuyerForTransaction(transaction, user);
+      const isSeller = isUserSellerForTransaction(transaction, user);
+      const hasDispute = meta.state === 'DISPUTED' || pendingDisputes.some((d) => d.transaction_id === transaction.transaction_id);
+      const amount = getTransactionValue(transaction);
+      const base = {
+        transaction,
+        amount,
+        role: isBuyer ? 'Buyer' : isSeller ? 'Seller' : 'Viewer',
+        status: meta.label,
+        path: `/transactions/${transaction.transaction_id}`,
+        priority: 99,
+        button: 'View Transaction',
+        title: 'Review transaction',
+        helper: meta.description,
+        color: V.accent,
+      };
+
+      if (hasDispute) {
+        return { ...base, priority: 1, title: 'Dispute needs response', button: 'View Dispute', path: '/disputes-dashboard', color: V.error, helper: 'Review the dispute so payout stays protected until the case is resolved.' };
+      }
+      if (isBuyer && meta.state === 'FUNDED') {
+        return { ...base, priority: 2, title: 'Your next step: Fund escrow', button: 'Pay into Escrow', color: V.accent, helper: 'Pay securely into escrow. Seller is paid only after you confirm delivery.' };
+      }
+      if (isSeller && meta.state === 'FUNDED') {
+        return { ...base, priority: 3, title: 'Waiting for buyer to fund escrow', button: 'View Transaction', color: V.warn, helper: 'Share this link with the buyer. Funds will be protected once the buyer pays.' };
+      }
+      if (isSeller && ['ESCROW_LOCKED', 'DELIVERY_PENDING'].includes(meta.state)) {
+        return { ...base, priority: 4, title: 'Funds secured — deliver safely', button: 'Add Delivery Info', color: V.success, helper: 'Payment is protected in escrow. Deliver the item and update the transaction.' };
+      }
+      if (isBuyer && meta.state === 'DELIVERED') {
+        return { ...base, priority: 5, title: 'Confirm receipt when delivered', button: 'Confirm Receipt', color: V.success, helper: 'Confirm only after you have received the item and are satisfied.' };
+      }
+      if (meta.state === 'RELEASED') {
+        return { ...base, priority: 6, title: 'Payout processing', button: 'View Transaction', color: V.warn, helper: PAYOUT_TIMING_SHORT };
+      }
+      return null;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.priority - b.priority);
+}
+
+function ActionRequiredPanel({ actionItems, navigate }) {
+  const action = actionItems[0];
+  if (!action) return null;
+  const { transaction } = action;
+  return (
+    <section className="tt-command-panel" style={{ padding: 18, borderLeft: `2px solid ${action.color}` }}>
+      <div style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 16, alignItems: 'center' }} className="tt-responsive-grid">
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: '0 0 7px', color: action.color, fontFamily: V.mono, fontSize: 10, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
+            Action Required / {action.role}
+          </p>
+          <h2 style={{ margin: 0, color: V.text, fontSize: 'clamp(20px, 2.4vw, 30px)', fontWeight: 850, letterSpacing: '-0.035em' }}>
+            {action.title}
+          </h2>
+          <p style={{ margin: '8px 0 0', color: V.sub, fontSize: 13, lineHeight: 1.55 }}>
+            {transaction.item_description || 'Protected transaction'} · {transaction.share_code || transaction.deal_id || transaction.transaction_id} · {money(action.amount, 2)}
+          </p>
+          <p style={{ margin: '6px 0 0', color: V.sub, fontSize: 12 }}>{action.helper}</p>
+        </div>
+        <div style={{ display: 'grid', justifyItems: 'end', gap: 8 }}>
+          <span style={{ color: action.color, background: `${action.color}18`, border: `1px solid ${action.color}55`, borderRadius: 999, padding: '5px 9px', fontSize: 10, fontFamily: V.mono, fontWeight: 900, textTransform: 'uppercase' }}>
+            {action.status}
+          </span>
+          <button
+            onClick={() => navigate(action.path, action.path === '/disputes-dashboard' ? { state: { transactionId: transaction.transaction_id } } : undefined)}
+            className="tt-action"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: `1px solid ${action.color}80`, background: `${action.color}14`, color: V.text, borderRadius: 6, padding: '11px 14px', cursor: 'pointer', fontWeight: 850, whiteSpace: 'nowrap' }}
+          >
+            {action.button}
+            <ArrowRight size={14} color={action.color} />
+          </button>
+        </div>
+      </div>
     </section>
   );
 }

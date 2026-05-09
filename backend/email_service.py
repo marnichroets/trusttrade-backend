@@ -173,7 +173,7 @@ def get_base_email_template(
             ("01", "Buyer pays into escrow"),
             ("02", "Seller delivers the item"),
             ("03", "Buyer confirms delivery"),
-            ("04", "Funds released to seller (10:00 or 15:00 daily)"),
+            ("04", "Payout processing · up to 2 business days"),
         ]
         step_rows = ""
         for num, step in steps:
@@ -365,7 +365,7 @@ def get_transaction_created_email(
             1. Review and confirm the transaction details<br>
             2. Wait for buyer to make payment<br>
             3. Ship the item once payment is secured<br>
-            4. Receive payout within 1-2 business days after buyer confirms
+            4. Payouts are processed as quickly as possible after buyer confirmation and may take up to 2 business days
         </div>"""
     
     details = {
@@ -382,7 +382,7 @@ def get_transaction_created_email(
         greeting_name=recipient_name,
         intro_text=intro_text,
         details=details,
-        cta_text="View Transaction",
+        cta_text="Review and Pay into Escrow" if role.lower() == "buyer" else "View Transaction",
         cta_link=share_link,
         show_how_it_works=False,
         status_badge="New Transaction",
@@ -411,7 +411,7 @@ def get_payment_received_email(
             1. Ship/deliver the item to the buyer<br>
             2. Mark as shipped in TrustTrade<br>
             3. Wait for buyer to confirm receipt<br><br>
-            <strong>Payout:</strong> 1-2 business days after buyer confirms delivery
+            <strong>Payout:</strong> processed as quickly as possible after buyer confirms delivery; bank settlement may take up to 2 business days
         </div>"""
     else:
         intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
@@ -572,7 +572,7 @@ def get_delivery_confirmed_email(
     subject = f"{share_code} - Delivery confirmed - funds releasing"
     
     if role.lower() == "seller":
-        intro_text = "The buyer has confirmed receiving the item. Your funds will be released during the next payout window (10:00 or 15:00 daily)."
+        intro_text = "The buyer has confirmed receiving the item. Funds released from escrow. Bank settlement may take up to 2 business days."
         status_text = "Funds Releasing"
     else:
         intro_text = "Thank you for confirming delivery. The seller's funds will now be released. We hope you enjoy your purchase!"
@@ -623,7 +623,7 @@ def get_funds_released_email(
         </table>
     </div>
     
-    <p><strong>Expected Deposit:</strong> Within 1-2 business days to your registered bank account.</p>
+    <p><strong>Expected Deposit:</strong> Payouts are processed as quickly as possible. Bank settlement may take up to 2 business days to your registered bank account.</p>
     """
     
     details = {

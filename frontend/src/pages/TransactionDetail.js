@@ -84,6 +84,65 @@ function FinalizedEscrowState({ transaction, uiState }) {
   );
 }
 
+function PayoutTimeline({ transaction }) {
+  const releasedAt = transaction.funds_released_at || transaction.released_at || transaction.completed_at;
+  const withdrawalAt = transaction.withdrawal_requested_at || transaction.withdrawal_started_at || transaction.withdrawal_triggered_at;
+  const completedAt = transaction.withdrawal_completed_at || transaction.settlement_confirmed_at || transaction.completed_at;
+  const steps = [
+    { label: 'Funds released', value: releasedAt ? formatDetailDate(releasedAt) : 'Waiting for escrow release', active: Boolean(releasedAt) },
+    { label: 'Withdrawal requested', value: withdrawalAt ? formatDetailDate(withdrawalAt) : 'Starts after release', active: Boolean(withdrawalAt) },
+    { label: 'Bank processing', value: withdrawalAt ? 'Processing through banking rails' : 'Not started', active: Boolean(withdrawalAt) },
+    { label: 'Expected settlement', value: 'Up to 2 business days', active: Boolean(releasedAt) },
+    { label: 'Completed', value: completedAt ? formatDetailDate(completedAt) : 'No confirmed bank settlement yet', active: Boolean(completedAt) },
+  ];
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
+        <div>
+          <p style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 4px' }}>Payout timeline</p>
+          <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>{PAYOUT_TIMING_COPY}</p>
+        </div>
+        <span style={{ display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '5px 9px', background: '#eff6ff', color: '#2563eb', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{PAYOUT_TIMING_SHORT}</span>
+      </div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {steps.map((step) => (
+          <div key={step.label} style={{ display: 'grid', gridTemplateColumns: '18px 1fr', gap: 10, alignItems: 'start' }}>
+            <div style={{ width: 14, height: 14, borderRadius: '50%', marginTop: 2, background: step.active ? '#10b981' : '#e2e8f0', boxShadow: step.active ? '0 0 0 4px rgba(16,185,129,0.12)' : 'none' }} />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', margin: 0 }}>{step.label}</p>
+              <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0' }}>{step.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function NextStepCard({ nextStep }) {
+  if (!nextStep) return null;
+  return (
+    <div style={{
+      background: nextStep.bg,
+      border: `1px solid ${nextStep.border}`,
+      borderLeft: `3px solid ${nextStep.color}`,
+      borderRadius: 14,
+      padding: '18px 20px',
+    }}>
+      <p style={{ fontSize: 11, color: nextStep.color, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 7px' }}>
+        {nextStep.roleContext}
+      </p>
+      <h2 style={{ fontSize: 20, color: nextStep.titleColor, fontWeight: 800, margin: '0 0 7px', letterSpacing: '-0.02em' }}>
+        {nextStep.title}
+      </h2>
+      <p style={{ fontSize: 13, color: nextStep.textColor, margin: 0, lineHeight: 1.6 }}>
+        {nextStep.description}
+      </p>
+    </div>
+  );
+}
+
 function TransactionDetail() {
   const API_BASE = process.env.REACT_APP_API_URL || '';
   const BASE_URL_LOCAL = API_BASE.replace('/api', '');
@@ -348,7 +407,7 @@ function TransactionDetail() {
 
   const handleAcceptDelivery = async () => {
     if (!payoutReadiness?.payout_ready) { await checkPayoutReadiness(); if (!payoutReadiness?.payout_ready) { const issues = payoutReadiness?.issues?.join(', ') || 'Unknown issue'; toast.warning(`Seller payout setup incomplete. ${issues}`); } }
-    if (!window.confirm('Confirm you have received the item? This will release funds from escrow. Bank settlement may take 1-2 business days. This action cannot be undone.')) return;
+    if (!window.confirm('Confirm you have received the item? This will release funds from escrow. Bank settlement may take up to 2 business days. This action cannot be undone.')) return;
     setAcceptingDelivery(true);
     try { await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(PAYOUT_TIMING_COPY); fetchData(); }
     catch (error) { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); }
@@ -356,7 +415,7 @@ function TransactionDetail() {
   };
 
   const handleManualAcceptDelivery = async () => {
-    if (!window.confirm('MANUAL OVERRIDE: Confirm receipt and release funds from escrow? Bank settlement may take 1-2 business days.')) return;
+    if (!window.confirm('MANUAL OVERRIDE: Confirm receipt and release funds from escrow? Bank settlement may take up to 2 business days.')) return;
     setAcceptingDelivery(true);
     try { await api.post(`${API}/tradesafe/manual-accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(PAYOUT_TIMING_COPY); fetchData(); }
     catch (error) { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); }
@@ -576,7 +635,8 @@ function TransactionDetail() {
   const isActionable = uiState.actionable && !uiState.terminal;
   const canBuyerConfirm = isActionable && isBuyer && !buyerConfirmed;
   const canSellerConfirm = isActionable && isSeller && !sellerConfirmed;
-  const canCreateEscrow = isActionable && isSeller && bothConfirmed && !hasEscrow && transaction.item_price >= 100;
+  const canFundEscrowSetup = isActionable && isBuyer && bothConfirmed && !hasEscrow && transaction.item_price >= 100;
+  const sellerWaitingForBuyerFunding = isActionable && isSeller && bothConfirmed && !hasEscrow;
   const canMakePayment = isActionable && hasEscrow && isBuyer && !isSeller && bothConfirmed && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
   console.log('Payment Button Debug:', { hasEscrow, isBuyer, isSeller, escrowState, paymentStatus: transaction.payment_status, canMakePayment });
   const isAwaitingBuyerPayment = isActionable && hasEscrow && isSeller && !isBuyer && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
@@ -595,6 +655,36 @@ function TransactionDetail() {
     (_fa === 'SPLIT_AGENT' || _fa === 'BUYER_SELLER_AGENT') ? (transaction.trusttrade_fee || 0) / 2 :
     0
   );
+  const fundsSecured = hasEscrow && (
+    ['FUNDS_RECEIVED', 'FUNDS_DEPOSITED', 'INITIATED', 'SENT', 'DELIVERED', 'FUNDS_RELEASED'].includes(escrowState) ||
+    ['Paid', 'Funds Secured', 'Delivery in Progress', 'Released'].includes(transaction.payment_status)
+  );
+  const nextStep = (() => {
+    const base = {
+      bg: '#eff6ff',
+      border: '#bfdbfe',
+      color: '#2563eb',
+      titleColor: '#1e3a8a',
+      textColor: '#1d4ed8',
+      roleContext: isBuyer ? 'Buyer next step' : isSeller ? 'Seller next step' : 'Transaction status',
+    };
+    if (isFinalized) {
+      return { ...base, bg: '#ecfdf5', border: '#a7f3d0', color: '#059669', titleColor: '#064e3b', textColor: '#047857', title: 'Funds released', description: PAYOUT_TIMING_SHORT };
+    }
+    if (isBuyer && (canFundEscrowSetup || canMakePayment)) {
+      return { ...base, title: 'Your next step: Fund escrow', description: 'Your payment is held securely until delivery is confirmed.' };
+    }
+    if (isSeller && (sellerWaitingForBuyerFunding || isAwaitingBuyerPayment)) {
+      return { ...base, bg: '#fffbeb', border: '#fde68a', color: '#d97706', titleColor: '#78350f', textColor: '#92400e', title: 'Waiting for buyer payment', description: 'Share this link with the buyer. You will be notified when funds are secured.' };
+    }
+    if (fundsSecured && isBuyer && !transaction.delivery_confirmed) {
+      return { ...base, bg: '#ecfdf5', border: '#a7f3d0', color: '#059669', titleColor: '#064e3b', textColor: '#047857', title: 'Escrow funded', description: 'Seller can now deliver. Funds remain locked until you confirm receipt.' };
+    }
+    if (fundsSecured && isSeller && !transaction.delivery_confirmed) {
+      return { ...base, bg: '#ecfdf5', border: '#a7f3d0', color: '#059669', titleColor: '#064e3b', textColor: '#047857', title: 'Funds secured — deliver safely', description: 'Payment is protected in escrow. Deliver the item and update the transaction.' };
+    }
+    return null;
+  })();
 
   const handleCopyLink = async () => {
     if (!shareLink) return;
@@ -634,6 +724,8 @@ function TransactionDetail() {
             <div style={{ ...S.card, padding: '18px 20px' }}>
               <StepProgressTracker transaction={transaction} />
             </div>
+
+            <NextStepCard nextStep={nextStep} />
 
             {/* Status card */}
             <TransactionStatusCard transaction={transaction} userRole={isBuyer ? 'buyer' : (isSeller ? 'seller' : 'viewer')} />
@@ -693,7 +785,10 @@ function TransactionDetail() {
             )}
 
             {isFinalized && (
-              <FinalizedEscrowState transaction={transaction} uiState={uiState} />
+              <>
+                <FinalizedEscrowState transaction={transaction} uiState={uiState} />
+                <PayoutTimeline transaction={transaction} />
+              </>
             )}
 
             {/* Buyer confirm */}
@@ -743,18 +838,36 @@ function TransactionDetail() {
               </div>
             )}
 
-            {/* Create escrow */}
-            {canCreateEscrow && (
+            {/* Buyer fund escrow setup */}
+            {canFundEscrowSetup && (
               <div style={S.actionCard('#10b981', '#ecfdf5')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: '#a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Shield size={18} color="#059669" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: '0 0 4px' }}>Action Required: Create Escrow</p>
-                    <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Both parties confirmed. Create escrow to enable secure payment.</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: '0 0 4px' }}>Your next step: Fund escrow</p>
+                    <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Pay securely into escrow. Seller is paid only after you confirm delivery.</p>
                     <button type="button" onClick={handleCreateEscrow} onTouchEnd={handleCreateEscrow} disabled={creatingEscrow} data-testid="create-escrow-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: creatingEscrow ? 0.6 : 1 }}>
-                      {creatingEscrow ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Creating…</> : <><Shield size={13} /> Create Escrow</>}
+                      {creatingEscrow ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Preparing secure escrow...</> : <><Shield size={13} /> Fund Escrow Securely</>}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Seller waiting for buyer funding setup */}
+            {sellerWaitingForBuyerFunding && (
+              <div style={S.actionCard('#f59e0b', '#fffbeb')}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 9, background: '#fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <CreditCard size={18} color="#d97706" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>Waiting for buyer to fund escrow</p>
+                    <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 14px' }}>Share this link with the buyer. Funds will be protected once the buyer pays.</p>
+                    <button type="button" onClick={handleCopyLink} className="action-btn" style={{ ...S.btn('#f59e0b'), opacity: 1 }}>
+                      {copied ? <><Check size={13} /> Link copied</> : <><Copy size={13} /> Copy buyer link</>}
                     </button>
                   </div>
                 </div>
@@ -769,8 +882,8 @@ function TransactionDetail() {
                     <CreditCard size={18} color="#3b82f6" />
                   </div>
                   <div>
-                    <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: '0 0 3px' }}>Pay Securely with TrustTrade</p>
-                    <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Select a payment method to complete your secure payment.</p>
+                    <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: '0 0 3px' }}>Fund Escrow</p>
+                    <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Pay securely into escrow. Seller is paid only after you confirm delivery.</p>
                   </div>
                 </div>
 
@@ -824,7 +937,7 @@ function TransactionDetail() {
                 </div>
 
                 <button type="button" onClick={handleGetPaymentLink} onTouchEnd={(e) => { e.preventDefault(); handleGetPaymentLink(e); }} disabled={loadingPaymentLink || !selectedPaymentMethod} data-testid="make-payment-btn" className="action-btn" style={{ ...S.btn(selectedPaymentMethod ? '#3b82f6' : '#94a3b8'), width: '100%', justifyContent: 'center', fontSize: 15, padding: '13px 20px', opacity: (loadingPaymentLink || !selectedPaymentMethod) ? 0.7 : 1 }}>
-                  {loadingPaymentLink ? <><Loader2 size={15} style={{ animation: 'spin 0.8s linear infinite' }} /> Loading Payment Page…</> : selectedPaymentMethod ? <><CreditCard size={15} /> Pay Securely</> : <><CreditCard size={15} style={{ opacity: 0.5 }} /> Select a payment method</>}
+                  {loadingPaymentLink ? <><Loader2 size={15} style={{ animation: 'spin 0.8s linear infinite' }} /> Loading Payment Page...</> : selectedPaymentMethod ? <><CreditCard size={15} /> Pay into Escrow</> : <><CreditCard size={15} style={{ opacity: 0.5 }} /> Select a payment method</>}
                 </button>
                 <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                   <Shield size={11} /> Your payment is protected by TrustTrade Escrow
@@ -840,10 +953,10 @@ function TransactionDetail() {
                     <CreditCard size={18} color="#d97706" />
                   </div>
                   <div>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>Awaiting Buyer Payment</p>
-                    <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 10px' }}>Escrow created. You'll be notified once payment is received.</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>Waiting for buyer payment</p>
+                    <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 10px' }}>Share this link with the buyer. Funds will be protected once the buyer pays.</p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: '#d97706' }}>
-                      <Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Waiting for buyer to pay…
+                      <Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Waiting for buyer to fund escrow...
                     </div>
                   </div>
                 </div>
@@ -923,7 +1036,7 @@ function TransactionDetail() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: '0 0 4px' }}>Confirm receipt</p>
-                    <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Confirm delivery to release funds from escrow. Bank settlement may take 1-2 business days.</p>
+                    <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Confirm delivery to release funds from escrow. Bank settlement may take up to 2 business days.</p>
                     {payoutReadiness && !payoutReadiness.payout_ready && (
                       <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
                         <p style={{ fontSize: 12, color: '#b45309', margin: 0 }}>{payoutReadiness.issues?.join('. ') || 'Seller must complete payout setup.'}</p>
@@ -1050,7 +1163,7 @@ function TransactionDetail() {
                     {uiState.state === 'DELIVERED' && (
                       <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 8, backgroundColor: 'rgba(26,115,232,0.08)' }}>
                         <p style={{ margin: 0, fontSize: 13, color: '#1a73e8', fontWeight: 500 }}>
-                          Funds release from escrow when buyer confirms receipt. Bank settlement may take 1-2 business days.
+                          Funds release from escrow when buyer confirms receipt. Bank settlement may take up to 2 business days.
                         </p>
                       </div>
                     )}
@@ -1092,7 +1205,7 @@ function TransactionDetail() {
             {canConfirmDelivery && (
               <div style={S.actionCard('#10b981', '#ecfdf5')}>
                 <p style={{ fontSize: 15, fontWeight: 700, color: '#064e3b', margin: '0 0 6px' }}>Final Step: Confirm Delivery</p>
-                <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Have you received the item and are satisfied? Confirming releases funds from escrow. Bank settlement may take 1-2 business days. This cannot be undone.</p>
+                <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Have you received the item and are satisfied? Confirming releases funds from escrow. Bank settlement may take up to 2 business days. This cannot be undone.</p>
                 <button onClick={handleConfirmDelivery} disabled={confirming} data-testid="confirm-delivery-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: confirming ? 0.6 : 1 }}>
                   {confirming ? 'Processing…' : 'Confirm Delivery'}
                 </button>

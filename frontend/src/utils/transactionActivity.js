@@ -250,6 +250,30 @@ export function buildTransactionActivity(transaction, options = {}) {
 export function buildUserActivityFeed(transactions = [], options = {}) {
   const { user = null, disputes = [], limit = 8, activeFirst = true } = options;
   const userTransactions = transactions.filter((transaction) => isUserParticipant(transaction, user));
+  console.log('[LATEST_ACTIVITY_DEBUG] buildUserActivityFeed input', {
+    user_id: user?.user_id,
+    email: user?.email,
+    dispute_ids: disputes.map((dispute) => dispute.dispute_id),
+    input_transaction_count: transactions.length,
+    user_transaction_count: userTransactions.length,
+    transactions: transactions.map((transaction) => ({
+      transaction_id: transaction.transaction_id,
+      buyer_user_id: transaction.buyer_user_id,
+      seller_user_id: transaction.seller_user_id,
+      buyer_email: transaction.buyer_email,
+      seller_email: transaction.seller_email,
+      invited_email: transaction.invited_email,
+      recipient_email: transaction.recipient_email,
+      recipient_info: transaction.recipient_info,
+      buyer_phone: transaction.buyer_phone,
+      seller_phone: transaction.seller_phone,
+      participant_match: isUserParticipant(transaction, user),
+      has_dispute: transaction.has_dispute,
+      transaction_state: transaction.transaction_state,
+      release_status: transaction.release_status,
+      payment_status: transaction.payment_status,
+    })),
+  });
   const events = userTransactions.flatMap((transaction) =>
     buildTransactionActivity(transaction, { user, disputes, includeUpcoming: false, chronological: false })
       .map((event) => ({

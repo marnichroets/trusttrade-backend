@@ -44,6 +44,9 @@ const isUserBuyerForTransaction = (transaction, user) =>
   transaction?.buyer_user_id === user?.user_id ||
   (transaction?.buyer_email && user?.email && transaction.buyer_email.toLowerCase() === user.email.toLowerCase());
 
+const emailMatches = (value, user) =>
+  Boolean(value && user?.email && String(value).trim().toLowerCase() === String(user.email).trim().toLowerCase());
+
 const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
 
 const phoneMatches = (transactionValue, user) => {
@@ -65,6 +68,17 @@ const isUserParticipantForTransaction = (transaction, user) =>
     phoneMatches(transaction?.buyer_phone, user) ||
     phoneMatches(transaction?.seller_phone, user) ||
     phoneMatches(transaction?.recipient_info, user)
+  ));
+
+const isExplicitDisputeCardParticipant = (transaction, user) =>
+  Boolean(transaction && user && (
+    transaction?.buyer_user_id === user?.user_id ||
+    transaction?.seller_user_id === user?.user_id ||
+    emailMatches(transaction?.buyer_email, user) ||
+    emailMatches(transaction?.seller_email, user) ||
+    emailMatches(transaction?.invited_email, user) ||
+    emailMatches(transaction?.recipient_email, user) ||
+    emailMatches(transaction?.recipient_info, user)
   ));
 
 const filterUserRelevantDisputes = (disputes, transactions, user) => {
@@ -104,6 +118,27 @@ function Dashboard() {
         api.get('/platform/stats'),
         api.get('/wallet').catch(() => ({ data: null })),
       ]);
+      console.log('[DASHBOARD_DISPUTES_RESPONSE_DEBUG]', {
+        user_id: userRes.data?.user_id,
+        email: userRes.data?.email,
+        dispute_ids: (disputesRes.data || []).map((dispute) => dispute.dispute_id),
+        transactions: (transactionsRes.data || []).map((transaction) => ({
+          transaction_id: transaction.transaction_id,
+          buyer_user_id: transaction.buyer_user_id,
+          seller_user_id: transaction.seller_user_id,
+          buyer_email: transaction.buyer_email,
+          seller_email: transaction.seller_email,
+          invited_email: transaction.invited_email,
+          recipient_email: transaction.recipient_email,
+          recipient_info: transaction.recipient_info,
+          buyer_phone: transaction.buyer_phone,
+          seller_phone: transaction.seller_phone,
+          has_dispute: transaction.has_dispute,
+          transaction_state: transaction.transaction_state,
+          release_status: transaction.release_status,
+          payment_status: transaction.payment_status,
+        })),
+      });
       setUser(userRes.data);
       setTransactions(transactionsRes.data);
       setDisputes(disputesRes.data);
@@ -618,6 +653,27 @@ function ActionDock({ navigate }) {
 }
 
 function buildActionItems(transactions, pendingDisputes, user) {
+  console.log('[DASHBOARD_ACTION_DEBUG] buildActionItems input', {
+    user_id: user?.user_id,
+    email: user?.email,
+    dispute_ids: pendingDisputes.map((dispute) => dispute.dispute_id),
+    transactions: transactions.map((transaction) => ({
+      transaction_id: transaction.transaction_id,
+      buyer_user_id: transaction.buyer_user_id,
+      seller_user_id: transaction.seller_user_id,
+      buyer_email: transaction.buyer_email,
+      seller_email: transaction.seller_email,
+      invited_email: transaction.invited_email,
+      recipient_email: transaction.recipient_email,
+      recipient_info: transaction.recipient_info,
+      buyer_phone: transaction.buyer_phone,
+      seller_phone: transaction.seller_phone,
+      has_dispute: transaction.has_dispute,
+      transaction_state: transaction.transaction_state,
+      release_status: transaction.release_status,
+      payment_status: transaction.payment_status,
+    })),
+  });
   return transactions
     .map((transaction) => {
       const meta = resolveEscrowUiState(transaction, pendingDisputes);
@@ -625,7 +681,26 @@ function buildActionItems(transactions, pendingDisputes, user) {
       const flow = getFlowCopy(transaction);
       const isBuyer = isUserBuyerForTransaction(transaction, user);
       const isSeller = isUserSellerForTransaction(transaction, user);
-      const hasDispute = meta.state === 'DISPUTED' || pendingDisputes.some((d) => d.transaction_id === transaction.transaction_id);
+      const scopedDisputes = pendingDisputes.filter((d) => d.transaction_id === transaction.transaction_id);
+      const hasDispute = scopedDisputes.length > 0 && isExplicitDisputeCardParticipant(transaction, user);
+      if (meta.state === 'DISPUTED' || scopedDisputes.length > 0) {
+        console.log('[DASHBOARD_ACTION_DEBUG] dispute action decision', {
+          user_id: user?.user_id,
+          email: user?.email,
+          transaction_id: transaction.transaction_id,
+          meta_state: meta.state,
+          dispute_ids: scopedDisputes.map((dispute) => dispute.dispute_id),
+          participant_match: isExplicitDisputeCardParticipant(transaction, user),
+          will_show_dispute_card: hasDispute,
+          buyer_user_id: transaction.buyer_user_id,
+          seller_user_id: transaction.seller_user_id,
+          buyer_email: transaction.buyer_email,
+          seller_email: transaction.seller_email,
+          invited_email: transaction.invited_email,
+          recipient_email: transaction.recipient_email,
+          recipient_info: transaction.recipient_info,
+        });
+      }
       const amount = getTransactionValue(transaction);
       const base = {
         transaction,

@@ -3,6 +3,38 @@ import api from '../utils/api';
 
 const AuthContext = createContext(null);
 
+const SESSION_UI_KEYS = [
+  'trusttrade:lastSeenActivityAt',
+  'trusttrade:lastSeenNotificationsAt',
+  'trusttrade:dashboardCache',
+  'trusttrade:disputesCache',
+  'trusttrade:notifications',
+];
+const SESSION_UI_KEY_PATTERNS = ['activity', 'dispute', 'dashboard', 'notification'];
+
+function clearSessionUiState() {
+  SESSION_UI_KEYS.forEach((key) => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
+  [localStorage, sessionStorage].forEach((storage) => {
+    Object.keys(storage).forEach((key) => {
+      const lowerKey = key.toLowerCase();
+      if (SESSION_UI_KEY_PATTERNS.some((pattern) => lowerKey.includes(pattern))) {
+        storage.removeItem(key);
+      }
+    });
+  });
+}
+
+function getStoredUserData() {
+  try {
+    return JSON.parse(localStorage.getItem('user_data') || 'null');
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }) {
   // Track if we've initialized to prevent re-runs
   const initialized = useRef(false);
@@ -63,6 +95,10 @@ export function AuthProvider({ children }) {
             is_admin: response.data.is_admin,
             picture: response.data.picture,
           };
+          const storedUser = getStoredUserData();
+          if (storedUser?.user_id && storedUser.user_id !== userData.user_id) {
+            clearSessionUiState();
+          }
           setUser(userData);
           setIsAuthenticated(true);
           localStorage.setItem('user_data', JSON.stringify(userData));
@@ -91,6 +127,10 @@ export function AuthProvider({ children }) {
   // Login function - called after successful OAuth
   const login = useCallback((userData, token) => {
     console.log('[LOGIN_CALLED] user:', userData.email);
+    const storedUser = getStoredUserData();
+    if (!storedUser?.user_id || storedUser.user_id !== userData.user_id) {
+      clearSessionUiState();
+    }
 
     // Store in localStorage FIRST
     localStorage.setItem('session_token', token);
@@ -121,6 +161,7 @@ export function AuthProvider({ children }) {
     
     localStorage.removeItem('session_token');
     localStorage.removeItem('user_data');
+    clearSessionUiState();
     setUser(null);
     setIsAuthenticated(false);
     
@@ -139,6 +180,10 @@ export function AuthProvider({ children }) {
           is_admin: response.data.is_admin,
           picture: response.data.picture,
         };
+        const storedUser = getStoredUserData();
+        if (storedUser?.user_id && storedUser.user_id !== userData.user_id) {
+          clearSessionUiState();
+        }
         setUser(userData);
         localStorage.setItem('user_data', JSON.stringify(userData));
         return userData;

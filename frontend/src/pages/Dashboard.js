@@ -44,10 +44,36 @@ const isUserBuyerForTransaction = (transaction, user) =>
   transaction?.buyer_user_id === user?.user_id ||
   (transaction?.buyer_email && user?.email && transaction.buyer_email.toLowerCase() === user.email.toLowerCase());
 
+const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
+
+const phoneMatches = (transactionValue, user) => {
+  const transactionPhone = normalizePhone(transactionValue);
+  const userPhone = normalizePhone(user?.phone);
+  return Boolean(transactionPhone && userPhone && transactionPhone === userPhone);
+};
+
 const isUserSellerForTransaction = (transaction, user) =>
   transaction?.seller_user_id === user?.user_id ||
   (transaction?.seller_email && user?.email && transaction.seller_email.toLowerCase() === user.email.toLowerCase()) ||
   (transaction?.freelancer_email && user?.email && transaction.freelancer_email.toLowerCase() === user.email.toLowerCase());
+
+const isUserParticipantForTransaction = (transaction, user) =>
+  Boolean(transaction && user && (
+    isUserBuyerForTransaction(transaction, user) ||
+    isUserSellerForTransaction(transaction, user) ||
+    (transaction?.recipient_info && user?.email && transaction.recipient_info.toLowerCase() === user.email.toLowerCase()) ||
+    phoneMatches(transaction?.buyer_phone, user) ||
+    phoneMatches(transaction?.seller_phone, user) ||
+    phoneMatches(transaction?.recipient_info, user)
+  ));
+
+const filterUserRelevantDisputes = (disputes, transactions, user) => {
+  const transactionById = new Map(transactions.map((transaction) => [transaction.transaction_id, transaction]));
+  return disputes.filter((dispute) => {
+    const transaction = transactionById.get(dispute.transaction_id);
+    return isUserParticipantForTransaction(transaction, user);
+  });
+};
 
 const flowSteps = [
   { label: 'Confirm', icon: CheckCircle },
@@ -102,26 +128,34 @@ function Dashboard() {
 
   useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
 
-  const pendingDisputes = disputes.filter(d => fieldText(d.status).includes('pending') || fieldText(d.status).includes('open'));
-  const activeTransactions = transactions.filter(t => !resolveEscrowUiState(t, pendingDisputes).terminal);
-  const actionItems = useMemo(() => buildActionItems(transactions, pendingDisputes, user), [transactions, pendingDisputes, user]);
-  const latestActivity = useMemo(
-    () => buildUserActivityFeed(transactions, { user, disputes: pendingDisputes, limit: 7, activeFirst: true }),
-    [transactions, pendingDisputes, user]
+  const userRelevantDisputes = useMemo(
+    () => filterUserRelevantDisputes(disputes, transactions, user),
+    [disputes, transactions, user]
   );
-  const pendingConfirmations = transactions.filter(t => {
+  const userRelevantTransactions = useMemo(
+    () => transactions.filter((transaction) => isUserParticipantForTransaction(transaction, user)),
+    [transactions, user]
+  );
+  const pendingDisputes = userRelevantDisputes.filter(d => fieldText(d.status).includes('pending') || fieldText(d.status).includes('open'));
+  const activeTransactions = userRelevantTransactions.filter(t => !resolveEscrowUiState(t, pendingDisputes).terminal);
+  const actionItems = useMemo(() => buildActionItems(userRelevantTransactions, pendingDisputes, user), [userRelevantTransactions, pendingDisputes, user]);
+  const latestActivity = useMemo(
+    () => buildUserActivityFeed(userRelevantTransactions, { user, disputes: pendingDisputes, limit: 7, activeFirst: true }),
+    [userRelevantTransactions, pendingDisputes, user]
+  );
+  const pendingConfirmations = userRelevantTransactions.filter(t => {
     const state = resolveEscrowUiState(t, pendingDisputes);
     return ['CREATED', 'DELIVERY_PENDING'].includes(state.state);
   });
-  const recentTransactions = transactions.slice(0, 6);
-  const totalEscrowValue = transactions
+  const recentTransactions = userRelevantTransactions.slice(0, 6);
+  const totalEscrowValue = userRelevantTransactions
     .filter(t => ['ESCROW_LOCKED', 'DELIVERY_PENDING', 'DELIVERED', 'DISPUTED'].includes(resolveEscrowUiState(t, pendingDisputes).state))
     .reduce((sum, t) => sum + (t.total || getTransactionValue(t)), 0);
-  const pendingConfirmationValue = transactions
+  const pendingConfirmationValue = userRelevantTransactions
     .filter(t => resolveEscrowUiState(t, pendingDisputes).state === 'DELIVERY_PENDING')
     .reduce((sum, t) => sum + (t.total || getTransactionValue(t)), 0);
 
-  const disputeHoldValue = transactions
+  const disputeHoldValue = userRelevantTransactions
     .filter(t => resolveEscrowUiState(t, pendingDisputes).state === 'DISPUTED')
     .reduce((sum, t) => sum + (t.total || getTransactionValue(t)), 0);
 

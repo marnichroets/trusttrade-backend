@@ -5,6 +5,7 @@ Handles dispute creation, management, and resolution
 
 import uuid
 import logging
+import re
 from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, HTTPException, Request
@@ -14,9 +15,54 @@ from core.database import get_database
 from core.security import get_user_from_token
 from models.dispute import Dispute, DisputeCreate, DisputeUpdate
 from email_service import send_dispute_opened_email
+from sms_service import normalize_phone_number
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/disputes", tags=["Disputes"])
+
+
+def _norm(value: str | None) -> str:
+    return (value or "").strip().lower()
+
+
+def user_transaction_access_query(user):
+    user_email = _norm(user.email)
+    user_phone = normalize_phone_number(getattr(user, "phone", None) or "")
+    conditions = []
+    if getattr(user, "user_id", None):
+        conditions.extend([
+            {"buyer_user_id": user.user_id},
+            {"seller_user_id": user.user_id},
+        ])
+    if user_email:
+        email_match = {"$regex": f"^{re.escape(user_email)}$", "$options": "i"}
+        conditions.extend([
+            {"buyer_email": email_match},
+            {"seller_email": email_match},
+            {"recipient_info": email_match},
+        ])
+    if user_phone:
+        conditions.extend([
+            {"buyer_phone": user_phone},
+            {"seller_phone": user_phone},
+            {"recipient_info": user_phone},
+        ])
+    return {"$or": conditions} if conditions else {"transaction_id": None}
+
+
+def user_can_access_transaction(transaction: dict, user) -> bool:
+    user_email = _norm(user.email)
+    user_phone = normalize_phone_number(getattr(user, "phone", None) or "")
+    return any([
+        transaction.get("buyer_user_id") == user.user_id,
+        transaction.get("seller_user_id") == user.user_id,
+        _norm(transaction.get("buyer_email")) == user_email,
+        _norm(transaction.get("seller_email")) == user_email,
+        _norm(transaction.get("recipient_info")) == user_email,
+        user_phone and transaction.get("buyer_phone") == user_phone,
+        user_phone and transaction.get("seller_phone") == user_phone,
+        user_phone and transaction.get("recipient_info") == user_phone,
+    ])
 
 
 @router.post("", response_model=Dispute, status_code=201)
@@ -37,11 +83,8 @@ async def create_dispute(request: Request, dispute_data: DisputeCreate):
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
-    if not user.is_admin:
-        if (transaction.get("buyer_user_id") != user.user_id and
-            transaction.get("buyer_email") != user.email and
-            transaction.get("seller_email") != user.email):
-            raise HTTPException(status_code=403, detail="Access denied")
+    if not user.is_admin and not user_can_access_transaction(transaction, user):
+        raise HTTPException(status_code=403, detail="Access denied")
     
     dispute_id = f"disp_{uuid.uuid4().hex[:12]}"
     
@@ -118,30 +161,26 @@ async def update_dispute_evidence(request: Request, dispute_id: str, evidence_fi
 
 @router.get("", response_model=List[Dispute])
 async def list_disputes(request: Request):
-    """List disputes for current user (or all for admin)"""
+    """List disputes linked to the authenticated user's own transactions.
+
+    Admin-wide dispute visibility is intentionally limited to /api/admin/disputes.
+    """
     db = get_database()
     
     user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    if user.is_admin:
-        query = {}
-    else:
-        # Get user's transactions
-        user_transactions = await db.transactions.find(
-            {
-                "$or": [
-                    {"buyer_user_id": user.user_id},
-                    {"buyer_email": user.email},
-                    {"seller_email": user.email}
-                ]
-            },
-            {"_id": 0, "transaction_id": 1}
-        ).to_list(1000)
-        
-        transaction_ids = [t["transaction_id"] for t in user_transactions]
-        query = {"transaction_id": {"$in": transaction_ids}}
+    user_transactions = await db.transactions.find(
+        user_transaction_access_query(user),
+        {"_id": 0, "transaction_id": 1}
+    ).to_list(1000)
+
+    transaction_ids = [t["transaction_id"] for t in user_transactions if t.get("transaction_id")]
+    if not transaction_ids:
+        return []
+
+    query = {"transaction_id": {"$in": transaction_ids}}
     
     disputes = await db.disputes.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return [Dispute(**d) for d in disputes]

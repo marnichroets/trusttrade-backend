@@ -617,7 +617,9 @@ async def list_transactions(request: Request):
             "transaction_id": 1, "share_code": 1, "item_description": 1, "item_price": 1,
             "payment_status": 1, "release_status": 1, "transaction_state": 1, "tradesafe_state": 1,
             "created_at": 1, "buyer_name": 1, "buyer_email": 1, "seller_name": 1, "seller_email": 1,
-            "buyer_user_id": 1, "seller_user_id": 1, "delivery_method": 1, "has_dispute": 1,
+            "buyer_user_id": 1, "seller_user_id": 1, "buyer_phone": 1, "seller_phone": 1,
+            "recipient_info": 1, "recipient_type": 1, "invite_type": 1,
+            "delivery_method": 1, "has_dispute": 1,
             "buyer_confirmed": 1, "seller_confirmed": 1, "tradesafe_id": 1,
             "trusttrade_fee": 1, "total": 1, "seller_receives": 1
         }

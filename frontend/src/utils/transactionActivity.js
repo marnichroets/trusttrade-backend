@@ -30,10 +30,31 @@ function isUserBuyer(transaction, user) {
     (transaction?.buyer_email && user?.email && transaction.buyer_email.toLowerCase() === user.email.toLowerCase());
 }
 
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function phoneMatches(transactionValue, user) {
+  const transactionPhone = normalizePhone(transactionValue);
+  const userPhone = normalizePhone(user?.phone);
+  return Boolean(transactionPhone && userPhone && transactionPhone === userPhone);
+}
+
 function isUserSeller(transaction, user) {
   return transaction?.seller_user_id === user?.user_id ||
     (transaction?.seller_email && user?.email && transaction.seller_email.toLowerCase() === user.email.toLowerCase()) ||
     (transaction?.freelancer_email && user?.email && transaction.freelancer_email.toLowerCase() === user.email.toLowerCase());
+}
+
+function isUserParticipant(transaction, user) {
+  return Boolean(transaction && user && (
+    isUserBuyer(transaction, user) ||
+    isUserSeller(transaction, user) ||
+    (transaction?.recipient_info && user?.email && transaction.recipient_info.toLowerCase() === user.email.toLowerCase()) ||
+    phoneMatches(transaction?.buyer_phone, user) ||
+    phoneMatches(transaction?.seller_phone, user) ||
+    phoneMatches(transaction?.recipient_info, user)
+  ));
 }
 
 function eventCopy(type, role, transaction) {
@@ -228,7 +249,8 @@ export function buildTransactionActivity(transaction, options = {}) {
 
 export function buildUserActivityFeed(transactions = [], options = {}) {
   const { user = null, disputes = [], limit = 8, activeFirst = true } = options;
-  const events = transactions.flatMap((transaction) =>
+  const userTransactions = transactions.filter((transaction) => isUserParticipant(transaction, user));
+  const events = userTransactions.flatMap((transaction) =>
     buildTransactionActivity(transaction, { user, disputes, includeUpcoming: false, chronological: false })
       .map((event) => ({
         ...event,

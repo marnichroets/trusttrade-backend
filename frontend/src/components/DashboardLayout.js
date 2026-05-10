@@ -1,9 +1,11 @@
-import { useEffect } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings, User, Activity, Shield, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import TrustLogo from './TrustLogo';
+import api from '../utils/api';
+import { buildUserActivityFeed, getUnreadActivityCount, markActivitySeen } from '../utils/transactionActivity';
 
 export const V = {
   bg:      '#0A0E14',
@@ -22,8 +24,10 @@ export const V = {
 
 function DashboardLayout({ children, user: userProp, loading = false }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { logout, user: authUser } = useAuth();
   const user = userProp || authUser;
+  const [unreadActivityCount, setUnreadActivityCount] = useState(0);
 
   useEffect(() => {
     const link = document.createElement('link');
@@ -32,6 +36,42 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
     document.head.appendChild(link);
     return () => { if (document.head.contains(link)) document.head.removeChild(link); };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) return undefined;
+
+    async function fetchActivityCount() {
+      try {
+        const [transactionsRes, disputesRes] = await Promise.all([
+          api.get('/transactions'),
+          api.get('/disputes').catch(() => ({ data: [] })),
+        ]);
+        if (cancelled) return;
+        const events = buildUserActivityFeed(transactionsRes.data || [], {
+          user,
+          disputes: disputesRes.data || [],
+          limit: 40,
+          activeFirst: false,
+        });
+        setUnreadActivityCount(getUnreadActivityCount(events));
+      } catch {
+        if (!cancelled) setUnreadActivityCount(0);
+      }
+    }
+
+    fetchActivityCount();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (location.pathname === '/activity') {
+      markActivitySeen();
+      setUnreadActivityCount(0);
+    }
+  }, [location.pathname]);
 
   const handleLogout = async () => {
     try {
@@ -231,6 +271,28 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
                         style={{ flexShrink: 0 }}
                       />
                       <span style={{ flex: 1 }}>{item.label}</span>
+                      {item.label === 'Live Activity' && unreadActivityCount > 0 && (
+                        <span
+                          data-testid="nav-notification-badge"
+                          title={`${unreadActivityCount} unread transaction, payout, or dispute updates`}
+                          style={{
+                            minWidth: 18,
+                            height: 18,
+                            padding: '0 5px',
+                            borderRadius: 999,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: V.accent,
+                            color: V.bg,
+                            fontSize: 9,
+                            fontWeight: 900,
+                            fontFamily: V.mono,
+                          }}
+                        >
+                          {unreadActivityCount > 99 ? '99+' : unreadActivityCount}
+                        </span>
+                      )}
                       {item.highlight && !isActive && (
                         <span style={{
                           fontSize: 8, fontWeight: 700,
@@ -391,7 +453,35 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
               transition: 'color 0.1s',
             })}
           >
-            <item.icon size={15} />
+            <span style={{ position: 'relative', display: 'inline-flex' }}>
+              <item.icon size={15} />
+              {item.label === 'Live Activity' && unreadActivityCount > 0 && (
+                <span
+                  data-testid="mobile-nav-notification-badge"
+                  title={`${unreadActivityCount} unread transaction, payout, or dispute updates`}
+                  style={{
+                    position: 'absolute',
+                    right: -8,
+                    top: -7,
+                    minWidth: 15,
+                    height: 15,
+                    padding: '0 4px',
+                    borderRadius: 999,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: V.accent,
+                    color: V.bg,
+                    fontSize: 8,
+                    fontWeight: 900,
+                    fontFamily: V.mono,
+                    border: `1px solid ${V.surface}`,
+                  }}
+                >
+                  {unreadActivityCount > 9 ? '9+' : unreadActivityCount}
+                </span>
+              )}
+            </span>
             <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: V.mono }}>
               {item.label.split(' ')[0]}
             </span>

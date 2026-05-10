@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import Timeline from '../components/Timeline';
+import TransactionActivityFeed from '../components/TransactionActivityFeed';
 import { TransactionTimeline } from '../components/TransactionTimeline';
 import TransactionStatusCard from '../components/TransactionStatusCard';
 import StepProgressTracker from '../components/StepProgressTracker';
 import { getFlowCopy, getTransactionFlowType, mapEscrowUiStateToTimelineState, PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from '../components/transactionState';
 import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
+import { buildTransactionActivity } from '../utils/transactionActivity';
 import api from '../utils/api';
 import { toast } from 'sonner';
 import {
@@ -863,6 +865,16 @@ function TransactionDetail() {
   const uiState = resolveEscrowUiState(transaction);
   const flowType = getTransactionFlowType(transaction);
   const flowCopy = getFlowCopy(transaction);
+  const transactionDisputes = [
+    ...(Array.isArray(transaction.disputes) ? transaction.disputes : []),
+    ...(transaction.dispute ? [transaction.dispute] : []),
+  ];
+  const activityEvents = buildTransactionActivity(transaction, {
+    user,
+    disputes: transactionDisputes,
+    includeUpcoming: true,
+    chronological: true,
+  });
   const isDeliveryFlow = flowType === 'delivery';
   const isInstantFlow = flowType === 'instant';
   const isFinalized = ['COMPLETED', 'RELEASED'].includes(uiState.state);
@@ -1445,6 +1457,10 @@ function TransactionDetail() {
                   <div>
                     <p style={{ ...S.sectionTitle, marginBottom: 20 }}>Transaction Progress</p>
                     <TransactionTimeline transaction={transaction} currentState={mapEscrowUiStateToTimelineState(uiState) || transaction.transaction_state || mapPaymentStatusToState(transaction.payment_status, transaction.tradesafe_state)} timeline={transaction.timeline} />
+                    <div style={{ marginTop: 24 }}>
+                      <p style={{ ...S.sectionTitle, marginBottom: 12 }}>Transaction Activity</p>
+                      <TransactionActivityFeed events={activityEvents} />
+                    </div>
                     {uiState.state === 'DELIVERED' && (
                       <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 8, backgroundColor: 'rgba(26,115,232,0.08)' }}>
                         <p style={{ margin: 0, fontSize: 13, color: '#1a73e8', fontWeight: 500 }}>

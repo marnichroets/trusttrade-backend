@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout, { V } from '../components/DashboardLayout';
+import TransactionActivityFeed from '../components/TransactionActivityFeed';
 import { fieldText, getFlowCopy, getTransactionFlowType, PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from '../components/transactionState';
+import { buildUserActivityFeed } from '../utils/transactionActivity';
 import api from '../utils/api';
 import {
   Activity,
@@ -103,6 +105,10 @@ function Dashboard() {
   const pendingDisputes = disputes.filter(d => fieldText(d.status).includes('pending') || fieldText(d.status).includes('open'));
   const activeTransactions = transactions.filter(t => !resolveEscrowUiState(t, pendingDisputes).terminal);
   const actionItems = useMemo(() => buildActionItems(transactions, pendingDisputes, user), [transactions, pendingDisputes, user]);
+  const latestActivity = useMemo(
+    () => buildUserActivityFeed(transactions, { user, disputes: pendingDisputes, limit: 7, activeFirst: true }),
+    [transactions, pendingDisputes, user]
+  );
   const pendingConfirmations = transactions.filter(t => {
     const state = resolveEscrowUiState(t, pendingDisputes);
     return ['CREATED', 'DELIVERY_PENDING'].includes(state.state);
@@ -194,6 +200,11 @@ function Dashboard() {
           border-color: rgba(0,209,255,0.42) !important;
           background: rgba(0,209,255,0.045) !important;
         }
+        .tt-activity-row:hover {
+          transform: translateY(-1px);
+          border-color: rgba(0,209,255,0.34) !important;
+          background: rgba(0,209,255,0.045) !important;
+        }
         .tt-action:hover {
           transform: translateY(-2px);
           border-color: rgba(0,209,255,0.52) !important;
@@ -201,7 +212,7 @@ function Dashboard() {
           box-shadow: 0 16px 45px rgba(0,209,255,0.08);
         }
         @media (prefers-reduced-motion: reduce) {
-          .tt-live-row, .tt-action { transition: none !important; }
+          .tt-live-row, .tt-action, .tt-activity-row { transition: none !important; }
         }
         @media (max-width: 1180px) {
           .tt-grid { grid-template-columns: 1fr; }
@@ -222,6 +233,8 @@ function Dashboard() {
         />
 
         <ActionRequiredPanel actionItems={actionItems} navigate={navigate} />
+
+        <LatestActivityCard events={latestActivity} navigate={navigate} />
 
         <LiveTransactionFeed
           activeTransactions={activeTransactions}
@@ -656,6 +669,25 @@ function ActionRequiredPanel({ actionItems, navigate }) {
             <ArrowRight size={14} color={action.color} />
           </button>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function LatestActivityCard({ events, navigate }) {
+  return (
+    <section className="tt-command-panel" style={{ padding: 18, overflow: 'hidden' }}>
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <SectionTitle
+          label="Latest Activity"
+          right={events.length ? `${events.length} updates` : "You're all caught up"}
+        />
+        <TransactionActivityFeed
+          events={events}
+          compact
+          showTransaction
+          onOpenEvent={(event) => navigate(event.path)}
+        />
       </div>
     </section>
   );

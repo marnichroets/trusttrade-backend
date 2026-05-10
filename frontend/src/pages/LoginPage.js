@@ -10,7 +10,10 @@ import { toast } from 'sonner';
 import api from '../utils/api';
 import TrustLogo from '../components/TrustLogo';
 
-const BACKEND_URL = process.env.REACT_APP_API_URL || process.env.REACT_APP_BACKEND_URL || 'https://trusttrade-backend-production-3efa.up.railway.app';
+function getGoogleAuthUrl() {
+  if (process.env.REACT_APP_GOOGLE_AUTH_URL) return process.env.REACT_APP_GOOGLE_AUTH_URL;
+  return `${window.location.origin}/api/auth/google`;
+}
 
 function getSafeRedirect(search) {
   const params = new URLSearchParams(search || '');
@@ -101,7 +104,7 @@ export default function LoginPage() {
       localStorage.setItem('intendedRoute', destination);
       sessionStorage.setItem('redirectAfterLogin', destination);
     }
-    window.location.href = 'https://trusttrade-backend-production-3efa.up.railway.app/api/auth/google';
+    window.location.href = getGoogleAuthUrl();
   };
 
   const handleSubmit = async (e) => {

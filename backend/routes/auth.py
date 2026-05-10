@@ -23,6 +23,12 @@ from sms_service import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
+TRUSTTRADE_OAUTH_HOSTS = {
+    "trusttradesa.co.za",
+    "www.trusttradesa.co.za",
+    "staging.trusttradesa.co.za",
+}
+
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -63,6 +69,16 @@ def verify_password(password: str, stored_hash: str) -> bool:
 def generate_session_token() -> str:
     """Generate a secure session token"""
     return secrets.token_urlsafe(32)
+
+
+def get_google_redirect_uri(request: Request) -> str:
+    """Prefer the branded host used by the browser for Google OAuth."""
+    forwarded_host = request.headers.get("x-forwarded-host")
+    host = (forwarded_host or request.headers.get("host") or "").split(",")[0].strip().lower()
+    host = host.split(":")[0]
+    if host in TRUSTTRADE_OAUTH_HOSTS:
+        return f"https://{host}/api/auth/google/callback"
+    return settings.GOOGLE_REDIRECT_URI
 
 
 @router.post("/register")
@@ -529,7 +545,7 @@ async def get_phone_verification_status(request: Request):
 # ============ GOOGLE OAUTH (direct) ============
 
 @router.get("/google")
-async def google_login():
+async def google_login(request: Request):
     """Redirect to Google OAuth consent screen."""
     from urllib.parse import urlencode
     from fastapi.responses import RedirectResponse
@@ -538,9 +554,10 @@ async def google_login():
         raise HTTPException(status_code=503, detail="Google OAuth is not configured")
 
     state = secrets.token_urlsafe(16)
+    redirect_uri = get_google_redirect_uri(request)
     params = urlencode({
         "client_id": settings.GOOGLE_CLIENT_ID,
-        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+        "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": "openid email profile",
         "state": state,
@@ -597,7 +614,7 @@ async def google_callback(
                     "code": code,
                     "client_id": settings.GOOGLE_CLIENT_ID,
                     "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                    "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                    "redirect_uri": get_google_redirect_uri(request),
                     "grant_type": "authorization_code",
                 },
             )

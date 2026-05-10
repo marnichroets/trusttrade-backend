@@ -56,7 +56,7 @@ class Settings:
     CORS_ORIGINS: List[str] = _get_cors_origins()
     
     # Frontend URL for email links
-    FRONTEND_URL: str = os.environ.get('FRONTEND_URL', 'https://www.trusttradesa.co.za')
+    FRONTEND_URL: str = os.environ.get('FRONTEND_URL', 'https://trusttradesa.co.za')
     
     # TradeSafe Integration
     TRADESAFE_CLIENT_ID: str = os.environ.get('TRADESAFE_CLIENT_ID', '')
@@ -78,7 +78,7 @@ class Settings:
     # Google OAuth
     GOOGLE_CLIENT_ID: str = os.environ.get('GOOGLE_CLIENT_ID', '')
     GOOGLE_CLIENT_SECRET: str = os.environ.get('GOOGLE_CLIENT_SECRET', '')
-    GOOGLE_REDIRECT_URI: str = os.environ.get('GOOGLE_REDIRECT_URI', 'https://www.trusttradesa.co.za/api/auth/google/callback')
+    GOOGLE_REDIRECT_URI: str = os.environ.get('GOOGLE_REDIRECT_URI', 'https://trusttradesa.co.za/api/auth/google/callback')
 
     # Admin
     ADMIN_ALERT_EMAIL: str = os.environ.get('ADMIN_ALERT_EMAIL', '')

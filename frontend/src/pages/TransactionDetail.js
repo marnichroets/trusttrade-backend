@@ -39,11 +39,120 @@ function formatDetailDate(value) {
   });
 }
 
+function addBusinessDays(date, days) {
+  const next = new Date(date);
+  let remaining = days;
+  while (remaining > 0) {
+    next.setDate(next.getDate() + 1);
+    const day = next.getDay();
+    if (day !== 0 && day !== 6) remaining -= 1;
+  }
+  return next;
+}
+
+function formatSettlementDate(value) {
+  return new Date(value).toLocaleDateString('en-ZA', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'short',
+  });
+}
+
+function getPayoutActivity(transaction) {
+  const releasedAt = transaction.released_at || transaction.funds_released_at || transaction.completed_at || transaction.delivery_confirmed_at;
+  const processingStartedAt = transaction.payout_processing_started_at ||
+    transaction.withdrawal_requested_at ||
+    transaction.withdrawal_started_at ||
+    transaction.withdrawal_triggered_at ||
+    releasedAt;
+  const settlementConfirmedAt = transaction.settlement_confirmed_at || transaction.withdrawal_completed_at || null;
+  const settlementConfirmed = Boolean(settlementConfirmedAt || transaction.bank_reference || transaction.settlement_reference || transaction.settlement_status === 'settlement_confirmed');
+
+  return {
+    releasedAt,
+    processingStartedAt,
+    settlementConfirmedAt,
+    settlementConfirmed,
+  };
+}
+
+function getPayoutStatus(transaction) {
+  const activity = getPayoutActivity(transaction);
+  const rawPayout = String(transaction.payout_status || '').toLowerCase();
+  const rawSettlement = String(transaction.settlement_status || '').toLowerCase();
+  const releaseDate = activity.releasedAt ? new Date(activity.releasedAt) : new Date();
+  const isWeekend = releaseDate.getDay() === 0 || releaseDate.getDay() === 6;
+
+  if (activity.settlementConfirmed || rawPayout.includes('complete') || rawSettlement.includes('confirm')) {
+    return { label: 'Completed', tone: 'green' };
+  }
+  if (isWeekend) {
+    return { label: 'Expected next business day', tone: 'amber' };
+  }
+  if (activity.processingStartedAt || rawPayout.includes('processing') || rawPayout.includes('withdraw')) {
+    return { label: 'Bank processing', tone: 'blue' };
+  }
+  return { label: 'Processing', tone: 'slate' };
+}
+
+function getSettlementEstimate(transaction) {
+  const activity = getPayoutActivity(transaction);
+  if (activity.settlementConfirmedAt) {
+    return {
+      title: 'Settlement confirmed',
+      detail: formatDetailDate(activity.settlementConfirmedAt),
+    };
+  }
+
+  const basis = activity.processingStartedAt || activity.releasedAt || new Date();
+  const releasedDate = new Date(basis);
+  const isWeekend = releasedDate.getDay() === 0 || releasedDate.getDay() === 6;
+  const estimatedDate = addBusinessDays(releasedDate, isWeekend ? 1 : 1);
+
+  return {
+    title: isWeekend ? 'Weekend release notice' : 'Expected settlement estimate',
+    detail: isWeekend
+      ? `Bank processing resumes on the next business day. Current estimate: ${formatSettlementDate(estimatedDate)}.`
+      : `Expected next business day: ${formatSettlementDate(estimatedDate)}.`,
+    holidayNote: 'Public holiday handling will follow bank processing calendars.',
+  };
+}
+
+function PayoutStatusBadge({ status }) {
+  const tones = {
+    green: { bg: '#dcfce7', text: '#166534', border: '#bbf7d0' },
+    blue: { bg: '#dbeafe', text: '#1d4ed8', border: '#bfdbfe' },
+    amber: { bg: '#fef3c7', text: '#92400e', border: '#fde68a' },
+    slate: { bg: '#f1f5f9', text: '#475569', border: '#e2e8f0' },
+  };
+  const tone = tones[status.tone] || tones.slate;
+
+  return (
+    <span
+      title="Funds have been released from escrow and are being processed through banking rails."
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        borderRadius: 999,
+        padding: '5px 9px',
+        background: tone.bg,
+        color: tone.text,
+        border: `1px solid ${tone.border}`,
+        fontSize: 11,
+        fontWeight: 800,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {status.label}
+    </span>
+  );
+}
+
 function FinalizedEscrowState({ transaction, uiState }) {
-  const completedAt = transaction.completed_at ||
-    transaction.released_at ||
-    transaction.delivery_confirmed_at ||
-    transaction.updated_at;
+  const activity = getPayoutActivity(transaction);
+  const status = getPayoutStatus(transaction);
+  const estimate = getSettlementEstimate(transaction);
+  const completedAt = activity.settlementConfirmedAt || activity.releasedAt || transaction.updated_at;
 
   return (
     <div style={{
@@ -59,16 +168,20 @@ function FinalizedEscrowState({ transaction, uiState }) {
           <CheckCircle2 size={22} color="#059669" />
         </div>
         <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 15, fontWeight: 800, color: '#064e3b', margin: '0 0 5px' }}>
-            Funds released from escrow
-          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 5 }}>
+            <p style={{ fontSize: 15, fontWeight: 800, color: '#064e3b', margin: 0 }}>
+              Funds released from escrow
+            </p>
+            <PayoutStatusBadge status={status} />
+          </div>
           <p style={{ fontSize: 13, color: '#047857', margin: '0 0 14px', lineHeight: 1.6 }}>
-            {PAYOUT_TIMING_COPY} No further action required.
+            Your payout is now moving through the banking system. Escrow release is complete; bank settlement is the separate banking step that follows.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
             {[
               ['Escrow state', uiState.label],
-              ['Settlement', PAYOUT_TIMING_SHORT],
+              ['Payout status', status.label],
+              ['Settlement estimate', estimate.detail],
               ['Completed', formatDetailDate(completedAt)],
               ['Protection', 'TrustTrade escrow'],
             ].map(([label, value]) => (
@@ -85,16 +198,20 @@ function FinalizedEscrowState({ transaction, uiState }) {
 }
 
 function PayoutTimeline({ transaction }) {
-  const releasedAt = transaction.funds_released_at || transaction.released_at || transaction.completed_at;
-  const withdrawalAt = transaction.withdrawal_requested_at || transaction.withdrawal_started_at || transaction.withdrawal_triggered_at;
-  const settlementConfirmed = Boolean(transaction.settlement_confirmed_at || transaction.bank_reference || transaction.settlement_reference || transaction.settlement_status === 'settlement_confirmed');
-  const completedAt = settlementConfirmed ? (transaction.withdrawal_completed_at || transaction.settlement_confirmed_at || transaction.completed_at) : null;
+  const activity = getPayoutActivity(transaction);
+  const status = getPayoutStatus(transaction);
+  const estimate = getSettlementEstimate(transaction);
   const steps = [
-    { label: 'Funds released', value: releasedAt ? formatDetailDate(releasedAt) : 'Waiting for escrow release', state: releasedAt ? 'complete' : 'pending' },
-    { label: 'Withdrawal requested / payout processing', value: withdrawalAt ? formatDetailDate(withdrawalAt) : releasedAt ? 'Payout processing started or awaiting provider evidence' : 'Starts after release', state: withdrawalAt ? 'complete' : releasedAt ? 'active' : 'pending' },
-    { label: 'Bank processing', value: releasedAt && !settlementConfirmed ? 'Bank settlement not yet confirmed' : settlementConfirmed ? 'Bank settlement evidence recorded' : 'Not started', state: settlementConfirmed ? 'complete' : releasedAt ? 'active' : 'pending' },
-    { label: 'Expected settlement', value: 'Up to 2 business days', state: releasedAt ? 'active' : 'pending' },
-    { label: 'Completed', value: completedAt ? formatDetailDate(completedAt) : 'No confirmed bank settlement yet', state: completedAt ? 'complete' : 'pending' },
+    { label: 'Escrow released', value: activity.releasedAt ? formatDetailDate(activity.releasedAt) : 'Waiting for escrow release', state: activity.releasedAt ? 'complete' : 'pending' },
+    { label: 'Payout processing started', value: activity.processingStartedAt ? formatDetailDate(activity.processingStartedAt) : 'Starts after release', state: activity.processingStartedAt ? 'complete' : activity.releasedAt ? 'active' : 'pending' },
+    { label: 'Bank processing', value: activity.settlementConfirmed ? 'Bank settlement evidence recorded' : 'Funds are moving through banking rails', state: activity.settlementConfirmed ? 'complete' : activity.releasedAt ? 'active' : 'pending' },
+    { label: estimate.title, value: `${estimate.detail} ${estimate.holidayNote || ''}`.trim(), state: activity.releasedAt ? 'active' : 'pending' },
+    { label: 'Completed', value: activity.settlementConfirmedAt ? formatDetailDate(activity.settlementConfirmedAt) : 'No confirmed bank settlement yet', state: activity.settlementConfirmedAt ? 'complete' : 'pending' },
+  ];
+  const activityRows = [
+    ['released_at', activity.releasedAt],
+    ['payout_processing_started_at', activity.processingStartedAt],
+    ['settlement_confirmed_at', activity.settlementConfirmedAt],
   ];
 
   return (
@@ -102,9 +219,11 @@ function PayoutTimeline({ transaction }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
         <div>
           <p style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 4px' }}>Payout timeline</p>
-          <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>{PAYOUT_TIMING_COPY}</p>
+          <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+            Funds have been released from escrow and are being processed through banking rails.
+          </p>
         </div>
-        <span style={{ display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '5px 9px', background: '#eff6ff', color: '#2563eb', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{PAYOUT_TIMING_SHORT}</span>
+        <PayoutStatusBadge status={status} />
       </div>
       <div style={{ display: 'grid', gap: 10 }}>
         {steps.map((step) => (
@@ -116,6 +235,21 @@ function PayoutTimeline({ transaction }) {
             </div>
           </div>
         ))}
+      </div>
+      <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #f1f5f9' }}>
+        <p style={{ fontSize: 11, color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>
+          Payout activity timestamps
+        </p>
+        <div style={{ display: 'grid', gap: 7 }}>
+          {activityRows.map(([label, value]) => (
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12 }}>
+              <span style={{ color: '#64748b', fontFamily: 'monospace' }}>{label}</span>
+              <span style={{ color: value ? '#0f172a' : '#94a3b8', fontWeight: 600, textAlign: 'right' }}>
+                {value ? formatDetailDate(value) : 'Not recorded yet'}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

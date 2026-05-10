@@ -81,6 +81,91 @@ const isExplicitDisputeCardParticipant = (transaction, user) =>
     emailMatches(transaction?.recipient_info, user)
   ));
 
+const normalizeStatus = (...values) => fieldText(...values).replace(/[_-]/g, ' ');
+
+const isDisputeResolved = (dispute) => {
+  const status = normalizeStatus(dispute?.status, dispute?.resolution, dispute?.admin_decision);
+  return ['resolved', 'closed', 'dismissed', 'cancelled', 'canceled'].some((value) => status.includes(value));
+};
+
+const isDisputeOpen = (dispute) => {
+  const status = normalizeStatus(dispute?.status);
+  if (isDisputeResolved(dispute)) return false;
+  return !status || ['pending', 'open', 'active', 'response required', 'awaiting response', 'escalated'].some((value) => status.includes(value));
+};
+
+const isDisputeAwaitingReview = (dispute) => {
+  const status = normalizeStatus(dispute?.status, dispute?.review_status);
+  return ['review', 'under review', 'admin review', 'trusttrade review'].some((value) => status.includes(value));
+};
+
+const userSubmittedDisputeResponse = (dispute, role) => {
+  if (role === 'Buyer') {
+    return Boolean(dispute?.buyer_statement || dispute?.buyer_statement_at || dispute?.buyer_response_at || dispute?.buyer_responded_at);
+  }
+  if (role === 'Seller') {
+    return Boolean(dispute?.seller_statement || dispute?.seller_statement_at || dispute?.seller_response_at || dispute?.seller_responded_at);
+  }
+  return false;
+};
+
+const payoutCompleted = (transaction) => {
+  const status = normalizeStatus(transaction?.payout_status, transaction?.settlement_status, transaction?.withdrawal_status);
+  return Boolean(
+    transaction?.settlement_confirmed_at ||
+    transaction?.withdrawal_completed_at ||
+    transaction?.bank_reference ||
+    transaction?.settlement_reference ||
+    status.includes('payout completed') ||
+    status.includes('settlement confirmed') ||
+    status.includes('completed')
+  );
+};
+
+const getDisputeActorRole = (dispute, transaction) => {
+  if (!dispute || !transaction) return null;
+  if (dispute.raised_by_user_id && dispute.raised_by_user_id === transaction.buyer_user_id) return 'Buyer';
+  if (dispute.raised_by_user_id && dispute.raised_by_user_id === transaction.seller_user_id) return 'Seller';
+  if (emailMatches(transaction.buyer_email, { email: dispute.raised_by_email })) return 'Buyer';
+  if (emailMatches(transaction.seller_email, { email: dispute.raised_by_email })) return 'Seller';
+  return null;
+};
+
+const getDisputeActionState = (dispute, transaction, user) => {
+  const role = isUserBuyerForTransaction(transaction, user) ? 'Buyer' : isUserSellerForTransaction(transaction, user) ? 'Seller' : 'Viewer';
+  if (!isExplicitDisputeCardParticipant(transaction, user)) return { kind: 'hidden', role };
+  if (isDisputeResolved(dispute)) {
+    return { kind: 'resolved', role, label: 'Dispute resolved', color: V.sub, priority: 90 };
+  }
+  if (payoutCompleted(transaction)) {
+    return { kind: 'resolved', role, label: 'Dispute resolved', color: V.sub, priority: 90 };
+  }
+  if (!isDisputeOpen(dispute)) return { kind: 'hidden', role };
+
+  const explicitRequired = normalizeStatus(dispute?.response_required_from, dispute?.awaiting_response_from, dispute?.needs_response_from);
+  if (isDisputeAwaitingReview(dispute) && !explicitRequired) {
+    return { kind: 'waiting', role, label: 'Waiting for TrustTrade review', color: V.warn, priority: 80 };
+  }
+  const raisedByRole = getDisputeActorRole(dispute, transaction);
+  const requiredRole = explicitRequired.includes('buyer') ? 'Buyer' : explicitRequired.includes('seller') ? 'Seller' : raisedByRole === 'Buyer' ? 'Seller' : raisedByRole === 'Seller' ? 'Buyer' : null;
+
+  if (requiredRole === role && !userSubmittedDisputeResponse(dispute, role)) {
+    return {
+      kind: 'action',
+      role,
+      label: `${role} response required`,
+      color: V.error,
+      priority: 10,
+    };
+  }
+
+  if (isDisputeAwaitingReview(dispute) || userSubmittedDisputeResponse(dispute, role) || requiredRole) {
+    return { kind: 'waiting', role, label: 'Waiting for TrustTrade review', color: V.warn, priority: 80 };
+  }
+
+  return { kind: 'waiting', role, label: 'Waiting for TrustTrade review', color: V.warn, priority: 80 };
+};
+
 const filterUserRelevantDisputes = (disputes, transactions, user) => {
   const transactionById = new Map(transactions.map((transaction) => [transaction.transaction_id, transaction]));
   return disputes.filter((dispute) => {
@@ -118,27 +203,6 @@ function Dashboard() {
         api.get('/platform/stats'),
         api.get('/wallet').catch(() => ({ data: null })),
       ]);
-      console.log('[DASHBOARD_DISPUTES_RESPONSE_DEBUG]', {
-        user_id: userRes.data?.user_id,
-        email: userRes.data?.email,
-        dispute_ids: (disputesRes.data || []).map((dispute) => dispute.dispute_id),
-        transactions: (transactionsRes.data || []).map((transaction) => ({
-          transaction_id: transaction.transaction_id,
-          buyer_user_id: transaction.buyer_user_id,
-          seller_user_id: transaction.seller_user_id,
-          buyer_email: transaction.buyer_email,
-          seller_email: transaction.seller_email,
-          invited_email: transaction.invited_email,
-          recipient_email: transaction.recipient_email,
-          recipient_info: transaction.recipient_info,
-          buyer_phone: transaction.buyer_phone,
-          seller_phone: transaction.seller_phone,
-          has_dispute: transaction.has_dispute,
-          transaction_state: transaction.transaction_state,
-          release_status: transaction.release_status,
-          payment_status: transaction.payment_status,
-        })),
-      });
       setUser(userRes.data);
       setTransactions(transactionsRes.data);
       setDisputes(disputesRes.data);
@@ -171,12 +235,12 @@ function Dashboard() {
     () => transactions.filter((transaction) => isUserParticipantForTransaction(transaction, user)),
     [transactions, user]
   );
-  const pendingDisputes = userRelevantDisputes.filter(d => fieldText(d.status).includes('pending') || fieldText(d.status).includes('open'));
+  const pendingDisputes = userRelevantDisputes.filter(isDisputeOpen);
   const activeTransactions = userRelevantTransactions.filter(t => !resolveEscrowUiState(t, pendingDisputes).terminal);
-  const actionItems = useMemo(() => buildActionItems(userRelevantTransactions, pendingDisputes, user), [userRelevantTransactions, pendingDisputes, user]);
+  const actionItems = useMemo(() => buildActionItems(userRelevantTransactions, userRelevantDisputes, user), [userRelevantTransactions, userRelevantDisputes, user]);
   const latestActivity = useMemo(
-    () => buildUserActivityFeed(userRelevantTransactions, { user, disputes: pendingDisputes, limit: 7, activeFirst: true }),
-    [userRelevantTransactions, pendingDisputes, user]
+    () => buildUserActivityFeed(userRelevantTransactions, { user, disputes: userRelevantDisputes, limit: 7, activeFirst: true }),
+    [userRelevantTransactions, userRelevantDisputes, user]
   );
   const pendingConfirmations = userRelevantTransactions.filter(t => {
     const state = resolveEscrowUiState(t, pendingDisputes);
@@ -301,6 +365,10 @@ function Dashboard() {
           setShowExactValues={setShowExactValues}
         />
 
+        {!loading && user && (!user.phone_verified || ((user.role === 'seller') && !user.banking_details_completed)) && (
+          <ProfileReadiness user={user} navigate={navigate} />
+        )}
+
         <ActionRequiredPanel actionItems={actionItems} navigate={navigate} />
 
         <LatestActivityCard events={latestActivity} navigate={navigate} />
@@ -330,10 +398,6 @@ function Dashboard() {
             navigate={navigate}
           />
         </div>
-
-        {!loading && user && (!user.phone_verified || ((user.role === 'seller') && !user.banking_details_completed)) && (
-          <ProfileReadiness user={user} navigate={navigate} />
-        )}
 
         <ActionDock navigate={navigate} />
 
@@ -653,27 +717,6 @@ function ActionDock({ navigate }) {
 }
 
 function buildActionItems(transactions, pendingDisputes, user) {
-  console.log('[DASHBOARD_ACTION_DEBUG] buildActionItems input', {
-    user_id: user?.user_id,
-    email: user?.email,
-    dispute_ids: pendingDisputes.map((dispute) => dispute.dispute_id),
-    transactions: transactions.map((transaction) => ({
-      transaction_id: transaction.transaction_id,
-      buyer_user_id: transaction.buyer_user_id,
-      seller_user_id: transaction.seller_user_id,
-      buyer_email: transaction.buyer_email,
-      seller_email: transaction.seller_email,
-      invited_email: transaction.invited_email,
-      recipient_email: transaction.recipient_email,
-      recipient_info: transaction.recipient_info,
-      buyer_phone: transaction.buyer_phone,
-      seller_phone: transaction.seller_phone,
-      has_dispute: transaction.has_dispute,
-      transaction_state: transaction.transaction_state,
-      release_status: transaction.release_status,
-      payment_status: transaction.payment_status,
-    })),
-  });
   return transactions
     .map((transaction) => {
       const meta = resolveEscrowUiState(transaction, pendingDisputes);
@@ -682,25 +725,10 @@ function buildActionItems(transactions, pendingDisputes, user) {
       const isBuyer = isUserBuyerForTransaction(transaction, user);
       const isSeller = isUserSellerForTransaction(transaction, user);
       const scopedDisputes = pendingDisputes.filter((d) => d.transaction_id === transaction.transaction_id);
-      const hasDispute = scopedDisputes.length > 0 && isExplicitDisputeCardParticipant(transaction, user);
-      if (meta.state === 'DISPUTED' || scopedDisputes.length > 0) {
-        console.log('[DASHBOARD_ACTION_DEBUG] dispute action decision', {
-          user_id: user?.user_id,
-          email: user?.email,
-          transaction_id: transaction.transaction_id,
-          meta_state: meta.state,
-          dispute_ids: scopedDisputes.map((dispute) => dispute.dispute_id),
-          participant_match: isExplicitDisputeCardParticipant(transaction, user),
-          will_show_dispute_card: hasDispute,
-          buyer_user_id: transaction.buyer_user_id,
-          seller_user_id: transaction.seller_user_id,
-          buyer_email: transaction.buyer_email,
-          seller_email: transaction.seller_email,
-          invited_email: transaction.invited_email,
-          recipient_email: transaction.recipient_email,
-          recipient_info: transaction.recipient_info,
-        });
-      }
+      const disputeStates = scopedDisputes.map((dispute) => getDisputeActionState(dispute, transaction, user));
+      const disputeState = disputeStates.find((state) => state.kind === 'action') ||
+        disputeStates.find((state) => state.kind === 'waiting') ||
+        disputeStates.find((state) => state.kind === 'resolved');
       const amount = getTransactionValue(transaction);
       const base = {
         transaction,
@@ -713,21 +741,19 @@ function buildActionItems(transactions, pendingDisputes, user) {
         title: 'Review transaction',
         helper: meta.description,
         color: V.accent,
+        eyebrow: 'Action Required',
       };
 
-      if (hasDispute) {
-        return { ...base, priority: 1, title: 'Dispute needs response', button: 'View Dispute', path: '/disputes-dashboard', color: V.error, helper: 'Review the dispute so payout stays protected until the case is resolved.' };
-      }
       if (isBuyer && meta.state === 'FUNDED') {
-        return { ...base, priority: 2, title: 'Your next step: Fund escrow', button: 'Pay into Escrow', color: V.accent, helper: 'Pay securely into escrow. Seller is paid only after you confirm delivery.' };
+        return { ...base, priority: 3, title: 'Your next step: Fund escrow', button: 'Pay into Escrow', color: V.accent, helper: 'Pay securely into escrow. Seller is paid only after you confirm delivery.' };
       }
       if (isSeller && meta.state === 'FUNDED') {
-        return { ...base, priority: 3, title: 'Waiting for buyer to fund escrow', button: 'View Transaction', color: V.warn, helper: 'Share this link with the buyer. Funds will be protected once the buyer pays.' };
+        return { ...base, priority: 4, title: 'Waiting for buyer to fund escrow', button: 'View Transaction', color: V.warn, helper: 'Share this link with the buyer. Funds will be protected once the buyer pays.' };
       }
       if (isSeller && ['ESCROW_LOCKED', 'DELIVERY_PENDING'].includes(meta.state)) {
         return {
           ...base,
-          priority: 4,
+          priority: 5,
           title: flowType === 'delivery' ? 'Funds secured — deliver safely' : 'Funds secured in escrow',
           button: flowType === 'delivery' ? 'Add Delivery Info' : 'View Transaction',
           color: V.success,
@@ -735,10 +761,19 @@ function buildActionItems(transactions, pendingDisputes, user) {
         };
       }
       if (isBuyer && meta.state === 'DELIVERED') {
-        return { ...base, priority: 5, title: flow.confirmationLabel, button: flow.confirmAction, color: V.success, helper: flow.confirmationDescription };
+        return { ...base, priority: 6, title: flow.confirmationLabel, button: flow.confirmAction, color: V.success, helper: flow.confirmationDescription };
+      }
+      if (disputeState?.kind === 'action') {
+        return { ...base, priority: disputeState.priority, title: disputeState.label, status: disputeState.label, button: 'Respond to Dispute', path: '/disputes-dashboard', color: V.error, helper: 'Your response is needed before TrustTrade can continue the review.' };
+      }
+      if (disputeState?.kind === 'waiting') {
+        return { ...base, priority: disputeState.priority, title: disputeState.label, status: disputeState.label, button: 'View Dispute', path: '/disputes-dashboard', color: V.warn, eyebrow: 'Status Update', helper: 'No response is needed from you right now. TrustTrade is reviewing the case.' };
+      }
+      if (disputeState?.kind === 'resolved') {
+        return { ...base, priority: disputeState.priority, title: disputeState.label, status: disputeState.label, button: 'View History', path: '/disputes-dashboard', color: V.sub, eyebrow: 'History', helper: 'This dispute is closed and kept for transaction history.' };
       }
       if (meta.state === 'RELEASED') {
-        return { ...base, priority: 6, title: 'Payout processing', button: 'View Transaction', color: V.warn, helper: PAYOUT_TIMING_SHORT };
+        return { ...base, priority: 70, title: 'Payout processing', button: 'View Transaction', color: V.warn, eyebrow: 'Status Update', helper: PAYOUT_TIMING_SHORT };
       }
       return null;
     })
@@ -755,7 +790,7 @@ function ActionRequiredPanel({ actionItems, navigate }) {
       <div style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 16, alignItems: 'center' }} className="tt-responsive-grid">
         <div style={{ minWidth: 0 }}>
           <p style={{ margin: '0 0 7px', color: action.color, fontFamily: V.mono, fontSize: 10, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-            Action Required / {action.role}
+            {action.eyebrow || 'Action Required'} / {action.role}
           </p>
           <h2 style={{ margin: 0, color: V.text, fontSize: 'clamp(20px, 2.4vw, 30px)', fontWeight: 850, letterSpacing: '-0.035em' }}>
             {action.title}

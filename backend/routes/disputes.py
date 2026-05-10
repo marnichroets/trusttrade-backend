@@ -92,6 +92,7 @@ async def create_dispute(request: Request, dispute_data: DisputeCreate):
         "dispute_id": dispute_id,
         "transaction_id": dispute_data.transaction_id,
         "raised_by_user_id": user.user_id,
+        "raised_by_email": user.email,
         "dispute_type": dispute_data.dispute_type,
         "description": dispute_data.description,
         "evidence_photos": [],
@@ -191,38 +192,11 @@ async def list_disputes(request: Request):
 
     transaction_ids = [t["transaction_id"] for t in user_transactions if t.get("transaction_id")]
     if not transaction_ids:
-        logger.warning(
-            "[DISPUTES_SCOPE_DEBUG] user_id=%s email=%s transaction_ids=[] dispute_ids=[] transactions=[]",
-            getattr(user, "user_id", None),
-            getattr(user, "email", None),
-        )
         return []
 
     query = {"transaction_id": {"$in": transaction_ids}}
     
     disputes = await db.disputes.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    logger.warning(
-        "[DISPUTES_SCOPE_DEBUG] user_id=%s email=%s transaction_ids=%s dispute_ids=%s transactions=%s",
-        getattr(user, "user_id", None),
-        getattr(user, "email", None),
-        transaction_ids,
-        [d.get("dispute_id") for d in disputes],
-        [
-            {
-                "transaction_id": t.get("transaction_id"),
-                "buyer_user_id": t.get("buyer_user_id"),
-                "seller_user_id": t.get("seller_user_id"),
-                "buyer_email": t.get("buyer_email"),
-                "seller_email": t.get("seller_email"),
-                "buyer_phone": t.get("buyer_phone"),
-                "seller_phone": t.get("seller_phone"),
-                "recipient_info": t.get("recipient_info"),
-                "recipient_type": t.get("recipient_type"),
-                "invite_type": t.get("invite_type"),
-            }
-            for t in user_transactions
-        ],
-    )
     return [Dispute(**d) for d in disputes]
 
 

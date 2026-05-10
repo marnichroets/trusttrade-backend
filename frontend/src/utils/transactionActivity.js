@@ -190,9 +190,27 @@ function hasSettlementEvidence(transaction) {
   );
 }
 
+function normalizeStatus(...values) {
+  return values.filter(Boolean).join(' ').toLowerCase().replace(/[_-]/g, ' ');
+}
+
+function isResolvedDispute(dispute) {
+  const status = normalizeStatus(dispute?.status, dispute?.resolution, dispute?.admin_decision);
+  return ['resolved', 'closed', 'dismissed', 'cancelled', 'canceled'].some((value) => status.includes(value));
+}
+
+function hasActiveDisputeForTransaction(transaction, disputes = []) {
+  return disputes.some((dispute) => {
+    const sameTransaction = String(dispute.transaction_id || dispute.transactionId || '') === String(transaction.transaction_id || '');
+    const status = normalizeStatus(dispute?.status);
+    const active = !status || ['pending', 'open', 'active', 'response required', 'awaiting response', 'escalated', 'review'].some((value) => status.includes(value));
+    return sameTransaction && active && !isResolvedDispute(dispute);
+  });
+}
+
 function currentEventType(transaction, disputes = []) {
   const uiState = resolveEscrowUiState(transaction, disputes);
-  if (uiState.state === 'DISPUTED') return 'dispute_opened';
+  if (uiState.state === 'DISPUTED' && hasActiveDisputeForTransaction(transaction, disputes)) return 'dispute_opened';
   if (uiState.state === 'FUNDED') return 'buyer_joined';
   if (uiState.state === 'ESCROW_LOCKED') return 'escrow_funded';
   if (uiState.state === 'DELIVERY_PENDING') return getTransactionFlowType(transaction) === 'delivery' ? 'seller_dispatched' : 'buyer_confirmed';
@@ -208,7 +226,7 @@ function disputeEvents(transaction, disputes, user) {
     .flatMap((dispute) => {
       const openedAt = firstValue(dispute.opened_at, dispute.created_at, dispute.createdAt);
       const resolvedAt = firstValue(dispute.resolved_at, dispute.closed_at, dispute.updated_at);
-      const isResolved = ['resolved', 'closed'].includes(String(dispute.status || '').toLowerCase());
+      const isResolved = isResolvedDispute(dispute);
       return [
         buildBaseEvent({ type: 'dispute_opened', transaction, user, timestamp: openedAt, state: openedAt ? 'completed' : 'current' }),
         ...(isResolved ? [buildBaseEvent({ type: 'dispute_resolved', transaction, user, timestamp: resolvedAt, state: resolvedAt ? 'completed' : 'current' })] : []),
@@ -250,35 +268,12 @@ export function buildTransactionActivity(transaction, options = {}) {
 export function buildUserActivityFeed(transactions = [], options = {}) {
   const { user = null, disputes = [], limit = 8, activeFirst = true } = options;
   const userTransactions = transactions.filter((transaction) => isUserParticipant(transaction, user));
-  console.log('[LATEST_ACTIVITY_DEBUG] buildUserActivityFeed input', {
-    user_id: user?.user_id,
-    email: user?.email,
-    dispute_ids: disputes.map((dispute) => dispute.dispute_id),
-    input_transaction_count: transactions.length,
-    user_transaction_count: userTransactions.length,
-    transactions: transactions.map((transaction) => ({
-      transaction_id: transaction.transaction_id,
-      buyer_user_id: transaction.buyer_user_id,
-      seller_user_id: transaction.seller_user_id,
-      buyer_email: transaction.buyer_email,
-      seller_email: transaction.seller_email,
-      invited_email: transaction.invited_email,
-      recipient_email: transaction.recipient_email,
-      recipient_info: transaction.recipient_info,
-      buyer_phone: transaction.buyer_phone,
-      seller_phone: transaction.seller_phone,
-      participant_match: isUserParticipant(transaction, user),
-      has_dispute: transaction.has_dispute,
-      transaction_state: transaction.transaction_state,
-      release_status: transaction.release_status,
-      payment_status: transaction.payment_status,
-    })),
-  });
   const events = userTransactions.flatMap((transaction) =>
     buildTransactionActivity(transaction, { user, disputes, includeUpcoming: false, chronological: false })
       .map((event) => ({
         ...event,
         active: !resolveEscrowUiState(transaction, disputes).terminal,
+        requiresAttention: event.status === 'current' && !['transaction_created', 'funds_released', 'payout_completed', 'dispute_resolved'].includes(event.type),
       }))
   );
 
@@ -301,5 +296,5 @@ export function markActivitySeen(timestamp = Date.now()) {
 
 export function getUnreadActivityCount(events = []) {
   const lastSeen = getLastSeenActivityAt();
-  return events.filter((event) => event.sortTime > lastSeen).length;
+  return events.filter((event) => event.requiresAttention && event.sortTime > lastSeen).length;
 }

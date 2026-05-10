@@ -85,11 +85,13 @@ export function getFlowCopy(transaction = {}) {
 }
 
 export function hasOpenDispute(transaction, disputes = []) {
-  const local = fieldText(transaction?.dispute_status, transaction?.dispute?.status, transaction?.status);
-  if (local.includes('dispute')) return true;
+  const local = fieldText(transaction?.dispute_status, transaction?.dispute?.status);
+  const localResolved = local.includes('resolved') || local.includes('closed') || local.includes('dismissed');
+  if (!localResolved && local.includes('dispute')) return true;
   return disputes.some((dispute) => {
     const status = fieldText(dispute.status);
-    const open = !status || status.includes('pending') || status.includes('open') || status.includes('review');
+    const resolved = status.includes('resolved') || status.includes('closed') || status.includes('dismissed') || status.includes('cancelled') || status.includes('canceled');
+    const open = !resolved && (!status || status.includes('pending') || status.includes('open') || status.includes('active') || status.includes('response') || status.includes('escalated') || status.includes('review'));
     return open && dispute.transaction_id && dispute.transaction_id === transaction?.transaction_id;
   });
 }

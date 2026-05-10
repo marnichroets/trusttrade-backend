@@ -18,6 +18,20 @@ class Dispute(BaseModel):
     description: str
     evidence_photos: List[str] = []
     status: str = "Pending"
+    raised_by_email: Optional[str] = None
+    buyer_statement: Optional[str] = None
+    seller_statement: Optional[str] = None
+    buyer_statement_at: Optional[str] = None
+    seller_statement_at: Optional[str] = None
+    buyer_response_at: Optional[str] = None
+    seller_response_at: Optional[str] = None
+    response_required_from: Optional[str] = None
+    awaiting_response_from: Optional[str] = None
+    needs_response_from: Optional[str] = None
+    review_status: Optional[str] = None
+    resolution: Optional[str] = None
+    resolved_at: Optional[str] = None
+    closed_at: Optional[str] = None
     admin_decision: Optional[str] = None
     is_valid_dispute: bool = False
     created_at: str

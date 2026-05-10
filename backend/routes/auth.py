@@ -26,7 +26,11 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 TRUSTTRADE_OAUTH_HOSTS = {
     "trusttradesa.co.za",
     "www.trusttradesa.co.za",
-    "staging.trusttradesa.co.za",
+}
+
+GOOGLE_ALLOWED_REDIRECT_URIS = {
+    "https://trusttradesa.co.za/api/auth/google/callback",
+    "https://www.trusttradesa.co.za/api/auth/google/callback",
 }
 
 
@@ -73,12 +77,27 @@ def generate_session_token() -> str:
 
 def get_google_redirect_uri(request: Request) -> str:
     """Prefer the branded host used by the browser for Google OAuth."""
+    from urllib.parse import urlparse
+
     forwarded_host = request.headers.get("x-forwarded-host")
     host = (forwarded_host or request.headers.get("host") or "").split(",")[0].strip().lower()
     host = host.split(":")[0]
     if host in TRUSTTRADE_OAUTH_HOSTS:
         return f"https://{host}/api/auth/google/callback"
-    return settings.GOOGLE_REDIRECT_URI
+
+    frontend_host = urlparse(settings.FRONTEND_URL).netloc.split(":")[0].lower()
+    if frontend_host in TRUSTTRADE_OAUTH_HOSTS:
+        return f"https://{frontend_host}/api/auth/google/callback"
+
+    configured_redirect_uri = (settings.GOOGLE_REDIRECT_URI or "").strip()
+    if configured_redirect_uri in GOOGLE_ALLOWED_REDIRECT_URIS:
+        return configured_redirect_uri
+
+    logger.warning(
+        "[GOOGLE_AUTH] Ignoring invalid GOOGLE_REDIRECT_URI=%s; using canonical branded callback",
+        configured_redirect_uri,
+    )
+    return "https://trusttradesa.co.za/api/auth/google/callback"
 
 
 @router.post("/register")
@@ -555,6 +574,12 @@ async def google_login(request: Request):
 
     state = secrets.token_urlsafe(16)
     redirect_uri = get_google_redirect_uri(request)
+    logger.warning(
+        "[GOOGLE_AUTH] Redirecting to Google with redirect_uri=%s host=%s x_forwarded_host=%s",
+        redirect_uri,
+        request.headers.get("host"),
+        request.headers.get("x-forwarded-host"),
+    )
     params = urlencode({
         "client_id": settings.GOOGLE_CLIENT_ID,
         "redirect_uri": redirect_uri,

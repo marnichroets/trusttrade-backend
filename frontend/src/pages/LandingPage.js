@@ -186,11 +186,11 @@ function LandingPage() {
       <style>{`
         html, body, #root { overflow-x: hidden; }
         .tt-landing { width: 100%; max-width: 100vw; overflow-x: hidden; }
-        .tt-hero-grid { min-width: 0; overflow: hidden; }
-        .tt-hero-stage { min-width: 0; max-width: min(100%, 620px); justify-self: center; overflow: hidden; }
-        .tt-hero-visual { inset: 0; overflow: hidden; max-width: 100%; }
-        .tt-visual-core { width: min(560px, calc(100% - 2rem)); height: min(560px, calc(100% - 6.25rem)); max-width: calc(100vw - 2rem); max-height: 560px; }
-        .tt-escrow-console { width: min(100%, 520px); max-width: calc(100% - 2rem); }
+        .tt-hero-grid { min-width: 0; overflow: visible; }
+        .tt-hero-stage { width: min(100%, 560px); min-width: 0; justify-self: center; overflow: visible; }
+        .tt-hero-visual { inset: 0; overflow: visible; width: 100%; max-width: 100%; }
+        .tt-visual-core { width: min(540px, 100%); height: min(540px, calc(100% - 6.25rem)); max-width: 100%; max-height: 540px; overflow: visible; }
+        .tt-escrow-console { width: min(100%, 500px); max-width: 100%; }
         .tt-endpoint { max-width: min(42vw, 170px); }
         .tt-flow-svg { overflow: hidden; }
 
@@ -198,7 +198,7 @@ function LandingPage() {
           .tt-hero-copy { text-align: center; }
           .tt-hero-copy p { margin-left: auto; margin-right: auto; }
           .tt-hero-actions { justify-content: center; }
-          .tt-hero-stage { min-height: 660px; margin-top: 0; }
+          .tt-hero-stage { width: min(100%, 560px); min-height: 660px; margin-top: 0; }
           .tt-hero-visual { position: relative !important; min-height: 660px; }
           .tt-visual-core {
             width: min(520px, calc(100vw - 2rem)) !important;
@@ -209,7 +209,7 @@ function LandingPage() {
         }
 
         @media (max-width: 768px) {
-          .tt-hero-stage { min-height: 570px; }
+          .tt-hero-stage { width: min(100%, 480px); min-height: 570px; }
           .tt-hero-visual { min-height: 590px; }
           .tt-visual-core {
             width: min(400px, calc(100vw - 1.5rem)) !important;
@@ -223,7 +223,7 @@ function LandingPage() {
 
         @media (max-width: 480px) {
           .tt-landing section { max-width: 100vw; }
-          .tt-hero-stage { min-height: 520px; }
+          .tt-hero-stage { width: 100%; min-height: 520px; }
           .tt-hero-visual { min-height: 545px; }
           .tt-visual-core {
             width: min(340px, calc(100vw - 1rem)) !important;
@@ -259,7 +259,6 @@ function LandingPage() {
           }
           .tt-escrow-console {
             max-width: calc(100% - 1rem);
-            left: 50% !important;
           }
           .tt-escrow-console > div { padding: 0.5rem !important; }
           .tt-escrow-console .tt-console-inner { padding: 0.875rem !important; }
@@ -302,7 +301,7 @@ function LandingPage() {
 
       <main className="relative z-10">
         <section onMouseMove={handleHeroMove} className="relative px-4 pb-12 pt-12 sm:pb-16 sm:pt-16 lg:min-h-[calc(100vh-4rem)]">
-          <div className="tt-hero-grid mx-auto grid max-w-7xl gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.86fr)] lg:items-center">
+          <div className="tt-hero-grid mx-auto grid max-w-7xl gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(480px,560px)] lg:items-center xl:grid-cols-[minmax(0,1fr)_minmax(520px,560px)]">
             <motion.div
               initial={{ opacity: 0, y: reduceMotion ? 0 : 24 }}
               animate={{ opacity: 1, y: 0 }}
@@ -348,7 +347,7 @@ function LandingPage() {
               <LiveTrustStrip reduceMotion={reduceMotion} />
             </motion.div>
 
-            <div className="tt-hero-stage relative min-h-[600px] sm:min-h-[700px] lg:min-h-[690px] xl:min-h-[720px]">
+            <div className="tt-hero-stage relative min-h-[600px] sm:min-h-[700px] lg:min-h-[650px] xl:min-h-[690px]">
               <SignatureEscrowVisual
                 depthX={heroDepthX}
                 depthY={heroDepthY}
@@ -406,7 +405,7 @@ function CinematicMesh({ reduceMotion }) {
 function SignatureEscrowVisual({ depthX, depthY, counterX, counterY, reduceMotion }) {
   return (
     <div className="tt-hero-visual absolute inset-0">
-      <motion.div style={{ x: depthX, y: depthY }} className="tt-visual-core absolute left-1/2 top-4 h-[500px] w-[500px] -translate-x-1/2 sm:h-[560px] sm:w-[560px]">
+      <motion.div style={{ x: depthX, y: depthY }} className="tt-visual-core absolute inset-x-0 top-4 mx-auto h-[500px] w-[500px] sm:h-[560px] sm:w-[560px]">
         <ParticleField reduceMotion={reduceMotion} />
         <AnimatedFlowSvg reduceMotion={reduceMotion} />
         <FlowArc className="left-[6%] top-[39%] w-[36%] -rotate-6" delay={0} reduceMotion={reduceMotion} />
@@ -420,17 +419,17 @@ function SignatureEscrowVisual({ depthX, depthY, counterX, counterY, reduceMotio
         <motion.div
           animate={reduceMotion ? {} : { rotate: 360 }}
           transition={{ duration: 32, repeat: Infinity, ease: 'linear' }}
-          className="tt-orbit-lg absolute left-1/2 top-1/2 h-[330px] w-[330px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-sky-300/14 bg-[conic-gradient(from_90deg,rgba(56,189,248,0),rgba(56,189,248,0.48),rgba(34,197,94,0.42),rgba(250,204,21,0.18),rgba(56,189,248,0))] sm:h-[350px] sm:w-[350px]"
+          className="tt-orbit-lg absolute inset-0 m-auto h-[330px] w-[330px] rounded-full border border-sky-300/14 bg-[conic-gradient(from_90deg,rgba(56,189,248,0),rgba(56,189,248,0.48),rgba(34,197,94,0.42),rgba(250,204,21,0.18),rgba(56,189,248,0))] sm:h-[350px] sm:w-[350px]"
         />
         <motion.div
           animate={reduceMotion ? {} : { rotate: -360 }}
           transition={{ duration: 44, repeat: Infinity, ease: 'linear' }}
-          className="tt-orbit-md absolute left-1/2 top-1/2 h-[260px] w-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-300/18 bg-[conic-gradient(from_180deg,rgba(34,197,94,0.3),rgba(37,99,235,0.22),rgba(34,197,94,0))] sm:h-[280px] sm:w-[280px]"
+          className="tt-orbit-md absolute inset-0 m-auto h-[260px] w-[260px] rounded-full border border-emerald-300/18 bg-[conic-gradient(from_180deg,rgba(34,197,94,0.3),rgba(37,99,235,0.22),rgba(34,197,94,0))] sm:h-[280px] sm:w-[280px]"
         />
         <motion.div
           animate={reduceMotion ? {} : { scale: [1, 1.07, 1], opacity: [0.52, 0.92, 0.52] }}
           transition={{ duration: 3.6, repeat: Infinity, ease: 'easeInOut' }}
-          className="tt-orbit-glow absolute left-1/2 top-1/2 h-[210px] w-[210px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-300/18 blur-[38px] sm:h-[230px] sm:w-[230px]"
+          className="tt-orbit-glow absolute inset-0 m-auto h-[210px] w-[210px] rounded-full bg-sky-300/18 blur-[38px] sm:h-[230px] sm:w-[230px]"
         />
         <div className="tt-vault-core absolute left-1/2 top-1/2 flex h-[178px] w-[178px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/16 bg-slate-950/78 shadow-[inset_0_0_58px_rgba(56,189,248,0.22),0_0_80px_rgba(56,189,248,0.26)] backdrop-blur-2xl sm:h-[190px] sm:w-[190px]">
           <div className="relative flex h-32 w-32 items-center justify-center rounded-lg border border-emerald-300/34 bg-gradient-to-br from-sky-300/16 to-emerald-300/12">
@@ -444,7 +443,7 @@ function SignatureEscrowVisual({ depthX, depthY, counterX, counterY, reduceMotio
         </div>
       </motion.div>
 
-      <motion.div style={{ x: counterX, y: counterY }} className="tt-escrow-console absolute bottom-0 left-1/2 z-20 w-full max-w-[520px] -translate-x-1/2">
+      <motion.div style={{ x: counterX, y: counterY }} className="tt-escrow-console absolute inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[500px]">
         <LiveEscrowConsole reduceMotion={reduceMotion} />
       </motion.div>
     </div>

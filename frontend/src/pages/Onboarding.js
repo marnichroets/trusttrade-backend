@@ -83,6 +83,12 @@ function FieldLabel({ icon: Icon, label }) {
 function Onboarding() {
   const navigate = useNavigate();
   const { setNeedsOnboarding, user } = useAuth();
+  const [onboardingStatus, setOnboardingStatus] = useState(null);
+  const role = onboardingStatus?.role || user?.role || 'buyer';
+  const needsBanking = onboardingStatus?.needs_banking ?? role === 'seller';
+  const roleMessage = needsBanking
+    ? 'Add payout details to receive escrow releases.'
+    : 'Verify your phone number to protect your escrow account.';
 
   // Which top-level step: 1=phone, 2=banking, 3=done
   const [step, setStep] = useState(1);
@@ -107,6 +113,16 @@ function Onboarding() {
       setBankingDetails(prev => ({ ...prev, account_holder: prev.account_holder || user.name }));
     }
   }, [user]);
+
+  useEffect(() => {
+    api.get('/auth/onboarding-status')
+      .then(res => {
+        setOnboardingStatus(res.data);
+        if (res.data.has_phone && res.data.needs_banking) setStep(2);
+        if (res.data.has_phone && !res.data.needs_banking) setStep(3);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (resendCooldown > 0) {
@@ -152,7 +168,7 @@ function Onboarding() {
     try {
       await api.post('/auth/phone/verify', { phone, otp_code: code });
       toast.success('Phone verified!');
-      setStep(2);
+      setStep(needsBanking ? 2 : 3);
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Incorrect code');
       setOtp(['', '', '', '', '', '']);
@@ -238,6 +254,9 @@ function Onboarding() {
         <p style={{ color: V.sub, fontSize: 13, margin: 0, fontFamily: V.mono }}>
           Verify your identity to start using escrow
         </p>
+        <p style={{ color: V.sub, fontSize: 12, margin: '8px 0 0', lineHeight: 1.5 }}>
+          {roleMessage} Phone verification helps protect buyers and sellers from fraud.
+        </p>
       </div>
 
       {/* Step indicator */}
@@ -245,9 +264,13 @@ function Onboarding() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: 0 }}>
           <StepDot num={1} label="Phone"   active={step === 1} done={step > 1} />
           <div style={{ flex: 1, height: 2, background: step > 1 ? V.success : V.border, maxWidth: 80, margin: '15px 8px 0', transition: 'background 0.3s' }} />
-          <StepDot num={2} label="Banking" active={step === 2} done={step > 2} />
-          <div style={{ flex: 1, height: 2, background: step > 2 ? V.success : V.border, maxWidth: 80, margin: '15px 8px 0', transition: 'background 0.3s' }} />
-          <StepDot num={3} label="Done"    active={step === 3} done={false} />
+          {needsBanking && (
+            <>
+              <StepDot num={2} label="Banking" active={step === 2} done={step > 2} />
+              <div style={{ flex: 1, height: 2, background: step > 2 ? V.success : V.border, maxWidth: 80, margin: '15px 8px 0', transition: 'background 0.3s' }} />
+            </>
+          )}
+          <StepDot num={needsBanking ? 3 : 2} label="Done" active={step === 3} done={false} />
         </div>
       </div>
 
@@ -303,7 +326,7 @@ function Onboarding() {
                   color: V.sub, fontFamily: V.sans, fontSize: 13, cursor: 'pointer',
                 }}
               >
-                Skip for now — add phone later in Profile
+                Skip for now - verify before payment or release actions
               </button>
             </>
           ) : (
@@ -514,7 +537,7 @@ function Onboarding() {
             Account setup complete
           </h2>
           <p style={{ color: V.sub, fontSize: 13, margin: '0 0 28px', fontFamily: V.mono }}>
-            Your phone and banking details are verified. You're ready to use TrustTrade escrow.
+            {needsBanking ? "Your phone and banking details are verified. You're ready to receive escrow releases." : "Your phone number is verified. You're ready to use TrustTrade escrow."}
           </p>
           <button
             onClick={handleComplete}
@@ -532,7 +555,7 @@ function Onboarding() {
       )}
 
       <p style={{ fontSize: 11, color: V.dim, margin: '20px 0 0', fontFamily: V.mono, textAlign: 'center' }}>
-        Setup required before accessing TrustTrade
+        Phone verification is required before payment or release actions
       </p>
     </div>
   );

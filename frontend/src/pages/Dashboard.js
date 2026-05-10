@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout, { V } from '../components/DashboardLayout';
-import { fieldText, PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from '../components/transactionState';
+import { fieldText, getFlowCopy, getTransactionFlowType, PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from '../components/transactionState';
 import api from '../utils/api';
 import {
   Activity,
@@ -249,7 +249,7 @@ function Dashboard() {
           />
         </div>
 
-        {!loading && user && (!user.phone_verified || !user.banking_details_completed) && (
+        {!loading && user && (!user.phone_verified || ((user.role === 'seller') && !user.banking_details_completed)) && (
           <ProfileReadiness user={user} navigate={navigate} />
         )}
 
@@ -509,6 +509,7 @@ function WalletLine({ label, value, helper, color }) {
 }
 
 function ProfileReadiness({ user, navigate }) {
+  const needsSellerBanking = user.role === 'seller' && !user.banking_details_completed;
   return (
     <section className="tt-command-panel" style={{ position: 'relative', zIndex: 1, padding: 16, borderLeft: `2px solid ${V.warn}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -517,17 +518,17 @@ function ProfileReadiness({ user, navigate }) {
           <div>
             <p style={{ margin: 0, color: V.text, fontWeight: 800 }}>Complete your command profile</p>
             <p style={{ margin: '3px 0 0', color: V.sub, fontSize: 12 }}>
-              {!user.phone_verified && !user.banking_details_completed
-                ? 'Add phone verification and banking details before money can move cleanly.'
+              {!user.phone_verified && needsSellerBanking
+                ? 'Verify your phone number and add payout details to receive escrow releases.'
                 : !user.phone_verified
-                ? 'Add phone verification to strengthen identity confidence.'
-                : 'Add banking details to receive protected payouts.'}
+                ? 'Verify your phone number to protect your escrow account. Phone verification helps protect buyers and sellers from fraud.'
+                : 'Add payout details to receive escrow releases.'}
             </p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {!user.phone_verified && <MiniButton label="Add phone" onClick={() => navigate('/verify/phone')} />}
-          {!user.banking_details_completed && <MiniButton label="Add banking" onClick={() => navigate('/settings/banking')} />}
+          {needsSellerBanking && <MiniButton label="Add banking" onClick={() => navigate('/settings/banking')} />}
         </div>
       </div>
     </section>
@@ -573,6 +574,8 @@ function buildActionItems(transactions, pendingDisputes, user) {
   return transactions
     .map((transaction) => {
       const meta = resolveEscrowUiState(transaction, pendingDisputes);
+      const flowType = getTransactionFlowType(transaction);
+      const flow = getFlowCopy(transaction);
       const isBuyer = isUserBuyerForTransaction(transaction, user);
       const isSeller = isUserSellerForTransaction(transaction, user);
       const hasDispute = meta.state === 'DISPUTED' || pendingDisputes.some((d) => d.transaction_id === transaction.transaction_id);
@@ -600,10 +603,17 @@ function buildActionItems(transactions, pendingDisputes, user) {
         return { ...base, priority: 3, title: 'Waiting for buyer to fund escrow', button: 'View Transaction', color: V.warn, helper: 'Share this link with the buyer. Funds will be protected once the buyer pays.' };
       }
       if (isSeller && ['ESCROW_LOCKED', 'DELIVERY_PENDING'].includes(meta.state)) {
-        return { ...base, priority: 4, title: 'Funds secured — deliver safely', button: 'Add Delivery Info', color: V.success, helper: 'Payment is protected in escrow. Deliver the item and update the transaction.' };
+        return {
+          ...base,
+          priority: 4,
+          title: flowType === 'delivery' ? 'Funds secured — deliver safely' : 'Funds secured in escrow',
+          button: flowType === 'delivery' ? 'Add Delivery Info' : 'View Transaction',
+          color: V.success,
+          helper: flow.securedSeller,
+        };
       }
       if (isBuyer && meta.state === 'DELIVERED') {
-        return { ...base, priority: 5, title: 'Confirm receipt when delivered', button: 'Confirm Receipt', color: V.success, helper: 'Confirm only after you have received the item and are satisfied.' };
+        return { ...base, priority: 5, title: flow.confirmationLabel, button: flow.confirmAction, color: V.success, helper: flow.confirmationDescription };
       }
       if (meta.state === 'RELEASED') {
         return { ...base, priority: 6, title: 'Payout processing', button: 'View Transaction', color: V.warn, helper: PAYOUT_TIMING_SHORT };

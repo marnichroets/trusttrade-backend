@@ -76,6 +76,32 @@ def generate_share_code() -> str:
     return f"TT-{numbers}"
 
 
+def has_verified_phone(user_doc: dict | None) -> bool:
+    return bool(user_doc and user_doc.get("phone") and user_doc.get("phone_verified"))
+
+
+def has_bank_details(user_doc: dict | None) -> bool:
+    banking = (user_doc or {}).get("banking_details") or {}
+    return bool(
+        user_doc
+        and user_doc.get("banking_details_completed")
+        and banking.get("bank_name")
+        and banking.get("account_number")
+    )
+
+
+def require_verified_phone_for_sensitive_action(user_doc: dict | None, role: str):
+    if role == "buyer" and not (user_doc and user_doc.get("email_verified", True)):
+        raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
+    if has_verified_phone(user_doc):
+        return
+    if role == "buyer":
+        detail = "PHONE_VERIFICATION_REQUIRED: Verify your phone number to protect your escrow account."
+    else:
+        detail = "PHONE_VERIFICATION_REQUIRED: Phone verification helps protect buyers and sellers from fraud."
+    raise HTTPException(status_code=403, detail=detail)
+
+
 def mock_send_email(to_email: str, subject: str, body: str):
     """Mock email function for fallback"""
     logger.info(f"MOCK EMAIL TO: {to_email}")
@@ -325,20 +351,11 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     if user.suspension_flag:
         raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")
     
-    # Check if seller has banking details
     if transaction_data.creator_role == "seller":
         user_doc = await db.users.find_one({"user_id": user.user_id})
-        # Accept either banking_details_added or banking_details_completed
-        has_banking = (
-            user_doc.get("banking_details_added") or 
-            user_doc.get("banking_details_completed") or
-            user_doc.get("banking_details")
-        )
-        if not user_doc or not has_banking:
-            raise HTTPException(
-                status_code=400,
-                detail="Please add your banking details before creating a transaction as a seller. Go to Settings > Banking Details."
-            )
+        require_verified_phone_for_sensitive_action(user_doc, "seller")
+        if not user.is_admin and (user_doc or {}).get("role") != "seller":
+            await db.users.update_one({"user_id": user.user_id}, {"$set": {"role": "seller"}})
     
     # Validate minimum transaction amount (R500)
     if transaction_data.item_price < settings.MINIMUM_TRANSACTION_AMOUNT:
@@ -815,27 +832,12 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
         logger.info(f"[TXN] Transaction {transaction_id} already confirmed by seller")
         return {"message": "Transaction already confirmed", "already_confirmed": True}
     
-    # Require banking details before seller can confirm
-    # Require phone and banking details before seller can confirm
-    seller_user = await db.users.find_one({"email": user_email}, {"banking_details": 1, "banking_details_completed": 1, "banking_details_added": 1, "phone": 1})
-    has_banking = (
-        seller_user and (
-            seller_user.get("banking_details_completed") or
-            seller_user.get("banking_details_added") or
-            (seller_user.get("banking_details") and seller_user["banking_details"].get("account_number"))
-        )
-    )
-    has_phone = bool(seller_user and seller_user.get("phone"))
-    missing = []
-    if not has_banking:
-        missing.append("banking details")
-    if not has_phone:
-        missing.append("phone number")
-    if missing:
-        logger.warning(f"[TXN] Seller {user_email} tried to confirm without: {', '.join(missing)}")
+    seller_user = await db.users.find_one({"email": user_email}, {"phone": 1, "phone_verified": 1})
+    if not has_verified_phone(seller_user):
+        logger.warning(f"[TXN] Seller {user_email} tried to confirm without verified phone")
         raise HTTPException(
-            status_code=400,
-            detail=f"MISSING_PROFILE: {', '.join(missing)}"
+            status_code=403,
+            detail="PHONE_VERIFICATION_REQUIRED: Phone verification helps protect buyers and sellers from fraud."
         )
         
     
@@ -1040,12 +1042,27 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
     # Only buyer can confirm
     if transaction["buyer_user_id"] != user.user_id and transaction["buyer_email"] != user.email:
         raise HTTPException(status_code=403, detail="Only buyer can confirm delivery")
+    buyer_user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    require_verified_phone_for_sensitive_action(buyer_user_doc, "buyer")
     
     # Check that payment has been made
     if transaction.get("payment_status") != "Paid":
         raise HTTPException(status_code=400, detail="Cannot confirm delivery before payment is received")
     
     if update_data.delivery_confirmed:
+        seller_email = transaction.get("seller_email", "").lower()
+        seller_user_doc = await db.users.find_one({"email": seller_email}, {"_id": 0}) if seller_email else None
+        payout_issues = []
+        if not has_verified_phone(seller_user_doc):
+            payout_issues.append("Seller must verify their phone number")
+        if not has_bank_details(seller_user_doc):
+            payout_issues.append("Seller must add payout details")
+        if payout_issues:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot release: Seller payout not ready. Issues: {', '.join(payout_issues)}."
+            )
+
         # Update timeline
         timeline = transaction.get("timeline", [])
         timeline.append({
@@ -1060,6 +1077,10 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
                 "delivery_confirmed": True,
                 "release_status": "Released",
                 "payment_status": "Released",
+                "released_at": datetime.now(timezone.utc).isoformat(),
+                "funds_released_at": datetime.now(timezone.utc).isoformat(),
+                "expected_settlement_window": "up to 2 business days",
+                "payout_sla_status": "on_track",
                 "timeline": timeline
             }}
         )
@@ -1087,7 +1108,7 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
             role="buyer"
         )
 
-        # Release TradeSafe escrow and trigger instant payout (fire-and-forget)
+        # Release TradeSafe escrow and request payout processing (fire-and-forget).
         allocation_id = transaction.get("tradesafe_allocation_id")
         seller_token_id = transaction.get("tradesafe_seller_token_id")
         if allocation_id:
@@ -1171,7 +1192,8 @@ async def confirm_payment(request: Request, transaction_id: str, payment: Paymen
                 share_code=transaction.get("share_code", transaction_id),
                 item_description=transaction["item_description"],
                 amount=transaction["item_price"],
-                role="buyer"
+                role="buyer",
+                delivery_method=transaction.get("delivery_method", "courier")
             )
             logger.info(f"[PAYMENT] Buyer payment email result: {buyer_result}")
         except Exception as e:
@@ -1184,7 +1206,8 @@ async def confirm_payment(request: Request, transaction_id: str, payment: Paymen
                 share_code=transaction.get("share_code", transaction_id),
                 item_description=transaction["item_description"],
                 amount=transaction["item_price"],
-                role="seller"
+                role="seller",
+                delivery_method=transaction.get("delivery_method", "courier")
             )
             logger.info(f"[PAYMENT] Seller payment email result: {seller_result}")
         except Exception as e:

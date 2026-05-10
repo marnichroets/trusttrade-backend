@@ -63,8 +63,11 @@ class Transaction(BaseModel):
     tradesafe_buyer_token_id: Optional[str] = None   # Buyer's TradeSafe token
     tradesafe_state: Optional[str] = None
     tradesafe_fee_allocation: Optional[str] = None  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
-    payout_status: Optional[str] = None  # "pending", "awaiting_bank_payout", "payout_completed", "payout_failed"
+    payout_status: Optional[str] = None  # "pending", "awaiting_bank_payout", "payout_processing", "payout_completed", "payout_failed"
     payout_ready: Optional[bool] = None  # Whether seller token has banking details
+    verified_phone: Optional[bool] = None
+    bank_details_present: Optional[bool] = None
+    payout_eligible: Optional[bool] = None
     tradesafe_statement_reference: Optional[str] = None
     tradesafe_withdrawal_id: Optional[str] = None
     tradesafe_withdrawal_reference: Optional[str] = None
@@ -73,7 +76,11 @@ class Transaction(BaseModel):
     withdrawal_status: Optional[str] = None
     withdrawal_triggered: Optional[bool] = None
     withdrawal_error: Optional[str] = None
+    withdrawal_requested_at: Optional[str] = None
     withdrawal_completed_at: Optional[str] = None
+    payout_processing_started_at: Optional[str] = None
+    expected_settlement_window: Optional[str] = None
+    payout_sla_status: Optional[str] = None
     settlement_status: Optional[str] = None
     settlement_checked_at: Optional[str] = None
     statement_status: Optional[str] = None

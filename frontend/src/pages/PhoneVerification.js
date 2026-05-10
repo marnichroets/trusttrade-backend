@@ -154,8 +154,8 @@ function PhoneVerification() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      <Card className="max-w-md w-full p-8 bg-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-start sm:items-center justify-center px-4 py-6 sm:p-4">
+      <Card className="max-w-md w-full p-5 sm:p-8 bg-white">
         {step === 'phone' && (
           <>
             <div className="text-center mb-6">
@@ -164,7 +164,10 @@ function PhoneVerification() {
               </div>
               <h1 className="text-2xl font-bold text-slate-900 mb-2">Verify Your Phone</h1>
               <p className="text-slate-600">
-                Enter your South African mobile number to receive a verification code.
+                Verify your phone number to protect your escrow account.
+              </p>
+              <p className="text-sm text-slate-500 mt-2">
+                Phone verification helps protect buyers and sellers from fraud.
               </p>
             </div>
 
@@ -178,7 +181,7 @@ function PhoneVerification() {
                     value={phone}
                     onChange={handlePhoneChange}
                     placeholder="0821234567 or 821234567"
-                    className="text-lg"
+                    className="text-lg h-12"
                     data-testid="phone-input"
                   />
                 </div>
@@ -190,7 +193,7 @@ function PhoneVerification() {
               <Button
                 onClick={handlePhoneSubmit}
                 disabled={loading || phone.replace(/\D/g, '').length < 9}
-                className="w-full"
+                className="w-full h-12"
                 data-testid="send-code-btn"
               >
                 {loading ? (
@@ -224,7 +227,7 @@ function PhoneVerification() {
 
             <div className="space-y-6">
               {/* OTP Input */}
-              <div className="flex justify-center gap-2">
+              <div className="grid grid-cols-6 gap-2">
                 {otp.map((digit, index) => (
                   <Input
                     key={index}
@@ -235,7 +238,7 @@ function PhoneVerification() {
                     value={digit}
                     onChange={(e) => handleOtpChange(index, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                    className="w-12 h-14 text-center text-2xl font-bold"
+                    className="w-full h-14 text-center text-2xl font-bold"
                     data-testid={`otp-input-${index}`}
                   />
                 ))}
@@ -244,7 +247,7 @@ function PhoneVerification() {
               <Button
                 onClick={() => handleOtpVerify()}
                 disabled={loading || otp.join('').length !== 6}
-                className="w-full"
+                className="w-full h-12"
                 data-testid="verify-btn"
               >
                 {loading ? (

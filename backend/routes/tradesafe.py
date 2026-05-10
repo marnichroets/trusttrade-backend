@@ -43,6 +43,84 @@ def calculate_seller_receives(item_price: float, fee_percent: float = 1.5) -> fl
     return float((price - fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
+def has_bank_details(user_doc: dict | None) -> bool:
+    if not user_doc:
+        return False
+    banking = user_doc.get("banking_details") or {}
+    return bool(
+        user_doc.get("banking_details_completed")
+        and banking.get("bank_name")
+        and banking.get("account_number")
+    )
+
+
+def has_verified_phone(user_doc: dict | None) -> bool:
+    return bool(user_doc and user_doc.get("phone") and user_doc.get("phone_verified"))
+
+
+def email_is_verified(user_doc: dict | None) -> bool:
+    return bool(user_doc and user_doc.get("email_verified", True))
+
+
+def add_unique_issue(issues: list, issue: str):
+    if issue not in issues:
+        issues.append(issue)
+
+
+def build_payout_readiness_response(
+    *,
+    transaction: dict,
+    seller_user: dict | None,
+    payout_check: dict | None = None,
+    seller_token_id: str | None = None,
+):
+    payout_check = payout_check or {}
+    verified_phone = has_verified_phone(seller_user)
+    bank_details_present = has_bank_details(seller_user)
+    token_ready = bool(payout_check.get("ready", False))
+    payout_eligible = bool(verified_phone and bank_details_present and token_ready)
+    issues = list(payout_check.get("issues") or [])
+
+    if not verified_phone:
+        add_unique_issue(issues, "Seller must verify their phone number")
+    if not bank_details_present:
+        add_unique_issue(issues, "Seller must add payout details")
+    if seller_token_id and verified_phone and bank_details_present and not token_ready and not issues:
+        add_unique_issue(issues, "Seller payout token is not ready")
+
+    return {
+        "payout_ready": payout_eligible,
+        "verified_phone": verified_phone,
+        "bank_details_present": bank_details_present,
+        "payout_eligible": payout_eligible,
+        "has_banking": payout_check.get("has_banking", False),
+        "has_mobile": payout_check.get("has_mobile", False),
+        "issues": issues,
+        "can_auto_sync": bank_details_present and bool(seller_token_id) and not token_ready,
+        "message": "Seller payout setup complete." if payout_eligible else "Seller must complete payout setup before funds can be released.",
+        "bank_details_attached_db": transaction.get("bank_details_attached", False),
+        "seller_token_id": seller_token_id,
+    }
+
+
+def require_verified_buyer_profile(user_doc: dict | None):
+    if not email_is_verified(user_doc):
+        raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
+    if not has_verified_phone(user_doc):
+        raise HTTPException(
+            status_code=403,
+            detail="PHONE_VERIFICATION_REQUIRED: Verify your phone number to protect your escrow account."
+        )
+
+
+def require_verified_seller_phone(user_doc: dict | None):
+    if not has_verified_phone(user_doc):
+        raise HTTPException(
+            status_code=403,
+            detail="PHONE_VERIFICATION_REQUIRED: Phone verification helps protect buyers and sellers from fraud."
+        )
+
+
 
 @router.get("/calculate-fees")
 async def get_fee_calculation(amount: float, fee_allocation: str = "SELLER_AGENT"):
@@ -97,7 +175,7 @@ async def get_fee_calculation(amount: float, fee_allocation: str = "SELLER_AGENT
         "fee_paid_by": fee_paid_by,
         "buyer_pays": round(buyer_pays, 2),
         "seller_receives": round(seller_receives, 2),
-        "payout_time": "1-2 business days after release"
+        "payout_time": "up to 2 business days after release"
     }
 
 
@@ -132,46 +210,32 @@ async def check_transaction_payout_readiness(request: Request, transaction_id: s
         raise HTTPException(status_code=403, detail="Not authorized to view this transaction")
     
     seller_token_id = transaction.get("tradesafe_seller_token_id")
+    seller_email = transaction.get("seller_email")
+    seller_user = await db.users.find_one({"email": seller_email.lower()}) if seller_email else None
     
     logger.info(f"[PAYOUT_CHECK] Checking readiness for transaction {transaction_id}")
     
     if not seller_token_id:
         logger.warning(f"[PAYOUT_CHECK] No seller token ID for {transaction_id}")
-        return {
-            "payout_ready": False,
-            "has_banking": False,
-            "has_mobile": False,
-            "issues": ["No seller token linked to this transaction"],
-            "can_auto_sync": False,
-            "message": "Seller must complete payout setup before funds can be released."
-        }
+        response = build_payout_readiness_response(
+            transaction=transaction,
+            seller_user=seller_user,
+            payout_check={"ready": False, "issues": ["No seller token linked to this transaction"]},
+            seller_token_id=None,
+        )
+        response["can_auto_sync"] = False
+        return response
     
     # Check live token state
     from tradesafe_service import check_payout_readiness
     payout_check = await check_payout_readiness(seller_token_id)
     
-    # Check if seller profile has banking details we could sync
-    seller_email = transaction.get("seller_email")
-    seller_user = await db.users.find_one({"email": seller_email.lower()}) if seller_email else None
-    can_auto_sync = bool(
-        seller_user and 
-        seller_user.get("banking_details_completed") and
-        seller_user.get("banking_details", {}).get("bank_name") and
-        seller_user.get("banking_details", {}).get("account_number")
+    return build_payout_readiness_response(
+        transaction=transaction,
+        seller_user=seller_user,
+        payout_check=payout_check,
+        seller_token_id=seller_token_id,
     )
-    
-    is_ready = payout_check.get("ready", False)
-    
-    return {
-        "payout_ready": is_ready,
-        "has_banking": payout_check.get("has_banking", False),
-        "has_mobile": payout_check.get("has_mobile", False),
-        "issues": payout_check.get("issues", []),
-        "can_auto_sync": can_auto_sync and not is_ready,
-        "message": "Seller payout setup complete." if is_ready else "Seller must complete payout setup before funds can be released.",
-        "bank_details_attached_db": transaction.get("bank_details_attached", False),
-        "seller_token_id": seller_token_id
-    }
 
 
 
@@ -225,6 +289,10 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     if not is_buyer and not is_seller and not user.is_admin:
         logger.warning(f"[ESCROW] failure exact reason: Access denied for {user.email}")
         raise HTTPException(status_code=403, detail="Access denied")
+
+    current_user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if is_buyer and not user.is_admin:
+        require_verified_buyer_profile(current_user_doc)
     
     # Check if already linked to escrow (prevent duplicate)
     if transaction.get("tradesafe_id"):
@@ -361,7 +429,13 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
             if bank_details_attached:
                 logger.info(f"[BANKING_SYNC] SUCCESS - Banking synced to seller token {seller_token_id}")
                 payout_check = await check_payout_readiness(seller_token_id)
-                payout_ready = payout_check.get("ready", False)
+                payout_profile = build_payout_readiness_response(
+                    transaction=transaction,
+                    seller_user=seller_user,
+                    payout_check=payout_check,
+                    seller_token_id=seller_token_id,
+                )
+                payout_ready = payout_profile["payout_eligible"]
                 logger.info(f"[BANKING_SYNC] Payout ready: {payout_ready}")
             else:
                 logger.error(f"[BANKING_SYNC] FAILED - {sync_result.get('error')}")
@@ -396,6 +470,9 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
             "payout_status": "pending",
             "bank_details_attached": bank_details_attached,
             "payout_ready": payout_ready,
+            "verified_phone": has_verified_phone(seller_user),
+            "bank_details_present": has_bank_details(seller_user),
+            "payout_eligible": payout_ready,
             "banking_sync_result": banking_sync_result,
             "timeline": timeline,
             "buyer_phone": buyer_mobile,
@@ -431,6 +508,16 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
     
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
+
+    is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
+    is_seller = transaction.get("seller_email") == user.email or transaction.get("seller_user_id") == user.user_id
+    if not is_buyer and not is_seller and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not is_buyer and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only buyer can fund escrow")
+    if is_buyer and not user.is_admin:
+        buyer_user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+        require_verified_buyer_profile(buyer_user_doc)
     
     # CRITICAL: Block payment if seller has not confirmed fee agreement
     if not transaction.get("seller_confirmed"):
@@ -571,6 +658,9 @@ async def start_tradesafe_delivery(request: Request, transaction_id: str):
     is_seller = transaction.get("seller_email") == user.email or transaction.get("seller_user_id") == user.user_id
     if not is_seller and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only seller can mark item as delivered")
+    if is_seller and not user.is_admin:
+        seller_user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+        require_verified_seller_phone(seller_user_doc)
 
     # Check TradeSafe state — both FUNDS_RECEIVED and FUNDS_DEPOSITED mean payment is confirmed
     FUNDED_STATES = {"FUNDS_RECEIVED", "FUNDS_DEPOSITED"}
@@ -661,9 +751,12 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     # Only buyer can accept delivery
-    is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == str(user.id)
+    is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
     if not is_buyer and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only buyer can confirm delivery")
+    if is_buyer and not user.is_admin:
+        buyer_user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+        require_verified_buyer_profile(buyer_user_doc)
 
     # Check TradeSafe state
     if transaction.get("tradesafe_state") not in ["INITIATED", "SENT", "DELIVERED"]:
@@ -702,11 +795,7 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     if seller_user:
         seller_banking = seller_user.get("banking_details", {})
         seller_mobile = seller_user.get("phone") or transaction.get("seller_phone")
-        seller_has_profile_banking = bool(
-            seller_user.get("banking_details_completed")
-            and seller_banking.get("bank_name")
-            and seller_banking.get("account_number")
-        )
+        seller_has_profile_banking = has_bank_details(seller_user)
 
     from tradesafe_service import check_payout_readiness, sync_banking_to_token
 
@@ -767,7 +856,12 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
                 {"transaction_id": transaction_id},
                 {"$set": {
                     "bank_details_attached": True,
-                    "payout_ready": payout_check.get("ready", False),
+                    "payout_ready": build_payout_readiness_response(
+                        transaction=transaction,
+                        seller_user=seller_user,
+                        payout_check=payout_check,
+                        seller_token_id=seller_token_id,
+                    )["payout_eligible"],
                     "banking_auto_synced_at": datetime.now(timezone.utc).isoformat()
                 }}
             )
@@ -785,13 +879,21 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         )
 
     # ===== PAYOUT PREFLIGHT: Final decision =====
-    if not payout_check.get("ready"):
-        issues = payout_check.get("issues", ["Unknown issue"])
+    payout_profile = build_payout_readiness_response(
+        transaction=transaction,
+        seller_user=seller_user,
+        payout_check=payout_check,
+        seller_token_id=seller_token_id,
+    )
+
+    if not payout_profile["payout_eligible"]:
+        issues = payout_profile.get("issues", ["Unknown issue"])
         logger.error(
             f"[PAYOUT_BLOCKED] Release blocked txn={transaction_id} token={seller_token_id} "
             f"sync_attempted={sync_attempted} sync_error={(sync_result or {}).get('error') if sync_attempted else None} "
             f"token_has_banking={payout_check.get('has_banking')} token_has_mobile={payout_check.get('has_mobile')} "
-            f"seller_profile_has_banking={seller_has_profile_banking} issues={issues}"
+            f"seller_profile_has_banking={seller_has_profile_banking} "
+            f"seller_verified_phone={payout_profile['verified_phone']} issues={issues}"
         )
         logger.info("=" * 60)
 
@@ -802,6 +904,7 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
 
     logger.info(
         f"[PAYOUT_READY] Token ready for payout txn={transaction_id} token={seller_token_id} "
+        f"verified_phone={payout_profile['verified_phone']} bank_details_present={payout_profile['bank_details_present']} "
         f"has_banking={payout_check.get('has_banking')} has_mobile={payout_check.get('has_mobile')} "
         f"sync_attempted={sync_attempted}"
     )
@@ -863,12 +966,14 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         "tradesafe_state": "FUNDS_RELEASED",
         "payment_status": "Released",
         "release_status": "Released",
-        "payout_status": "awaiting_bank_payout" if withdrawal_ok is None else ("payout_completed" if withdrawal_ok else "payout_failed"),
+        "payout_status": "awaiting_bank_payout" if withdrawal_ok is None else ("payout_processing" if withdrawal_ok else "payout_failed"),
         "withdrawal_status": "pending" if withdrawal_ok is None else ("succeeded" if withdrawal_ok else "failed"),
         "delivery_confirmed": True,
         "delivery_confirmed_at": now_iso,
         "released_at": now_iso,
         "funds_released_at": now_iso,
+        "expected_settlement_window": "up to 2 business days",
+        "payout_sla_status": "on_track" if withdrawal_ok is not False else "critical",
         "timeline": timeline,
         "net_amount": net_amount
     }
@@ -876,11 +981,13 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     if withdrawal_ok is True:
         update_fields.update({
             "withdrawal_triggered": True,
+            "withdrawal_requested_at": now_iso,
             "withdrawal_triggered_at": now_iso,
             "withdrawal_completed_at": now_iso,
             "withdrawal_error": None,
             "settlement_status": "bank_processing",
             "settlement_checked_at": now_iso,
+            "payout_processing_started_at": now_iso,
             "tradesafe_withdrawal_id": None,
             "bank_reference": None,
             "settlement_reference": None,
@@ -892,6 +999,7 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
             "withdrawal_error": withdrawal_error,
             "settlement_status": "withdrawal_failed",
             "settlement_checked_at": now_iso,
+            "payout_sla_status": "critical",
         })
 
     await db.transactions.update_one(
@@ -969,6 +1077,9 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
     is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
     if not is_buyer and not user.is_admin:
         raise HTTPException(status_code=403, detail="Only buyer or admin can confirm delivery")
+    if is_buyer and not user.is_admin:
+        buyer_user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+        require_verified_buyer_profile(buyer_user_doc)
     
     allocation_id = transaction.get("tradesafe_allocation_id")
     if not allocation_id:
@@ -994,12 +1105,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
     seller_banking = (seller_user_doc or {}).get("banking_details", {}) or {}
     seller_mobile = (seller_user_doc or {}).get("phone") or transaction.get("seller_phone")
 
-    profile_ok = bool(
-        seller_user_doc
-        and seller_user_doc.get("banking_details_completed")
-        and seller_banking.get("bank_name")
-        and seller_banking.get("account_number")
-    )
+    profile_ok = has_bank_details(seller_user_doc)
 
     # Step 1: Check live token readiness FIRST
     logger.info(f"[PAYOUT_CHECK] Manual release initial check txn={transaction_id} token={seller_token_id}")
@@ -1074,7 +1180,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         f"sync_attempted={sync_attempted}"
     )
 
-    # Calculate net amount before release so we can trigger instant payout inside accept_delivery
+    # Calculate net amount before release so accept_delivery can request payout processing.
     net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
 
     result = await accept_delivery(
@@ -1116,6 +1222,8 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             "release_status": "Released",
             "released_at": datetime.now(timezone.utc).isoformat(),
             "funds_released_at": datetime.now(timezone.utc).isoformat(),
+            "expected_settlement_window": "up to 2 business days",
+            "payout_sla_status": "on_track",
             "timeline": timeline,
             "manual_delivery_accept": True,
             "net_amount": net_amount
@@ -1233,8 +1341,15 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
     else:
         logger.warning("[PAYOUT_BLOCKED] Manual release: seller profile has no banking to sync")
 
-    if not payout_check.get("ready"):
-        issues = payout_check.get("issues", ["Unknown"])
+    payout_profile = build_payout_readiness_response(
+        transaction=transaction,
+        seller_user=seller_user_doc,
+        payout_check=payout_check,
+        seller_token_id=seller_token_id,
+    )
+
+    if not payout_profile["payout_eligible"]:
+        issues = payout_profile.get("issues", ["Unknown"])
         logger.error(f"[PAYOUT_BLOCKED] Manual release blocked: {issues}")
         raise HTTPException(
             status_code=400,
@@ -1243,7 +1358,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
 
     logger.info(f"[PAYOUT_READY] Manual release proceeding for {transaction_id}")
 
-    # Calculate net amount before release so we can trigger instant payout inside accept_delivery
+    # Calculate net amount before release so accept_delivery can request payout processing.
     net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
 
     result = await accept_delivery(
@@ -1285,6 +1400,8 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             "release_status": "Released",
             "released_at": datetime.now(timezone.utc).isoformat(),
             "funds_released_at": datetime.now(timezone.utc).isoformat(),
+            "expected_settlement_window": "up to 2 business days",
+            "payout_sla_status": "on_track",
             "timeline": timeline,
             "manual_delivery_accept": True,
             "net_amount": net_amount

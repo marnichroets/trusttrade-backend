@@ -461,7 +461,7 @@ async def resend_phone_otp(request: Request, data: PhoneSubmitRequest):
 
 @router.get("/onboarding-status")
 async def get_onboarding_status(request: Request):
-    """Return whether the user still needs to complete onboarding (phone + banking)."""
+    """Return progressive onboarding status. Buyers do not need bank details."""
     db = get_database()
     user = await get_user_from_token(request, db)
     if not user:
@@ -473,8 +473,9 @@ async def get_onboarding_status(request: Request):
 
     # Admins always bypass onboarding
     if user_doc.get("is_admin"):
-        return {"needs_onboarding": False, "has_phone": True, "has_banking": True}
+        return {"needs_onboarding": False, "has_phone": True, "has_banking": True, "role": "admin"}
 
+    role = user_doc.get("role", "buyer")
     has_phone = bool(user_doc.get("phone") and user_doc.get("phone_verified"))
 
     # Banking may be stored under "banking_details", "banking", or top-level fields
@@ -484,10 +485,22 @@ async def get_onboarding_status(request: Request):
         or user_doc.get("bank_name")
     )
 
+    needs_banking = role == "seller"
+    needs_onboarding = not has_phone or (needs_banking and not has_banking)
+
     return {
-        "needs_onboarding": not (has_phone and has_banking),
+        "needs_onboarding": needs_onboarding,
         "has_phone": has_phone,
         "has_banking": has_banking,
+        "needs_banking": needs_banking,
+        "role": role,
+        "onboarding_message": (
+            "Add payout details to receive escrow releases."
+            if needs_banking and not has_banking
+            else "Verify your phone number to protect your escrow account."
+            if not has_phone
+            else "Phone verification helps protect buyers and sellers from fraud."
+        ),
     }
 
 

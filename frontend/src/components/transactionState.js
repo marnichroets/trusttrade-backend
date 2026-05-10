@@ -7,8 +7,8 @@ const COLORS = {
   sub: '#8B949E',
 };
 
-export const PAYOUT_TIMING_COPY = 'Funds released from escrow. Bank settlement may take 1-2 business days.';
-export const PAYOUT_TIMING_SHORT = 'Payout processing · 1-2 business days';
+export const PAYOUT_TIMING_COPY = 'Once funds are released from escrow, payouts are processed as quickly as possible. Bank settlement may take up to 2 business days depending on payment runs, weekends, and bank processing.';
+export const PAYOUT_TIMING_SHORT = 'Payout processing · up to 2 business days';
 
 export const ESCROW_FLOW_STEPS = [
   { key: 'CREATED', label: 'Awaiting agreement' },
@@ -23,6 +23,67 @@ export function fieldText(...values) {
   return values.filter(Boolean).join(' ').toLowerCase();
 }
 
+export function getTransactionFlowType(transaction = {}) {
+  const method = fieldText(
+    transaction.delivery_method,
+    transaction.transaction_type,
+    transaction.release_type,
+    transaction.fulfillment_type
+  );
+
+  if (method.includes('courier') || method.includes('delivery') || method.includes('shipping') || method.includes('physical')) {
+    return 'delivery';
+  }
+  if (method.includes('digital') || method.includes('instant') || method.includes('immediate')) {
+    return 'instant';
+  }
+  return 'neutral';
+}
+
+export function getFlowCopy(transaction = {}) {
+  const flowType = getTransactionFlowType(transaction);
+  if (flowType === 'delivery') {
+    return {
+      flowType,
+      securedLabel: 'Funds secured in escrow',
+      securedBuyer: 'Your payment is safely held in escrow. Seller can now dispatch the item.',
+      securedSeller: 'Payment is protected in escrow. Dispatch the item and update the transaction.',
+      progressLabel: 'Delivery in progress',
+      progressDescription: 'Delivery is in progress. Buyer confirmation controls escrow release.',
+      confirmationLabel: 'Awaiting buyer confirmation',
+      confirmationDescription: 'Delivery has been marked complete. Buyer confirmation is required before release.',
+      confirmAction: 'Confirm receipt',
+      sellerAction: 'Mark as dispatched',
+    };
+  }
+  if (flowType === 'instant') {
+    return {
+      flowType,
+      securedLabel: 'Funds secured in escrow',
+      securedBuyer: 'Your payment is secured in escrow. The instant release flow will process according to the agreed terms.',
+      securedSeller: 'Payment is protected in escrow. No delivery dispatch action is required for this instant flow.',
+      progressLabel: 'Instant release processing',
+      progressDescription: 'Release is being processed according to the instant escrow flow.',
+      confirmationLabel: 'Release conditions met',
+      confirmationDescription: 'The transaction is ready for escrow release according to the instant flow.',
+      confirmAction: 'View release status',
+      sellerAction: 'View transaction',
+    };
+  }
+  return {
+    flowType,
+    securedLabel: 'Funds secured in escrow',
+    securedBuyer: 'Your payment is safely held in escrow until the agreed release conditions are met.',
+    securedSeller: 'Payment is protected in escrow. Complete the agreed conditions and update the transaction.',
+    progressLabel: 'Release conditions in progress',
+    progressDescription: 'The agreed release conditions are being completed.',
+    confirmationLabel: 'Awaiting completion confirmation',
+    confirmationDescription: 'Completion confirmation is required before escrow release.',
+    confirmAction: 'Confirm completion',
+    sellerAction: 'Update completion',
+  };
+}
+
 export function hasOpenDispute(transaction, disputes = []) {
   const local = fieldText(transaction?.dispute_status, transaction?.dispute?.status, transaction?.status);
   if (local.includes('dispute')) return true;
@@ -34,6 +95,7 @@ export function hasOpenDispute(transaction, disputes = []) {
 }
 
 export function resolveEscrowUiState(transaction = {}, disputes = []) {
+  const flow = getFlowCopy(transaction);
   const payment = fieldText(transaction.payment_status);
   const release = fieldText(transaction.release_status);
   const transactionStatus = fieldText(transaction.transaction_status, transaction.transaction_state);
@@ -73,7 +135,7 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
     tradesafe.includes('funds_released');
   const completed = transactionStatus.includes('completed') ||
     payment.includes('completed') ||
-    (deliveryConfirmed && fundsSecured);
+    (deliveryConfirmed && fundsSecured && released);
 
   if (combined.includes('cancel') || combined.includes('refund')) {
     return {
@@ -158,8 +220,10 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
   if (fundsSecured && !deliveryStarted) {
     return {
       state: 'ESCROW_LOCKED',
-      label: 'Funds secured in escrow',
-      description: 'Funds are locked in escrow until delivery is confirmed.',
+      label: flow.securedLabel,
+      description: flow.flowType === 'delivery'
+        ? 'Funds are locked in escrow until delivery is confirmed.'
+        : 'Funds are locked in escrow until release conditions are met.',
       color: COLORS.success,
       bg: 'rgba(0,255,163,0.1)',
       progressIndex: 3,
@@ -171,8 +235,8 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
   if (deliveryStarted && !deliveryConfirmed) {
     return {
       state: 'DELIVERY_PENDING',
-      label: 'Delivery in progress',
-      description: 'Delivery is in progress. Buyer confirmation controls escrow release.',
+      label: flow.progressLabel,
+      description: flow.progressDescription,
       color: COLORS.purple,
       bg: 'rgba(167,139,250,0.12)',
       progressIndex: 4,
@@ -183,8 +247,8 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
 
   return {
     state: 'DELIVERED',
-    label: 'Awaiting buyer confirmation',
-    description: 'Delivery has been marked complete. Buyer confirmation is required before release.',
+    label: flow.confirmationLabel,
+    description: flow.confirmationDescription,
     color: COLORS.success,
     bg: 'rgba(0,255,163,0.1)',
     progressIndex: 5,

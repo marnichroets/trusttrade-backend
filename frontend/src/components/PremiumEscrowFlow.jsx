@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { CheckCircle2, CreditCard, PackageCheck, ShieldCheck, Truck } from 'lucide-react';
-import { PAYOUT_TIMING_COPY } from './transactionState';
+import { usePlatformConfig } from '../context/PlatformConfigContext';
+import { getPayoutScheduleMessage } from '../utils/payoutSchedule';
 
 const steps = [
   {
@@ -24,7 +25,7 @@ const steps = [
   },
   {
     title: 'Funds Released',
-    description: PAYOUT_TIMING_COPY,
+    description: 'Bank clearing may take up to 2 business days.',
     icon: PackageCheck,
     accent: 'from-green-500 to-emerald-400',
   },
@@ -38,6 +39,8 @@ export default function PremiumEscrowFlow({
 }) {
   const prefersReducedMotion = useReducedMotion();
   const [animatedStep, setAnimatedStep] = useState(0);
+  const { config: platformConfig } = usePlatformConfig();
+  const payoutSchedule = useMemo(() => getPayoutScheduleMessage(new Date(), platformConfig), [platformConfig]);
 
   const currentStep = typeof activeStep === 'number'
     ? Math.min(Math.max(activeStep, 0), steps.length - 1)
@@ -86,7 +89,7 @@ export default function PremiumEscrowFlow({
               Secure trade progression from agreement to payout
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
-              A clear four-step escrow journey designed for high-trust peer-to-peer transactions.
+              A clear four-step escrow journey designed for high-trust peer-to-peer transactions. {payoutSchedule.copy}
             </p>
           </div>
 

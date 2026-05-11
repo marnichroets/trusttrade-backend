@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import DashboardLayout from './components/DashboardLayout';
 import { Toaster } from './components/ui/sonner';
 import { AuthProvider } from './context/AuthContext';
+import { PlatformConfigProvider } from './context/PlatformConfigContext';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import AuthCallback from './pages/AuthCallback';
@@ -109,10 +110,12 @@ function App() {
   return (
     <div className="App">
       <BrowserRouter>
-        <AuthProvider>
-          <AppRouter />
-          <Toaster position="top-right" />
-        </AuthProvider>
+        <PlatformConfigProvider>
+          <AuthProvider>
+            <AppRouter />
+            <Toaster position="top-right" />
+          </AuthProvider>
+        </PlatformConfigProvider>
       </BrowserRouter>
     </div>
   );

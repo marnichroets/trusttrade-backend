@@ -1,8 +1,13 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck, Lock, CheckCircle, Clock } from 'lucide-react';
 import PremiumEscrowFlow from '../components/PremiumEscrowFlow';
+import { usePlatformConfig } from '../context/PlatformConfigContext';
+import { getDefaultMinimumTransactionAmount, getPayoutScheduleMessage } from '../utils/payoutSchedule';
 
 export default function EscrowPage() {
+  const { config: platformConfig } = usePlatformConfig();
+  const minimumTransactionAmount = getDefaultMinimumTransactionAmount(platformConfig);
+  const payoutSchedule = getPayoutScheduleMessage(new Date(), platformConfig);
   return (
     <div className="min-h-screen bg-slate-50">
       <nav className="bg-white border-b border-slate-200 sticky top-0 z-50">
@@ -60,7 +65,7 @@ export default function EscrowPage() {
                 <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">4</div>
                 <div>
                   <h3 className="font-semibold text-slate-900">Funds Released</h3>
-                  <p className="text-sm text-slate-600">Buyer confirms receipt, then funds release from escrow. Bank settlement may take up to 2 business days.</p>
+                  <p className="text-sm text-slate-600">{payoutSchedule.copy}</p>
                 </div>
               </div>
             </div>
@@ -97,7 +102,7 @@ export default function EscrowPage() {
             <h2 className="text-xl font-semibold text-slate-900 mb-4">Fees</h2>
             <p className="text-slate-600 leading-relaxed">
               TrustTrade charges a <strong>2% platform fee</strong> on all transactions. 
-              Minimum transaction amount is <strong>R500</strong>. 
+              Minimum transaction amount is <strong>R{minimumTransactionAmount.toFixed(0)}</strong>. 
               The fee can be paid by buyer, seller, or split between both parties.
             </p>
           </section>

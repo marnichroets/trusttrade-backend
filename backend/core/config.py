@@ -89,11 +89,18 @@ class Settings:
     # Backend public URL — used to register the TradeSafe webhook callbackUrl
     BACKEND_URL: str = os.environ.get('BACKEND_URL', 'https://trusttrade-backend-production-3efa.up.railway.app')
 
-    # Platform Constants - Beta Launch Limits
-    MINIMUM_TRANSACTION_AMOUNT: float = 100.0  # R100 minimum (beta)
-    MAXIMUM_TRANSACTION_AMOUNT: float = 10000.0  # R10,000 maximum (beta)
-    PAYOUT_THRESHOLD: float = 100.0  # R100 payout threshold
-    PLATFORM_FEE_PERCENT: float = 2.0  # 2% platform fee
+    # Platform Constants
+    MINIMUM_TRANSACTION_AMOUNT: float = float(os.environ.get('MINIMUM_TRANSACTION_AMOUNT', '500'))
+    MAXIMUM_TRANSACTION_AMOUNT: float = float(os.environ.get('MAXIMUM_TRANSACTION_AMOUNT', '10000'))
+    PAYOUT_THRESHOLD: float = float(os.environ.get('PAYOUT_THRESHOLD', '100'))
+    PLATFORM_FEE_PERCENT: float = float(os.environ.get('PLATFORM_FEE_PERCENT', '2'))
+    PAYOUT_RELEASE_TIMES: List[str] = [time.strip() for time in os.environ.get('PAYOUT_RELEASE_TIMES', '10:00,15:00').split(',') if time.strip()]
+    PAYOUT_CUTOFF_TIMES: List[str] = [time.strip() for time in os.environ.get('PAYOUT_CUTOFF_TIMES', '09:00,14:00').split(',') if time.strip()]
+    PAYOUT_CLEARING_DISCLAIMER: str = os.environ.get(
+        'PAYOUT_CLEARING_DISCLAIMER',
+        'Bank clearing may take up to 2 business days depending on payment runs, weekends, and bank processing.'
+    )
+    PAYOUT_TIMEZONE: str = os.environ.get('PAYOUT_TIMEZONE', 'Africa/Johannesburg')
     
     # Upload Paths
     UPLOAD_BASE_PATH: str = '/app/uploads'

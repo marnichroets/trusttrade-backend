@@ -2,14 +2,16 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronUp, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { V } from '../components/DashboardLayout';
+import { usePlatformConfig } from '../context/PlatformConfigContext';
+import { getDefaultMinimumTransactionAmount, getPayoutScheduleMessage } from '../utils/payoutSchedule';
 
-const FAQS = [
+const buildFaqs = (payoutSchedule, minimumTransactionAmount) => [
   {
     category: 'HOW IT WORKS',
     items: [
       {
         q: 'What is escrow and how does TrustTrade work?',
-        a: 'Escrow is a secure holding arrangement where funds are kept by a neutral third party until both buyer and seller fulfil their obligations. When you create a transaction on TrustTrade, the buyer pays into a secure escrow account. The seller ships or delivers the item. Once the buyer confirms receipt, payouts are processed as quickly as possible. Bank settlement may take up to 2 business days.',
+        a: `Escrow is a secure holding arrangement where funds are kept by a neutral third party until both buyer and seller fulfil their obligations. When you create a transaction on TrustTrade, the buyer pays into a secure escrow account. The seller ships or delivers the item. Once the buyer confirms receipt, ${payoutSchedule.copy}`,
       },
       {
         q: 'How do I start a transaction?',
@@ -30,7 +32,7 @@ const FAQS = [
     items: [
       {
         q: 'What are TrustTrade\'s fees?',
-        a: 'TrustTrade charges a small platform fee on each completed transaction. The fee is calculated as a percentage of the transaction value and is clearly shown before you confirm. There are no hidden fees — what you see is what you pay.',
+        a: `TrustTrade charges a small platform fee on each completed transaction. The fee is calculated as a percentage of the transaction value and is clearly shown before you confirm. Minimum transaction amount is R${minimumTransactionAmount.toFixed(0)} to keep payout economics sustainable. There are no hidden fees - what you see is what you pay.`,
       },
       {
         q: 'Which payment methods are accepted?',
@@ -38,7 +40,7 @@ const FAQS = [
       },
       {
         q: 'How long does it take to receive my payout?',
-        a: 'Once funds are released from escrow, payouts are processed as quickly as possible. Bank settlement may take up to 2 business days depending on payment runs, weekends, and bank processing.',
+        a: payoutSchedule.copy,
       },
       {
         q: 'Which banks are supported for payouts?',
@@ -51,7 +53,7 @@ const FAQS = [
     items: [
       {
         q: 'Is my money safe in escrow?',
-        a: 'Yes. TrustTrade uses professional escrow services to hold funds. Your money is never held directly by TrustTrade — it sits in a regulated escrow account and can only be released with your explicit confirmation or a dispute resolution decision.',
+        a: 'Yes. TrustTrade uses professional escrow services to hold funds. Your money is never held directly by TrustTrade Ã¢â‚¬â€ it sits in a regulated escrow account and can only be released with your explicit confirmation or a dispute resolution decision.',
       },
       {
         q: 'Why do I need to verify my identity?',
@@ -59,7 +61,7 @@ const FAQS = [
       },
       {
         q: 'Why do I need to add a phone number?',
-        a: 'Your phone number is used for transaction alerts and two-factor security confirmations. It also helps verify your identity as required by FICA. You can add your phone number under Settings → Verify Phone.',
+        a: 'Your phone number is used for transaction alerts and two-factor security confirmations. It also helps verify your identity as required by FICA. You can add your phone number under Settings Ã¢â€ â€™ Verify Phone.',
       },
       {
         q: 'How is my personal data protected?',
@@ -76,11 +78,11 @@ const FAQS = [
       },
       {
         q: 'What happens if the item is not as described?',
-        a: 'Raise a dispute before confirming delivery. Include evidence such as photos and a description of the discrepancy. TrustTrade\'s dispute team will review the evidence from both parties and make a determination within 5–7 business days.',
+        a: 'Raise a dispute before confirming delivery. Include evidence such as photos and a description of the discrepancy. TrustTrade\'s dispute team will review the evidence from both parties and make a determination within 5Ã¢â‚¬â€œ7 business days.',
       },
       {
         q: 'How long does dispute resolution take?',
-        a: 'Simple disputes are typically resolved within 3–5 business days. Complex disputes requiring more evidence may take up to 10 business days. You\'ll be notified by email at each stage of the process.',
+        a: 'Simple disputes are typically resolved within 3Ã¢â‚¬â€œ5 business days. Complex disputes requiring more evidence may take up to 10 business days. You\'ll be notified by email at each stage of the process.',
       },
     ],
   },
@@ -116,6 +118,10 @@ function FAQItem({ q, a }) {
 
 export default function FAQPage() {
   const navigate = useNavigate();
+  const { config: platformConfig } = usePlatformConfig();
+  const minimumTransactionAmount = getDefaultMinimumTransactionAmount(platformConfig);
+  const payoutSchedule = getPayoutScheduleMessage(new Date(), platformConfig);
+  const FAQS = buildFaqs(payoutSchedule, minimumTransactionAmount);
 
   return (
     <div style={{ minHeight: '100vh', background: V.bg, color: V.text, fontFamily: V.sans }}>

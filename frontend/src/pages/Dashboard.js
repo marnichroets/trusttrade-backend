@@ -3,8 +3,10 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout, { V } from '../components/DashboardLayout';
 import TransactionActivityFeed from '../components/TransactionActivityFeed';
-import { fieldText, getFlowCopy, getTransactionFlowType, PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from '../components/transactionState';
+import { fieldText, getFlowCopy, getTransactionFlowType, resolveEscrowUiState } from '../components/transactionState';
 import { buildUserActivityFeed } from '../utils/transactionActivity';
+import { getPayoutScheduleMessage } from '../utils/payoutSchedule';
+import { usePlatformConfig } from '../context/PlatformConfigContext';
 import api from '../utils/api';
 import {
   Activity,
@@ -18,7 +20,6 @@ import {
   Eye,
   EyeOff,
   FileText,
-  Fingerprint,
   Landmark,
   Lock,
   PackageCheck,
@@ -203,6 +204,7 @@ function Dashboard() {
     return stored !== 'false';
   });
   const [now, setNow] = useState(() => new Date());
+  const { config: platformConfig } = usePlatformConfig();
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
 
@@ -258,6 +260,8 @@ function Dashboard() {
 
   useEffect(() => { fetchDashboardData(); }, [fetchDashboardData]);
 
+  const payoutSchedule = useMemo(() => getPayoutScheduleMessage(now, platformConfig), [now, platformConfig]);
+
   const userRelevantDisputes = useMemo(
     () => filterUserRelevantDisputes(disputes, transactions, user),
     [disputes, transactions, user]
@@ -267,8 +271,8 @@ function Dashboard() {
     [transactions, user]
   );
   const pendingDisputes = userRelevantDisputes.filter(isDisputeOpen);
-  const activeTransactions = userRelevantTransactions.filter(t => !resolveEscrowUiState(t, pendingDisputes).terminal);
-  const actionItems = useMemo(() => buildActionItems(userRelevantTransactions, userRelevantDisputes, user), [userRelevantTransactions, userRelevantDisputes, user]);
+  const activeTransactions = userRelevantTransactions.filter(t => !resolveEscrowUiState(t, pendingDisputes, now, payoutSchedule).terminal);
+  const actionItems = useMemo(() => buildActionItems(userRelevantTransactions, userRelevantDisputes, user, payoutSchedule), [userRelevantTransactions, userRelevantDisputes, user, payoutSchedule]);
   const latestActivity = useMemo(
     () => buildUserActivityFeed(userRelevantTransactions, { user, disputes: userRelevantDisputes, limit: 7, activeFirst: true }),
     [userRelevantTransactions, userRelevantDisputes, user]
@@ -279,10 +283,10 @@ function Dashboard() {
   });
   const recentTransactions = userRelevantTransactions.slice(0, 6);
   const totalEscrowValue = userRelevantTransactions
-    .filter(t => ['ESCROW_LOCKED', 'DELIVERY_PENDING', 'DELIVERED', 'DISPUTED'].includes(resolveEscrowUiState(t, pendingDisputes).state))
+    .filter(t => ['ESCROW_LOCKED', 'DELIVERY_PENDING', 'DELIVERED', 'DISPUTED'].includes(resolveEscrowUiState(t, pendingDisputes, now, payoutSchedule).state))
     .reduce((sum, t) => sum + (t.total || getTransactionValue(t)), 0);
   const pendingConfirmationValue = userRelevantTransactions
-    .filter(t => resolveEscrowUiState(t, pendingDisputes).state === 'DELIVERY_PENDING')
+    .filter(t => resolveEscrowUiState(t, pendingDisputes, now, payoutSchedule).state === 'DELIVERY_PENDING')
     .reduce((sum, t) => sum + (t.total || getTransactionValue(t)), 0);
 
   const disputeHoldValue = userRelevantTransactions
@@ -395,6 +399,7 @@ function Dashboard() {
           showExactValues={showExactValues}
           setShowExactValues={setShowExactValues}
           now={now}
+          payoutSchedule={payoutSchedule}
         />
 
         {!loading && user && (!user.phone_verified || ((user.role === 'seller') && !user.banking_details_completed)) && (
@@ -436,14 +441,15 @@ function Dashboard() {
 
         <ActionDock navigate={navigate} />
 
-        <TrustOperations
-          activeTransactions={activeTransactions}
-          pendingConfirmations={pendingConfirmations}
-          pendingDisputes={pendingDisputes}
-          platformStats={platformStats}
-          totalEscrowValue={totalEscrowValue}
-          showExactValues={showExactValues}
-        />
+          <TrustOperations
+            activeTransactions={activeTransactions}
+            pendingConfirmations={pendingConfirmations}
+            pendingDisputes={pendingDisputes}
+            platformStats={platformStats}
+            totalEscrowValue={totalEscrowValue}
+            showExactValues={showExactValues}
+            payoutSchedule={payoutSchedule}
+          />
 
         <RecentLedger recentTransactions={recentTransactions} pendingDisputes={pendingDisputes} navigate={navigate} showExactValues={showExactValues} />
 
@@ -461,7 +467,7 @@ function Dashboard() {
   );
 }
 
-function CommandHeader({ greeting, user, showExactValues, setShowExactValues, now }) {
+function CommandHeader({ greeting, user, showExactValues, setShowExactValues, now, payoutSchedule }) {
   const dateLabel = now.toLocaleDateString('en-ZA', {
     weekday: 'long',
     day: '2-digit',
@@ -472,6 +478,10 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues, no
     minute: '2-digit',
     second: '2-digit',
   });
+  const phoneVerified = Boolean(user?.phone_verified);
+  const bankingReady = Boolean(user?.banking_details_completed);
+  const showBanking = user?.role === 'seller' || bankingReady;
+  const setupIncomplete = !phoneVerified || (user?.role === 'seller' && !bankingReady);
 
   return (
     <div style={{ position: 'relative', display: 'grid', gap: 14 }}>
@@ -514,19 +524,49 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues, no
           </button>
         )}
       </div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {[
-          ['SA banking ready', Landmark, V.accent],
-          ['Escrow system online', ShieldCheck, V.sub],
-          ['Verification active', Fingerprint, '#A78BFA'],
-          [PAYOUT_TIMING_SHORT, RadioTower, V.warn],
-        ].map(([label, Icon, color]) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.025)', padding: '8px 11px', borderRadius: 999 }}>
-            <Icon size={13} color={color} />
-            <span style={{ color: V.sub, fontSize: 12, fontWeight: 700 }}>{label}</span>
-          </div>
-        ))}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <AccountStatusPill
+          icon={phoneVerified ? CheckCircle : AlertCircle}
+          label={phoneVerified ? 'Phone verified' : 'Phone verification needed'}
+          tone={phoneVerified ? 'success' : 'muted'}
+          color={phoneVerified ? V.success : V.sub}
+        />
+        {showBanking && (
+          <AccountStatusPill
+            icon={bankingReady ? Landmark : AlertCircle}
+            label={bankingReady ? 'Banking details added' : 'Banking details needed'}
+            tone={bankingReady ? 'success' : 'warn'}
+            color={bankingReady ? V.success : V.warn}
+          />
+        )}
+        <AccountStatusPill
+          icon={ShieldCheck}
+          label="Escrow system online"
+          tone="muted"
+          color={V.sub}
+        />
+        <AccountStatusPill
+          icon={RadioTower}
+          label={payoutSchedule.shortCopy || 'Next payout release'}
+          tone="warn"
+          color={V.warn}
+        />
+        {setupIncomplete && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(240,180,41,0.24)', background: 'rgba(240,180,41,0.08)', color: V.warn, padding: '7px 11px', borderRadius: 999, fontSize: 11, fontWeight: 800 }}>
+            <AlertCircle size={13} />
+            Account setup incomplete
+          </span>
+        )}
       </div>
+    </div>
+  );
+}
+
+function AccountStatusPill({ icon: Icon, label, tone, color }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${tone === 'success' ? 'rgba(0,255,163,0.18)' : tone === 'warn' ? 'rgba(240,180,41,0.2)' : V.border}`, background: tone === 'success' ? 'rgba(0,255,163,0.06)' : tone === 'warn' ? 'rgba(240,180,41,0.06)' : 'rgba(255,255,255,0.025)', padding: '8px 11px', borderRadius: 999 }}>
+      <Icon size={13} color={color} />
+      <span style={{ color: V.sub, fontSize: 12, fontWeight: 700 }}>{label}</span>
     </div>
   );
 }
@@ -669,7 +709,7 @@ function WalletCommand({ walletData, walletSegments, pendingDisputes, navigate, 
         </div>
 
         <div style={{ display: 'grid', gap: 10 }}>
-          <WalletLine label="Available for payout" value={walletSegments.hasWallet ? displayMoney(walletSegments.available, showExactValues, 2) : 'Not available'} helper={PAYOUT_TIMING_SHORT} color={walletSegments.hasWallet ? V.success : V.sub} />
+          <WalletLine label="Available for payout" value={walletSegments.hasWallet ? displayMoney(walletSegments.available, showExactValues, 2) : 'Not available'} helper={payoutSchedule.shortCopy || 'Next payout release'} color={walletSegments.hasWallet ? V.success : V.sub} />
           <WalletLine label="Protected in escrow" value={protectedAmount} helper="Locked until release conditions are met." color={V.warn} />
           <WalletLine label="Awaiting confirmation" value={displayMoney(walletSegments.pending, showExactValues, 2)} helper="Delivery confirmation still required." color="#A78BFA" />
           <WalletLine label="Dispute hold" value={displayMoney(pendingDisputes.length > 0 ? walletSegments.disputeHold : 0, showExactValues, 2)} helper="Paused until a dispute is resolved." color={pendingDisputes.length > 0 ? V.error : V.success} />
@@ -694,6 +734,8 @@ function WalletLine({ label, value, helper, color }) {
 
 function ProfileReadiness({ user, navigate }) {
   const needsSellerBanking = user.role === 'seller' && !user.banking_details_completed;
+  const phonePrompt = 'Verify your phone number to continue.';
+  const bankingPrompt = 'Add banking details to receive payouts.';
   return (
     <section className="tt-command-panel" style={{ position: 'relative', zIndex: 1, padding: 16, borderLeft: `2px solid ${V.warn}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -703,16 +745,16 @@ function ProfileReadiness({ user, navigate }) {
             <p style={{ margin: 0, color: V.text, fontWeight: 800 }}>Complete your command profile</p>
             <p style={{ margin: '3px 0 0', color: V.sub, fontSize: 12 }}>
               {!user.phone_verified && needsSellerBanking
-                ? 'Verify your phone number and add payout details to receive escrow releases.'
+                ? `${phonePrompt} ${bankingPrompt}`
                 : !user.phone_verified
-                ? 'Verify your phone number to protect your escrow account. Phone verification helps protect buyers and sellers from fraud.'
-                : 'Add payout details to receive escrow releases.'}
+                ? phonePrompt
+                : bankingPrompt}
             </p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {!user.phone_verified && <MiniButton label="Add phone" onClick={() => navigate('/verify/phone')} />}
-          {needsSellerBanking && <MiniButton label="Add banking" onClick={() => navigate('/settings/banking')} />}
+          {!user.phone_verified && <MiniButton label="Verify phone" onClick={() => navigate('/verify/phone')} />}
+          {needsSellerBanking && <MiniButton label="Add banking details" onClick={() => navigate('/settings/banking')} />}
         </div>
       </div>
     </section>
@@ -754,7 +796,7 @@ function ActionDock({ navigate }) {
   );
 }
 
-function buildActionItems(transactions, pendingDisputes, user) {
+function buildActionItems(transactions, pendingDisputes, user, payoutSchedule) {
   return transactions
     .map((transaction) => {
       const meta = resolveEscrowUiState(transaction, pendingDisputes);
@@ -818,7 +860,7 @@ function buildActionItems(transactions, pendingDisputes, user) {
         return { ...base, priority: disputeState.priority, title: disputeState.label, status: disputeState.label, button: 'View History', path: '/disputes-dashboard', color: V.sub, eyebrow: 'History', helper: 'This dispute is closed and kept for transaction history.' };
       }
       if (meta.state === 'RELEASED') {
-        return { ...base, priority: 70, title: 'Payout processing', button: 'View Transaction', color: V.warn, eyebrow: 'Status Update', helper: PAYOUT_TIMING_SHORT };
+        return { ...base, priority: 70, title: 'Payout processing', button: 'View Transaction', color: V.warn, eyebrow: 'Status Update', helper: payoutSchedule.shortCopy || 'Next payout release' };
       }
       return null;
     })
@@ -1002,7 +1044,7 @@ function EmptyState({ navigate }) {
   );
 }
 
-function TrustOperations({ activeTransactions, pendingConfirmations, pendingDisputes, platformStats, totalEscrowValue, showExactValues }) {
+function TrustOperations({ activeTransactions, pendingConfirmations, pendingDisputes, platformStats, totalEscrowValue, showExactValues, payoutSchedule }) {
   const rows = [
     { label: 'Escrow lock active', value: activeTransactions.length, icon: Lock, color: V.success },
     { label: 'Pending confirmation', value: platformStats?.pending_confirmations ?? pendingConfirmations.length, icon: Clock, color: V.warn },
@@ -1029,7 +1071,7 @@ function TrustOperations({ activeTransactions, pendingConfirmations, pendingDisp
         </div>
         <div style={{ marginTop: 18, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.025)', padding: 14 }}>
           <p style={{ margin: 0, color: V.text, fontWeight: 800 }}>Payout timing</p>
-          <p style={{ margin: '6px 0 0', color: V.sub, fontSize: 12 }}>{PAYOUT_TIMING_COPY}</p>
+          <p style={{ margin: '6px 0 0', color: V.sub, fontSize: 12 }}>{payoutSchedule.copy || 'Bank clearing may take up to 2 business days.'}</p>
         </div>
       </div>
     </section>

@@ -4,7 +4,9 @@ import DashboardLayout from '../components/DashboardLayout';
 import PhotoUploader from '../components/PhotoUploader';
 import api from '../utils/api';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, User, Camera, Shield, CheckCircle, Truck, Banknote, Zap, Check } from 'lucide-react';
+import { ArrowLeft, ArrowRight, User, Camera, Shield, CheckCircle, Truck, Banknote, Zap, Check, AlertCircle } from 'lucide-react';
+import { usePlatformConfig } from '../context/PlatformConfigContext';
+import { getDefaultMinimumTransactionAmount, getPayoutScheduleMessage } from '../utils/payoutSchedule';
 
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;
@@ -171,6 +173,7 @@ function NewTransaction() {
     seller_details: false,
     item_accuracy: false,
   });
+  const { config: platformConfig } = usePlatformConfig();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -203,6 +206,9 @@ function NewTransaction() {
   };
 
   const itemPrice = parseFloat(formData.item_price) || 0;
+  const minimumTransactionAmount = getDefaultMinimumTransactionAmount(platformConfig);
+  const maximumTransactionAmount = Number(platformConfig.maximum_transaction || 10000);
+  const payoutSchedule = getPayoutScheduleMessage(new Date(), platformConfig);
   const trusttradeFee = Math.max(itemPrice * 0.02, 5);
 
   let sellerPayout = itemPrice;
@@ -218,16 +224,37 @@ function NewTransaction() {
       : (formData.buyer_name && formData.buyer_email)
   );
 
+  const amountTooLow = itemPrice > 0 && itemPrice < minimumTransactionAmount;
+  const amountTooHigh = itemPrice > maximumTransactionAmount;
   const canProceedStep2 = formData.item_description && formData.item_category &&
-    formData.item_condition && itemPrice >= 100 && itemPrice <= 10000;
+    formData.item_condition && itemPrice >= minimumTransactionAmount && itemPrice <= maximumTransactionAmount;
+  const amountError = amountTooLow
+    ? `Minimum transaction amount is R${minimumTransactionAmount.toFixed(0)}.`
+    : amountTooHigh
+      ? `Maximum transaction amount is R${maximumTransactionAmount.toLocaleString('en-ZA')}.`
+      : '';
 
   const canProceedStep3 = photos.length >= 1;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!user?.phone_verified) {
+      toast.error('Verify your phone number to continue.');
+      navigate('/verify/phone');
+      return;
+    }
+
     if (!confirmations.buyer_details || !confirmations.seller_details || !confirmations.item_accuracy) {
       toast.error('Please tick all confirmation checkboxes');
+      return;
+    }
+    if (itemPrice < minimumTransactionAmount) {
+      toast.error(`Minimum transaction amount is R${minimumTransactionAmount.toFixed(0)}.`);
+      return;
+    }
+    if (itemPrice > maximumTransactionAmount) {
+      toast.error(`Maximum transaction amount is R${maximumTransactionAmount.toLocaleString('en-ZA')}.`);
       return;
     }
 
@@ -280,6 +307,19 @@ function NewTransaction() {
   return (
     <DashboardLayout user={user}>
       <div style={S.page}>
+
+        {!user.phone_verified && (
+          <div style={{ ...S.card, borderLeft: '3px solid #f59e0b', background: '#fffbeb', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <AlertCircle size={18} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#78350f' }}>Verify your phone number to continue.</p>
+              <p style={{ margin: 0, fontSize: 13, color: '#92400e' }}>Phone verification is required before you can create a transaction or access escrow actions.</p>
+            </div>
+            <button type="button" onClick={() => navigate('/verify/phone')} style={{ ...S.btnPrimary, width: 'auto', height: 38, padding: '0 14px', background: '#f59e0b' }}>
+              Verify phone
+            </button>
+          </div>
+        )}
 
         {/* Back button */}
         <button
@@ -336,7 +376,7 @@ function NewTransaction() {
 
         <form onSubmit={handleSubmit}>
 
-          {/* ── Step 1: Role & Other Party ── */}
+          {/* â”€â”€ Step 1: Role & Other Party â”€â”€ */}
           {step === 1 && (
             <div>
               <div style={S.card}>
@@ -466,7 +506,7 @@ function NewTransaction() {
             </div>
           )}
 
-          {/* ── Step 2: Item Details ── */}
+          {/* â”€â”€ Step 2: Item Details â”€â”€ */}
           {step === 2 && (
             <div>
               {/* Item basics */}
@@ -483,7 +523,7 @@ function NewTransaction() {
                       name="item_description"
                       value={formData.item_description}
                       onChange={handleChange}
-                      placeholder="Describe the item in detail — model, specs, what's included..."
+                      placeholder="Describe the item in detail â€” model, specs, what's included..."
                       rows={3}
                       data-testid="item-description-input"
                     />
@@ -529,7 +569,7 @@ function NewTransaction() {
                       name="known_issues"
                       value={formData.known_issues}
                       onChange={handleChange}
-                      placeholder="None — leave blank if no issues"
+                      placeholder="None â€” leave blank if no issues"
                     />
                   </div>
 
@@ -539,15 +579,23 @@ function NewTransaction() {
                       style={{ ...S.input, fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}
                       name="item_price"
                       type="number"
-                      min="100"
-                      max="10000"
+                      min={minimumTransactionAmount}
+                      max={maximumTransactionAmount}
                       step="0.01"
                       value={formData.item_price}
                       onChange={handleChange}
                       placeholder="0.00"
+                      aria-invalid={Boolean(amountError)}
                       data-testid="item-price-input"
                     />
-                    <p style={{ fontSize: 11, color: '#94a3b8', margin: '5px 0 0' }}>Min R100 • Max R10,000 (beta)</p>
+                    <p style={{ fontSize: 11, color: amountError ? '#dc2626' : '#94a3b8', margin: '5px 0 0' }}>
+                      Minimum transaction amount is R{minimumTransactionAmount.toFixed(0)}. Maximum transaction amount is R{maximumTransactionAmount.toLocaleString('en-ZA')}.
+                    </p>
+                    {amountError && (
+                      <p style={{ fontSize: 11, color: '#dc2626', margin: '4px 0 0', fontWeight: 600 }}>
+                        {amountError}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -557,9 +605,9 @@ function NewTransaction() {
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 14px' }}>Delivery Method</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    { value: 'courier', icon: Truck, label: 'Courier / Physical Delivery', desc: 'Seller dispatches. Funds release from escrow after buyer confirms receipt. Bank settlement may take up to 2 business days.' },
-                    { value: 'bank_deposit', icon: Banknote, label: 'Bank Deposit / Cash', desc: 'Funds release from escrow after agreed completion is confirmed. Bank settlement may take up to 2 business days.' },
-                    { value: 'digital', icon: Zap, label: 'Digital / Instant', desc: 'No dispatch step. Funds release according to the agreed instant-flow conditions. Bank settlement may take up to 2 business days.' },
+                    { value: 'courier', icon: Truck, label: 'Courier / Physical Delivery', desc: `Seller dispatches. Funds release from escrow after buyer confirms receipt. ${payoutSchedule.copy}` },
+                    { value: 'bank_deposit', icon: Banknote, label: 'Bank Deposit / Cash', desc: `Funds release from escrow after agreed completion is confirmed. ${payoutSchedule.copy}` },
+                    { value: 'digital', icon: Zap, label: 'Digital / Instant', desc: `No dispatch step. Funds release according to the agreed instant-flow conditions. ${payoutSchedule.copy}` },
                   ].map(opt => {
                     const active = formData.delivery_method === opt.value;
                     return (
@@ -676,7 +724,7 @@ function NewTransaction() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                     <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>TrustTrade Fee (2%, min R5)</span>
                     <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
-                      − R {trusttradeFee.toFixed(2)}
+                      âˆ’ R {trusttradeFee.toFixed(2)}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
@@ -699,7 +747,7 @@ function NewTransaction() {
             </div>
           )}
 
-          {/* ── Step 3: Photos ── */}
+          {/* â”€â”€ Step 3: Photos â”€â”€ */}
           {step === 3 && (
             <div>
               <div style={S.card}>
@@ -718,7 +766,7 @@ function NewTransaction() {
                   borderRadius: 10, padding: '10px 14px', marginBottom: 16, marginTop: 14,
                 }}>
                   <p style={{ fontSize: 12, color: '#92400e', margin: 0 }}>
-                    Upload <strong>1–5 clear photos</strong>. Include all angles and any defects.
+                    Upload <strong>1â€“5 clear photos</strong>. Include all angles and any defects.
                   </p>
                 </div>
 
@@ -736,7 +784,7 @@ function NewTransaction() {
             </div>
           )}
 
-          {/* ── Step 4: Confirm ── */}
+          {/* â”€â”€ Step 4: Confirm â”€â”€ */}
           {step === 4 && (
             <div>
               {/* Summary */}
@@ -792,7 +840,7 @@ function NewTransaction() {
                     Protected by TrustTrade Escrow
                   </p>
                   <p style={{ fontSize: 12, color: '#3730a3', margin: 0 }}>
-                    Funds held securely until buyer confirms receipt. Once released from escrow, payouts are processed as quickly as possible and may take up to 2 business days.
+                    Funds held securely until buyer confirms receipt. {payoutSchedule.copy}
                   </p>
                 </div>
               </div>
@@ -868,3 +916,4 @@ function NewTransaction() {
 }
 
 export default NewTransaction;
+

@@ -1,16 +1,20 @@
 import { Shield, CheckCircle2, Truck, Clock, AlertTriangle, XCircle, CreditCard, Banknote, Lock, ArrowRight } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
-import { getFlowCopy, getPendingPaymentExpiry, getTransactionFlowType, PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from './transactionState';
+import { getFlowCopy, getPendingPaymentExpiry, getTransactionFlowType, resolveEscrowUiState } from './transactionState';
+import { getPayoutScheduleMessage } from '../utils/payoutSchedule';
+import { usePlatformConfig } from '../context/PlatformConfigContext';
 
 // Main transaction status card - shows current state prominently with clear next action
 export function TransactionStatusCard({ transaction, userRole }) {
-  const uiState = resolveEscrowUiState(transaction);
+  const { config: platformConfig } = usePlatformConfig();
+  const payoutSchedule = getPayoutScheduleMessage(new Date(), platformConfig);
+  const uiState = resolveEscrowUiState(transaction, [], new Date(), payoutSchedule);
   const expiry = getPendingPaymentExpiry(transaction);
   const state = mapUiStateToStatusCardState(uiState) || transaction.transaction_state ||
     mapLegacyStatus(transaction.payment_status, transaction.tradesafe_state);
   
-  const statusConfig = getStatusConfig(state, userRole, transaction);
+  const statusConfig = getStatusConfig(state, userRole, transaction, payoutSchedule);
   if (uiState.state === 'FUNDED' && expiry.isAwaitingPayment) {
     statusConfig.badge = expiry.expiresInLabel || statusConfig.badge;
     statusConfig.description = userRole === 'buyer'
@@ -18,7 +22,7 @@ export function TransactionStatusCard({ transaction, userRole }) {
       : `Waiting for the buyer to complete payment. ${expiry.expiresInLabel}.`;
   }
   if (uiState.state === 'EXPIRED' || expiry.isExpired) {
-    const expiredConfig = getStatusConfig('EXPIRED', userRole, transaction);
+    const expiredConfig = getStatusConfig('EXPIRED', userRole, transaction, payoutSchedule);
     expiredConfig.description = 'Transaction expired due to no payment.';
     expiredConfig.badge = 'Expired';
     expiredConfig.nextAction = 'Review it in transaction history';
@@ -140,7 +144,7 @@ function mapLegacyStatus(paymentStatus, tradesafeState) {
   return 'CREATED';
 }
 
-function getStatusConfig(state, userRole, transaction) {
+function getStatusConfig(state, userRole, transaction, payoutSchedule = {}) {
   const isBuyer = userRole === 'buyer';
   const isSeller = userRole === 'seller';
   const flowType = getTransactionFlowType(transaction);
@@ -282,11 +286,11 @@ function getStatusConfig(state, userRole, transaction) {
     COMPLETED: {
       icon: Banknote,
       title: 'Completed',
-      badge: PAYOUT_TIMING_SHORT,
+      badge: payoutSchedule.shortCopy || 'Expected release',
       description: isSeller
-        ? 'Your payout is now moving through the banking system. Funds have been released from escrow and are being processed through banking rails.'
-        : PAYOUT_TIMING_COPY,
-      escrowNotice: 'Escrow release is complete. Bank settlement is processed separately and may take up to 2 business days.',
+        ? 'Your payout is now moving through the banking system. Funds have been released from escrow and are waiting on bank clearing.'
+        : payoutSchedule.copy || 'Bank clearing may take up to 2 business days.',
+      escrowNotice: payoutSchedule.disclaimer || 'Bank clearing may take up to 2 business days depending on payment runs, weekends, and bank processing.',
       bgColor: '#d1fae5',
       borderClass: 'border-green-300',
       iconBgClass: 'bg-green-100',
@@ -327,7 +331,7 @@ function getStatusConfig(state, userRole, transaction) {
       description: isBuyer 
         ? 'Your funds have been refunded.'
         : 'Funds have been returned to the buyer.',
-      escrowNotice: 'Refund processed. Bank arrival may take up to 2 business days.',
+      escrowNotice: 'Refund processed. Bank clearing may take up to 2 business days.',
       bgColor: '#fef2f2',
       borderClass: 'border-red-200',
       iconBgClass: 'bg-red-100',

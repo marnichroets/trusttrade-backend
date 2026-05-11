@@ -11,6 +11,7 @@ from unittest import result
 from fastapi import APIRouter, HTTPException, Request
 import models.transaction as transaction
 from core.config import settings
+from core.payout_schedule import build_payout_schedule_summary
 from core.database import get_database
 from core.security import get_user_from_token
 from models.transaction import TradeSafeTransactionCreate
@@ -58,6 +59,11 @@ def has_verified_phone(user_doc: dict | None) -> bool:
     return bool(user_doc and user_doc.get("phone") and user_doc.get("phone_verified"))
 
 
+def require_verified_phone_to_continue(user_doc: dict | None):
+    if not has_verified_phone(user_doc):
+        raise HTTPException(status_code=403, detail="Verify your phone number to continue.")
+
+
 def email_is_verified(user_doc: dict | None) -> bool:
     return bool(user_doc and user_doc.get("email_verified", True))
 
@@ -82,9 +88,9 @@ def build_payout_readiness_response(
     issues = list(payout_check.get("issues") or [])
 
     if not verified_phone:
-        add_unique_issue(issues, "Seller must verify their phone number")
+        add_unique_issue(issues, "Verify your phone number to continue.")
     if not bank_details_present:
-        add_unique_issue(issues, "Seller must add payout details")
+        add_unique_issue(issues, "Add banking details to receive payouts.")
     if seller_token_id and verified_phone and bank_details_present and not token_ready and not issues:
         add_unique_issue(issues, "Seller payout token is not ready")
 
@@ -109,7 +115,7 @@ def require_verified_buyer_profile(user_doc: dict | None):
     if not has_verified_phone(user_doc):
         raise HTTPException(
             status_code=403,
-            detail="PHONE_VERIFICATION_REQUIRED: Verify your phone number to protect your escrow account."
+            detail="Verify your phone number to continue."
         )
 
 
@@ -117,7 +123,7 @@ def require_verified_seller_phone(user_doc: dict | None):
     if not has_verified_phone(user_doc):
         raise HTTPException(
             status_code=403,
-            detail="PHONE_VERIFICATION_REQUIRED: Phone verification helps protect buyers and sellers from fraud."
+            detail="Verify your phone number to continue."
         )
 
 
@@ -135,8 +141,11 @@ async def get_fee_calculation(amount: float, fee_allocation: str = "SELLER_AGENT
         - buyer_pays: What buyer will pay
         - seller_receives: What seller will receive after fees
     """
-    if amount < 100:
-        raise HTTPException(status_code=400, detail="Minimum transaction amount is R100")
+    if amount < settings.MINIMUM_TRANSACTION_AMOUNT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Minimum transaction amount is R{settings.MINIMUM_TRANSACTION_AMOUNT:.0f}"
+        )
     
     # TrustTrade fee: 1.5% with R5 minimum
     calculated_tt_fee = round(amount * (PLATFORM_FEE_PERCENT / 100), 2)
@@ -175,7 +184,11 @@ async def get_fee_calculation(amount: float, fee_allocation: str = "SELLER_AGENT
         "fee_paid_by": fee_paid_by,
         "buyer_pays": round(buyer_pays, 2),
         "seller_receives": round(seller_receives, 2),
-        "payout_time": "up to 2 business days after release"
+        "payout_time": build_payout_schedule_summary(
+            release_times=settings.PAYOUT_RELEASE_TIMES,
+            cutoff_times=settings.PAYOUT_CUTOFF_TIMES,
+            clearing_disclaimer=settings.PAYOUT_CLEARING_DISCLAIMER,
+        )["copy"]
     }
 
 
@@ -291,8 +304,10 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
         raise HTTPException(status_code=403, detail="Access denied")
 
     current_user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
-    if is_buyer and not user.is_admin:
-        require_verified_buyer_profile(current_user_doc)
+    if not user.is_admin:
+        require_verified_phone_to_continue(current_user_doc)
+        if is_buyer:
+            require_verified_buyer_profile(current_user_doc)
     
     # Check if already linked to escrow (prevent duplicate)
     if transaction.get("tradesafe_id"):

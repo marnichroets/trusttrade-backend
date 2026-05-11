@@ -121,8 +121,8 @@ def _first_non_empty(*values):
 # =========================================================
 
 
-# TrustTrade Platform Settings - Beta Launch Limits
-MINIMUM_TRANSACTION_AMOUNT = 100.0  # R100 minimum (beta)
+# TrustTrade Platform Settings
+MINIMUM_TRANSACTION_AMOUNT = settings.MINIMUM_TRANSACTION_AMOUNT
 PLATFORM_FEE_PERCENT = settings.PLATFORM_FEE_PERCENT
 MINIMUM_FEE_RANDS = 5.0  # Minimum fee R5
 
@@ -1101,7 +1101,7 @@ async def get_transaction_by_reference(reference: str) -> Optional[Dict[str, Any
 
 def validate_minimum_transaction(amount: float) -> tuple:
     """
-    Validate that transaction meets minimum amount requirement (R500).
+    Validate that transaction meets minimum amount requirement.
     
     Returns:
         (is_valid, error_message)

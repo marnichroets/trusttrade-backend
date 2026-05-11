@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse
 
 from core.config import settings
+from core.payout_schedule import build_payout_schedule_summary
 from core.database import get_database
 from core.security import get_user_from_token, normalize_email, emails_match
 from models.user import User
@@ -90,16 +91,17 @@ def has_bank_details(user_doc: dict | None) -> bool:
     )
 
 
+def require_verified_phone_to_continue(user_doc: dict | None):
+    if not has_verified_phone(user_doc):
+        raise HTTPException(status_code=403, detail="Verify your phone number to continue.")
+
+
 def require_verified_phone_for_sensitive_action(user_doc: dict | None, role: str):
     if role == "buyer" and not (user_doc and user_doc.get("email_verified", True)):
         raise HTTPException(status_code=403, detail="EMAIL_NOT_VERIFIED")
     if has_verified_phone(user_doc):
         return
-    if role == "buyer":
-        detail = "PHONE_VERIFICATION_REQUIRED: Verify your phone number to protect your escrow account."
-    else:
-        detail = "PHONE_VERIFICATION_REQUIRED: Phone verification helps protect buyers and sellers from fraud."
-    raise HTTPException(status_code=403, detail=detail)
+    raise HTTPException(status_code=403, detail="Verify your phone number to continue.")
 
 
 def mock_send_email(to_email: str, subject: str, body: str):
@@ -350,9 +352,12 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     # Check if user is suspended
     if user.suspension_flag:
         raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")
+
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not user.is_admin:
+        require_verified_phone_to_continue(user_doc)
     
     if transaction_data.creator_role == "seller":
-        user_doc = await db.users.find_one({"user_id": user.user_id})
         require_verified_phone_for_sensitive_action(user_doc, "seller")
         if not user.is_admin and (user_doc or {}).get("role") != "seller":
             await db.users.update_one({"user_id": user.user_id}, {"$set": {"role": "seller"}})
@@ -833,13 +838,13 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
     if transaction.get("seller_confirmed"):
         logger.info(f"[TXN] Transaction {transaction_id} already confirmed by seller")
         return {"message": "Transaction already confirmed", "already_confirmed": True}
-    
+
     seller_user = await db.users.find_one({"email": user_email}, {"phone": 1, "phone_verified": 1})
     if not has_verified_phone(seller_user):
         logger.warning(f"[TXN] Seller {user_email} tried to confirm without verified phone")
         raise HTTPException(
             status_code=403,
-            detail="PHONE_VERIFICATION_REQUIRED: Phone verification helps protect buyers and sellers from fraud."
+            detail="Verify your phone number to continue."
         )
         
     
@@ -930,7 +935,12 @@ async def buyer_confirm_transaction(request: Request, transaction_id: str, confi
     if transaction.get("buyer_confirmed"):
         logger.info(f"[TXN] Transaction {transaction_id} already confirmed by buyer")
         return {"message": "Transaction already confirmed", "already_confirmed": True}
-    
+
+    buyer_user = await db.users.find_one({"email": user_email}, {"phone": 1, "phone_verified": 1})
+    if not has_verified_phone(buyer_user):
+        logger.warning(f"[TXN] Buyer {user_email} tried to confirm without verified phone")
+        raise HTTPException(status_code=403, detail="Verify your phone number to continue.")
+
     if confirmation.confirmed:
         logger.info(f"[TXN] buyer confirmed - {user_email} confirming for transaction {transaction_id}")
         
@@ -1278,13 +1288,23 @@ async def rate_transaction(request: Request, transaction_id: str, rating_data: R
 @router.get("/platform/settings")
 async def get_platform_settings():
     """Get platform settings (public endpoint)"""
+    payout_schedule = build_payout_schedule_summary(
+        release_times=settings.PAYOUT_RELEASE_TIMES,
+        cutoff_times=settings.PAYOUT_CUTOFF_TIMES,
+        clearing_disclaimer=settings.PAYOUT_CLEARING_DISCLAIMER,
+    )
     return {
         "minimum_transaction": settings.MINIMUM_TRANSACTION_AMOUNT,
+        "maximum_transaction": settings.MAXIMUM_TRANSACTION_AMOUNT,
         "payout_threshold": settings.PAYOUT_THRESHOLD,
         "platform_fee_percent": settings.PLATFORM_FEE_PERCENT,
         "currency": "ZAR",
         "currency_symbol": "R",
-        "payment_methods": ALLOWED_PAYMENT_METHODS
+        "payment_methods": ALLOWED_PAYMENT_METHODS,
+        "payout_release_times": settings.PAYOUT_RELEASE_TIMES,
+        "payout_cutoff_times": settings.PAYOUT_CUTOFF_TIMES,
+        "payout_clearing_disclaimer": settings.PAYOUT_CLEARING_DISCLAIMER,
+        "payout_schedule": payout_schedule,
     }
 
 

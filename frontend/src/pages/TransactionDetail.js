@@ -6,10 +6,12 @@ import TransactionActivityFeed from '../components/TransactionActivityFeed';
 import { TransactionTimeline } from '../components/TransactionTimeline';
 import TransactionStatusCard from '../components/TransactionStatusCard';
 import StepProgressTracker from '../components/StepProgressTracker';
-import { getFlowCopy, getTransactionFlowType, mapEscrowUiStateToTimelineState, PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from '../components/transactionState';
+import { getFlowCopy, getTransactionFlowType, mapEscrowUiStateToTimelineState, resolveEscrowUiState } from '../components/transactionState';
 import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
 import { buildTransactionActivity } from '../utils/transactionActivity';
+import { usePlatformConfig } from '../context/PlatformConfigContext';
+import { getPayoutScheduleMessage } from '../utils/payoutSchedule';
 import api from '../utils/api';
 import { toast } from 'sonner';
 import {
@@ -20,6 +22,8 @@ import {
 
 const BASE_URL = process.env.REACT_APP_API_URL || 'https://trusttrade-backend-production-3efa.up.railway.app';
 const API = BASE_URL ? `${BASE_URL}/api` : '/api';
+const PHONE_VERIFICATION_PROMPT = 'Verify your phone number to continue.';
+const BANKING_DETAILS_PROMPT = 'Add banking details to receive payouts.';
 
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;
@@ -134,7 +138,7 @@ function PayoutStatusBadge({ status }) {
 
   return (
     <span
-      title="Funds have been released from escrow and are being processed through banking rails."
+      title="Funds have been released from escrow and are awaiting bank clearing."
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -153,7 +157,7 @@ function PayoutStatusBadge({ status }) {
   );
 }
 
-function FinalizedEscrowState({ transaction, uiState }) {
+function FinalizedEscrowState({ transaction, uiState, payoutSchedule }) {
   const activity = getPayoutActivity(transaction);
   const status = getPayoutStatus(transaction);
   const estimate = getSettlementEstimate(transaction);
@@ -180,7 +184,7 @@ function FinalizedEscrowState({ transaction, uiState }) {
             <PayoutStatusBadge status={status} />
           </div>
           <p style={{ fontSize: 13, color: '#047857', margin: '0 0 14px', lineHeight: 1.6 }}>
-            Your payout is now moving through the banking system. Escrow release is complete; bank settlement is the separate banking step that follows.
+            Your payout is now moving through the banking system. Escrow release is complete; {payoutSchedule.copy}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
             {[
@@ -202,7 +206,7 @@ function FinalizedEscrowState({ transaction, uiState }) {
   );
 }
 
-function PayoutTimeline({ transaction }) {
+function PayoutTimeline({ transaction, payoutSchedule }) {
   const activity = getPayoutActivity(transaction);
   const status = getPayoutStatus(transaction);
   const estimate = getSettlementEstimate(transaction);
@@ -225,7 +229,7 @@ function PayoutTimeline({ transaction }) {
         <div>
           <p style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 4px' }}>Payout timeline</p>
           <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
-            Funds have been released from escrow and are being processed through banking rails.
+            {payoutSchedule.copy}
           </p>
         </div>
         <PayoutStatusBadge status={status} />
@@ -290,7 +294,7 @@ function CurrentStateHeader({ uiState, flowType, userRole }) {
     if (uiState.state === 'ESCROW_LOCKED') return 'Funds secured in escrow';
     if (uiState.state === 'DELIVERY_PENDING') return flowType === 'delivery' ? 'Delivery in progress' : flowType === 'instant' ? 'Instant release processing' : 'Release conditions in progress';
     if (uiState.state === 'DELIVERED') return flowType === 'delivery' ? 'Awaiting buyer confirmation' : 'Release conditions met';
-    if (uiState.state === 'RELEASED') return 'Funds released — payout processing';
+    if (uiState.state === 'RELEASED') return 'Funds released — bank clearing pending';
     if (uiState.state === 'COMPLETED') return 'Completed';
     if (uiState.state === 'DISPUTED') return 'Disputed';
     return uiState.label || 'Transaction status';
@@ -357,6 +361,8 @@ function TransactionDetail() {
   const [wrongAccount, setWrongAccount] = useState(null);
   const [phoneVerificationContext, setPhoneVerificationContext] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const { config: platformConfig } = usePlatformConfig();
+  const payoutSchedule = getPayoutScheduleMessage(new Date(), platformConfig);
   const navigate = useNavigate();
   const { transactionId } = useParams();
 
@@ -487,13 +493,16 @@ function TransactionDetail() {
       toast.success('Transaction confirmed!'); fetchData();
     } catch (error) {
       const errMsg = parseErrorMessage(error);
-      if (errMsg && errMsg.startsWith('MISSING_PROFILE:')) {
+      if (errMsg && errMsg.includes(BANKING_DETAILS_PROMPT)) {
+        setProfileIncompleteError(BANKING_DETAILS_PROMPT);
+        toast.error(BANKING_DETAILS_PROMPT);
+      } else if (errMsg && errMsg.includes(PHONE_VERIFICATION_PROMPT)) {
+        setProfileIncompleteError(PHONE_VERIFICATION_PROMPT);
+        toast.error(PHONE_VERIFICATION_PROMPT);
+      } else if (errMsg && errMsg.startsWith('MISSING_PROFILE:')) {
         const missing = errMsg.replace('MISSING_PROFILE: ', '');
         setProfileIncompleteError(missing);
         toast.error(`Complete your profile first: ${missing}`);
-      } else if (errMsg && errMsg.startsWith('PHONE_VERIFICATION_REQUIRED:')) {
-        setProfileIncompleteError('verified phone number');
-        toast.error(errMsg.replace('PHONE_VERIFICATION_REQUIRED: ', ''));
       } else { toast.error(errMsg || 'Failed to confirm transaction'); }
     } finally { setSellerConfirming(false); }
   };
@@ -508,13 +517,13 @@ function TransactionDetail() {
 
   const handleConfirmDelivery = async () => {
     if (!user?.phone_verified) {
-      toast.info('Verify your phone number to protect your escrow account.');
+      toast.info(PHONE_VERIFICATION_PROMPT);
       navigate('/verify/phone');
       return;
     }
     if (!window.confirm('Are you sure you want to confirm delivery and release the funds to the seller?')) return;
     setConfirming(true);
-    try { await api.patch(`${API}/transactions/${transactionId}/delivery`, { delivery_confirmed: true }, { withCredentials: true }); toast.success(PAYOUT_TIMING_COPY); fetchData(); }
+    try { await api.patch(`${API}/transactions/${transactionId}/delivery`, { delivery_confirmed: true }, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
     catch (error) { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery'); }
     finally { setConfirming(false); }
   };
@@ -542,7 +551,7 @@ function TransactionDetail() {
   const handleCreateEscrow = async (e) => {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     if (!user?.phone_verified) {
-      toast.info('Verify your phone number to protect your escrow account.');
+      toast.info(PHONE_VERIFICATION_PROMPT);
       navigate('/verify/phone');
       return;
     }
@@ -558,7 +567,7 @@ function TransactionDetail() {
   const handleGetPaymentLink = async (e) => {
     if (e) { e.preventDefault(); e.stopPropagation(); }
     if (!user?.phone_verified) {
-      toast.info('Verify your phone number to protect your escrow account.');
+      toast.info(PHONE_VERIFICATION_PROMPT);
       navigate('/verify/phone');
       return;
     }
@@ -578,7 +587,7 @@ function TransactionDetail() {
 
   const handleStartDelivery = async () => {
     if (!user?.phone_verified) {
-      toast.info('Phone verification helps protect buyers and sellers from fraud.');
+      toast.info(PHONE_VERIFICATION_PROMPT);
       navigate('/verify/phone');
       return;
     }
@@ -596,7 +605,7 @@ function TransactionDetail() {
 
   const handleManualStartDelivery = async () => {
     if (!user?.phone_verified) {
-      toast.info('Phone verification helps protect buyers and sellers from fraud.');
+      toast.info(PHONE_VERIFICATION_PROMPT);
       navigate('/verify/phone');
       return;
     }
@@ -622,38 +631,38 @@ function TransactionDetail() {
 
   const handleAcceptDelivery = async () => {
     if (!user?.phone_verified) {
-      toast.info('Verify your phone number to protect your escrow account.');
+      toast.info(PHONE_VERIFICATION_PROMPT);
       navigate('/verify/phone');
       return;
     }
     const readiness = payoutReadiness?.payout_ready ? payoutReadiness : await checkPayoutReadiness();
     if (readiness && !readiness.payout_ready) {
       const issues = readiness.issues?.join(', ') || 'Unknown issue';
-      toast.warning(`Seller payout setup incomplete. ${issues}`);
+      toast.warning(issues);
       return;
     }
-    if (!window.confirm('Confirm you have received the item? This will release funds from escrow. Bank settlement may take up to 2 business days. This action cannot be undone.')) return;
+    if (!window.confirm(`Confirm you have received the item? This will release funds from escrow. ${payoutSchedule.copy} This action cannot be undone.`)) return;
     setAcceptingDelivery(true);
-    try { await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(PAYOUT_TIMING_COPY); fetchData(); }
+    try { await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
     catch (error) { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); }
     finally { setAcceptingDelivery(false); }
   };
 
   const handleManualAcceptDelivery = async () => {
     if (!user?.phone_verified) {
-      toast.info('Verify your phone number to protect your escrow account.');
+      toast.info(PHONE_VERIFICATION_PROMPT);
       navigate('/verify/phone');
       return;
     }
     const readiness = payoutReadiness?.payout_ready ? payoutReadiness : await checkPayoutReadiness();
     if (readiness && !readiness.payout_ready) {
       const issues = readiness.issues?.join(', ') || 'Unknown issue';
-      toast.warning(`Seller payout setup incomplete. ${issues}`);
+      toast.warning(issues);
       return;
     }
-    if (!window.confirm('MANUAL OVERRIDE: Confirm receipt and release funds from escrow? Bank settlement may take up to 2 business days.')) return;
+    if (!window.confirm(`MANUAL OVERRIDE: Confirm receipt and release funds from escrow? ${payoutSchedule.copy}`)) return;
     setAcceptingDelivery(true);
-    try { await api.post(`${API}/tradesafe/manual-accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(PAYOUT_TIMING_COPY); fetchData(); }
+    try { await api.post(`${API}/tradesafe/manual-accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
     catch (error) { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); }
     finally { setAcceptingDelivery(false); }
   };
@@ -921,7 +930,7 @@ function TransactionDetail() {
       roleContext: isBuyer ? 'Buyer next step' : isSeller ? 'Seller next step' : 'Transaction status',
     };
     if (isFinalized) {
-      return { ...base, bg: '#ecfdf5', border: '#a7f3d0', color: '#059669', titleColor: '#064e3b', textColor: '#047857', title: 'Funds released', description: PAYOUT_TIMING_SHORT };
+      return { ...base, bg: '#ecfdf5', border: '#a7f3d0', color: '#059669', titleColor: '#064e3b', textColor: '#047857', title: 'Funds released', description: payoutSchedule.shortCopy || 'Next payout release' };
     }
     if (isBuyer && (canFundEscrowSetup || canMakePayment)) {
       return { ...base, title: 'Your next step: Fund escrow', description: isDeliveryFlow ? 'Your payment is held securely until delivery is confirmed.' : 'Your payment is held securely until release conditions are met.' };
@@ -1008,7 +1017,7 @@ function TransactionDetail() {
               <div>
                 <p style={{ fontSize: 13, fontWeight: 600, color: '#fff', margin: '0 0 6px' }}>TrustTrade Escrow Protection</p>
                 <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {['Funds held securely in escrow', 'Seller paid only after release conditions are met', PAYOUT_TIMING_COPY].map((t, i) => (
+                  {['Funds held securely in escrow', 'Seller paid only after release conditions are met', payoutSchedule.copy].map((t, i) => (
                     <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
                       <CheckCircle2 size={11} color={i < 2 ? '#10b981' : '#60a5fa'} />
                       {t}
@@ -1056,8 +1065,8 @@ function TransactionDetail() {
 
             {isFinalized && (
               <>
-                <FinalizedEscrowState transaction={transaction} uiState={uiState} />
-                <PayoutTimeline transaction={transaction} />
+                <FinalizedEscrowState transaction={transaction} uiState={uiState} payoutSchedule={payoutSchedule} />
+                <PayoutTimeline transaction={transaction} payoutSchedule={payoutSchedule} />
               </>
             )}
 
@@ -1086,10 +1095,27 @@ function TransactionDetail() {
                     <Shield size={18} color="#3b82f6" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#1e3a8a', margin: '0 0 4px' }}>Verify your phone number to protect your escrow account.</p>
-                    <p style={{ fontSize: 13, color: '#2563eb', margin: '0 0 14px' }}>Phone verification helps protect buyers and sellers from fraud.</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#1e3a8a', margin: '0 0 4px' }}>{PHONE_VERIFICATION_PROMPT}</p>
+                    <p style={{ fontSize: 13, color: '#2563eb', margin: '0 0 14px' }}>Phone verification is required before you can continue with escrow actions.</p>
                     <button onClick={() => navigate('/verify/phone')} className="action-btn" style={{ ...S.btn('#3b82f6') }}>
                       <Shield size={13} /> Verify Phone
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isSeller && !user?.banking_details_completed && (isFinalized || canStartDelivery || canManualStartDelivery || canAcceptDeliveryTS || canManualAcceptDelivery) && (
+              <div style={S.actionCard('#f59e0b', '#fffbeb')}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 9, background: '#fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Banknote size={18} color="#d97706" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>{BANKING_DETAILS_PROMPT}</p>
+                    <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 14px' }}>Add your banking details before funds are released so payouts can complete cleanly.</p>
+                    <button onClick={() => navigate('/settings/banking')} className="action-btn" style={{ ...S.btn('#f59e0b') }}>
+                      <Banknote size={13} /> Add banking details
                     </button>
                   </div>
                 </div>
@@ -1105,15 +1131,15 @@ function TransactionDetail() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#7c2d12', margin: '0 0 4px' }}>Action Required: Confirm Fee Agreement</p>
-                    <p style={{ fontSize: 13, color: '#ea580c', margin: '0 0 4px' }}>2% TrustTrade fee (min R5). Add payout details to receive escrow releases.</p>
+                    <p style={{ fontSize: 13, color: '#ea580c', margin: '0 0 4px' }}>2% TrustTrade fee (min R5). {BANKING_DETAILS_PROMPT}</p>
                     <p style={{ fontSize: 13, fontWeight: 600, color: '#9a3412', margin: '0 0 14px' }}>You'll receive R {(transaction.seller_receives ?? (transaction.item_price - transaction.trusttrade_fee))?.toFixed(2)}</p>
                     {profileIncompleteError && (
                       <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
                         <p style={{ fontSize: 13, fontWeight: 600, color: '#b91c1c', margin: '0 0 4px' }}>Complete your profile first</p>
-                        <p style={{ fontSize: 12, color: '#ef4444', margin: '0 0 8px' }}>Phone verification helps protect buyers and sellers from fraud.</p>
+                        <p style={{ fontSize: 12, color: '#ef4444', margin: '0 0 8px' }}>{profileIncompleteError}</p>
                         <div style={{ display: 'flex', gap: 10 }}>
                           <Link to="/verify/phone" style={{ fontSize: 12, color: '#b91c1c', fontWeight: 600 }}>Verify phone</Link>
-                          <Link to="/settings/banking" style={{ fontSize: 12, color: '#b91c1c', fontWeight: 600 }}>Add payout details</Link>
+                          <Link to="/settings/banking" style={{ fontSize: 12, color: '#b91c1c', fontWeight: 600 }}>Add banking details</Link>
                         </div>
                       </div>
                     )}
@@ -1338,7 +1364,7 @@ function TransactionDetail() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: '0 0 4px' }}>Confirm receipt</p>
-                    <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Confirm delivery to release funds from escrow. Bank settlement may take up to 2 business days.</p>
+                    <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>{payoutSchedule.copy}</p>
                     {payoutReadiness && !payoutReadiness.payout_ready && (
                       <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
                         <p style={{ fontSize: 12, color: '#b45309', margin: 0 }}>{payoutReadiness.issues?.join('. ') || 'Seller must complete payout setup.'}</p>
@@ -1470,8 +1496,8 @@ function TransactionDetail() {
                       <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 8, backgroundColor: 'rgba(26,115,232,0.08)' }}>
                         <p style={{ margin: 0, fontSize: 13, color: '#1a73e8', fontWeight: 500 }}>
                           {isDeliveryFlow
-                            ? 'Funds release from escrow when buyer confirms receipt. Bank settlement may take up to 2 business days.'
-                            : 'Funds release from escrow when release conditions are met. Bank settlement may take up to 2 business days.'}
+                            ? `Funds release from escrow when buyer confirms receipt. ${payoutSchedule.copy}`
+                            : `Funds release from escrow when release conditions are met. ${payoutSchedule.copy}`}
                         </p>
                       </div>
                     )}
@@ -1513,7 +1539,7 @@ function TransactionDetail() {
             {canConfirmDelivery && (
               <div style={S.actionCard('#10b981', '#ecfdf5')}>
                 <p style={{ fontSize: 15, fontWeight: 700, color: '#064e3b', margin: '0 0 6px' }}>Final Step: Confirm Delivery</p>
-                <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>Have you received the item and are satisfied? Confirming releases funds from escrow. Bank settlement may take up to 2 business days. This cannot be undone.</p>
+                <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>{`Have you received the item and are satisfied? Confirming releases funds from escrow. ${payoutSchedule.copy} This cannot be undone.`}</p>
                 <button onClick={handleConfirmDelivery} disabled={confirming} data-testid="confirm-delivery-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: confirming ? 0.6 : 1 }}>
                   {confirming ? 'Processing…' : 'Confirm Delivery'}
                 </button>

@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/share", tags=["Share Links"])
 
 
+def require_verified_phone_to_continue(user):
+    if not getattr(user, "phone_verified", False):
+        raise HTTPException(status_code=403, detail="Verify your phone number to continue.")
+
+
 @router.get("/{share_code}", response_model=TransactionPreview)
 async def get_transaction_by_share_code(share_code: str):
     """Get transaction preview by share code - requires auth to view full details"""
@@ -53,7 +58,10 @@ async def join_transaction_by_share_code(request: Request, share_code: str):
     user = await get_user_from_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
+    if not getattr(user, "is_admin", False):
+        require_verified_phone_to_continue(user)
+
     transaction = await db.transactions.find_one(
         {"share_code": share_code},
         {"_id": 0}

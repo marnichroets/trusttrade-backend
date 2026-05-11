@@ -7,6 +7,8 @@ const COLORS = {
   sub: '#8B949E',
 };
 
+const UNPAID_EXPIRY_HOURS = 72;
+
 export const PAYOUT_TIMING_COPY = 'Once funds are released from escrow, payouts are processed as quickly as possible. Bank settlement may take up to 2 business days depending on payment runs, weekends, and bank processing.';
 export const PAYOUT_TIMING_SHORT = 'Payout processing · up to 2 business days';
 
@@ -21,6 +23,73 @@ export const ESCROW_FLOW_STEPS = [
 
 export function fieldText(...values) {
   return values.filter(Boolean).join(' ').toLowerCase();
+}
+
+export function parseTransactionDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function formatExpiryCountdown(msRemaining) {
+  const hours = Math.max(0, msRemaining) / (1000 * 60 * 60);
+  if (hours < 1) return 'less than 1 hour';
+  if (hours < 24) return `${Math.ceil(hours)} hour${Math.ceil(hours) === 1 ? '' : 's'}`;
+  const days = hours / 24;
+  return `${Math.ceil(days)} day${Math.ceil(days) === 1 ? '' : 's'}`;
+}
+
+export function getPendingPaymentExpiry(transaction = {}, now = new Date()) {
+  const referenceDate = parseTransactionDate(
+    transaction.awaiting_payment_at ||
+    transaction.payment_requested_at ||
+    transaction.payment_due_at ||
+    transaction.created_at ||
+    transaction.updated_at
+  );
+
+  if (!referenceDate) {
+    return {
+      isAwaitingPayment: false,
+      isExpired: false,
+      expiresAt: null,
+      expiresInLabel: null,
+      ageHours: null,
+    };
+  }
+
+  const paymentStatus = fieldText(transaction.payment_status, transaction.transaction_status, transaction.transaction_state, transaction.tradesafe_state);
+  const isPaymentPhase = (
+    paymentStatus.includes('awaiting payment') ||
+    paymentStatus.includes('ready for payment') ||
+    paymentStatus.includes('pending payment') ||
+    paymentStatus.includes('awaiting payment into escrow') ||
+    paymentStatus.includes('payment pending') ||
+    fieldText(transaction.transaction_state).includes('awaiting_payment')
+  );
+
+  const terminal = fieldText(transaction.payment_status, transaction.transaction_state, transaction.payout_status, transaction.tradesafe_state);
+  if (!isPaymentPhase || terminal.includes('expired') || terminal.includes('completed') || terminal.includes('released') || terminal.includes('cancel') || terminal.includes('refund')) {
+    return {
+      isAwaitingPayment: false,
+      isExpired: false,
+      expiresAt: null,
+      expiresInLabel: null,
+      ageHours: null,
+    };
+  }
+
+  const expiryAt = new Date(referenceDate.getTime() + UNPAID_EXPIRY_HOURS * 60 * 60 * 1000);
+  const msRemaining = expiryAt.getTime() - now.getTime();
+  const ageHours = (now.getTime() - referenceDate.getTime()) / (1000 * 60 * 60);
+
+  return {
+    isAwaitingPayment: true,
+    isExpired: msRemaining <= 0,
+    expiresAt: expiryAt.toISOString(),
+    expiresInLabel: msRemaining <= 0 ? 'Transaction expired due to no payment' : `Expires in ${formatExpiryCountdown(msRemaining)}`,
+    ageHours,
+  };
 }
 
 export function getTransactionFlowType(transaction = {}) {
@@ -193,6 +262,28 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
     };
   }
 
+  const explicitExpiry = getPendingPaymentExpiry(transaction);
+  if (
+    transaction.archived ||
+    payment.includes('expired') ||
+    transactionStatus.includes('expired') ||
+    tradesafe.includes('expired') ||
+    explicitExpiry.isExpired
+  ) {
+    return {
+      state: 'EXPIRED',
+      label: 'Transaction expired',
+      description: 'Transaction expired due to no payment.',
+      secondaryLabel: 'No payment received within 72 hours',
+      color: '#64748b',
+      bg: 'rgba(100,116,139,0.1)',
+      progressIndex: 2,
+      terminal: true,
+      actionable: false,
+      expiresAt: explicitExpiry.expiresAt,
+    };
+  }
+
   if (!bothConfirmed) {
     return {
       state: 'CREATED',
@@ -206,11 +297,37 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
     };
   }
 
-  if (!fundsSecured || payment.includes('awaiting') || payment.includes('ready') || payment.includes('pending') || tradesafe.includes('created') || tradesafe.includes('pending')) {
+  const paymentExpiry = getPendingPaymentExpiry(transaction);
+  const awaitingPayment = !fundsSecured && (
+    payment.includes('awaiting') ||
+    payment.includes('ready') ||
+    payment.includes('pending') ||
+    transactionStatus.includes('awaiting_payment') ||
+    tradesafe.includes('created') ||
+    tradesafe.includes('pending')
+  );
+
+  if (awaitingPayment) {
+    if (paymentExpiry.isExpired) {
+      return {
+        state: 'EXPIRED',
+        label: 'Transaction expired',
+        description: 'Transaction expired due to no payment.',
+        secondaryLabel: 'No payment received within 72 hours',
+        color: '#64748b',
+        bg: 'rgba(100,116,139,0.1)',
+        progressIndex: 2,
+        terminal: true,
+        actionable: false,
+        expiresAt: paymentExpiry.expiresAt,
+      };
+    }
     return {
       state: 'FUNDED',
       label: 'Awaiting payment',
       description: 'Waiting for buyer payment into escrow.',
+      secondaryLabel: paymentExpiry.expiresInLabel,
+      expiresAt: paymentExpiry.expiresAt,
       color: COLORS.accent,
       bg: 'rgba(0,209,255,0.1)',
       progressIndex: 2,
@@ -264,6 +381,8 @@ export function mapEscrowUiStateToTimelineState(uiState) {
     case 'COMPLETED':
     case 'RELEASED':
       return 'COMPLETED';
+    case 'EXPIRED':
+      return 'EXPIRED';
     case 'DISPUTED':
       return 'DELIVERY_IN_PROGRESS';
     case 'DELIVERED':

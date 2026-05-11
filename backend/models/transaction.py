@@ -37,6 +37,7 @@ class Transaction(BaseModel):
     delivery_method: str = "courier"  # "courier", "bank_deposit", "digital"
     auto_release_days: int = 3
     payment_status: str = "Pending Seller Confirmation"
+    transaction_state: Optional[str] = None
     buyer_confirmed: bool = False
     buyer_confirmed_at: Optional[str] = None
     seller_confirmed: bool = False
@@ -83,6 +84,10 @@ class Transaction(BaseModel):
     payout_sla_status: Optional[str] = None
     settlement_status: Optional[str] = None
     settlement_checked_at: Optional[str] = None
+    awaiting_payment_at: Optional[str] = None
+    expired_at: Optional[str] = None
+    archived_at: Optional[str] = None
+    archived: Optional[bool] = None
     statement_status: Optional[str] = None
     funds_received_at: Optional[str] = None
     delivery_started_at: Optional[str] = None

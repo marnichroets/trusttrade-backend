@@ -39,6 +39,7 @@ async def _payment_polling_loop():
         try:
             db = get_database()
             await background_jobs.verify_pending_payments(db, tradesafe_service)
+            await background_jobs.expire_stale_payment_transactions(db)
         except Exception as exc:
             logger.error(f"[BG_POLL] Payment polling error: {exc}")
         await asyncio.sleep(300)  # 5 minutes

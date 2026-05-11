@@ -285,6 +285,7 @@ function NextStepCard({ nextStep }) {
 
 function CurrentStateHeader({ uiState, flowType, userRole }) {
   const title = (() => {
+    if (uiState.state === 'EXPIRED') return 'Transaction expired due to no payment';
     if (uiState.state === 'FUNDED') return 'Awaiting buyer payment';
     if (uiState.state === 'ESCROW_LOCKED') return 'Funds secured in escrow';
     if (uiState.state === 'DELIVERY_PENDING') return flowType === 'delivery' ? 'Delivery in progress' : flowType === 'instant' ? 'Instant release processing' : 'Release conditions in progress';
@@ -682,12 +683,13 @@ function TransactionDetail() {
   );
 
   const getEscrowStateBadge = (state) => {
-    const variants = { 'CREATED': { bg: '#f1f5f9', text: '#475569', label: 'Created' }, 'PENDING': { bg: '#fefce8', text: '#854d0e', label: 'Pending' }, 'FUNDS_RECEIVED': { bg: '#ecfdf5', text: '#065f46', label: 'Funds Secured' }, 'INITIATED': { bg: '#f5f3ff', text: '#5b21b6', label: 'Delivery Started' }, 'SENT': { bg: '#eff6ff', text: '#1e40af', label: 'Item Sent' }, 'DELIVERED': { bg: '#fffbeb', text: '#92400e', label: 'Awaiting Confirmation' }, 'FUNDS_RELEASED': { bg: '#ecfdf5', text: '#14532d', label: 'Funds Released' }, 'DISPUTED': { bg: '#fef2f2', text: '#7f1d1d', label: 'Disputed' }, 'CANCELLED': { bg: '#fef2f2', text: '#7f1d1d', label: 'Cancelled' } };
+    const variants = { 'CREATED': { bg: '#f1f5f9', text: '#475569', label: 'Created' }, 'PENDING': { bg: '#fefce8', text: '#854d0e', label: 'Pending' }, 'FUNDS_RECEIVED': { bg: '#ecfdf5', text: '#065f46', label: 'Funds Secured' }, 'INITIATED': { bg: '#f5f3ff', text: '#5b21b6', label: 'Delivery Started' }, 'SENT': { bg: '#eff6ff', text: '#1e40af', label: 'Item Sent' }, 'DELIVERED': { bg: '#fffbeb', text: '#92400e', label: 'Awaiting Confirmation' }, 'FUNDS_RELEASED': { bg: '#ecfdf5', text: '#14532d', label: 'Funds Released' }, 'EXPIRED': { bg: '#f1f5f9', text: '#64748b', label: 'Expired' }, 'DISPUTED': { bg: '#fef2f2', text: '#7f1d1d', label: 'Disputed' }, 'CANCELLED': { bg: '#fef2f2', text: '#7f1d1d', label: 'Cancelled' } };
     return variants[state] || { bg: '#f1f5f9', text: '#475569', label: state };
   };
 
   const mapPaymentStatusToState = (paymentStatus, tradesafeState) => {
     const ps = (paymentStatus || '').toLowerCase(); const ts = (tradesafeState || '').toUpperCase();
+    if (ps.includes('expired') || ts === 'EXPIRED') return 'EXPIRED';
     if (ts === 'FUNDS_RELEASED' || ps.includes('completed') || ps.includes('released')) return 'COMPLETED';
     if (ts === 'DELIVERED' || ps.includes('delivered')) return 'DELIVERED';
     if (ts === 'INITIATED' || ts === 'SENT' || ps.includes('delivery') || ps.includes('dispatched')) return 'DELIVERY_IN_PROGRESS';

@@ -156,6 +156,87 @@ async def verify_single_transaction(
         return {"updated": False, "reason": "api_exception", "error": str(e)}
 
 
+async def expire_stale_payment_transactions(db: AsyncIOMotorDatabase) -> Dict[str, Any]:
+    """
+    Mark unpaid transactions as expired after 72 hours.
+
+    This is a read-friendly cleanup pass: it only updates stale unpaid
+    transactions and leaves the records in place for history review.
+    """
+    logger.info("=== Running unpaid transaction expiry check ===")
+
+    summary = {
+        "checked": 0,
+        "expired": 0,
+        "errors": 0,
+    }
+
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=72)).isoformat()
+        candidates = await db.transactions.find({
+            "$and": [
+                {
+                    "$or": [
+                        {"awaiting_payment_at": {"$lt": cutoff}},
+                        {"awaiting_payment_at": {"$exists": False}, "created_at": {"$lt": cutoff}},
+                    ]
+                },
+                {
+                    "$or": [
+                        {"archived": {"$ne": True}},
+                        {"archived": {"$exists": False}},
+                    ]
+                }
+            ],
+            "transaction_state": "AWAITING_PAYMENT",
+            "payment_status": {"$in": ["Awaiting Payment", "Ready for Payment", "Pending Payment"]},
+        }, {"_id": 0}).to_list(250)
+
+        summary["checked"] = len(candidates)
+        if not candidates:
+            return summary
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        expiry_note = "Transaction expired due to no payment"
+
+        for txn in candidates:
+            try:
+                transaction_id = txn.get("transaction_id")
+                timeline = txn.get("timeline", [])
+                timeline.append({
+                    "status": "Transaction expired",
+                    "timestamp": now_iso,
+                    "by": "System",
+                    "details": expiry_note,
+                })
+
+                update_data = {
+                    "transaction_state": "EXPIRED",
+                    "payment_status": "Expired",
+                    "release_status": "Not Released",
+                    "expired_at": now_iso,
+                    "archived_at": now_iso,
+                    "archived": True,
+                    "timeline": timeline,
+                }
+
+                await db.transactions.update_one(
+                    {"transaction_id": transaction_id},
+                    {"$set": update_data}
+                )
+                summary["expired"] += 1
+                logger.info(f"Expired stale unpaid transaction {transaction_id}")
+            except Exception as exc:
+                summary["errors"] += 1
+                logger.error(f"Failed to expire unpaid transaction {txn.get('transaction_id')}: {exc}")
+    except Exception as exc:
+        summary["errors"] += 1
+        logger.error(f"Expiry job failed: {exc}")
+
+    logger.info(f"Unpaid transaction expiry complete: {summary}")
+    return summary
+
+
 async def send_fallback_payment_notifications(db: AsyncIOMotorDatabase, txn: Dict) -> None:
     """Send payment secured notifications via fallback (with deduplication)"""
     from webhook_handler import (
@@ -478,6 +559,12 @@ async def start_background_jobs(
                 await verify_pending_payments(db, tradesafe_service)
             except Exception as e:
                 logger.error(f"Payment verification failed: {e}")
+
+            # Expire stale unpaid transactions - every iteration
+            try:
+                await expire_stale_payment_transactions(db)
+            except Exception as e:
+                logger.error(f"Expiry job failed: {e}")
             
             # Auto-release - every 2nd iteration (6 minutes)
             if iteration % 2 == 0:

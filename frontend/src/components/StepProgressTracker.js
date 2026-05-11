@@ -1,5 +1,5 @@
 // Step Progress Tracker for Transaction Detail Page
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, Clock } from 'lucide-react';
 import { getTransactionFlowType, resolveEscrowUiState } from './transactionState';
 
 const DELIVERY_STEPS = [
@@ -39,6 +39,9 @@ function getStepIndex(transaction, uiState, steps) {
   const ts = (transaction.tradesafe_state || '').toUpperCase();
   const bothConfirmed = transaction.buyer_confirmed && transaction.seller_confirmed;
 
+  if (uiState.state === 'EXPIRED' || ps.includes('expired') || ts === 'EXPIRED') {
+    return steps.length - 1;
+  }
   if (uiState.terminal || uiState.state === 'RELEASED' || ts === 'FUNDS_RELEASED' || ps.includes('released') || ps.includes('completed')) {
     return steps.length - 1;
   }
@@ -59,6 +62,22 @@ export function StepProgressTracker({ transaction }) {
   const uiState = resolveEscrowUiState(transaction);
   const steps = getSteps(transaction);
   const currentStep = getStepIndex(transaction, uiState, steps);
+
+  if (uiState.state === 'EXPIRED') {
+    return (
+      <div className="w-full min-w-0">
+        <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 text-slate-500">
+            <Clock className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-700">Transaction expired</p>
+            <p className="text-xs text-slate-500">Transaction expired due to no payment</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full min-w-0">

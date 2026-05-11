@@ -148,11 +148,12 @@ async def get_monitoring_dashboard(request: Request):
     
     # Transaction metrics
     total_active = await db.transactions.count_documents({
-        "transaction_state": {"$nin": ["COMPLETED", "CANCELLED", "REFUNDED"]}
+        "transaction_state": {"$nin": ["COMPLETED", "CANCELLED", "REFUNDED", "EXPIRED"]}
     })
     
     awaiting_payment = await db.transactions.count_documents({
-        "transaction_state": {"$in": ["AWAITING_PAYMENT", "CREATED", "PENDING_CONFIRMATION"]}
+        "transaction_state": {"$in": ["AWAITING_PAYMENT", "CREATED", "PENDING_CONFIRMATION"]},
+        "archived": {"$ne": True}
     })
     
     payments_secured_24h = await db.transactions.count_documents({

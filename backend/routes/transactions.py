@@ -867,6 +867,7 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
         if buyer_confirmed:
             logger.info(f"[TXN] both confirmed - transaction {transaction_id} moving to READY_FOR_PAYMENT")
             update_fields["payment_status"] = "Ready for Payment"
+            update_fields["awaiting_payment_at"] = datetime.now(timezone.utc).isoformat()
             
             # Generate escrow agreement PDF
             pdf_filename = f"agreement_{transaction_id}.pdf"
@@ -954,6 +955,7 @@ async def buyer_confirm_transaction(request: Request, transaction_id: str, confi
         if seller_confirmed:
             logger.info(f"[TXN] both confirmed - transaction {transaction_id} moving to READY_FOR_PAYMENT")
             update_fields["payment_status"] = "Ready for Payment"
+            update_fields["awaiting_payment_at"] = datetime.now(timezone.utc).isoformat()
             
             # Generate escrow agreement PDF
             pdf_filename = f"agreement_{transaction_id}.pdf"

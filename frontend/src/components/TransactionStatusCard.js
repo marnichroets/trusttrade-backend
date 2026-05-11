@@ -1,15 +1,57 @@
 import { Shield, CheckCircle2, Truck, Clock, AlertTriangle, XCircle, CreditCard, Banknote, Lock, ArrowRight } from 'lucide-react';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
-import { getFlowCopy, getTransactionFlowType, PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from './transactionState';
+import { getFlowCopy, getPendingPaymentExpiry, getTransactionFlowType, PAYOUT_TIMING_COPY, PAYOUT_TIMING_SHORT, resolveEscrowUiState } from './transactionState';
 
 // Main transaction status card - shows current state prominently with clear next action
 export function TransactionStatusCard({ transaction, userRole }) {
   const uiState = resolveEscrowUiState(transaction);
+  const expiry = getPendingPaymentExpiry(transaction);
   const state = mapUiStateToStatusCardState(uiState) || transaction.transaction_state ||
     mapLegacyStatus(transaction.payment_status, transaction.tradesafe_state);
   
   const statusConfig = getStatusConfig(state, userRole, transaction);
+  if (uiState.state === 'FUNDED' && expiry.isAwaitingPayment) {
+    statusConfig.badge = expiry.expiresInLabel || statusConfig.badge;
+    statusConfig.description = userRole === 'buyer'
+      ? `Escrow is ready. Complete payment to secure your purchase. ${expiry.expiresInLabel}.`
+      : `Waiting for the buyer to complete payment. ${expiry.expiresInLabel}.`;
+  }
+  if (uiState.state === 'EXPIRED' || expiry.isExpired) {
+    const expiredConfig = getStatusConfig('EXPIRED', userRole, transaction);
+    expiredConfig.description = 'Transaction expired due to no payment.';
+    expiredConfig.badge = 'Expired';
+    expiredConfig.nextAction = 'Review it in transaction history';
+    const Icon = expiredConfig.icon;
+    return (
+      <Card className={`p-5 border-2 ${expiredConfig.borderClass}`} style={{ backgroundColor: expiredConfig.bgColor }}>
+        <div className="flex items-start gap-4">
+          <div className={`p-3 rounded-xl ${expiredConfig.iconBgClass}`}>
+            <Icon className={`w-6 h-6 ${expiredConfig.iconClass}`} />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h3 className={`text-lg font-bold ${expiredConfig.titleClass}`}>
+                {expiredConfig.title}
+              </h3>
+              <Badge className={expiredConfig.badgeClass}>
+                {expiredConfig.badge}
+              </Badge>
+            </div>
+            <p className="text-sm text-slate-600 mb-3">
+              {expiredConfig.description}
+            </p>
+            {expiredConfig.nextAction && (
+              <div className="bg-white rounded-lg p-3 border border-slate-200 flex items-center gap-2">
+                <ArrowRight className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <span className="text-sm font-medium text-slate-800">{expiredConfig.nextAction}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+    );
+  }
   const Icon = statusConfig.icon;
   
   return (
@@ -67,6 +109,8 @@ function mapUiStateToStatusCardState(uiState) {
       return 'PAYMENT_SECURED';
     case 'FUNDED':
       return 'AWAITING_PAYMENT';
+    case 'EXPIRED':
+      return 'EXPIRED';
     case 'CANCELLED':
       return 'CANCELLED';
     case 'REFUNDED':
@@ -81,6 +125,7 @@ function mapLegacyStatus(paymentStatus, tradesafeState) {
   const ps = (paymentStatus || '').toLowerCase();
   const ts = (tradesafeState || '').toUpperCase();
   
+  if (ps.includes('expired') || ts === 'EXPIRED') return 'EXPIRED';
   if (ts === 'FUNDS_RELEASED' || ps.includes('completed') || ps.includes('released')) return 'COMPLETED';
   if (ts === 'DELIVERED' || ps.includes('delivered')) return 'DELIVERED';
   if (ts === 'INITIATED' || ts === 'SENT' || ps.includes('delivery') || ps.includes('dispatched')) return 'DELIVERY_IN_PROGRESS';
@@ -171,6 +216,20 @@ function getStatusConfig(state, userRole, transaction) {
       iconClass: 'text-blue-600',
       titleClass: 'text-blue-800',
       badgeClass: 'bg-blue-100 text-blue-700 border border-blue-200'
+    },
+    EXPIRED: {
+      icon: Clock,
+      title: 'Transaction expired',
+      badge: 'Expired',
+      description: 'Transaction expired due to no payment.',
+      nextAction: 'Review it in transaction history',
+      escrowNotice: 'Expired transactions remain in your history for review.',
+      bgColor: '#f8fafc',
+      borderClass: 'border-slate-300',
+      iconBgClass: 'bg-slate-100',
+      iconClass: 'text-slate-500',
+      titleClass: 'text-slate-700',
+      badgeClass: 'bg-slate-100 text-slate-600 border border-slate-200'
     },
     PAYMENT_SECURED: {
       icon: Shield,

@@ -720,6 +720,9 @@ function buildActionItems(transactions, pendingDisputes, user) {
   return transactions
     .map((transaction) => {
       const meta = resolveEscrowUiState(transaction, pendingDisputes);
+      if (transaction.archived || ['EXPIRED', 'CANCELLED', 'REFUNDED', 'COMPLETED'].includes(meta.state)) {
+        return null;
+      }
       const flowType = getTransactionFlowType(transaction);
       const flow = getFlowCopy(transaction);
       const isBuyer = isUserBuyerForTransaction(transaction, user);
@@ -741,14 +744,18 @@ function buildActionItems(transactions, pendingDisputes, user) {
         title: 'Review transaction',
         helper: meta.description,
         color: V.accent,
-        eyebrow: 'Action Required',
+        eyebrow: meta.state === 'FUNDED' ? 'Awaiting payment' : 'Current step',
       };
 
+      if (!meta.actionable && disputeState?.kind !== 'action' && disputeState?.kind !== 'waiting') {
+        return null;
+      }
+
       if (isBuyer && meta.state === 'FUNDED') {
-        return { ...base, priority: 3, title: 'Your next step: Fund escrow', button: 'Pay into Escrow', color: V.accent, helper: 'Pay securely into escrow. Seller is paid only after you confirm delivery.' };
+        return { ...base, priority: 3, title: 'Your next step: Fund escrow', button: 'Pay into Escrow', color: V.accent, helper: meta.secondaryLabel || 'Pay securely into escrow. Seller is paid only after you confirm delivery.' };
       }
       if (isSeller && meta.state === 'FUNDED') {
-        return { ...base, priority: 4, title: 'Waiting for buyer to fund escrow', button: 'View Transaction', color: V.warn, helper: 'Share this link with the buyer. Funds will be protected once the buyer pays.' };
+        return { ...base, priority: 4, title: 'Waiting for buyer to fund escrow', button: 'View Transaction', color: V.warn, helper: meta.secondaryLabel || 'Share this link with the buyer. Funds will be protected once the buyer pays.' };
       }
       if (isSeller && ['ESCROW_LOCKED', 'DELIVERY_PENDING'].includes(meta.state)) {
         return {
@@ -785,12 +792,13 @@ function ActionRequiredPanel({ actionItems, navigate }) {
   const action = actionItems[0];
   if (!action) return null;
   const { transaction } = action;
+  const eyebrow = action.eyebrow || (action.status === 'Awaiting payment' ? 'Awaiting payment' : 'Current step');
   return (
     <section className="tt-command-panel" style={{ padding: 18, borderLeft: `2px solid ${action.color}` }}>
       <div style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 16, alignItems: 'center' }} className="tt-responsive-grid">
         <div style={{ minWidth: 0 }}>
           <p style={{ margin: '0 0 7px', color: action.color, fontFamily: V.mono, fontSize: 10, fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-            {action.eyebrow || 'Action Required'} / {action.role}
+            {eyebrow} / {action.role}
           </p>
           <h2 style={{ margin: 0, color: V.text, fontSize: 'clamp(20px, 2.4vw, 30px)', fontWeight: 850, letterSpacing: '-0.035em' }}>
             {action.title}

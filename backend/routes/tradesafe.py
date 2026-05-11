@@ -467,6 +467,7 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
             "tradesafe_state": (result.get("state") if result else "CREATED"),
             "tradesafe_fee_allocation": result.get("fee_allocation", data.fee_allocation),
             "payment_status": "Awaiting Payment",
+            "awaiting_payment_at": datetime.now(timezone.utc).isoformat(),
             "payout_status": "pending",
             "bank_details_attached": bank_details_attached,
             "payout_ready": payout_ready,

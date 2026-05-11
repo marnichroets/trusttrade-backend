@@ -17,6 +17,7 @@ class TransactionState(str, Enum):
     CREATED = "CREATED"
     PENDING_CONFIRMATION = "PENDING_CONFIRMATION"
     AWAITING_PAYMENT = "AWAITING_PAYMENT"
+    EXPIRED = "EXPIRED"
     PAYMENT_SECURED = "PAYMENT_SECURED"
     DELIVERY_IN_PROGRESS = "DELIVERY_IN_PROGRESS"
     DELIVERED = "DELIVERED"
@@ -39,8 +40,10 @@ VALID_TRANSITIONS: Dict[TransactionState, Set[TransactionState]] = {
     },
     TransactionState.AWAITING_PAYMENT: {
         TransactionState.PAYMENT_SECURED,
+        TransactionState.EXPIRED,
         TransactionState.CANCELLED
     },
+    TransactionState.EXPIRED: set(),
     TransactionState.PAYMENT_SECURED: {
         TransactionState.DELIVERY_IN_PROGRESS,
         TransactionState.DISPUTED,
@@ -149,6 +152,14 @@ def get_ui_status(state: str) -> Dict:
             "icon": "CreditCard",
             "step": 2,
             "is_active": True
+        },
+        TransactionState.EXPIRED.value: {
+            "label": "Expired",
+            "description": "No payment was received within the payment window",
+            "color": "#64748b",
+            "icon": "ClockAlert",
+            "step": None,
+            "is_active": False
         },
         TransactionState.PAYMENT_SECURED.value: {
             "label": "Payment Secured",

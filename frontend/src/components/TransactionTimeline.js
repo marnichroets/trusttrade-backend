@@ -91,8 +91,9 @@ export function TransactionTimeline({ transaction, currentState, timeline = [] }
   const isDisputed = currentState === 'DISPUTED';
   const isCancelled = currentState === 'CANCELLED';
   const isRefunded = currentState === 'REFUNDED';
+  const isExpired = currentState === 'EXPIRED';
   
-  if (isDisputed || isCancelled || isRefunded) {
+  if (isDisputed || isCancelled || isRefunded || isExpired) {
     return (
       <div className="space-y-4">
         {/* Show completed steps */}
@@ -124,23 +125,25 @@ export function TransactionTimeline({ transaction, currentState, timeline = [] }
         })}
         
         {/* Show special state */}
-        <div className="flex items-center gap-4 p-3 rounded-lg" style={{ backgroundColor: `${isDisputed ? COLORS.warning : COLORS.error}15` }}>
+        <div className="flex items-center gap-4 p-3 rounded-lg" style={{ backgroundColor: `${isDisputed ? COLORS.warning : isExpired ? COLORS.subtext : COLORS.error}15` }}>
           <div 
             className="w-10 h-10 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: `${isDisputed ? COLORS.warning : COLORS.error}30` }}
+            style={{ backgroundColor: `${isDisputed ? COLORS.warning : isExpired ? COLORS.subtext : COLORS.error}30` }}
           >
             {isDisputed ? (
               <AlertTriangle className="w-5 h-5" style={{ color: COLORS.warning }} />
+            ) : isExpired ? (
+              <Clock className="w-5 h-5" style={{ color: COLORS.subtext }} />
             ) : (
               <XCircle className="w-5 h-5" style={{ color: COLORS.error }} />
             )}
           </div>
           <div className="flex-1">
-            <p className="font-medium text-sm" style={{ color: isDisputed ? COLORS.warning : COLORS.error }}>
-              {isDisputed ? 'Dispute Opened' : isCancelled ? 'Transaction Cancelled' : 'Funds Refunded'}
+            <p className="font-medium text-sm" style={{ color: isDisputed ? COLORS.warning : isExpired ? COLORS.subtext : COLORS.error }}>
+              {isDisputed ? 'Dispute Opened' : isExpired ? 'Transaction expired' : isCancelled ? 'Transaction Cancelled' : 'Funds Refunded'}
             </p>
             <p className="text-xs" style={{ color: COLORS.subtext }}>
-              {isDisputed ? 'Transaction under review by TrustTrade' : 'This transaction has ended'}
+              {isDisputed ? 'Transaction under review by TrustTrade' : isExpired ? 'Transaction expired due to no payment' : 'This transaction has ended'}
             </p>
           </div>
         </div>

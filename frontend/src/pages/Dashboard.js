@@ -436,6 +436,7 @@ function Dashboard() {
             pendingDisputes={pendingDisputes}
             navigate={navigate}
             showExactValues={showExactValues}
+            payoutSchedule={payoutSchedule}
           />
         </div>
 
@@ -675,7 +676,7 @@ function MetricCell({ icon: Icon, label, value, sub, color, testId }) {
   );
 }
 
-function WalletCommand({ walletData, walletSegments, pendingDisputes, navigate, showExactValues }) {
+function WalletCommand({ walletData, walletSegments, pendingDisputes, navigate, showExactValues, payoutSchedule = {} }) {
   const protectedAmount = walletSegments.hasWallet || walletSegments.held > 0 ? displayMoney(walletSegments.held, showExactValues, 2) : 'Not available';
   const ring = `conic-gradient(${V.success} 0 ${walletSegments.availablePct}%, ${V.warn} ${walletSegments.availablePct}% ${walletSegments.availablePct + walletSegments.heldPct}%, #A78BFA ${walletSegments.availablePct + walletSegments.heldPct}% ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct}%, ${V.error} ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct}% ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct + (walletSegments.disputeHold ? 8 : 0)}%, rgba(255,255,255,0.08) ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct + (walletSegments.disputeHold ? 8 : 0)}% 100%)`;
   return (

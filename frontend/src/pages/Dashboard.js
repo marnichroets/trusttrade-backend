@@ -191,8 +191,24 @@ function Dashboard() {
   const [walletData, setWalletData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showExactValues, setShowExactValues] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    const updateNow = () => setNow(new Date());
+    updateNow();
+
+    const timer = window.setInterval(updateNow, 1000);
+    window.addEventListener('focus', updateNow);
+    document.addEventListener('visibilitychange', updateNow);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', updateNow);
+      document.removeEventListener('visibilitychange', updateNow);
+    };
+  }, []);
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -363,6 +379,7 @@ function Dashboard() {
           user={user}
           showExactValues={showExactValues}
           setShowExactValues={setShowExactValues}
+          now={now}
         />
 
         {!loading && user && (!user.phone_verified || ((user.role === 'seller') && !user.banking_details_completed)) && (
@@ -424,15 +441,16 @@ function Dashboard() {
   );
 }
 
-function CommandHeader({ greeting, user, showExactValues, setShowExactValues }) {
-  const dateLabel = new Date().toLocaleDateString('en-ZA', {
+function CommandHeader({ greeting, user, showExactValues, setShowExactValues, now }) {
+  const dateLabel = now.toLocaleDateString('en-ZA', {
     weekday: 'long',
     day: '2-digit',
     month: 'short',
   });
-  const timeLabel = new Date().toLocaleTimeString('en-ZA', {
+  const timeLabel = now.toLocaleTimeString('en-ZA', {
     hour: '2-digit',
     minute: '2-digit',
+    second: '2-digit',
   });
 
   return (

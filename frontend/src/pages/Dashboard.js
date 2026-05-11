@@ -29,11 +29,18 @@ import {
   WalletCards,
 } from 'lucide-react';
 
+const DASHBOARD_VALUES_KEY = 'trusttrade_dashboard_show_exact_values';
+
 const money = (value, decimals = 0) =>
   `R ${Number(value || 0).toLocaleString('en-ZA', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   })}`;
+
+const hiddenMoney = '••••••';
+
+const displayMoney = (value, showExactValues, decimals = 0) =>
+  showExactValues ? money(value, decimals) : hiddenMoney;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -190,7 +197,11 @@ function Dashboard() {
   const [adminData, setAdminData] = useState(null);
   const [walletData, setWalletData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showExactValues, setShowExactValues] = useState(false);
+  const [showExactValues, setShowExactValues] = useState(() => {
+    const stored = window.sessionStorage.getItem(DASHBOARD_VALUES_KEY);
+    if (stored === null) return true;
+    return stored !== 'false';
+  });
   const [now, setNow] = useState(() => new Date());
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
@@ -209,6 +220,10 @@ function Dashboard() {
       document.removeEventListener('visibilitychange', updateNow);
     };
   }, []);
+
+  useEffect(() => {
+    window.sessionStorage.setItem(DASHBOARD_VALUES_KEY, String(showExactValues));
+  }, [showExactValues]);
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -316,15 +331,15 @@ function Dashboard() {
           inset: 0;
           pointer-events: none;
           background:
-            radial-gradient(circle at 24% 0%, rgba(0,209,255,0.16), transparent 34%),
-            radial-gradient(circle at 78% 18%, rgba(0,255,163,0.1), transparent 30%),
-            linear-gradient(180deg, rgba(10,14,20,0), rgba(10,14,20,0.84));
+            radial-gradient(circle at 24% 0%, rgba(0,209,255,0.08), transparent 36%),
+            radial-gradient(circle at 78% 18%, rgba(0,255,163,0.06), transparent 32%),
+            linear-gradient(180deg, rgba(10,14,20,0), rgba(10,14,20,0.9));
         }
         .tt-command-panel {
           position: relative;
           border: 1px solid rgba(255,255,255,0.1);
-          background: linear-gradient(145deg, rgba(28,33,40,0.82), rgba(8,12,20,0.92));
-          box-shadow: 0 30px 120px rgba(0,0,0,0.36), inset 0 1px 0 rgba(255,255,255,0.04);
+          background: linear-gradient(145deg, rgba(28,33,40,0.88), rgba(8,12,20,0.96));
+          box-shadow: 0 18px 60px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.03);
           backdrop-filter: blur(22px);
         }
         .tt-command-panel::after {
@@ -332,8 +347,8 @@ function Dashboard() {
           position: absolute;
           inset: 0;
           pointer-events: none;
-          background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.04) 42%, transparent 68%);
-          opacity: 0.75;
+          background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.025) 42%, transparent 68%);
+          opacity: 0.45;
         }
         .tt-grid {
           display: grid;
@@ -346,19 +361,19 @@ function Dashboard() {
         }
         .tt-live-row:hover {
           transform: translateY(-2px);
-          border-color: rgba(0,209,255,0.42) !important;
-          background: rgba(0,209,255,0.045) !important;
+          border-color: rgba(0,209,255,0.26) !important;
+          background: rgba(0,209,255,0.03) !important;
         }
         .tt-activity-row:hover {
           transform: translateY(-1px);
-          border-color: rgba(0,209,255,0.34) !important;
-          background: rgba(0,209,255,0.045) !important;
+          border-color: rgba(0,209,255,0.24) !important;
+          background: rgba(0,209,255,0.03) !important;
         }
         .tt-action:hover {
           transform: translateY(-2px);
-          border-color: rgba(0,209,255,0.52) !important;
+          border-color: rgba(0,209,255,0.34) !important;
           color: ${V.text} !important;
-          box-shadow: 0 16px 45px rgba(0,209,255,0.08);
+          box-shadow: 0 10px 24px rgba(0,209,255,0.06);
         }
         @media (prefers-reduced-motion: reduce) {
           .tt-live-row, .tt-action, .tt-activity-row { transition: none !important; }
@@ -386,7 +401,7 @@ function Dashboard() {
           <ProfileReadiness user={user} navigate={navigate} />
         )}
 
-        <ActionRequiredPanel actionItems={actionItems} navigate={navigate} />
+        <ActionRequiredPanel actionItems={actionItems} navigate={navigate} showExactValues={showExactValues} />
 
         <LatestActivityCard events={latestActivity} navigate={navigate} />
 
@@ -396,6 +411,7 @@ function Dashboard() {
           user={user}
           navigate={navigate}
           reduceMotion={reduceMotion}
+          showExactValues={showExactValues}
         />
 
         <div className="tt-grid">
@@ -407,12 +423,14 @@ function Dashboard() {
             totalEscrowValue={totalEscrowValue}
             reduceMotion={reduceMotion}
             navigate={navigate}
+            showExactValues={showExactValues}
           />
           <WalletCommand
             walletData={walletData}
             walletSegments={walletSegments}
             pendingDisputes={pendingDisputes}
             navigate={navigate}
+            showExactValues={showExactValues}
           />
         </div>
 
@@ -424,9 +442,10 @@ function Dashboard() {
           pendingDisputes={pendingDisputes}
           platformStats={platformStats}
           totalEscrowValue={totalEscrowValue}
+          showExactValues={showExactValues}
         />
 
-        <RecentLedger recentTransactions={recentTransactions} pendingDisputes={pendingDisputes} navigate={navigate} />
+        <RecentLedger recentTransactions={recentTransactions} pendingDisputes={pendingDisputes} navigate={navigate} showExactValues={showExactValues} />
 
         {user?.is_admin && (
           <AdminCommand
@@ -434,6 +453,7 @@ function Dashboard() {
             pendingDisputes={pendingDisputes}
             adminData={adminData}
             navigate={navigate}
+            showExactValues={showExactValues}
           />
         )}
       </div>
@@ -481,7 +501,7 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues, no
               padding: '10px 13px',
               borderRadius: 6,
               border: `1px solid ${V.border}`,
-              background: 'rgba(255,255,255,0.035)',
+              background: 'rgba(255,255,255,0.025)',
               color: V.sub,
               fontSize: 11,
               cursor: 'pointer',
@@ -497,11 +517,11 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues, no
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {[
           ['SA banking ready', Landmark, V.accent],
-          ['Escrow system online', ShieldCheck, V.success],
+          ['Escrow system online', ShieldCheck, V.sub],
           ['Verification active', Fingerprint, '#A78BFA'],
           [PAYOUT_TIMING_SHORT, RadioTower, V.warn],
         ].map(([label, Icon, color]) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.035)', padding: '8px 11px', borderRadius: 999 }}>
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.025)', padding: '8px 11px', borderRadius: 999 }}>
             <Icon size={13} color={color} />
             <span style={{ color: V.sub, fontSize: 12, fontWeight: 700 }}>{label}</span>
           </div>
@@ -511,14 +531,14 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues, no
   );
 }
 
-function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDisputes, platformStats, totalEscrowValue, reduceMotion, navigate }) {
+function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDisputes, platformStats, totalEscrowValue, reduceMotion, navigate, showExactValues }) {
   const activeCount = platformStats?.active_transactions ?? activeTransactions.length;
   const pendingCount = platformStats?.pending_confirmations ?? pendingConfirmations.length;
   const verifiedUsers = platformStats?.verified_users ?? 0;
 
   return (
     <section className="tt-command-panel" style={{ minHeight: 500, padding: 22, overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 42%, rgba(0,209,255,0.2), transparent 30%), radial-gradient(circle at 72% 58%, rgba(0,255,163,0.12), transparent 28%)' }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 42%, rgba(0,209,255,0.12), transparent 32%), radial-gradient(circle at 72% 58%, rgba(0,255,163,0.08), transparent 30%)' }} />
       <div style={{ position: 'relative', zIndex: 1, display: 'grid', minHeight: 456, gridTemplateRows: 'auto 1fr auto', gap: 18 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div>
@@ -532,7 +552,7 @@ function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDispute
           <button
             onClick={() => navigate('/transactions/new')}
             className="tt-action"
-            style={{ display: 'flex', alignItems: 'center', gap: 9, border: '1px solid rgba(0,209,255,0.36)', background: 'linear-gradient(135deg, rgba(0,209,255,0.16), rgba(0,255,163,0.1))', color: V.text, borderRadius: 6, padding: '12px 16px', cursor: 'pointer', fontWeight: 800 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 9, border: '1px solid rgba(0,209,255,0.24)', background: 'linear-gradient(135deg, rgba(0,209,255,0.1), rgba(0,255,163,0.06))', color: V.text, borderRadius: 6, padding: '12px 16px', cursor: 'pointer', fontWeight: 800 }}
           >
             <Plus size={16} color={V.accent} />
             New Transaction
@@ -545,17 +565,17 @@ function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDispute
           <motion.div
             animate={reduceMotion ? {} : { x: ['-230px', '0px', '230px'], opacity: [0, 1, 1, 0] }}
             transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
-            style={{ position: 'absolute', zIndex: 2, width: 13, height: 13, borderRadius: '50%', background: '#E6FBFF', boxShadow: '0 0 36px rgba(0,209,255,0.95)' }}
+            style={{ position: 'absolute', zIndex: 2, width: 11, height: 11, borderRadius: '50%', background: '#E6FBFF', boxShadow: '0 0 18px rgba(0,209,255,0.55)' }}
           />
-          <div className="tt-hide-sm" style={{ position: 'absolute', left: '14%', right: '14%', top: '50%', height: 1, background: 'linear-gradient(90deg, rgba(0,209,255,0.2), rgba(0,255,163,0.78), rgba(240,180,41,0.25))' }} />
-          <EscrowCore reduceMotion={reduceMotion} value={totalEscrowValue} />
+          <div className="tt-hide-sm" style={{ position: 'absolute', left: '14%', right: '14%', top: '50%', height: 1, background: 'linear-gradient(90deg, rgba(0,209,255,0.14), rgba(0,255,163,0.5), rgba(240,180,41,0.16))' }} />
+          <EscrowCore reduceMotion={reduceMotion} value={totalEscrowValue} showExactValues={showExactValues} />
         </div>
 
         <div className="tt-responsive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 1, border: `1px solid ${V.border}`, background: V.border }}>
           <MetricCell icon={Activity} label="Active" value={activeCount} sub="transactions" color={V.accent} testId="active-transactions" />
           <MetricCell icon={AlertCircle} label="Pending" value={pendingCount} sub="need action" color={V.warn} testId="pending-confirmations" />
           <MetricCell icon={ShieldCheck} label="Verified" value={verifiedUsers} sub="users" color={V.success} testId="verified-users" />
-          <MetricCell icon={Lock} label="In escrow" value={money(totalEscrowValue)} sub="secured" color={V.success} testId="total-escrow" />
+          <MetricCell icon={Lock} label="In escrow" value={displayMoney(totalEscrowValue, showExactValues)} sub="secured" color={V.success} testId="total-escrow" />
         </div>
       </div>
     </section>
@@ -564,9 +584,9 @@ function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDispute
 
 function FlowEndpoint({ label, value, icon: Icon, side }) {
   return (
-    <div className="tt-hide-sm" style={{ position: 'absolute', [side]: 8, zIndex: 3, width: 170, border: `1px solid ${V.border}`, background: 'rgba(10,14,20,0.72)', padding: 14, backdropFilter: 'blur(18px)' }}>
+    <div className="tt-hide-sm" style={{ position: 'absolute', [side]: 8, zIndex: 3, width: 170, border: `1px solid ${V.border}`, background: 'rgba(10,14,20,0.78)', padding: 14, backdropFilter: 'blur(16px)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', border: '1px solid rgba(0,209,255,0.32)', background: 'rgba(0,209,255,0.09)', borderRadius: 6 }}>
+        <div style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', border: '1px solid rgba(0,209,255,0.22)', background: 'rgba(0,209,255,0.06)', borderRadius: 6 }}>
           <Icon size={18} color={V.accent} />
         </div>
         <div>
@@ -578,24 +598,24 @@ function FlowEndpoint({ label, value, icon: Icon, side }) {
   );
 }
 
-function EscrowCore({ reduceMotion, value }) {
+function EscrowCore({ reduceMotion, value, showExactValues }) {
   return (
     <div style={{ position: 'relative', width: 230, height: 230, display: 'grid', placeItems: 'center' }}>
       <motion.div
         animate={reduceMotion ? {} : { rotate: 360 }}
         transition={{ duration: 24, repeat: Infinity, ease: 'linear' }}
-        style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'conic-gradient(from 80deg, transparent, rgba(0,209,255,0.74), rgba(0,255,163,0.62), rgba(240,180,41,0.22), transparent)', filter: 'drop-shadow(0 0 45px rgba(0,209,255,0.32))' }}
+        style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'conic-gradient(from 80deg, transparent, rgba(0,209,255,0.46), rgba(0,255,163,0.36), rgba(240,180,41,0.16), transparent)', filter: 'drop-shadow(0 0 24px rgba(0,209,255,0.18))' }}
       />
       <motion.div
         animate={reduceMotion ? {} : { scale: [1, 1.08, 1], opacity: [0.55, 0.95, 0.55] }}
         transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-        style={{ position: 'absolute', inset: 32, borderRadius: '50%', background: 'rgba(0,209,255,0.18)', filter: 'blur(28px)' }}
+        style={{ position: 'absolute', inset: 34, borderRadius: '50%', background: 'rgba(0,209,255,0.12)', filter: 'blur(18px)' }}
       />
-      <div style={{ position: 'relative', width: 164, height: 164, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.16)', background: 'linear-gradient(145deg, rgba(12,18,30,0.96), rgba(5,9,16,0.98))', display: 'grid', placeItems: 'center', boxShadow: 'inset 0 0 55px rgba(0,209,255,0.2), 0 0 85px rgba(0,209,255,0.2)' }}>
+      <div style={{ position: 'relative', width: 164, height: 164, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.14)', background: 'linear-gradient(145deg, rgba(12,18,30,0.96), rgba(5,9,16,0.98))', display: 'grid', placeItems: 'center', boxShadow: 'inset 0 0 28px rgba(0,209,255,0.12), 0 0 40px rgba(0,209,255,0.1)' }}>
         <div style={{ textAlign: 'center' }}>
-          <ShieldCheck size={42} color={V.success} style={{ margin: '0 auto 10px', filter: 'drop-shadow(0 0 20px rgba(0,255,163,0.7))' }} />
+          <ShieldCheck size={42} color={V.success} style={{ margin: '0 auto 10px', filter: 'drop-shadow(0 0 10px rgba(0,255,163,0.35))' }} />
           <p style={{ margin: 0, color: V.sub, fontSize: 10, fontFamily: V.mono, fontWeight: 800, letterSpacing: '0.12em' }}>LOCKED CORE</p>
-          <p style={{ margin: '6px 0 0', color: V.text, fontFamily: V.mono, fontWeight: 800 }}>{money(value)}</p>
+          <p style={{ margin: '6px 0 0', color: V.text, fontFamily: V.mono, fontWeight: 800 }}>{displayMoney(value, showExactValues)}</p>
         </div>
       </div>
     </div>
@@ -615,8 +635,8 @@ function MetricCell({ icon: Icon, label, value, sub, color, testId }) {
   );
 }
 
-function WalletCommand({ walletData, walletSegments, pendingDisputes, navigate }) {
-  const protectedAmount = walletSegments.hasWallet || walletSegments.held > 0 ? money(walletSegments.held, 2) : 'Not available';
+function WalletCommand({ walletData, walletSegments, pendingDisputes, navigate, showExactValues }) {
+  const protectedAmount = walletSegments.hasWallet || walletSegments.held > 0 ? displayMoney(walletSegments.held, showExactValues, 2) : 'Not available';
   const ring = `conic-gradient(${V.success} 0 ${walletSegments.availablePct}%, ${V.warn} ${walletSegments.availablePct}% ${walletSegments.availablePct + walletSegments.heldPct}%, #A78BFA ${walletSegments.availablePct + walletSegments.heldPct}% ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct}%, ${V.error} ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct}% ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct + (walletSegments.disputeHold ? 8 : 0)}%, rgba(255,255,255,0.08) ${walletSegments.availablePct + walletSegments.heldPct + walletSegments.pendingPct + (walletSegments.disputeHold ? 8 : 0)}% 100%)`;
   return (
     <section className="tt-command-panel" style={{ padding: 20, overflow: 'hidden' }}>
@@ -629,14 +649,14 @@ function WalletCommand({ walletData, walletSegments, pendingDisputes, navigate }
           <button
             onClick={() => navigate('/settings/banking')}
             className="tt-action"
-            style={{ display: 'flex', alignItems: 'center', gap: 7, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.035)', color: V.sub, borderRadius: 6, padding: '9px 11px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.025)', color: V.sub, borderRadius: 6, padding: '9px 11px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}
           >
             <CreditCard size={13} /> Banking
           </button>
         </div>
 
         <div style={{ display: 'grid', placeItems: 'center', minHeight: 240 }}>
-          <div style={{ position: 'relative', width: 210, height: 210, borderRadius: '50%', background: ring, padding: 14, boxShadow: '0 0 75px rgba(0,209,255,0.14)' }}>
+          <div style={{ position: 'relative', width: 210, height: 210, borderRadius: '50%', background: ring, padding: 14, boxShadow: '0 0 42px rgba(0,209,255,0.08)' }}>
             <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: V.bg, display: 'grid', placeItems: 'center', border: `1px solid ${V.border}` }}>
               <div style={{ textAlign: 'center' }}>
                 <WalletCards size={31} color={V.accent} style={{ margin: '0 auto 8px' }} />
@@ -649,10 +669,10 @@ function WalletCommand({ walletData, walletSegments, pendingDisputes, navigate }
         </div>
 
         <div style={{ display: 'grid', gap: 10 }}>
-          <WalletLine label="Available for payout" value={walletSegments.hasWallet ? money(walletSegments.available, 2) : 'Not available'} helper={PAYOUT_TIMING_SHORT} color={walletSegments.hasWallet ? V.success : V.sub} />
+          <WalletLine label="Available for payout" value={walletSegments.hasWallet ? displayMoney(walletSegments.available, showExactValues, 2) : 'Not available'} helper={PAYOUT_TIMING_SHORT} color={walletSegments.hasWallet ? V.success : V.sub} />
           <WalletLine label="Protected in escrow" value={protectedAmount} helper="Locked until release conditions are met." color={V.warn} />
-          <WalletLine label="Awaiting confirmation" value={money(walletSegments.pending, 2)} helper="Delivery confirmation still required." color="#A78BFA" />
-          <WalletLine label="Dispute hold" value={pendingDisputes.length > 0 ? money(walletSegments.disputeHold, 2) : money(0, 2)} helper="Paused until a dispute is resolved." color={pendingDisputes.length > 0 ? V.error : V.success} />
+          <WalletLine label="Awaiting confirmation" value={displayMoney(walletSegments.pending, showExactValues, 2)} helper="Delivery confirmation still required." color="#A78BFA" />
+          <WalletLine label="Dispute hold" value={displayMoney(pendingDisputes.length > 0 ? walletSegments.disputeHold : 0, showExactValues, 2)} helper="Paused until a dispute is resolved." color={pendingDisputes.length > 0 ? V.error : V.success} />
         </div>
         <p style={{ margin: '14px 0 0', color: V.sub, fontSize: 12, lineHeight: 1.6 }}>
           Protected funds remain locked until delivery is confirmed or a dispute is resolved.
@@ -721,7 +741,7 @@ function ActionDock({ navigate }) {
           data-testid={action.testId}
           onClick={() => navigate(action.path)}
           className="tt-action"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 74, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.035)', color: V.text, borderRadius: 6, padding: '14px 16px', cursor: 'pointer', fontWeight: 800 }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 74, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.025)', color: V.text, borderRadius: 6, padding: '14px 16px', cursor: 'pointer', fontWeight: 800 }}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <action.icon size={17} color={action.color} />
@@ -806,7 +826,7 @@ function buildActionItems(transactions, pendingDisputes, user) {
     .sort((a, b) => a.priority - b.priority);
 }
 
-function ActionRequiredPanel({ actionItems, navigate }) {
+function ActionRequiredPanel({ actionItems, navigate, showExactValues }) {
   const action = actionItems[0];
   if (!action) return null;
   const { transaction } = action;
@@ -822,7 +842,7 @@ function ActionRequiredPanel({ actionItems, navigate }) {
             {action.title}
           </h2>
           <p style={{ margin: '8px 0 0', color: V.sub, fontSize: 13, lineHeight: 1.55 }}>
-            {transaction.item_description || 'Protected transaction'} · {transaction.share_code || transaction.deal_id || transaction.transaction_id} · {money(action.amount, 2)}
+            {transaction.item_description || 'Protected transaction'} · {transaction.share_code || transaction.deal_id || transaction.transaction_id} · {displayMoney(action.amount, showExactValues, 2)}
           </p>
           <p style={{ margin: '6px 0 0', color: V.sub, fontSize: 12 }}>{action.helper}</p>
         </div>
@@ -863,7 +883,7 @@ function LatestActivityCard({ events, navigate }) {
   );
 }
 
-function LiveTransactionFeed({ activeTransactions, pendingDisputes, user, navigate, reduceMotion }) {
+function LiveTransactionFeed({ activeTransactions, pendingDisputes, user, navigate, reduceMotion, showExactValues }) {
   return (
     <section className="tt-command-panel" style={{ padding: 20, overflow: 'hidden' }}>
       <div style={{ position: 'relative', zIndex: 1 }}>
@@ -881,10 +901,11 @@ function LiveTransactionFeed({ activeTransactions, pendingDisputes, user, naviga
                 user={user}
                 navigate={navigate}
                 reduceMotion={reduceMotion}
+                showExactValues={showExactValues}
               />
             ))}
             {activeTransactions.length > 5 && (
-              <button onClick={() => navigate('/transactions')} className="tt-action" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.035)', color: V.sub, padding: 11, borderRadius: 5, cursor: 'pointer', fontFamily: V.mono, fontSize: 11, fontWeight: 800 }}>
+              <button onClick={() => navigate('/transactions')} className="tt-action" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.025)', color: V.sub, padding: 11, borderRadius: 5, cursor: 'pointer', fontFamily: V.mono, fontSize: 11, fontWeight: 800 }}>
                 VIEW ALL {activeTransactions.length} TRANSACTIONS <ArrowRight size={12} />
               </button>
             )}
@@ -895,7 +916,7 @@ function LiveTransactionFeed({ activeTransactions, pendingDisputes, user, naviga
   );
 }
 
-function TransactionRail({ transaction, pendingDisputes, index, user, navigate, reduceMotion }) {
+function TransactionRail({ transaction, pendingDisputes, index, user, navigate, reduceMotion, showExactValues }) {
   const isUserBuyer = transaction.buyer_user_id === user?.user_id;
   const otherParty = isUserBuyer ? transaction.seller_name : transaction.buyer_name;
   const meta = resolveEscrowUiState(transaction, pendingDisputes);
@@ -911,7 +932,7 @@ function TransactionRail({ transaction, pendingDisputes, index, user, navigate, 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 14, alignItems: 'start' }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <span style={{ width: 28, height: 28, borderRadius: 6, display: 'grid', placeItems: 'center', border: `1px solid ${isUserBuyer ? 'rgba(0,209,255,0.4)' : 'rgba(240,180,41,0.4)'}`, background: isUserBuyer ? 'rgba(0,209,255,0.08)' : 'rgba(240,180,41,0.08)', color: isUserBuyer ? V.accent : V.warn, fontFamily: V.mono, fontSize: 11, fontWeight: 800 }}>
+            <span style={{ width: 28, height: 28, borderRadius: 6, display: 'grid', placeItems: 'center', border: `1px solid ${isUserBuyer ? 'rgba(0,209,255,0.24)' : 'rgba(240,180,41,0.24)'}`, background: isUserBuyer ? 'rgba(0,209,255,0.05)' : 'rgba(240,180,41,0.05)', color: isUserBuyer ? V.accent : V.warn, fontFamily: V.mono, fontSize: 11, fontWeight: 800 }}>
               {isUserBuyer ? 'B' : 'S'}
             </span>
             <div style={{ minWidth: 0 }}>
@@ -929,7 +950,7 @@ function TransactionRail({ transaction, pendingDisputes, index, user, navigate, 
               initial={false}
               animate={{ width: `${progress}%` }}
               transition={reduceMotion ? { duration: 0 } : { duration: 0.55, delay: index * 0.05 }}
-              style={{ position: 'absolute', left: 0, top: 12, height: 2, background: `linear-gradient(90deg, ${V.accent}, ${meta.color})`, boxShadow: `0 0 20px ${meta.color}` }}
+              style={{ position: 'absolute', left: 0, top: 12, height: 2, background: `linear-gradient(90deg, ${V.accent}, ${meta.color})`, boxShadow: `0 0 10px ${meta.color}55` }}
             />
             <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${flowSteps.length}, 1fr)` }}>
               {flowSteps.map((step, stepIndex) => {
@@ -954,7 +975,7 @@ function TransactionRail({ transaction, pendingDisputes, index, user, navigate, 
           </div>
         </div>
         <div style={{ textAlign: 'right', minWidth: 118 }}>
-          <p style={{ margin: 0, color: V.text, fontFamily: V.mono, fontWeight: 800 }}>{money(getTransactionValue(transaction), 2)}</p>
+          <p style={{ margin: 0, color: V.text, fontFamily: V.mono, fontWeight: 800 }}>{displayMoney(getTransactionValue(transaction), showExactValues, 2)}</p>
           <span style={{ display: 'inline-flex', marginTop: 8, color: meta.color, background: meta.bg, border: `1px solid ${meta.color}55`, padding: '5px 8px', borderRadius: 999, fontSize: 10, fontFamily: V.mono, fontWeight: 800, textTransform: 'uppercase' }}>
             {meta.label}
           </span>
@@ -981,12 +1002,12 @@ function EmptyState({ navigate }) {
   );
 }
 
-function TrustOperations({ activeTransactions, pendingConfirmations, pendingDisputes, platformStats, totalEscrowValue }) {
+function TrustOperations({ activeTransactions, pendingConfirmations, pendingDisputes, platformStats, totalEscrowValue, showExactValues }) {
   const rows = [
     { label: 'Escrow lock active', value: activeTransactions.length, icon: Lock, color: V.success },
     { label: 'Pending confirmation', value: platformStats?.pending_confirmations ?? pendingConfirmations.length, icon: Clock, color: V.warn },
     { label: 'Dispute protection', value: pendingDisputes.length, icon: AlertCircle, color: pendingDisputes.length > 0 ? V.error : V.success },
-    { label: 'Secured value', value: money(totalEscrowValue), icon: TrendingUp, color: V.accent },
+    { label: 'Secured value', value: displayMoney(totalEscrowValue, showExactValues), icon: TrendingUp, color: V.accent },
   ];
   return (
     <section className="tt-command-panel" style={{ padding: 20 }}>
@@ -1015,7 +1036,7 @@ function TrustOperations({ activeTransactions, pendingConfirmations, pendingDisp
   );
 }
 
-function RecentLedger({ recentTransactions, pendingDisputes, navigate }) {
+function RecentLedger({ recentTransactions, pendingDisputes, navigate, showExactValues }) {
   return (
     <section className="tt-command-panel" style={{ padding: 20, overflow: 'hidden' }}>
       <div style={{ position: 'relative', zIndex: 1 }}>
@@ -1050,7 +1071,7 @@ function RecentLedger({ recentTransactions, pendingDisputes, navigate }) {
                         <span style={{ color: meta.color, background: meta.bg, border: `1px solid ${meta.color}55`, borderRadius: 999, padding: '5px 8px', fontFamily: V.mono, fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>{meta.label}</span>
                       </td>
                       <td style={{ padding: '13px 10px', color: meta.terminal ? V.success : V.sub, fontSize: 11, fontFamily: V.mono, fontWeight: 700 }}>{meta.secondaryLabel || (meta.state === 'DISPUTED' ? 'Payout paused' : 'Active escrow')}</td>
-                      <td style={{ padding: '13px 10px', color: V.success, fontFamily: V.mono, fontWeight: 800, textAlign: 'right' }}>{money(getTransactionValue(transaction), 2)}</td>
+                      <td style={{ padding: '13px 10px', color: V.success, fontFamily: V.mono, fontWeight: 800, textAlign: 'right' }}>{displayMoney(getTransactionValue(transaction), showExactValues, 2)}</td>
                       <td style={{ padding: '13px 10px' }}><ArrowUpRight size={13} color={V.dim} /></td>
                     </tr>
                   );
@@ -1064,13 +1085,13 @@ function RecentLedger({ recentTransactions, pendingDisputes, navigate }) {
   );
 }
 
-function AdminCommand({ platformStats, pendingDisputes, adminData, navigate }) {
+function AdminCommand({ platformStats, pendingDisputes, adminData, navigate, showExactValues }) {
   return (
     <section className="tt-command-panel" style={{ padding: 20 }}>
       <div style={{ position: 'relative', zIndex: 1 }}>
         <SectionTitle label="Admin Command Layer" right="confidential" />
         <div className="tt-responsive-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, border: `1px solid ${V.border}`, background: V.border }}>
-          <MetricCell icon={ShieldCheck} label="Total escrow" value={money(platformStats?.total_escrow_value || 0)} sub="platform secured" color={V.success} />
+          <MetricCell icon={ShieldCheck} label="Total escrow" value={displayMoney(platformStats?.total_escrow_value || 0, showExactValues)} sub="platform secured" color={V.success} />
           <MetricCell icon={Activity} label="Total users" value={platformStats?.total_users || 0} sub="identity graph" color={V.accent} />
           <MetricCell icon={AlertCircle} label="Open disputes" value={pendingDisputes.length} sub="protection cases" color={pendingDisputes.length > 0 ? V.error : V.success} />
         </div>
@@ -1092,7 +1113,7 @@ function SectionTitle({ label, right }) {
       <span style={{ color: V.sub, fontSize: 10, fontFamily: V.mono, fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{label}</span>
       <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${V.border}, transparent)` }} />
       {typeof right === 'string' ? (
-        <span style={{ color: V.success, fontSize: 10, fontFamily: V.mono, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{right}</span>
+        <span style={{ color: V.sub, fontSize: 10, fontFamily: V.mono, fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{right}</span>
       ) : right}
     </div>
   );

@@ -358,7 +358,7 @@ async def admin_release_funds(request: Request, transaction_id: str, release_dat
         net_amount=net_amount
     )
 
-    # Release escrow on TradeSafe and trigger instant payout to seller's bank
+    # Release escrow on TradeSafe and request payout processing to seller's bank
     allocation_id = transaction.get("tradesafe_allocation_id")
     seller_token_id = transaction.get("tradesafe_seller_token_id")
     if allocation_id:
@@ -1283,6 +1283,12 @@ async def update_token_for_recovery(request: Request, data: TokenRecoveryUpdateR
                 "accountNumber": data.account_number,
                 "branchCode": data.branch_code,
                 "accountType": account_type
+            },
+            "settings": {
+                "payout": {
+                    "interval": "WALLET" if data.token == os.environ.get("TRUSTTRADE_ORG_TOKEN_ID", "32fbUbeMWjdor4uHBJdns") else "IMMEDIATE",
+                    "refund": "WALLET"
+                }
             }
         }
     }
@@ -1380,7 +1386,7 @@ async def withdraw_token(request: Request, data: TokenWithdrawRequest):
     - Token must be complete (has mobile + banking)
     - Token must have balance > 0
     
-    This initiates a bank transfer. Funds typically arrive in 1-2 business days.
+    This initiates a bank transfer. Bank settlement may take up to 2 business days.
     """
     from tradesafe_service import withdraw_token_full_balance
     from datetime import datetime, timezone
@@ -1665,7 +1671,7 @@ async def get_transaction_tradesafe_details(request: Request, transaction_id: st
 async def update_payout_status(request: Request, transaction_id: str):
     """
     ADMIN ONLY: Update payout status for a transaction.
-    Valid statuses: pending, awaiting_bank_payout, payout_completed, payout_failed
+    Valid statuses: pending, awaiting_bank_payout, payout_processing, payout_completed, payout_failed
     """
     db = get_database()
     admin = await require_admin(request, db)
@@ -1673,7 +1679,7 @@ async def update_payout_status(request: Request, transaction_id: str):
     body = await request.json()
     new_status = body.get("payout_status")
     
-    valid_statuses = ["pending", "awaiting_bank_payout", "payout_completed", "payout_failed"]
+    valid_statuses = ["pending", "awaiting_bank_payout", "payout_processing", "payout_completed", "payout_failed"]
     if new_status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
     
@@ -1735,7 +1741,7 @@ async def retry_transaction_withdrawal(request: Request, transaction_id: str):
         raise HTTPException(status_code=400, detail=f"Token balance R{token_balance:.2f} is below expected payout R{net_amount:.2f}")
 
     statement = await get_token_statement(token_id, first=100, page=1)
-    rows = [_normalize_statement_entry(entry) for entry in (statement.get("entries") or [])]
+    rows = [_normalize_token_statement_entry(token_id, entry) for entry in (statement.get("entries") or [])]
     references = [
         transaction.get("transaction_id"),
         transaction.get("deal_id"),
@@ -1950,26 +1956,7 @@ def _payout_amount(txn: dict):
 
 
 def _payout_recommendation(txn: dict, amount, token_balance):
-    released_states = {"FUNDS_RELEASED", "COMPLETE", "COMPLETED"}
-    withdrawal_status = txn.get("withdrawal_status")
-    seller_token_id = txn.get("tradesafe_seller_token_id")
-    tradesafe_state = txn.get("tradesafe_state")
-
-    if withdrawal_status == "succeeded":
-        return False, "No action - withdrawal already succeeded"
-    if withdrawal_status == "in_progress":
-        return False, "Wait - withdrawal is already in progress"
-    if tradesafe_state not in released_states and txn.get("release_status") != "Released":
-        return False, "Do not retry - escrow is not marked released"
-    if not seller_token_id:
-        return False, "Fix transaction - missing seller token id"
-    if amount is None or float(amount or 0) <= 0:
-        return False, "Backfill expected seller amount before retry"
-    if token_balance is None:
-        return False, "Check TradeSafe token balance before retry"
-    if float(token_balance) + 0.01 < float(amount):
-        return False, "Do not retry - token balance is below expected amount"
-    return True, "Retry withdrawal via POST /api/admin/transactions/{transaction_id}/retry-withdrawal"
+    return False, "No retry - payout retries are disabled while TradeSafe support confirms payout timing and statement semantics"
 
 
 def _matching_statement_entries(entries: list, amount, references: list):
@@ -2014,6 +2001,72 @@ def _token_balance_rands(token: Optional[dict]) -> Optional[float]:
     return _as_money((token or {}).get("balance"))
 
 
+def _parse_dt(value) -> Optional[datetime]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    text = str(value).replace("Z", "+00:00")
+    if " " in text and "T" not in text:
+        text = text.replace(" ", "T")
+    try:
+        parsed = datetime.fromisoformat(text)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _business_hours_since(value) -> Optional[float]:
+    start = _parse_dt(value)
+    if not start:
+        return None
+    end = datetime.now(timezone.utc)
+    cursor = start
+    total = 0.0
+    while cursor < end:
+        next_hour = min(cursor + timedelta(hours=1), end)
+        if cursor.weekday() < 5:
+            total += (next_hour - cursor).total_seconds() / 3600
+        cursor = next_hour
+    return round(total, 2)
+
+
+def _payout_sla_fields(txn: dict, settlement_confirmed_at=None) -> Dict[str, Any]:
+    released_at = txn.get("funds_released_at") or txn.get("released_at") or txn.get("completed_at")
+    withdrawal_requested_at = txn.get("withdrawal_requested_at") or txn.get("withdrawal_started_at") or txn.get("withdrawal_triggered_at")
+    release_dt = _parse_dt(released_at)
+    settlement_dt = _parse_dt(settlement_confirmed_at or txn.get("settlement_confirmed_at"))
+    age_hours = round((datetime.now(timezone.utc) - release_dt).total_seconds() / 3600, 2) if release_dt else None
+    business_age_hours = _business_hours_since(released_at)
+
+    if settlement_dt or txn.get("withdrawal_status") == "succeeded" and txn.get("settlement_status") == "settlement_confirmed":
+        status = "completed"
+        monitor_level = "completed"
+    elif business_age_hours is not None and business_age_hours >= 48:
+        status = "critical"
+        monitor_level = "critical"
+    elif age_hours is not None and age_hours >= 24:
+        status = "delayed"
+        monitor_level = "delayed"
+    elif age_hours is not None and age_hours >= 6:
+        status = "on_track"
+        monitor_level = "monitor"
+    else:
+        status = "on_track"
+        monitor_level = "on_track"
+
+    return {
+        "released_at": release_dt.isoformat() if release_dt else None,
+        "withdrawal_requested_at": _parse_dt(withdrawal_requested_at).isoformat() if _parse_dt(withdrawal_requested_at) else None,
+        "payout_processing_started_at": _parse_dt(withdrawal_requested_at).isoformat() if _parse_dt(withdrawal_requested_at) else None,
+        "expected_settlement_window": "up to 2 business days",
+        "payout_sla_status": status,
+        "payout_sla_monitor_level": monitor_level,
+        "age_hours": age_hours,
+        "business_age_hours": business_age_hours,
+    }
+
+
 def _statement_category(entry: dict) -> str:
     entry_type = str(entry.get("type") or "").upper()
     reference = str(entry.get("reference") or "").lower()
@@ -2048,6 +2101,20 @@ def _normalize_statement_entry(entry: dict) -> dict:
     }
 
 
+def _normalize_token_statement_entry(token_id: str, entry: dict) -> dict:
+    row = _normalize_statement_entry(entry)
+    amount = _as_money(row.get("amount_normalized")) or 0
+    reference = str(row.get("reference") or "").lower()
+    if (
+        token_id == "32fbUbeMWjdor4uHBJdns"
+        and amount < 0
+        and ("payout from transaction:" in reference or "payout for transaction:" in reference)
+    ):
+        row["category"] = "needs_fee_setup_review"
+        row["accounting_note"] = "Org token balance reflects TradeSafe statement accounting and may include historical fee movements."
+    return row
+
+
 async def _get_all_token_statement_entries(token_id: str, first: int = 100) -> Dict[str, Any]:
     from tradesafe_service import get_token_statement
 
@@ -2057,7 +2124,7 @@ async def _get_all_token_statement_entries(token_id: str, first: int = 100) -> D
     while True:
         statement = await get_token_statement(token_id, first=first, page=page)
         paginator = statement.get("paginator")
-        entries.extend(_normalize_statement_entry(entry) for entry in (statement.get("entries") or []))
+        entries.extend(_normalize_token_statement_entry(token_id, entry) for entry in (statement.get("entries") or []))
         if not paginator or not paginator.get("hasMorePages"):
             break
         page += 1
@@ -2077,6 +2144,7 @@ def _statement_summary(entries: List[dict]) -> Dict[str, Any]:
         "seller_withdrawals": 0.0,
         "tradesafe_fees": 0.0,
         "agent_fees": 0.0,
+        "fee_setup_review": 0.0,
         "allocation_debits": 0.0,
         "pdng_amount": 0.0,
         "acsp_amount": 0.0,
@@ -2103,6 +2171,8 @@ def _statement_summary(entries: List[dict]) -> Dict[str, Any]:
             totals["tradesafe_fees"] += amount
         elif category == "agent_fee":
             totals["agent_fees"] += amount
+        elif category == "needs_fee_setup_review":
+            totals["fee_setup_review"] += amount
         elif category == "allocation_debit":
             totals["allocation_debits"] += amount
         if status == "PDNG":
@@ -2194,26 +2264,15 @@ def _match_transaction_statement(txn: dict, entries: List[dict]) -> Dict[str, An
     elif allocation_rows and not withdrawal_rows:
         final_state = "needs_tradesafe_support"
 
-    release_value = txn.get("funds_released_at") or txn.get("released_at") or txn.get("completed_at")
-    age_hours = None
-    if release_value:
-        try:
-            release_text = str(release_value).replace("Z", "+00:00")
-            if " " in release_text and "T" not in release_text:
-                release_text = release_text.replace(" ", "T")
-            release_dt = datetime.fromisoformat(release_text)
-            if release_dt.tzinfo is None:
-                release_dt = release_dt.replace(tzinfo=timezone.utc)
-            age_hours = round((datetime.now(timezone.utc) - release_dt).total_seconds() / 3600, 2)
-        except Exception:
-            age_hours = None
-
-    payout_sla_status = "healthy"
-    if final_state != "reconciled" and age_hours is not None:
-        if age_hours >= 48:
-            payout_sla_status = "critical"
-        elif age_hours >= 24:
-            payout_sla_status = "delayed"
+    settlement_confirmed_at = None
+    for row in withdrawal_rows:
+        if str(row.get("status") or "").upper() == "ACSP":
+            settlement_confirmed_at = row.get("updatedAt") or row.get("createdAt")
+            break
+    sla = _payout_sla_fields(txn, settlement_confirmed_at=settlement_confirmed_at)
+    if final_state == "reconciled":
+        sla["payout_sla_status"] = "completed"
+        sla["payout_sla_monitor_level"] = "completed"
 
     return {
         "transaction_id": txn.get("transaction_id"),
@@ -2231,8 +2290,14 @@ def _match_transaction_statement(txn: dict, entries: List[dict]) -> Dict[str, An
         "allocation_rows": allocation_rows,
         "statement_rows": matched,
         "final_state": final_state,
-        "age_hours": age_hours,
-        "payout_sla_status": payout_sla_status,
+        "released_at": sla["released_at"],
+        "withdrawal_requested_at": sla["withdrawal_requested_at"],
+        "payout_processing_started_at": sla["payout_processing_started_at"],
+        "expected_settlement_window": sla["expected_settlement_window"],
+        "age_hours": sla["age_hours"],
+        "business_age_hours": sla["business_age_hours"],
+        "payout_sla_status": sla["payout_sla_status"],
+        "payout_sla_monitor_level": sla["payout_sla_monitor_level"],
     }
 
 
@@ -2246,7 +2311,7 @@ async def get_admin_token_statement(request: Request, token_id: str, first: int 
 
     token = await get_token_details(token_id)
     statement = await get_token_statement(token_id, first=first, page=page)
-    rows = [_normalize_statement_entry(entry) for entry in (statement.get("entries") or [])]
+    rows = [_normalize_token_statement_entry(token_id, entry) for entry in (statement.get("entries") or [])]
 
     return {
         "token_id": token_id,
@@ -2321,18 +2386,23 @@ async def get_admin_finance_ledger(
     org_token = next((row for row in token_rows if row["token_id"] == org_token_id), None)
     org_entries = statement_entries_by_token.get(org_token_id, [])
     org_negative_entries = [entry for entry in org_entries if (_as_money(entry.get("amount_normalized")) or 0) < 0]
+    org_movement_dates = []
+    for entry in org_entries:
+        value = entry.get("createdAt")
+        if value:
+            org_movement_dates.append(str(value))
     org_analysis = {
         "token_id": org_token_id,
         "balance": (org_token or {}).get("balance"),
         "balance_unit": "ZAR",
         "negative_balance_explanation": (
-            "The org token statement contains negative agent/platform fee movements. "
-            "These are not seller payout balances and should be reconciled with TradeSafe fee configuration."
+            "Org token balance reflects TradeSafe statement accounting and may include historical fee movements. "
+            "Negative org-token payout rows are treated as fee setup review items until TradeSafe confirms semantics."
         ),
         "negative_entries": org_negative_entries,
+        "last_new_org_token_movement_timestamp": max(org_movement_dates) if org_movement_dates else None,
         "trusttrade_fee_setup_assessment": (
-            "Needs TradeSafe support review if agent fees are expected to settle as positive platform income. "
-            "Current statement evidence shows negative fee movements on the org token."
+            "Needs TradeSafe support review. Historical negative TradeSafe org-token fee rows are not confirmed platform losses."
         ),
     }
 
@@ -2361,6 +2431,12 @@ async def get_admin_finance_ledger(
         "funds_released_at": 1,
         "released_at": 1,
         "completed_at": 1,
+        "withdrawal_requested_at": 1,
+        "withdrawal_started_at": 1,
+        "withdrawal_triggered_at": 1,
+        "payout_processing_started_at": 1,
+        "expected_settlement_window": 1,
+        "payout_sla_status": 1,
         "created_at": 1,
     }
     txns = await db.transactions.find(
@@ -2403,6 +2479,7 @@ async def get_admin_finance_ledger(
             "seller_withdrawals": summary["totals"]["seller_withdrawals"],
             "tradesafe_fees": summary["totals"]["tradesafe_fees"],
             "trusttrade_agent_platform_fee_entries": summary["totals"]["agent_fees"],
+            "fee_setup_review_entries": summary["totals"].get("fee_setup_review", 0.0),
             "allocation_debits": summary["totals"]["allocation_debits"],
             "pdng_entries": summary["statuses"].get("PDNG", 0),
             "acsp_entries": summary["statuses"].get("ACSP", 0),
@@ -2486,6 +2563,20 @@ async def get_admin_finance_alerts(request: Request, active_only: bool = True, l
     return {"count": len(alerts), "alerts": alerts}
 
 
+@router.get("/payout-settlement-monitor")
+async def get_admin_payout_settlement_monitor(request: Request, limit: int = 250):
+    """
+    Read-only settlement monitor for released payouts. Shows TradeSafe processed
+    payout rows separately from local bank settlement confirmation.
+    """
+    db = get_database()
+    await require_admin(request, db)
+
+    from services.reconciliation_service import get_payout_settlement_monitor
+
+    return await get_payout_settlement_monitor(db, limit=max(1, min(limit, 1000)))
+
+
 @router.get("/finance-audit-trail")
 async def get_admin_finance_audit_trail(request: Request, limit: int = 100):
     """Immutable finance audit records for retries, withdrawals, failures, and reconciliation state changes."""
@@ -2498,11 +2589,11 @@ async def get_admin_finance_audit_trail(request: Request, limit: int = 100):
 
 @router.get("/finance-export/{report}")
 async def export_admin_finance_report(request: Request, report: str, format: str = "json"):
-    """Export unresolved payouts, token residues, org movements, or payout aging as JSON/CSV."""
+    """Export unresolved payouts, token residues, org movements, payout aging, or pending bank settlement as JSON/CSV."""
     db = get_database()
     await require_admin(request, db)
 
-    valid_reports = {"unresolved-payouts", "token-residues", "org-token-movements", "payout-aging"}
+    valid_reports = {"unresolved-payouts", "token-residues", "org-token-movements", "payout-aging", "pending-bank-settlement"}
     if report not in valid_reports:
         raise HTTPException(status_code=400, detail=f"report must be one of {sorted(valid_reports)}")
 
@@ -2657,7 +2748,7 @@ async def get_payout_settlement_trace(request: Request, ids: str):
         seller_token_id = txn.get("tradesafe_seller_token_id")
         token = await get_token_details(seller_token_id) if seller_token_id else None
         statement = await get_token_statement(seller_token_id, first=50, page=1) if seller_token_id else {"entries": []}
-        statement["entries"] = [_normalize_statement_entry(entry) for entry in (statement.get("entries") or [])]
+        statement["entries"] = [_normalize_token_statement_entry(seller_token_id, entry) for entry in (statement.get("entries") or [])]
         ts_transaction = await get_tradesafe_transaction(tradesafe_id) if tradesafe_id else None
 
         webhook_terms = [
@@ -2748,7 +2839,7 @@ async def get_payout_token_statements(request: Request, token_ids: str, first: i
     for token_id in requested_tokens:
         token = await get_token_details(token_id)
         statement = await get_token_statement(token_id, first=first, page=page)
-        rows = [_normalize_statement_entry(entry) for entry in (statement.get("entries") or [])]
+        rows = [_normalize_token_statement_entry(token_id, entry) for entry in (statement.get("entries") or [])]
         rows.append({
             "token_id": token_id,
             "email": ((token or {}).get("user") or {}).get("email"),
@@ -2792,7 +2883,7 @@ async def admin_release_transaction(tradesafe_id: str, request: Request):
     sd_result = await start_delivery(allocation_id)
     logger.info(f"[ADMIN_RELEASE] start_delivery allocation={allocation_id}: {sd_result}")
 
-    # Step 2: accept delivery — releases funds to seller and triggers instant RTC payout.
+    # Step 2: accept delivery and request seller payout processing.
     payout_result = await accept_delivery(
         allocation_id,
         seller_token_id=seller_token_id,
@@ -2865,6 +2956,106 @@ async def get_token_balances(request: Request):
     }
 
 
+@router.get("/payout-readiness")
+async def get_admin_payout_readiness(request: Request):
+    """
+    Read-only seller-token payout readiness view. This verifies fast-payout
+    configuration without triggering withdrawals or changing balances.
+    """
+    db = get_database()
+    await require_admin(request, db)
+
+    from tradesafe_service import get_all_tokens
+
+    org_token_id = os.environ.get("TRUSTTRADE_ORG_TOKEN_ID", "32fbUbeMWjdor4uHBJdns")
+    tokens = await get_all_tokens()
+    seller_token_ids = [token.get("id") for token in tokens if token.get("id") and token.get("id") != org_token_id]
+
+    linked_transactions = await db.transactions.find(
+        {"tradesafe_seller_token_id": {"$in": seller_token_ids}},
+        {
+            "_id": 0,
+            "transaction_id": 1,
+            "deal_id": 1,
+            "seller_email": 1,
+            "freelancer_email": 1,
+            "tradesafe_seller_token_id": 1,
+        },
+    ).to_list(2000)
+    users = await db.users.find(
+        {"tradesafe_token_id": {"$in": seller_token_ids}},
+        {"_id": 0, "email": 1, "tradesafe_token_id": 1},
+    ).to_list(2000)
+
+    tx_by_token: Dict[str, List[dict]] = {}
+    for txn in linked_transactions:
+        tx_by_token.setdefault(txn.get("tradesafe_seller_token_id"), []).append(txn)
+
+    user_by_token = {user.get("tradesafe_token_id"): user for user in users}
+    rows = []
+    for token in tokens:
+        token_id = token.get("id")
+        if not token_id or token_id == org_token_id:
+            continue
+
+        token_user = token.get("user") or {}
+        bank = token.get("bankAccount") or {}
+        payout = ((token.get("settings") or {}).get("payout") or {})
+        payout_interval = payout.get("interval")
+        linked = tx_by_token.get(token_id, [])
+        seller_email = (
+            token_user.get("email")
+            or (user_by_token.get(token_id) or {}).get("email")
+            or next((txn.get("seller_email") or txn.get("freelancer_email") for txn in linked if txn.get("seller_email") or txn.get("freelancer_email")), None)
+        )
+        has_banking = bool(bank.get("accountNumber"))
+        has_mobile = bool(token_user.get("mobile"))
+        token_valid = bool(token.get("valid"))
+        issues = []
+        if payout_interval != "IMMEDIATE":
+            issues.append("Seller token payout interval is not IMMEDIATE")
+        if not has_banking:
+            issues.append("Bank details missing")
+        if not has_mobile:
+            issues.append("Mobile number missing")
+        if not token_valid:
+            issues.append("Token is not valid")
+
+        rows.append({
+            "seller_token_id": token_id,
+            "seller_email": seller_email,
+            "payout_interval": payout_interval,
+            "refund_interval": payout.get("refund") or "WALLET target",
+            "bank_details_present": has_banking,
+            "mobile_present": has_mobile,
+            "token_valid": token_valid,
+            "ready_for_fast_payout": not issues,
+            "issues": issues,
+            "linked_transaction_count": len(linked),
+            "linked_transactions": [
+                txn.get("transaction_id") or txn.get("deal_id")
+                for txn in linked[:10]
+            ],
+        })
+
+    org_token = next((token for token in tokens if token.get("id") == org_token_id), None) or {}
+    rows.sort(key=lambda row: (not row["ready_for_fast_payout"], row.get("seller_email") or row["seller_token_id"]))
+
+    return {
+        "count": len(rows),
+        "ready_count": sum(1 for row in rows if row["ready_for_fast_payout"]),
+        "not_ready_count": sum(1 for row in rows if not row["ready_for_fast_payout"]),
+        "seller_token_target": {"payout_interval": "IMMEDIATE", "refund": "WALLET"},
+        "org_token_target": {
+            "token_id": org_token_id,
+            "payout_interval": "WALLET",
+            "refund": "WALLET",
+            "current_payout_interval": (((org_token.get("settings") or {}).get("payout") or {}).get("interval")),
+        },
+        "rows": rows,
+    }
+
+
 @router.post("/smart-deals/{deal_id}/force-fund")
 async def force_fund_smart_deal(deal_id: str, request: Request):
     db = get_database()
@@ -2924,7 +3115,7 @@ async def admin_release_smart_deal_funds(deal_id: str, request: Request):
     sd_result = await start_delivery(allocation_id)
     logger.info(f"[ADMIN_RELEASE] start_delivery {deal_id} allocation={allocation_id}: {sd_result}")
 
-    # Step 2: accept delivery — releases funds to seller and triggers instant RTC payout
+    # Step 2: accept delivery and request seller payout processing.
     payout_result = await accept_delivery(
         allocation_id,
         seller_token_id=seller_token_id,

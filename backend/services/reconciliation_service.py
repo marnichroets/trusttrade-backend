@@ -19,6 +19,14 @@ RESIDUE_ALERT_THRESHOLD = 10.0
 ORG_NEGATIVE_ALERT_THRESHOLD = -10.0
 PAYOUT_DELAYED_HOURS = 24
 PAYOUT_CRITICAL_HOURS = 48
+PAYOUT_MONITOR_HOURS = 6
+EXPECTED_SETTLEMENT_WINDOW = "up to 2 business days"
+PAYOUT_TIMING_SHORT = "Payout processing · up to 2 business days"
+PAYOUT_TIMING_COPY = (
+    "Once funds are released from escrow, payouts are processed as quickly as possible. "
+    "Bank settlement may take up to 2 business days depending on payment runs, weekends, and bank processing."
+)
+PROFITABILITY_PARSER_DEPLOYED_AT = datetime(2026, 5, 9, 12, 59, 59, tzinfo=timezone.utc)
 DEFAULT_PLATFORM_FEE_PERCENT = 2.0
 DEFAULT_MINIMUM_FEE = 5.0
 PAYMENT_METHOD_COSTS = {
@@ -46,6 +54,60 @@ def parse_dt(value) -> Optional[datetime]:
         return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
     except ValueError:
         return None
+
+
+def business_hours_between(start: Optional[datetime], end: Optional[datetime] = None) -> Optional[float]:
+    """Approximate business-hour age excluding Saturdays and Sundays."""
+    if not start:
+        return None
+    end = end or datetime.now(timezone.utc)
+    if start > end:
+        return 0.0
+
+    cursor = start
+    total = 0.0
+    while cursor < end:
+        next_hour = min(cursor + timedelta(hours=1), end)
+        if cursor.weekday() < 5:
+            total += (next_hour - cursor).total_seconds() / 3600
+        cursor = next_hour
+    return round(total, 2)
+
+
+def payout_sla_status(released_at, withdrawal_requested_at=None, settlement_confirmed_at=None) -> Dict[str, Any]:
+    release_dt = parse_dt(released_at)
+    withdrawal_dt = parse_dt(withdrawal_requested_at)
+    settlement_dt = parse_dt(settlement_confirmed_at)
+    now = datetime.now(timezone.utc)
+    age_hours = round((now - release_dt).total_seconds() / 3600, 2) if release_dt else None
+    business_age_hours = business_hours_between(release_dt, now) if release_dt else None
+
+    if settlement_dt:
+        status = "completed"
+        monitor_level = "completed"
+    elif business_age_hours is not None and business_age_hours >= PAYOUT_CRITICAL_HOURS:
+        status = "critical"
+        monitor_level = "critical"
+    elif age_hours is not None and age_hours >= PAYOUT_DELAYED_HOURS:
+        status = "delayed"
+        monitor_level = "delayed"
+    elif age_hours is not None and age_hours >= PAYOUT_MONITOR_HOURS:
+        status = "on_track"
+        monitor_level = "monitor"
+    else:
+        status = "on_track"
+        monitor_level = "on_track"
+
+    return {
+        "released_at": release_dt.isoformat() if release_dt else None,
+        "withdrawal_requested_at": withdrawal_dt.isoformat() if withdrawal_dt else None,
+        "payout_processing_started_at": withdrawal_dt.isoformat() if withdrawal_dt else None,
+        "expected_settlement_window": EXPECTED_SETTLEMENT_WINDOW,
+        "payout_sla_status": status,
+        "payout_sla_monitor_level": monitor_level,
+        "payout_age_hours": age_hours,
+        "payout_business_age_hours": business_age_hours,
+    }
 
 
 def money(value) -> Optional[float]:
@@ -88,6 +150,25 @@ def normalize_statement_entry(entry: dict) -> dict:
         "amount_unit": "ZAR",
         "category": statement_category(entry),
     }
+
+
+def normalize_token_statement_entry(token_id: str, entry: dict) -> dict:
+    row = normalize_statement_entry(entry)
+    amount = money(row.get("amount_normalized")) or 0
+    reference = str(row.get("reference") or "").lower()
+    created = parse_dt(row.get("createdAt"))
+    is_org_negative_payout = (
+        token_id == ORG_TOKEN_ID
+        and amount < 0
+        and ("payout from transaction:" in reference or "payout for transaction:" in reference)
+    )
+    if is_org_negative_payout:
+        row["category"] = "needs_fee_setup_review"
+        row["accounting_note"] = (
+            "Org token balance reflects TradeSafe statement accounting and may include historical fee movements."
+        )
+        row["post_parser_deploy"] = bool(created and created > PROFITABILITY_PARSER_DEPLOYED_AT)
+    return row
 
 
 def payout_amount(txn: dict) -> Tuple[Optional[float], Optional[str]]:
@@ -160,7 +241,7 @@ async def get_all_statement_entries(token_id: str, first: int = 100) -> List[dic
     page = 1
     while True:
         statement = await get_token_statement(token_id, first=first, page=page)
-        entries.extend(normalize_statement_entry(entry) for entry in (statement.get("entries") or []))
+        entries.extend(normalize_token_statement_entry(token_id, entry) for entry in (statement.get("entries") or []))
         paginator = statement.get("paginator") or {}
         if not paginator.get("hasMorePages"):
             break
@@ -179,6 +260,7 @@ def statement_summary(entries: List[dict]) -> Dict[str, Any]:
         "seller_withdrawals": 0.0,
         "tradesafe_fees": 0.0,
         "agent_fees": 0.0,
+        "fee_setup_review": 0.0,
         "allocation_debits": 0.0,
     }
     for entry in entries:
@@ -195,6 +277,8 @@ def statement_summary(entries: List[dict]) -> Dict[str, Any]:
             totals["tradesafe_fees"] += amount
         elif category == "agent_fee":
             totals["agent_fees"] += amount
+        elif category == "needs_fee_setup_review":
+            totals["fee_setup_review"] += amount
         elif category == "allocation_debit":
             totals["allocation_debits"] += amount
     return {
@@ -255,27 +339,25 @@ def match_transaction_statement(txn: dict, entries: List[dict]) -> Dict[str, Any
         detected_issue = "mismatched_payout_amount"
 
     release_dt = parse_dt(txn.get("funds_released_at") or txn.get("released_at") or txn.get("completed_at"))
-    withdrawal_dt = parse_dt(txn.get("withdrawal_started_at") or txn.get("withdrawal_triggered_at"))
+    withdrawal_dt = parse_dt(txn.get("withdrawal_requested_at") or txn.get("withdrawal_started_at") or txn.get("withdrawal_triggered_at"))
     settlement_dt = None
     for row in withdrawal_rows:
         if str(row.get("status") or "").upper() == "ACSP":
             settlement_dt = parse_dt(row.get("updatedAt") or row.get("createdAt"))
             break
 
-    age_hours = None
-    if release_dt:
-        age_hours = round((datetime.now(timezone.utc) - release_dt).total_seconds() / 3600, 2)
-
     payout_duration_hours = None
     if release_dt and settlement_dt:
         payout_duration_hours = round((settlement_dt - release_dt).total_seconds() / 3600, 2)
 
-    sla_status = "healthy"
-    if final_state != "reconciled" and age_hours is not None:
-        if age_hours >= PAYOUT_CRITICAL_HOURS:
-            sla_status = "critical"
-        elif age_hours >= PAYOUT_DELAYED_HOURS:
-            sla_status = "delayed"
+    sla = payout_sla_status(
+        release_dt.isoformat() if release_dt else None,
+        withdrawal_dt.isoformat() if withdrawal_dt else None,
+        settlement_dt.isoformat() if settlement_dt else None,
+    )
+    if final_state == "reconciled" and not sla["released_at"]:
+        sla["payout_sla_status"] = "completed"
+        sla["payout_sla_monitor_level"] = "completed"
 
     settlement_status = txn.get("settlement_status")
     if withdrawal_rows:
@@ -308,12 +390,161 @@ def match_transaction_statement(txn: dict, entries: List[dict]) -> Dict[str, Any
         "withdrawal_status": txn.get("withdrawal_status"),
         "settlement_status": settlement_status,
         "funds_released_at": txn.get("funds_released_at") or txn.get("released_at") or txn.get("completed_at"),
-        "withdrawal_requested_at": txn.get("withdrawal_started_at") or txn.get("withdrawal_triggered_at"),
+        "released_at": sla["released_at"],
+        "withdrawal_requested_at": sla["withdrawal_requested_at"],
+        "payout_processing_started_at": sla["payout_processing_started_at"],
+        "expected_settlement_window": sla["expected_settlement_window"],
         "settlement_confirmed_at": settlement_dt.isoformat() if settlement_dt else None,
         "payout_duration_hours": payout_duration_hours,
-        "payout_sla_status": sla_status,
-        "age_hours": age_hours,
+        "payout_sla_status": sla["payout_sla_status"],
+        "payout_sla_monitor_level": sla["payout_sla_monitor_level"],
+        "age_hours": sla["payout_age_hours"],
+        "business_age_hours": sla["payout_business_age_hours"],
         "requires_manual_review": final_state != "reconciled",
+    }
+
+
+BANK_SETTLEMENT_PENDING_MESSAGE = "Payout processed by TradeSafe, bank settlement pending"
+NO_RETRY_PROCESSED_NOTE = "Do not retry if TradeSafe already shows processed payout entry."
+PROCESSED_STATEMENT_STATUSES = {"ACSP", "PROCESSED", "PROCESSED_BY_TRADESAFE", "SUCCESS", "SUCCEEDED", "COMPLETED"}
+
+
+def has_bank_settlement_confirmation(txn: dict) -> bool:
+    """Local bank settlement evidence only; TradeSafe processed rows are not bank confirmation."""
+    if txn.get("settlement_confirmed_at") or txn.get("bank_confirmed_at"):
+        return True
+    if txn.get("bank_reference") or txn.get("settlement_reference"):
+        return True
+    if txn.get("settlement_status") == "settlement_confirmed":
+        return True
+    return False
+
+
+def tradesafe_processed_rows(rows: List[dict]) -> List[dict]:
+    return [
+        row for row in rows or []
+        if row.get("category") == "withdrawal_debit"
+        and str(row.get("status") or "").upper() in PROCESSED_STATEMENT_STATUSES
+    ]
+
+
+def statement_row_time(row: dict) -> Optional[datetime]:
+    return parse_dt(row.get("processedAt") or row.get("updatedAt") or row.get("createdAt"))
+
+
+def settlement_monitor_status(age_business_hours: Optional[float]) -> str:
+    if age_business_hours is not None and age_business_hours >= PAYOUT_CRITICAL_HOURS:
+        return "critical"
+    if age_business_hours is not None and age_business_hours >= PAYOUT_DELAYED_HOURS:
+        return "delayed"
+    return "on_track"
+
+
+def pending_bank_settlement_action(row: dict) -> str:
+    if row.get("tradesafe_processed"):
+        return f"{NO_RETRY_PROCESSED_NOTE} Verify bank settlement evidence and wait for TradeSafe support guidance."
+    if row.get("payout_processing_started"):
+        return "Monitor TradeSafe processing evidence. Do not retry or trigger withdrawal from this report."
+    return "Verify release and TradeSafe statement evidence. Do not mutate payout state from this report."
+
+
+def pending_bank_settlement_report_row(match: dict, txn: dict) -> Dict[str, Any]:
+    withdrawal_rows = match.get("withdrawal_rows") or []
+    processed_rows = tradesafe_processed_rows(withdrawal_rows)
+    processed_times = [statement_row_time(row) for row in processed_rows]
+    processed_times = [value for value in processed_times if value]
+    processed_at = min(processed_times).isoformat() if processed_times else None
+    local_processing_started = (
+        txn.get("payout_processing_started_at")
+        or txn.get("withdrawal_requested_at")
+        or txn.get("withdrawal_started_at")
+        or txn.get("withdrawal_triggered_at")
+        or match.get("payout_processing_started_at")
+    )
+    processing_started_at = processed_at or local_processing_started
+    released_at = match.get("released_at") or txn.get("funds_released_at") or txn.get("released_at") or txn.get("completed_at")
+    age_start = parse_dt(processed_at or processing_started_at or released_at)
+    business_age_hours = business_hours_between(age_start) if age_start else None
+    bank_confirmed = has_bank_settlement_confirmation(txn)
+    tradesafe_processed = bool(processed_rows)
+    bank_settlement_pending = tradesafe_processed and not bank_confirmed
+    status = settlement_monitor_status(business_age_hours)
+    row = {
+        "transaction_id": txn.get("transaction_id") or txn.get("deal_id") or match.get("transaction_id") or match.get("deal_id"),
+        "deal_id": txn.get("deal_id") or match.get("deal_id"),
+        "tradesafe_transaction_id": match.get("tradesafe_transaction_id") or txn.get("tradesafe_id") or txn.get("tradesafe_transaction_id"),
+        "seller_token": match.get("token_id") or txn.get("tradesafe_seller_token_id"),
+        "seller_email": txn.get("seller_email") or txn.get("freelancer_email") or match.get("seller_email"),
+        "amount": match.get("expected_seller_amount"),
+        "released_at": released_at,
+        "payout_processing_started": bool(processing_started_at or withdrawal_rows),
+        "payout_processing_started_at": parse_dt(processing_started_at).isoformat() if parse_dt(processing_started_at) else None,
+        "tradesafe_processed": tradesafe_processed,
+        "processed_at": processed_at,
+        "tradesafe_processed_rows": processed_rows,
+        "bank_settlement_confirmed": bank_confirmed,
+        "bank_settlement_not_confirmed": not bank_confirmed,
+        "bank_settlement_pending": bank_settlement_pending,
+        "status": status,
+        "age_business_hours": business_age_hours,
+        "age": None if business_age_hours is None else f"{business_age_hours} business hours",
+        "recommended_action": None,
+        "internal_note": NO_RETRY_PROCESSED_NOTE if tradesafe_processed else "No payout retries, withdrawals, or payout mutations from this monitor.",
+    }
+    row["recommended_action"] = pending_bank_settlement_action(row)
+    return row
+
+
+async def get_payout_settlement_monitor(db, limit: int = 250) -> Dict[str, Any]:
+    """
+    Read-only monitor for released payouts and bank settlement evidence.
+    It fetches TradeSafe token statements but does not retry, withdraw, or mutate payout records.
+    """
+    query = {
+        "$or": [
+            {"tradesafe_state": {"$in": ["FUNDS_RELEASED", "COMPLETE", "COMPLETED"]}},
+            {"release_status": "Released"},
+            {"status": "COMPLETE", "deal_type": "DIGITAL_WORK"},
+            {"funds_released_at": {"$exists": True, "$ne": None}},
+            {"released_at": {"$exists": True, "$ne": None}},
+        ],
+    }
+    projection = {"_id": 0}
+    txns = await db.transactions.find(query, projection).sort("created_at", -1).limit(max(1, min(limit, 1000))).to_list(max(1, min(limit, 1000)))
+    token_ids = sorted({txn.get("tradesafe_seller_token_id") for txn in txns if txn.get("tradesafe_seller_token_id")})
+    token_entries: Dict[str, List[dict]] = {}
+    for token_id in token_ids:
+        try:
+            token_entries[token_id] = await get_all_statement_entries(token_id)
+        except Exception as exc:
+            logger.error("[PAYOUT_SETTLEMENT_MONITOR] token statement fetch failed token=%s error=%s", token_id, exc)
+            token_entries[token_id] = []
+
+    rows = []
+    for txn in txns:
+        match = match_transaction_statement(txn, token_entries.get(txn.get("tradesafe_seller_token_id"), []))
+        rows.append(pending_bank_settlement_report_row(match, txn))
+
+    pending_rows = [row for row in rows if row["bank_settlement_pending"]]
+    delayed_rows = [row for row in rows if row["status"] == "delayed"]
+    critical_rows = [row for row in rows if row["status"] == "critical"]
+    return {
+        "source_of_truth": "TradeSafe tokenStatement plus local bank settlement evidence",
+        "read_only": True,
+        "internal_note": NO_RETRY_PROCESSED_NOTE,
+        "alert_message": BANK_SETTLEMENT_PENDING_MESSAGE,
+        "summary": {
+            "released_payouts": len(rows),
+            "payout_processing_started": sum(1 for row in rows if row["payout_processing_started"]),
+            "tradesafe_processed_rows": sum(len(row["tradesafe_processed_rows"]) for row in rows),
+            "bank_settlement_not_confirmed": sum(1 for row in rows if row["bank_settlement_not_confirmed"]),
+            "bank_settlement_pending": len(pending_rows),
+            "on_track": sum(1 for row in rows if row["status"] == "on_track"),
+            "delayed": len(delayed_rows),
+            "critical": len(critical_rows),
+        },
+        "rows": rows,
+        "pending_bank_settlement_rows": pending_rows,
     }
 
 
@@ -538,10 +769,13 @@ async def get_profitability_analysis(db, limit: int = 500) -> Dict[str, Any]:
         if token.get("token_id") == ORG_TOKEN_ID
         for entry in token.get("entries", [])
     ]
+    fee_review_entries = [entry for entry in org_token_entries if entry.get("category") == "needs_fee_setup_review"]
     org_breakdown = {
         "trusttrade_earned_revenue": total_revenue,
         "tradesafe_fees": total_tradesafe_costs,
-        "negative_adjustments": round(sum(money(entry.get("amount_normalized")) or 0 for entry in org_token_entries if (money(entry.get("amount_normalized")) or 0) < 0), 2),
+        "negative_adjustments": 0.0,
+        "fee_setup_review_entries": fee_review_entries,
+        "historical_fee_movements_needing_review": round(sum(money(entry.get("amount_normalized")) or 0 for entry in fee_review_entries), 2),
         "unresolved_fee_entries": [entry for entry in org_token_entries if str(entry.get("status") or "").upper() != "ACSP"],
     }
 
@@ -644,8 +878,8 @@ def health_score(metrics: dict) -> int:
     score -= min(35, int(metrics.get("unresolved_count", 0)) * 4)
     score -= min(20, int(metrics.get("pdng_over_24h", 0)) * 10)
     score -= min(20, int(metrics.get("failed_withdrawals", 0)) * 8)
-    if (metrics.get("org_token_balance") or 0) < 0:
-        score -= min(15, int(abs(metrics["org_token_balance"])))
+    if metrics.get("new_negative_org_movements", 0) > 0:
+        score -= min(15, int(metrics["new_negative_org_movements"]) * 5)
     score -= min(10, int(metrics.get("missing_statement_entry_count", 0)) * 2)
     return max(0, min(100, score))
 
@@ -718,6 +952,17 @@ async def run_reconciliation(db, mode: str = "recent", limit: int = 150) -> Dict
             pdng_old.append(entry)
 
     org_balance = money(token_details.get(ORG_TOKEN_ID, {}).get("balance")) or 0
+    org_entries = token_entries.get(ORG_TOKEN_ID, [])
+    negative_org_review_entries = [
+        entry for entry in org_entries
+        if entry.get("category") == "needs_fee_setup_review"
+    ]
+    new_negative_org_entries = [
+        entry for entry in negative_org_review_entries
+        if entry.get("post_parser_deploy")
+    ]
+    org_movement_dates = [parse_dt(entry.get("createdAt")) for entry in org_entries if parse_dt(entry.get("createdAt"))]
+    last_org_movement = max(org_movement_dates).isoformat() if org_movement_dates else None
     residues = []
     negative_balances = []
     for token_id, token in token_details.items():
@@ -728,15 +973,52 @@ async def run_reconciliation(db, mode: str = "recent", limit: int = 150) -> Dict
             negative_balances.append({"token_id": token_id, "balance": balance})
 
     failed_withdrawals = await db.transactions.count_documents({"withdrawal_status": "failed"})
+    settlement_monitor_rows = [
+        pending_bank_settlement_report_row(match, txn)
+        for txn, match in zip(txns, matches)
+    ]
+    bank_settlement_pending_rows = [
+        row for row in settlement_monitor_rows
+        if row.get("bank_settlement_pending")
+    ]
+    payout_monitor = [match for match in matches if match.get("payout_sla_monitor_level") == "monitor"]
+    payout_delayed = [match for match in matches if match.get("payout_sla_status") == "delayed"]
+    payout_critical = [match for match in matches if match.get("payout_sla_status") == "critical"]
+    payouts_processing_today = [
+        match for match in matches
+        if match.get("payout_sla_status") == "on_track"
+        and match.get("released_at")
+        and parse_dt(match.get("released_at"))
+        and parse_dt(match.get("released_at")).date() == now.date()
+    ]
+    payouts_expected_next_business_day = [
+        match for match in matches
+        if match.get("payout_sla_status") in {"on_track", "delayed"}
+        and 6 <= float(match.get("age_hours") or 0) < 24
+    ]
     metrics = {
         "unresolved_count": len(unresolved),
         "pdng_count": len(summary["pdng_entries"]),
         "acsp_count": len(summary["acsp_entries"]),
         "pdng_over_24h": len(pdng_old),
+        "payout_monitor_count": len(payout_monitor),
+        "payout_delayed_count": len(payout_delayed),
+        "payout_critical_count": len(payout_critical),
+        "payouts_processing_today": len(payouts_processing_today),
+        "payouts_expected_next_business_day": len(payouts_expected_next_business_day),
+        "payouts_approaching_2_business_days": len(payout_delayed),
+        "critical_delayed_payouts": len(payout_critical),
+        "bank_settlement_pending_count": len(bank_settlement_pending_rows),
+        "payout_processed_bank_settlement_pending_count": len(bank_settlement_pending_rows),
+        "expected_settlement_window": EXPECTED_SETTLEMENT_WINDOW,
+        "payout_timing_short": PAYOUT_TIMING_SHORT,
         "failed_withdrawals": failed_withdrawals,
         "missing_statement_entry_count": sum(1 for match in matches if match["reconciliation_state"] == "missing_statement_entry"),
         "org_token_balance": org_balance,
         "total_fees": summary["totals"]["agent_fees"],
+        "fee_setup_review_total": summary["totals"].get("fee_setup_review", 0.0),
+        "new_negative_org_movements": len(new_negative_org_entries),
+        "last_new_org_token_movement_timestamp": last_org_movement,
         "tradesafe_fees": summary["totals"]["tradesafe_fees"],
         "unresolved_value": round(sum(match.get("expected_seller_amount") or 0 for match in unresolved), 2),
     }
@@ -749,8 +1031,32 @@ async def run_reconciliation(db, mode: str = "recent", limit: int = 150) -> Dict
         await create_finance_alert(db, "unresolved_threshold", "high", f"{len(unresolved)} finance items are unresolved", {"count": len(unresolved)})
     if pdng_old:
         await create_finance_alert(db, "pdng_over_24h", "critical", f"{len(pdng_old)} PDNG payout entries are older than 24 hours", {"entries": pdng_old[:10]})
-    if org_balance <= ORG_NEGATIVE_ALERT_THRESHOLD:
-        await create_finance_alert(db, "negative_org_token", "high", f"Org token balance is {org_balance}", {"token_id": ORG_TOKEN_ID, "balance": org_balance})
+    if payout_monitor:
+        await create_finance_alert(db, "payout_monitor_6h", "medium", f"{len(payout_monitor)} released payouts are older than 6 hours and still processing", {"transactions": payout_monitor[:10]})
+    if payout_delayed:
+        await create_finance_alert(db, "payout_delayed_24h", "high", f"{len(payout_delayed)} released payouts are older than 24 hours", {"transactions": payout_delayed[:10]})
+    if payout_critical:
+        await create_finance_alert(db, "payout_critical_48_business_hours", "critical", f"{len(payout_critical)} released payouts exceeded 48 business hours", {"transactions": payout_critical[:10]})
+    if bank_settlement_pending_rows:
+        await create_finance_alert(
+            db,
+            "processed_bank_settlement_pending",
+            "high",
+            BANK_SETTLEMENT_PENDING_MESSAGE,
+            {
+                "count": len(bank_settlement_pending_rows),
+                "transactions": bank_settlement_pending_rows[:10],
+                "internal_note": NO_RETRY_PROCESSED_NOTE,
+            },
+        )
+    if new_negative_org_entries:
+        await create_finance_alert(
+            db,
+            "new_negative_org_token_movement",
+            "high",
+            f"{len(new_negative_org_entries)} new negative org-token movements appeared after parser deployment",
+            {"token_id": ORG_TOKEN_ID, "entries": new_negative_org_entries[:10]},
+        )
     if residues:
         await create_finance_alert(db, "token_residue", "medium", f"{len(residues)} token residues exceed R{RESIDUE_ALERT_THRESHOLD:.2f}", {"residues": residues})
     if failed_withdrawals:
@@ -819,6 +1125,47 @@ async def get_finance_metrics(db) -> Dict[str, Any]:
 
 
 async def export_finance_report(db, report: str, fmt: str = "json") -> Any:
+    if report == "pending-bank-settlement":
+        monitor = await get_payout_settlement_monitor(db, limit=1000)
+        rows = [
+            {
+                "transaction id": row.get("transaction_id"),
+                "TradeSafe transaction id": row.get("tradesafe_transaction_id"),
+                "seller token": row.get("seller_token"),
+                "amount": row.get("amount"),
+                "released_at": row.get("released_at"),
+                "processed_at": row.get("processed_at"),
+                "status": row.get("status"),
+                "age": row.get("age"),
+                "recommended action": row.get("recommended_action"),
+            }
+            for row in monitor["pending_bank_settlement_rows"]
+        ]
+        if fmt.lower() == "csv":
+            buffer = io.StringIO()
+            fieldnames = [
+                "transaction id",
+                "TradeSafe transaction id",
+                "seller token",
+                "amount",
+                "released_at",
+                "processed_at",
+                "status",
+                "age",
+                "recommended action",
+            ]
+            writer = csv.DictWriter(buffer, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+            return buffer.getvalue()
+        return {
+            "report": "Pending Bank Settlement Report",
+            "format": "json",
+            "count": len(rows),
+            "internal_note": NO_RETRY_PROCESSED_NOTE,
+            "rows": rows,
+        }
+
     latest = await run_reconciliation(db, mode="recent", limit=250)
     rows = latest["matches"]
     if report == "unresolved-payouts":

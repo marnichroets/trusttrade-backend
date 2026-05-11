@@ -557,9 +557,9 @@ function NewTransaction() {
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 14px' }}>Delivery Method</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    { value: 'courier', icon: Truck, label: 'Courier / Physical Delivery', desc: 'Funds release from escrow after buyer confirmation. Bank settlement may take 1-2 business days.' },
-                    { value: 'bank_deposit', icon: Banknote, label: 'Bank Deposit / Cash', desc: 'Funds release from escrow after buyer confirmation. Bank settlement may take 1-2 business days.' },
-                    { value: 'digital', icon: Zap, label: 'Digital / Instant', desc: 'Funds release from escrow after buyer confirmation. Bank settlement may take 1-2 business days.' },
+                    { value: 'courier', icon: Truck, label: 'Courier / Physical Delivery', desc: 'Seller dispatches. Funds release from escrow after buyer confirms receipt. Bank settlement may take up to 2 business days.' },
+                    { value: 'bank_deposit', icon: Banknote, label: 'Bank Deposit / Cash', desc: 'Funds release from escrow after agreed completion is confirmed. Bank settlement may take up to 2 business days.' },
+                    { value: 'digital', icon: Zap, label: 'Digital / Instant', desc: 'No dispatch step. Funds release according to the agreed instant-flow conditions. Bank settlement may take up to 2 business days.' },
                   ].map(opt => {
                     const active = formData.delivery_method === opt.value;
                     return (
@@ -792,7 +792,7 @@ function NewTransaction() {
                     Protected by TrustTrade Escrow
                   </p>
                   <p style={{ fontSize: 12, color: '#3730a3', margin: 0 }}>
-                    Funds held securely until buyer confirms receipt. Funds released from escrow. Bank settlement may take 1-2 business days.
+                    Funds held securely until buyer confirms receipt. Once released from escrow, payouts are processed as quickly as possible and may take up to 2 business days.
                   </p>
                 </div>
               </div>

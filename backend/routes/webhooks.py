@@ -99,6 +99,8 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
                 "payout_status": "payout_failed",
                 "settlement_status": "withdrawal_failed",
                 "settlement_checked_at": now_iso,
+                "expected_settlement_window": "up to 2 business days",
+                "payout_sla_status": "critical",
             }}
         )
         await _audit("payout_failure", {"error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount})
@@ -111,12 +113,16 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
         },
         {"$set": {
             "withdrawal_status": "in_progress",
+            "withdrawal_requested_at": now_iso,
             "withdrawal_triggered": False,
             "withdrawal_started_at": now_iso,
             "withdrawal_source": source,
             "payout_status": "withdrawal_initiated",
             "settlement_status": "withdrawal_initiated",
             "settlement_checked_at": now_iso,
+            "payout_processing_started_at": now_iso,
+            "expected_settlement_window": "up to 2 business days",
+            "payout_sla_status": "on_track",
         }}
     )
 
@@ -146,9 +152,12 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
                 "withdrawal_triggered_at": finished_at,
                 "withdrawal_completed_at": finished_at,
                 "withdrawal_error": None,
-                "payout_status": "payout_completed",
+                "payout_status": "payout_processing",
                 "settlement_status": "bank_processing",
                 "settlement_checked_at": finished_at,
+                "payout_processing_started_at": txn.get("payout_processing_started_at") or now_iso,
+                "expected_settlement_window": "up to 2 business days",
+                "payout_sla_status": "on_track",
                 "tradesafe_withdrawal_id": None,
                 "bank_reference": None,
                 "settlement_reference": None,
@@ -167,6 +176,8 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
             "payout_status": "payout_failed",
             "settlement_status": "withdrawal_failed",
             "settlement_checked_at": finished_at,
+            "expected_settlement_window": "up to 2 business days",
+            "payout_sla_status": "critical",
         }}
     )
     await _audit("payout_failure", {"error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount})
@@ -186,6 +197,9 @@ async def handle_released_transaction(db, txn: dict, state: str = "FUNDS_RELEASE
             "payout_status": txn.get("payout_status") or "awaiting_bank_payout",
             "withdrawal_status": txn.get("withdrawal_status") or "pending",
             "funds_released_at": txn.get("funds_released_at") or now_iso,
+            "released_at": txn.get("released_at") or now_iso,
+            "expected_settlement_window": "up to 2 business days",
+            "payout_sla_status": txn.get("payout_sla_status") or "on_track",
             "last_funds_released_webhook_at": now_iso,
         }}
     )
@@ -307,16 +321,43 @@ async def tradesafe_webhook(request: Request):
         if state in FUNDED_STATES:
             now_iso = datetime.now(timezone.utc).isoformat()
             auto_release_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
+            should_send_payment_email = not txn.get("payment_secured_email_sent_at")
+            set_fields = {
+                "payment_status": "Paid",
+                "tradesafe_state": state,
+                "funds_received_at": now_iso,
+                "auto_release_at": auto_release_at,
+            }
+            if should_send_payment_email:
+                set_fields["payment_secured_email_sent_at"] = now_iso
             await db.transactions.update_one(
                 {"_id": txn["_id"]},
-                {"$set": {
-                    "payment_status": "Paid",
-                    "tradesafe_state": state,
-                    "funds_received_at": now_iso,
-                    "auto_release_at": auto_release_at,
-                }}
+                {"$set": set_fields}
             )
             logger.info(f"[WEBHOOK] Regular txn {txn_id} → payment_status=Paid, auto_release_at={auto_release_at} (state={state})")
+            if should_send_payment_email:
+                import asyncio
+                import email_service
+                delivery_method = txn.get("delivery_method", "courier")
+                share_code = txn.get("share_code", txn_id)
+                asyncio.create_task(_bg(email_service.send_payment_received_email(
+                    to_email=txn["buyer_email"],
+                    to_name=txn.get("buyer_name", "Buyer"),
+                    share_code=share_code,
+                    item_description=txn["item_description"],
+                    amount=txn["item_price"],
+                    role="buyer",
+                    delivery_method=delivery_method,
+                )))
+                asyncio.create_task(_bg(email_service.send_payment_received_email(
+                    to_email=txn["seller_email"],
+                    to_name=txn.get("seller_name", "Seller"),
+                    share_code=share_code,
+                    item_description=txn["item_description"],
+                    amount=txn["item_price"],
+                    role="seller",
+                    delivery_method=delivery_method,
+                )))
 
         elif state in RELEASED_STATES and txn.get("withdrawal_status") not in ("in_progress", "succeeded"):
             # Funds settled in seller token wallet — trigger bank payout now.

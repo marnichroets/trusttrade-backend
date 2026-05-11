@@ -303,7 +303,8 @@ async def create_user_token(
             },
             "settings": {
                 "payout": {
-                    "interval": "IMMEDIATE"
+                    "interval": "IMMEDIATE",
+                    "refund": "WALLET"
                 }
             }
         }
@@ -1230,7 +1231,7 @@ async def update_token_banking_details(
     account_type: str = "SAVINGS",
     id_number: str = None,
     payout_interval: str = "IMMEDIATE",
-    refund_interval: str = "IMMEDIATE"
+    refund_interval: str = "WALLET"
 ) -> Dict[str, Any]:
     """
     Update a TradeSafe token with banking details and payout settings.
@@ -1274,7 +1275,7 @@ async def update_token_banking_details(
             "settings": {
                 "payout": {
                     "interval": payout_interval,
-                    "refund": "WALLET"
+                    "refund": refund_interval or "WALLET"
                 }
             },
             "bankAccount": {
@@ -1321,7 +1322,10 @@ async def update_token_banking_details(
 async def update_token_payout(token_id: str, interval: str = "WALLET") -> Dict[str, Any]:
     """Update only the payout interval on a TradeSafe token (no banking changes).
     Fetches existing user fields first — TradeSafe requires user in every tokenUpdate."""
-    logger.info(f"[UPDATE_TOKEN_PAYOUT] token={token_id} interval={interval}")
+    org_token_id = os.environ.get("TRUSTTRADE_ORG_TOKEN_ID", "32fbUbeMWjdor4uHBJdns")
+    if token_id == org_token_id:
+        interval = "WALLET"
+    logger.info(f"[UPDATE_TOKEN_PAYOUT] token={token_id} interval={interval} refund=WALLET")
 
     existing = await get_token_details(token_id)
     if not existing:
@@ -1357,6 +1361,7 @@ async def update_token_payout(token_id: str, interval: str = "WALLET") -> Dict[s
             "settings": {
                 "payout": {
                     "interval": interval,
+                    "refund": "WALLET",
                 }
             }
         }
@@ -1632,6 +1637,8 @@ async def check_payout_readiness(seller_token_id: str) -> Dict[str, Any]:
     # Check mobile on the LIVE token
     user_info = token_details.get('user', {})
     has_mobile = bool(user_info.get('mobile'))
+    payout_settings = ((token_details.get('settings') or {}).get('payout') or {})
+    payout_interval = payout_settings.get('interval')
     
     # TradeSafe returns token.balance as ZAR decimal, not cents.
     balance_raw = token_details.get('balance', 0)
@@ -1645,8 +1652,10 @@ async def check_payout_readiness(seller_token_id: str) -> Dict[str, Any]:
         issues.append("Banking details not attached to TradeSafe token")
     if not has_mobile:
         issues.append("Mobile number not set on TradeSafe token")
+    if payout_interval != "IMMEDIATE":
+        issues.append("Payout interval is not IMMEDIATE")
     
-    is_ready = has_banking and has_mobile
+    is_ready = has_banking and has_mobile and payout_interval == "IMMEDIATE"
     
     # Detailed logging
     logger.info(f"[PAYOUT_CHECK] Token ID: {seller_token_id}")
@@ -1658,6 +1667,7 @@ async def check_payout_readiness(seller_token_id: str) -> Dict[str, Any]:
         mobile = user_info.get('mobile', '')
         logger.info(f"[PAYOUT_CHECK] Mobile: {mobile[:6]}***{mobile[-2:] if len(mobile) > 6 else ''}")
     logger.info(f"[PAYOUT_CHECK] Balance: R{balance_rands:.2f}")
+    logger.info(f"[PAYOUT_CHECK] Payout interval: {payout_interval}")
     logger.info(f"[PAYOUT_CHECK] READY: {is_ready}")
     
     if issues:
@@ -1671,6 +1681,8 @@ async def check_payout_readiness(seller_token_id: str) -> Dict[str, Any]:
         "token_id": seller_token_id,
         "has_banking": has_banking,
         "has_mobile": has_mobile,
+        "payout_interval": payout_interval,
+        "ready_for_fast_payout": is_ready,
         "balance": balance_rands,
         "balance_raw": balance_raw,
         "balance_unit": "ZAR",
@@ -2219,7 +2231,7 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
                 "amount_rands": withdrawal_value_rands,
                 "new_balance_cents": 0,
                 "new_balance_rands": 0.0,
-                "message": "Withdrawal initiated successfully. Funds will reflect in 1-2 business days."
+                "message": "Withdrawal initiated successfully. Bank settlement may take up to 2 business days."
             }
         else:
             logger.error("[WITHDRAW] TradeSafe returned false for withdrawal")

@@ -9,6 +9,17 @@ function PaymentSuccess() {
   // Support both 'tx' (from TradeSafe redirect) and 'transaction_id'
   const transactionId = searchParams.get('tx') || searchParams.get('transaction_id');
   const reference = searchParams.get('reference');
+  const storedRoute = localStorage.getItem('lastPaymentTransactionRoute');
+  const transactionRoute = transactionId ? `/transactions/${transactionId}` : storedRoute;
+
+  const openTransaction = () => {
+    if (transactionRoute) {
+      localStorage.removeItem('lastPaymentTransactionRoute');
+      navigate(transactionRoute);
+      return;
+    }
+    navigate('/transactions');
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-white flex items-center justify-center p-4">
@@ -44,9 +55,9 @@ function PaymentSuccess() {
             The seller has been notified and will now deliver the item. You will receive an email confirmation shortly.
           </p>
           
-          {transactionId ? (
+          {transactionRoute ? (
             <Button 
-              onClick={() => navigate(`/transactions/${transactionId}`)} 
+              onClick={openTransaction}
               className="w-full"
               data-testid="view-transaction-btn"
             >

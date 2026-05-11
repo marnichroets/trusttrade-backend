@@ -169,7 +169,7 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
   if (released) {
     return {
       state: 'RELEASED',
-      label: 'Funds released',
+      label: payout.includes('fail') ? 'Bank settlement pending' : 'Funds released',
       description: PAYOUT_TIMING_COPY,
       secondaryLabel: PAYOUT_TIMING_SHORT,
       color: COLORS.success,

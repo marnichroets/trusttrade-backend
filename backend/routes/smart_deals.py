@@ -417,6 +417,9 @@ async def approve_deal(deal_id: str, request: Request):
                 "payout_status": "awaiting_bank_payout",
                 "withdrawal_status": "pending",
                 "funds_released_at": now,
+                "released_at": now,
+                "expected_settlement_window": "up to 2 business days",
+                "payout_sla_status": "on_track",
                 "net_amount": net_amount,
             }},
         )

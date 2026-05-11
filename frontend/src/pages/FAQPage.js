@@ -9,7 +9,7 @@ const FAQS = [
     items: [
       {
         q: 'What is escrow and how does TrustTrade work?',
-        a: 'Escrow is a secure holding arrangement where funds are kept by a neutral third party until both buyer and seller fulfil their obligations. When you create a transaction on TrustTrade, the buyer pays into a secure escrow account. The seller ships or delivers the item. Once the buyer confirms receipt, funds are released from escrow. Bank settlement may take 1-2 business days.',
+        a: 'Escrow is a secure holding arrangement where funds are kept by a neutral third party until both buyer and seller fulfil their obligations. When you create a transaction on TrustTrade, the buyer pays into a secure escrow account. The seller ships or delivers the item. Once the buyer confirms receipt, payouts are processed as quickly as possible. Bank settlement may take up to 2 business days.',
       },
       {
         q: 'How do I start a transaction?',
@@ -38,7 +38,7 @@ const FAQS = [
       },
       {
         q: 'How long does it take to receive my payout?',
-        a: 'Funds released from escrow. Bank settlement may take 1-2 business days depending on your bank.',
+        a: 'Once funds are released from escrow, payouts are processed as quickly as possible. Bank settlement may take up to 2 business days depending on payment runs, weekends, and bank processing.',
       },
       {
         q: 'Which banks are supported for payouts?',

@@ -88,6 +88,9 @@ function getPayoutStatus(transaction) {
   if (activity.settlementConfirmed || rawPayout.includes('complete') || rawSettlement.includes('confirm')) {
     return { label: 'Completed', tone: 'green' };
   }
+  if (activity.releasedAt && (rawPayout.includes('fail') || rawSettlement.includes('withdrawal_failed'))) {
+    return { label: 'Bank settlement pending', tone: 'amber' };
+  }
   if (isWeekend) {
     return { label: 'Expected next business day', tone: 'amber' };
   }

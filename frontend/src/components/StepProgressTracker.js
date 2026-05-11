@@ -1,78 +1,86 @@
 // Step Progress Tracker for Transaction Detail Page
 import { CheckCircle } from 'lucide-react';
-import { resolveEscrowUiState } from './transactionState';
+import { getTransactionFlowType, resolveEscrowUiState } from './transactionState';
 
-const STEPS = [
+const DELIVERY_STEPS = [
   { key: 'CREATED', label: 'Awaiting agreement', short: 'Agreement' },
   { key: 'CONFIRMED', label: 'Awaiting payment', short: 'Payment' },
   { key: 'PAID', label: 'Funds secured in escrow', short: 'Secured' },
   { key: 'SECURED', label: 'Delivery in progress', short: 'Delivery' },
   { key: 'DELIVERED', label: 'Awaiting buyer confirmation', short: 'Confirm' },
-  { key: 'RELEASED', label: 'Funds released', short: 'Released' }
+  { key: 'RELEASED', label: 'Funds released', short: 'Released' },
 ];
 
-// Map transaction states to step index
-function getStepIndex(paymentStatus, tradesafeState, buyerConfirmed, sellerConfirmed) {
-  const ps = (paymentStatus || '').toLowerCase();
-  const ts = (tradesafeState || '').toUpperCase();
-  const bothConfirmed = buyerConfirmed && sellerConfirmed;
-  
-  // Released / Completed
-  if (ts === 'FUNDS_RELEASED' || ps.includes('released') || ps.includes('completed')) return 5;
-  
-  // Delivered - awaiting confirmation or funds release
-  if (ts === 'DELIVERED' || ts === 'INITIATED' || ts === 'SENT' || 
-      ps.includes('delivery') || ps.includes('dispatched')) return 4;
-  
-  // Funds secured in escrow
-  if (ts === 'FUNDS_RECEIVED' || ps.includes('secured') || ps.includes('escrow') || 
-      (ps === 'paid' && ts !== 'CREATED')) return 3;
-  
-  // Paid / Awaiting payment (escrow exists)
-  if (ps.includes('awaiting') || ts === 'CREATED' || ts === 'PENDING' || 
-      ps.includes('ready')) return 2;
-  
-  // Both parties confirmed
+const INSTANT_STEPS = [
+  { key: 'CREATED', label: 'Awaiting agreement', short: 'Agreement' },
+  { key: 'CONFIRMED', label: 'Awaiting payment', short: 'Payment' },
+  { key: 'PAID', label: 'Funds secured in escrow', short: 'Secured' },
+  { key: 'PROCESSING', label: 'Release processing', short: 'Release' },
+  { key: 'RELEASED', label: 'Funds released', short: 'Released' },
+];
+
+const NEUTRAL_STEPS = [
+  { key: 'CREATED', label: 'Awaiting agreement', short: 'Agreement' },
+  { key: 'CONFIRMED', label: 'Awaiting payment', short: 'Payment' },
+  { key: 'PAID', label: 'Funds secured in escrow', short: 'Secured' },
+  { key: 'CONDITIONS', label: 'Release conditions', short: 'Conditions' },
+  { key: 'RELEASED', label: 'Funds released', short: 'Released' },
+];
+
+function getSteps(transaction) {
+  const flowType = getTransactionFlowType(transaction);
+  if (flowType === 'delivery') return DELIVERY_STEPS;
+  if (flowType === 'instant') return INSTANT_STEPS;
+  return NEUTRAL_STEPS;
+}
+
+function getStepIndex(transaction, uiState, steps) {
+  const ps = (transaction.payment_status || '').toLowerCase();
+  const ts = (transaction.tradesafe_state || '').toUpperCase();
+  const bothConfirmed = transaction.buyer_confirmed && transaction.seller_confirmed;
+
+  if (uiState.terminal || uiState.state === 'RELEASED' || ts === 'FUNDS_RELEASED' || ps.includes('released') || ps.includes('completed')) {
+    return steps.length - 1;
+  }
+  if (uiState.state === 'DELIVERY_PENDING' || uiState.state === 'DELIVERED' || ts === 'INITIATED' || ts === 'SENT' || ts === 'DELIVERED') {
+    return Math.min(3, steps.length - 2);
+  }
+  if (uiState.state === 'ESCROW_LOCKED' || ts === 'FUNDS_RECEIVED' || ps.includes('secured') || ps.includes('escrow') || (ps === 'paid' && ts !== 'CREATED')) {
+    return 2;
+  }
+  if (uiState.state === 'FUNDED' || ps.includes('awaiting') || ts === 'CREATED' || ts === 'PENDING' || ps.includes('ready')) {
+    return 1;
+  }
   if (bothConfirmed) return 1;
-  
-  // Initial / Created
   return 0;
 }
 
 export function StepProgressTracker({ transaction }) {
   const uiState = resolveEscrowUiState(transaction);
-  const currentStep = uiState.terminal
-    ? STEPS.length - 1
-    : getStepIndex(
-      transaction.payment_status,
-      transaction.tradesafe_state,
-      transaction.buyer_confirmed,
-      transaction.seller_confirmed
-    );
+  const steps = getSteps(transaction);
+  const currentStep = getStepIndex(transaction, uiState, steps);
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0">
       {/* Desktop: Horizontal */}
-      <div className="hidden sm:flex items-center justify-between relative">
-        {/* Progress line background */}
+      <div className="hidden sm:flex items-center justify-between relative min-w-0">
         <div className="absolute top-4 left-0 right-0 h-0.5 bg-slate-200" />
-        {/* Progress line filled */}
-        <div 
+        <div
           className="absolute top-4 left-0 h-0.5 bg-emerald-500 transition-all duration-500"
-          style={{ width: `${(currentStep / (STEPS.length - 1)) * 100}%` }}
+          style={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
         />
-        
-        {STEPS.map((step, idx) => {
-          const isComplete = idx < currentStep;
-          const isCurrent = idx === currentStep;
-          const isPending = idx > currentStep;
-          
+
+        {steps.map((step, idx) => {
+          const isFinalStep = idx === steps.length - 1;
+          const isComplete = idx < currentStep || (isFinalStep && currentStep === idx && uiState.terminal);
+          const isCurrent = idx === currentStep && !isComplete;
+
           return (
-            <div key={step.key} className="relative flex flex-col items-center z-10">
+            <div key={step.key} className="relative flex flex-col items-center z-10 min-w-0">
               <div className={`
                 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300
-                ${isComplete ? 'bg-emerald-500 text-white' : 
-                  isCurrent ? 'bg-blue-600 text-white ring-4 ring-blue-100' : 
+                ${isComplete ? 'bg-emerald-500 text-white' :
+                  isCurrent ? 'bg-blue-600 text-white ring-4 ring-blue-100' :
                   'bg-white border-2 border-slate-200 text-slate-400'}
               `}>
                 {isComplete ? (
@@ -82,7 +90,7 @@ export function StepProgressTracker({ transaction }) {
                 )}
               </div>
               <span className={`
-                mt-2 text-xs font-medium whitespace-nowrap
+                mt-2 text-xs font-medium text-center max-w-[104px] leading-tight
                 ${isCurrent ? 'text-blue-600' : isComplete ? 'text-emerald-600' : 'text-slate-400'}
               `}>
                 {step.label}
@@ -93,15 +101,15 @@ export function StepProgressTracker({ transaction }) {
       </div>
 
       {/* Mobile: Compact */}
-      <div className="sm:hidden">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-slate-500">Step {currentStep + 1} of {STEPS.length}</span>
-          <span className="text-xs font-medium text-blue-600">{STEPS[currentStep]?.label}</span>
+      <div className="sm:hidden min-w-0">
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <span className="text-xs text-slate-500 shrink-0">Step {currentStep + 1} of {steps.length}</span>
+          <span className="text-xs font-medium text-blue-600 text-right min-w-0 break-words">{steps[currentStep]?.label}</span>
         </div>
         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div 
+          <div
             className="h-full bg-gradient-to-r from-emerald-500 to-blue-500 transition-all duration-500"
-            style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
+            style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
           />
         </div>
       </div>

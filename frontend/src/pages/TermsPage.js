@@ -88,7 +88,7 @@ export default function TermsPage() {
               <li><strong>Seller Acceptance:</strong> The seller reviews and accepts the transaction terms.</li>
               <li><strong>Funding:</strong> The buyer deposits funds into escrow via a supported payment method (EFT, card, or Ozow). Funds are held by TradeSafe.</li>
               <li><strong>Delivery:</strong> The seller delivers the goods or services as agreed.</li>
-              <li><strong>Confirmation:</strong> The buyer confirms receipt and satisfaction. Funds are released to the seller within 1–3 business days.</li>
+              <li><strong>Confirmation:</strong> The buyer confirms receipt and satisfaction. Once funds are released from escrow, payouts are processed as quickly as possible and bank settlement may take up to 2 business days.</li>
               <li><strong>Dispute:</strong> If the buyer disputes delivery, funds remain in escrow until the dispute is resolved.</li>
             </ol>
           </section>

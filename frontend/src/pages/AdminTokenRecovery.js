@@ -208,7 +208,7 @@ function AdminTokenRecovery() {
       'Are you sure you want to withdraw funds from this token?\n\n' +
       '• This action CANNOT be reversed\n' +
       '• Funds will be sent to the configured bank account\n' +
-      '• Transfer takes 1-2 business days\n\n' +
+      '• Bank settlement may take up to 2 business days\n\n' +
       `Token: ${token}\n` +
       `Amount: R ${checkResult?.balance_rands?.toFixed(2) || '0.00'}\n\n` +
       'Click OK to proceed with withdrawal.'
@@ -587,7 +587,7 @@ function AdminTokenRecovery() {
               <AlertTriangle className="w-4 h-4 mt-0.5" style={{ color: COLORS.error }} />
               <div className="text-sm">
                 <p className="font-medium" style={{ color: COLORS.error }}>Withdrawal Warning</p>
-                <p style={{ color: COLORS.text }}>This action cannot be reversed. Funds will be sent to the configured bank account and typically arrive within 1-2 business days.</p>
+                <p style={{ color: COLORS.text }}>This action cannot be reversed. Funds will be sent to the configured bank account. Bank settlement may take up to 2 business days.</p>
               </div>
             </div>
           </div>
@@ -630,7 +630,7 @@ function AdminTokenRecovery() {
                   <p><strong>Token:</strong> {withdrawResult.token}</p>
                   <p><strong>New Balance:</strong> R {withdrawResult.new_balance_rands?.toFixed(2)}</p>
                   <p className="text-sm mt-3" style={{ color: COLORS.subtext }}>
-                    Funds will be transferred to the configured bank account within 1-2 business days.
+                    Funds will be transferred to the configured bank account. Bank settlement may take up to 2 business days.
                   </p>
                 </div>
               </div>
@@ -681,7 +681,7 @@ function AdminTokenRecovery() {
                 <li>Click "Update Token" to save banking details</li>
                 <li>Verify token shows "Complete" status</li>
                 <li>Click "Withdraw" to initiate bank transfer</li>
-                <li>Funds arrive in 1-2 business days</li>
+                <li>Bank settlement may take up to 2 business days</li>
               </ol>
             </div>
           </div>

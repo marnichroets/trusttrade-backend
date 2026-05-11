@@ -60,7 +60,7 @@ export default function EscrowPage() {
                 <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">4</div>
                 <div>
                   <h3 className="font-semibold text-slate-900">Funds Released</h3>
-                  <p className="text-sm text-slate-600">Buyer confirms receipt, then funds release from escrow. Bank settlement may take 1-2 business days.</p>
+                  <p className="text-sm text-slate-600">Buyer confirms receipt, then funds release from escrow. Bank settlement may take up to 2 business days.</p>
                 </div>
               </div>
             </div>

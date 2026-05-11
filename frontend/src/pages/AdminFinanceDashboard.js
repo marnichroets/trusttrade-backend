@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   CircleDollarSign,
+  Clock,
   Download,
   FileSearch,
   Landmark,
@@ -69,10 +70,6 @@ function rowState(row) {
 
 function stateMeta(state) {
   return STATE_META[state] || DEFAULT_STATE_META;
-}
-
-function sumRows(rows, key) {
-  return rows.reduce((total, row) => total + (Number(row?.[key]) || 0), 0);
 }
 
 function groupByDay(entries, category) {
@@ -190,6 +187,40 @@ function fetchReconciliationStatus() {
 
 function fetchProfitability() {
   return api.get('/admin/profitability');
+}
+
+function fetchPayoutReadiness() {
+  return api.get('/admin/payout-readiness');
+}
+
+function fetchPayoutSettlementMonitor() {
+  return api.get('/admin/payout-settlement-monitor');
+}
+
+function downloadPendingBankSettlementCsv(rows) {
+  const columns = [
+    ['transaction id', 'transaction_id'],
+    ['TradeSafe transaction id', 'tradesafe_transaction_id'],
+    ['seller token', 'seller_token'],
+    ['amount', 'amount'],
+    ['released_at', 'released_at'],
+    ['processed_at', 'processed_at'],
+    ['status', 'status'],
+    ['age', 'age'],
+    ['recommended action', 'recommended_action'],
+  ];
+  const escape = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+  const csv = [
+    columns.map(([label]) => label).join(','),
+    ...rows.map((row) => columns.map(([, key]) => escape(row[key])).join(',')),
+  ].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'pending-bank-settlement-report.csv';
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function StatusPill({ state }) {
@@ -324,6 +355,8 @@ export default function AdminFinanceDashboard() {
   const [metrics, setMetrics] = useState(null);
   const [reconciliationStatus, setReconciliationStatus] = useState(null);
   const [profitability, setProfitability] = useState(null);
+  const [payoutReadiness, setPayoutReadiness] = useState(null);
+  const [payoutSettlementMonitor, setPayoutSettlementMonitor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filters, setFilters] = useState({
@@ -340,16 +373,20 @@ export default function AdminFinanceDashboard() {
     setLoading(true);
     setError('');
     try {
-      const [ledgerRes, metricsRes, statusRes, profitabilityRes] = await Promise.all([
+      const [ledgerRes, metricsRes, statusRes, profitabilityRes, payoutReadinessRes, payoutSettlementRes] = await Promise.all([
         fetchFinanceLedger(),
         fetchFinanceMetrics().catch(() => ({ data: null })),
         fetchReconciliationStatus().catch(() => ({ data: null })),
         fetchProfitability().catch(() => ({ data: null })),
+        fetchPayoutReadiness().catch(() => ({ data: null })),
+        fetchPayoutSettlementMonitor().catch(() => ({ data: null })),
       ]);
       setLedger(ledgerRes.data);
       setMetrics(metricsRes.data);
       setReconciliationStatus(statusRes.data);
       setProfitability(profitabilityRes.data);
+      setPayoutReadiness(payoutReadinessRes.data);
+      setPayoutSettlementMonitor(payoutSettlementRes.data);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load finance ledger');
     } finally {
@@ -387,6 +424,8 @@ export default function AdminFinanceDashboard() {
   const summary = ledger?.summary || {};
   const orgAnalysis = ledger?.org_token_revenue_analysis || {};
   const activeAlerts = metrics?.active_alerts || reconciliationStatus?.active_alerts || [];
+  const settlementSummary = payoutSettlementMonitor?.summary || {};
+  const pendingBankSettlementRows = payoutSettlementMonitor?.pending_bank_settlement_rows || [];
   const profitabilityRows = useMemo(() => profitability?.transactions || [], [profitability]);
   const profitabilityById = useMemo(() => {
     const byId = {};
@@ -439,9 +478,11 @@ export default function AdminFinanceDashboard() {
   const unresolvedCount = transactionRows.filter((row) => rowState(row) !== 'reconciled').length;
   const platformFeeTotal = Number(summary.trusttrade_agent_platform_fee_entries) || 0;
   const tradeSafeFees = Number(summary.tradesafe_fees) || 0;
-  const negativeAdjustments = sumRows(tokens.filter((token) => Number(token.balance) < 0), 'balance');
+  const negativeAdjustments = 0;
+  const feeSetupReviewTotal = Number(summary.fee_setup_review_entries) || 0;
   const netPlatformRevenue = platformFeeTotal - tradeSafeFees + negativeAdjustments;
   const orgTokenBalance = orgAnalysis.balance;
+  const lastOrgMovementTimestamp = orgAnalysis.last_new_org_token_movement_timestamp || metrics?.last_new_org_token_movement_timestamp;
   const pendingSettlements = Number(summary.pdng_entries) || 0;
 
   const feeChart = groupByDay(entries, 'agent_fee');
@@ -464,6 +505,24 @@ export default function AdminFinanceDashboard() {
   }));
   const recommendedModel = profitability?.recommendation_engine?.recommended_model || 'Not available';
   const riskyModels = (profitability?.fee_strategy_presets || []).filter((model) => (model.projected_margin_percent ?? 0) < 10);
+  const payoutSlaCounts = {
+    processingToday: metrics?.payouts_processing_today ?? 0,
+    nextBusinessDay: metrics?.payouts_expected_next_business_day ?? 0,
+    approachingTwoDays: metrics?.payouts_approaching_2_business_days ?? 0,
+    critical: metrics?.critical_delayed_payouts ?? 0,
+    monitor: metrics?.payout_monitor_count ?? 0,
+  };
+  const payoutSettlementCounts = {
+    released: settlementSummary.released_payouts ?? 0,
+    processingStarted: settlementSummary.payout_processing_started ?? 0,
+    tradesafeProcessedRows: settlementSummary.tradesafe_processed_rows ?? 0,
+    bankNotConfirmed: settlementSummary.bank_settlement_not_confirmed ?? 0,
+    pending: settlementSummary.bank_settlement_pending ?? metrics?.bank_settlement_pending_count ?? 0,
+    delayed: settlementSummary.delayed ?? 0,
+    critical: settlementSummary.critical ?? 0,
+  };
+  const readinessRows = payoutReadiness?.rows || [];
+  const readinessIssues = readinessRows.filter((row) => !row.ready_for_fast_payout).slice(0, 6);
   const testChecklist = [
     'Create test transaction',
     'Confirm payment',
@@ -533,6 +592,27 @@ export default function AdminFinanceDashboard() {
           <div className="rounded-lg border border-slate-200 bg-white p-8 text-center text-slate-600">Loading finance ledger...</div>
         ) : (
           <>
+            {payoutSettlementCounts.pending > 0 && (
+              <section className="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
+                  <div className="flex-1">
+                    <h2 className="font-bold text-amber-950">Payout processed by TradeSafe, bank settlement pending</h2>
+                    <p className="mt-1 text-sm text-amber-900">
+                      {payoutSettlementCounts.pending} payout{payoutSettlementCounts.pending === 1 ? '' : 's'} show TradeSafe processed evidence without local bank confirmation.
+                    </p>
+                    <p className="mt-2 text-xs font-semibold text-amber-950">
+                      Do not retry if TradeSafe already shows processed payout entry.
+                    </p>
+                  </div>
+                  <button onClick={() => downloadPendingBankSettlementCsv(pendingBankSettlementRows)} className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                    <Download className="h-4 w-4" />
+                    Pending Bank Settlement Report
+                  </button>
+                </div>
+              </section>
+            )}
+
             {activeAlerts.length > 0 && (
               <section className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
                 <div className="flex items-start gap-3">
@@ -565,7 +645,7 @@ export default function AdminFinanceDashboard() {
                 <MetricCard label="TrustTrade fees earned" value={money(platformFeeTotal)} icon={Landmark} />
                 <MetricCard label="TradeSafe fees" value={money(tradeSafeFees)} icon={CircleDollarSign} />
                 <MetricCard label="Net platform revenue" value={money(netPlatformRevenue)} tone={netPlatformRevenue >= 0 ? 'green' : 'red'} icon={CircleDollarSign} />
-                <MetricCard label="Negative fee adjustments" value={money(negativeAdjustments)} tone={negativeAdjustments < 0 ? 'red' : 'slate'} icon={AlertTriangle} />
+                <MetricCard label="Fee setup review" value={money(feeSetupReviewTotal)} tone={feeSetupReviewTotal < 0 ? 'yellow' : 'slate'} icon={AlertTriangle} />
                 <MetricCard label="Org token balance" value={money(orgTokenBalance)} tone={Number(orgTokenBalance) < 0 ? 'red' : 'slate'} icon={Wallet} />
                 <MetricCard label="Pending settlements" value={pendingSettlements} tone={pendingSettlements > 0 ? 'yellow' : 'green'} icon={FileSearch} />
                 <MetricCard label="Unsettled transactions" value={unresolvedCount} tone={unresolvedCount > 0 ? 'yellow' : 'green'} icon={AlertTriangle} />
@@ -597,6 +677,54 @@ export default function AdminFinanceDashboard() {
                 tone={(metrics?.payout_success_rate ?? 100) >= 95 ? 'green' : 'yellow'}
                 icon={CheckCircle2}
               />
+            </section>
+
+            <section className="mb-6 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-950">Payout SLA Monitoring</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Payouts are processed as quickly as possible and may take up to 2 business days. Alerts monitor released payouts after 6h, flag delayed after 24h, and mark critical after 48 business hours.
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                  <Clock className="h-3.5 w-3.5" />
+                  Same-day target · next-business-day target · 2 business day maximum messaging
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-5">
+                <MetricCard label="Processing today" value={payoutSlaCounts.processingToday} tone="green" icon={Wallet} />
+                <MetricCard label="Expected next business day" value={payoutSlaCounts.nextBusinessDay} tone={payoutSlaCounts.nextBusinessDay > 0 ? 'yellow' : 'slate'} icon={Clock} />
+                <MetricCard label="Monitor after 6h" value={payoutSlaCounts.monitor} tone={payoutSlaCounts.monitor > 0 ? 'yellow' : 'green'} icon={FileSearch} />
+                <MetricCard label="Approaching 2 business days" value={payoutSlaCounts.approachingTwoDays} tone={payoutSlaCounts.approachingTwoDays > 0 ? 'yellow' : 'green'} icon={AlertTriangle} />
+                <MetricCard label="Critical delayed payouts" value={payoutSlaCounts.critical} tone={payoutSlaCounts.critical > 0 ? 'red' : 'green'} icon={ShieldAlert} />
+              </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-4 lg:grid-cols-7">
+                <MetricCard label="Released payouts" value={payoutSettlementCounts.released} icon={Wallet} />
+                <MetricCard label="Processing started" value={payoutSettlementCounts.processingStarted} icon={Clock} />
+                <MetricCard label="TradeSafe processed rows" value={payoutSettlementCounts.tradesafeProcessedRows} tone={payoutSettlementCounts.tradesafeProcessedRows > 0 ? 'yellow' : 'slate'} icon={FileSearch} />
+                <MetricCard label="Bank not confirmed" value={payoutSettlementCounts.bankNotConfirmed} tone={payoutSettlementCounts.bankNotConfirmed > 0 ? 'yellow' : 'green'} icon={AlertTriangle} />
+                <MetricCard label="Settlement pending" value={payoutSettlementCounts.pending} tone={payoutSettlementCounts.pending > 0 ? 'yellow' : 'green'} icon={Landmark} />
+                <MetricCard label="Delayed" value={payoutSettlementCounts.delayed} tone={payoutSettlementCounts.delayed > 0 ? 'yellow' : 'green'} icon={Clock} />
+                <MetricCard label="Critical" value={payoutSettlementCounts.critical} tone={payoutSettlementCounts.critical > 0 ? 'red' : 'green'} icon={ShieldAlert} />
+              </div>
+              <p className="mt-3 text-xs font-semibold text-slate-600">
+                Internal note: Do not retry if TradeSafe already shows processed payout entry. This monitor is read-only and does not run withdrawals or payout mutations.
+              </p>
+              {readinessIssues.length > 0 && (
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-sm font-bold text-amber-950">Seller payout readiness issues</p>
+                  <div className="mt-2 grid gap-2">
+                    {readinessIssues.map((row) => (
+                      <div key={row.seller_token_id} className="grid gap-2 text-sm text-amber-900 md:grid-cols-[1fr_150px_2fr]">
+                        <span className="font-semibold">{row.seller_email || row.seller_token_id}</span>
+                        <span>{row.payout_interval || 'No interval'}</span>
+                        <span>{(row.issues || []).join(', ') || 'Review required'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
 
             <section className="mb-6">
@@ -862,6 +990,62 @@ export default function AdminFinanceDashboard() {
             </section>
 
             <section className="mb-6 rounded-lg border border-slate-200 bg-white shadow-sm">
+              <div className="flex flex-col justify-between gap-3 border-b border-slate-200 p-4 md:flex-row md:items-center">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-950">Pending Bank Settlement Report</h2>
+                  <p className="mt-1 text-sm text-slate-600">TradeSafe processed payout entries with no local bank settlement confirmation.</p>
+                </div>
+                <button onClick={() => downloadPendingBankSettlementCsv(pendingBankSettlementRows)} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+                  <Download className="h-4 w-4" />
+                  Export report
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-[1180px] w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Transaction ID</th>
+                      <th className="px-4 py-3">TradeSafe transaction ID</th>
+                      <th className="px-4 py-3">Seller token</th>
+                      <th className="px-4 py-3">Amount</th>
+                      <th className="px-4 py-3">Released</th>
+                      <th className="px-4 py-3">Processed</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Age</th>
+                      <th className="px-4 py-3">Recommended action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {pendingBankSettlementRows.map((row, index) => (
+                      <tr key={`pending-bank-${row.transaction_id || index}`}>
+                        <td className="px-4 py-3 font-mono text-blue-700">{row.transaction_id || 'Unknown'}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{shortId(row.tradesafe_transaction_id)}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{shortId(row.seller_token)}</td>
+                        <td className="px-4 py-3">{money(row.amount)}</td>
+                        <td className="px-4 py-3">{formatDate(row.released_at)}</td>
+                        <td className="px-4 py-3">{formatDate(row.processed_at)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                            row.status === 'critical' ? 'bg-red-50 text-red-700' :
+                            row.status === 'delayed' ? 'bg-amber-50 text-amber-700' :
+                            'bg-emerald-50 text-emerald-700'
+                          }`}>
+                            {row.status || 'on_track'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">{row.age || 'Not available'}</td>
+                        <td className="px-4 py-3 text-slate-700">{row.recommended_action || 'Review bank settlement evidence'}</td>
+                      </tr>
+                    ))}
+                    {pendingBankSettlementRows.length === 0 && (
+                      <tr><td colSpan="9" className="px-4 py-6 text-center text-slate-500">No payouts are currently marked Bank settlement pending.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="mb-6 rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="border-b border-slate-200 p-4">
                 <h2 className="text-lg font-bold text-slate-950">Seller Wallet Monitoring</h2>
                 <p className="mt-1 text-sm text-slate-600">Token balances, residues, statement status counts, and linked seller identity.</p>
@@ -1091,6 +1275,7 @@ export default function AdminFinanceDashboard() {
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">Org Token Diagnostics</h2>
                   <p className="mt-1 text-sm text-slate-600">{orgAnalysis.negative_balance_explanation || 'No org token analysis returned.'}</p>
+                  <p className="mt-1 text-sm text-slate-600">Org token balance reflects TradeSafe statement accounting and may include historical fee movements.</p>
                 </div>
                 {Number(orgAnalysis.balance) < 0 ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 ring-1 ring-red-200">
@@ -1107,6 +1292,7 @@ export default function AdminFinanceDashboard() {
               <div className="mt-4 grid gap-3 md:grid-cols-3">
                 <MetricCard label="Org token balance" value={money(orgAnalysis.balance)} tone={Number(orgAnalysis.balance) < 0 ? 'red' : 'slate'} />
                 <MetricCard label="Platform fee totals" value={money(platformFeeTotal)} />
+                <MetricCard label="Last new org-token movement" value={formatDate(lastOrgMovementTimestamp)} />
                 <MetricCard label="Profitability view" value={netPlatformRevenue >= 0 ? 'Positive by ledger' : 'Needs review'} tone={netPlatformRevenue >= 0 ? 'green' : 'red'} note={orgAnalysis.trusttrade_fee_setup_assessment} />
               </div>
               <StatementList title="Current fee entries" rows={orgAnalysis.negative_entries || []} />

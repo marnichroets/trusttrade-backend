@@ -364,7 +364,7 @@ def get_transaction_created_email(
             <strong>What happens next:</strong><br>
             1. Review and confirm the transaction details<br>
             2. Wait for buyer to make payment<br>
-            3. Ship the item once payment is secured<br>
+            3. Complete the agreed release conditions once payment is secured<br>
             4. Payouts are processed as quickly as possible after buyer confirmation and may take up to 2 business days
         </div>"""
     
@@ -397,32 +397,68 @@ def get_payment_received_email(
     share_code: str,
     item_description: str,
     amount: float,
-    role: str
+    role: str,
+    delivery_method: str = "courier"
 ) -> tuple[str, str]:
     """Generate payment received email content"""
     
     subject = f"TrustTrade: Payment Secured - {share_code}"
+    flow = (delivery_method or "courier").lower()
+    is_delivery = flow == "courier"
+    is_instant = flow == "digital"
     
     if role.lower() == "seller":
-        intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
-        
-        <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
-            <strong>What you need to do:</strong><br>
-            1. Ship/deliver the item to the buyer<br>
-            2. Mark as shipped in TrustTrade<br>
-            3. Wait for buyer to confirm receipt<br><br>
-            <strong>Payout:</strong> processed as quickly as possible after buyer confirms delivery; bank settlement may take up to 2 business days
-        </div>"""
+        if is_delivery:
+            intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
+            
+            <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
+                <strong>What you need to do:</strong><br>
+                1. Dispatch the item to the buyer<br>
+                2. Mark it as dispatched in TrustTrade<br>
+                3. Wait for buyer confirmation<br><br>
+                <strong>Payout:</strong> processed as quickly as possible after escrow release; bank settlement may take up to 2 business days
+            </div>"""
+        elif is_instant:
+            intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
+            
+            <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
+                <strong>Instant release flow:</strong><br>
+                No delivery dispatch action is required. TrustTrade will process release according to the agreed instant-flow conditions.<br><br>
+                <strong>Payout:</strong> processed as quickly as possible after escrow release; bank settlement may take up to 2 business days
+            </div>"""
+        else:
+            intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
+            
+            <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
+                <strong>What happens next:</strong><br>
+                Complete the agreed release conditions and update the transaction. Funds remain protected until release conditions are met.<br><br>
+                <strong>Payout:</strong> processed as quickly as possible after escrow release; bank settlement may take up to 2 business days
+            </div>"""
     else:
-        intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
-        
-        <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
-            <strong>What happens next:</strong><br>
-            1. Seller will ship/deliver the item<br>
-            2. Inspect the item when you receive it<br>
-            3. Click "Confirm Delivery" to release funds to seller<br><br>
-            <strong>Your money is protected</strong> until you confirm delivery.
-        </div>"""
+        if is_delivery:
+            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
+            
+            <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
+                <strong>What happens next:</strong><br>
+                1. Seller dispatches the item<br>
+                2. Inspect the item when you receive it<br>
+                3. Confirm receipt to release funds to seller<br><br>
+                <strong>Your money is protected</strong> until you confirm receipt.
+            </div>"""
+        elif is_instant:
+            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
+            
+            <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
+                <strong>Instant release flow:</strong><br>
+                Funds are protected in escrow and release according to the agreed instant-flow conditions. No delivery dispatch step is required.
+            </div>"""
+        else:
+            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
+            
+            <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
+                <strong>What happens next:</strong><br>
+                Funds remain protected until the agreed release conditions are met. Confirm completion only when satisfied.
+            </div>"""
     
     # Add note about payment processor emails - prominent placement
     processor_note = """
@@ -460,7 +496,8 @@ def get_immediate_payment_secured_email(
     recipient_name: str,
     share_code: str,
     item_description: str,
-    amount: float
+    amount: float,
+    delivery_method: str = "courier"
 ) -> tuple[str, str]:
     """
     Generate IMMEDIATE payment secured email for buyer.
@@ -469,9 +506,16 @@ def get_immediate_payment_secured_email(
     
     subject = f"{share_code} — Payment Secured by TrustTrade"
     
-    intro_html = """
+    flow = (delivery_method or "courier").lower()
+    protection_copy = "Your funds are protected until you confirm delivery."
+    if flow == "digital":
+        protection_copy = "Your funds are protected in escrow and release according to the agreed instant-flow conditions."
+    elif flow != "courier":
+        protection_copy = "Your funds are protected until the agreed release conditions are met."
+
+    intro_html = f"""
     <p style='font-size: 18px; color: #10b981; font-weight: 700; margin: 0 0 16px 0;'>Your payment has been secured safely in TrustTrade Escrow.</p>
-    <p style='font-size: 15px; color: #212529; margin: 0 0 20px 0; line-height: 1.6;'>Your funds are protected until you confirm delivery.</p>
+    <p style='font-size: 15px; color: #212529; margin: 0 0 20px 0; line-height: 1.6;'>{protection_copy}</p>
     """
     
     # Prominent note about TradeSafe email - this is key!
@@ -510,13 +554,14 @@ async def send_immediate_payment_secured_email(
     to_name: str,
     share_code: str,
     item_description: str,
-    amount: float
+    amount: float,
+    delivery_method: str = "courier"
 ) -> bool:
     """
     Send IMMEDIATE payment secured email to buyer.
     Called the MOMENT webhook receives FUNDS_RECEIVED - must be fast!
     """
-    subject, html = get_immediate_payment_secured_email(to_name, share_code, item_description, amount)
+    subject, html = get_immediate_payment_secured_email(to_name, share_code, item_description, amount, delivery_method)
     return await send_email(to_email, to_name, subject, html)
 
 
@@ -850,7 +895,8 @@ async def send_payment_received_email(
     share_code: str,
     item_description: str,
     amount: float,
-    role: str
+    role: str,
+    delivery_method: str = "courier"
 ) -> bool:
     """Send payment received notification"""
     logger.info("=" * 60)
@@ -863,7 +909,7 @@ async def send_payment_received_email(
     logger.info("=" * 60)
     
     try:
-        subject, html = get_payment_received_email(to_name, share_code, item_description, amount, role)
+        subject, html = get_payment_received_email(to_name, share_code, item_description, amount, role, delivery_method)
         logger.info(f"[TX_EMAIL] Subject: {subject}")
         logger.info(f"[TX_EMAIL] Calling send_email()...")
         

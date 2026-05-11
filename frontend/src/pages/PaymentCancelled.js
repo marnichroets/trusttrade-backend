@@ -10,6 +10,8 @@ function PaymentCancelled() {
   // Support both 'tx' (from TradeSafe redirect) and 'transaction_id'
   const transactionId = searchParams.get('tx') || searchParams.get('transaction_id');
   const reason = searchParams.get('reason');
+  const storedRoute = localStorage.getItem('lastPaymentTransactionRoute');
+  const transactionRoute = transactionId ? `/transactions/${transactionId}` : storedRoute;
   
   // Check if this is a failed payment (from /transaction/failed route)
   const isFailed = location.pathname.includes('failed') || reason === 'failed';
@@ -35,10 +37,10 @@ function PaymentCancelled() {
         </p>
 
         <div className="space-y-3">
-          {transactionId ? (
+          {transactionRoute ? (
             <>
               <Button 
-                onClick={() => navigate(`/transactions/${transactionId}`)} 
+                onClick={() => { localStorage.removeItem('lastPaymentTransactionRoute'); navigate(transactionRoute); }} 
                 className="w-full"
                 data-testid="retry-payment-btn"
               >
@@ -47,7 +49,7 @@ function PaymentCancelled() {
               </Button>
               <Button 
                 variant="outline"
-                onClick={() => navigate(`/transactions/${transactionId}`)} 
+                onClick={() => { localStorage.removeItem('lastPaymentTransactionRoute'); navigate(transactionRoute); }} 
                 className="w-full"
               >
                 View Transaction

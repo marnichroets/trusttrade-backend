@@ -240,7 +240,7 @@ function ShareTransaction() {
                 </>
               ) : (
                 <>
-                  Join Transaction
+                  View Transaction
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </>
               )}

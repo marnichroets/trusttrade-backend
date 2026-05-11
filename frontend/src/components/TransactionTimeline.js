@@ -1,4 +1,5 @@
 import { CheckCircle2, Clock, CreditCard, Truck, Package, DollarSign, AlertTriangle, XCircle, Shield, FileText } from 'lucide-react';
+import { getTransactionFlowType } from './transactionState';
 
 const COLORS = {
   primary: '#1a2942',
@@ -48,6 +49,28 @@ const TIMELINE_STEPS = [
   }
 ];
 
+function getTimelineSteps(transaction) {
+  const flowType = getTransactionFlowType(transaction);
+  if (flowType === 'delivery') return TIMELINE_STEPS;
+  return TIMELINE_STEPS.map((step) => {
+    if (step.key === 'delivery') {
+      return {
+        ...step,
+        label: flowType === 'instant' ? 'Release Processing' : 'Release Conditions',
+        icon: Shield,
+      };
+    }
+    if (step.key === 'delivered') {
+      return {
+        ...step,
+        label: flowType === 'instant' ? 'Release Conditions Met' : 'Completion Confirmed',
+        icon: CheckCircle2,
+      };
+    }
+    return step;
+  });
+}
+
 function getStepStatus(stepStates, currentState, allTimelineEvents) {
   // Check if any step state matches current state
   const isCurrentStep = stepStates.includes(currentState);
@@ -63,6 +86,7 @@ function getStepStatus(stepStates, currentState, allTimelineEvents) {
 }
 
 export function TransactionTimeline({ transaction, currentState, timeline = [] }) {
+  const steps = getTimelineSteps(transaction);
   // Handle disputed or cancelled states
   const isDisputed = currentState === 'DISPUTED';
   const isCancelled = currentState === 'CANCELLED';
@@ -72,7 +96,7 @@ export function TransactionTimeline({ transaction, currentState, timeline = [] }
     return (
       <div className="space-y-4">
         {/* Show completed steps */}
-        {TIMELINE_STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const { isCompleted } = getStepStatus(step.states, currentState, timeline);
           const Icon = step.icon;
           
@@ -126,7 +150,7 @@ export function TransactionTimeline({ transaction, currentState, timeline = [] }
   
   return (
     <div className="space-y-1">
-      {TIMELINE_STEPS.map((step, index) => {
+      {steps.map((step, index) => {
         const { isCurrentStep, isCompleted } = getStepStatus(step.states, currentState, timeline);
         const Icon = step.icon;
         const isLast = index === TIMELINE_STEPS.length - 1;

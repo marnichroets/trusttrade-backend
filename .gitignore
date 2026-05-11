@@ -803,3 +803,6 @@ credentials.json
 .claude/
 
 ~/.claude/
+
+# Browser automation artifacts
+frontend/viewport-checks/

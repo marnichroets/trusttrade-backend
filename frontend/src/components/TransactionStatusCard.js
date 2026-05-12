@@ -164,7 +164,7 @@ function getStatusConfig(state, userRole, transaction, payoutSchedule = {}) {
       iconBgClass: 'bg-slate-100',
       iconClass: 'text-slate-500',
       titleClass: 'text-slate-800',
-      badgeClass: 'bg-slate-100 text-slate-600 border border-slate-200'
+      badgeClass: 'bg-slate-100 text-slate-600 border border-slate-200 pointer-events-none cursor-default'
     },
     PENDING_CONFIRMATION: {
       icon: Clock,

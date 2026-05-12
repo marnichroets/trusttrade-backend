@@ -308,7 +308,7 @@ function NewTransaction() {
             <AlertCircle size={18} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ flex: 1 }}>
               <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#78350f' }}>Verify your phone number to continue.</p>
-              <p style={{ margin: 0, fontSize: 13, color: '#92400e' }}>Phone verification is required before you can create a transaction or access escrow actions.</p>
+              <p style={{ margin: 0, fontSize: 13, color: '#92400e' }}>Phone verification is required before you can create a transaction or access payment actions.</p>
             </div>
             <button type="button" onClick={() => navigate('/verify/phone')} style={{ ...S.btnPrimary, width: 'auto', height: 38, padding: '0 14px', background: '#f59e0b' }}>
               Verify phone
@@ -457,6 +457,18 @@ function NewTransaction() {
                   </span>
                 </div>
 
+                {/* Other party prompt */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  background: '#eff6ff', border: '1.5px solid #93c5fd',
+                  borderRadius: 10, padding: '11px 14px', marginBottom: 16,
+                }}>
+                  <span style={{ fontSize: 18 }}>👇</span>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1e40af' }}>
+                    Now enter your {role === 'buyer' ? 'seller' : 'buyer'}'s details below
+                  </p>
+                </div>
+
                 {/* Other party */}
                 <h3 style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', margin: '0 0 12px' }}>
                   {role === 'buyer' ? 'Seller' : 'Buyer'} Details
@@ -597,12 +609,12 @@ function NewTransaction() {
 
               {/* Delivery Method */}
               <div style={S.card}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 14px' }}>Delivery Method</h3>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 14px' }}>How will the item be delivered?</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    { value: 'courier', icon: Truck, label: 'Courier / Physical Delivery', desc: `Seller dispatches. Funds release from escrow after buyer confirms receipt. ${payoutSchedule.copy}` },
-                    { value: 'bank_deposit', icon: Banknote, label: 'Bank Deposit / Cash', desc: `Funds release from escrow after agreed completion is confirmed. ${payoutSchedule.copy}` },
-                    { value: 'digital', icon: Zap, label: 'Digital / Instant', desc: `No dispatch step. Funds release according to the agreed instant-flow conditions. ${payoutSchedule.copy}` },
+                    { value: 'courier', icon: Truck, label: 'Physical Item — seller ships or hands over in person', desc: 'Buyer confirms receipt before payment is released.' },
+                    { value: 'bank_deposit', icon: Banknote, label: 'Cash on Collection — meet in person to exchange', desc: 'Payment is released once the handover is confirmed.' },
+                    { value: 'digital', icon: Zap, label: 'Digital Delivery — files, codes, or online services', desc: 'Payment is released once the digital delivery is confirmed.' },
                   ].map(opt => {
                     const active = formData.delivery_method === opt.value;
                     return (
@@ -652,7 +664,7 @@ function NewTransaction() {
                   borderRadius: 12, padding: '16px 20px', marginBottom: 14,
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Item Value (into escrow)</span>
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Item Value (held safely)</span>
                     <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: '#fff' }}>
                       R {itemPrice.toFixed(2)}
                     </span>
@@ -676,7 +688,7 @@ function NewTransaction() {
                     </span>
                   </div>
                   <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', margin: '10px 0 0', lineHeight: 1.5 }}>
-                    The 2% platform fee is collected by TrustTrade and is not held in escrow.
+                    The 2% platform fee is collected by TrustTrade separately from the protected payment.
                   </p>
                 </div>
               )}
@@ -736,13 +748,25 @@ function NewTransaction() {
               <div style={S.card}>
                 <h2 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', margin: '0 0 18px' }}>Review & Confirm</h2>
 
+                {/* Parties side by side */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+                  {[
+                    { roleLabel: 'Buyer', name: role === 'buyer' ? user.name : formData.buyer_name, email: role === 'buyer' ? user.email : formData.buyer_email, accent: '#3b82f6', bg: '#eff6ff', isYou: role === 'buyer' },
+                    { roleLabel: 'Seller', name: role === 'seller' ? user.name : formData.seller_name, email: role === 'seller' ? user.email : formData.seller_email, accent: '#10b981', bg: '#ecfdf5', isYou: role === 'seller' },
+                  ].map(p => (
+                    <div key={p.roleLabel} style={{ background: p.bg, border: `1px solid ${p.accent}33`, borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: p.accent }}>{p.roleLabel}</span>
+                        {p.isYou && <span style={{ fontSize: 9, fontWeight: 600, background: p.accent, color: '#fff', padding: '1px 5px', borderRadius: 20 }}>You</span>}
+                      </div>
+                      <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name || '—'}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email || '—'}</p>
+                    </div>
+                  ))}
+                </div>
+
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                   {[
-                    { label: 'You are', value: role.charAt(0).toUpperCase() + role.slice(1) },
-                    {
-                      label: role === 'buyer' ? 'Seller' : 'Buyer',
-                      value: role === 'buyer' ? formData.seller_name : formData.buyer_name,
-                    },
                     { label: 'Item', value: formData.item_description, truncate: true },
                     { label: 'Item Value', value: `R ${itemPrice.toFixed(2)}`, mono: true },
                     { label: 'TrustTrade Fee (2%)', value: `R ${platformFee.toFixed(2)}`, mono: true },
@@ -766,29 +790,12 @@ function NewTransaction() {
                         overflow: 'hidden',
                         textOverflow: row.truncate ? 'ellipsis' : undefined,
                         whiteSpace: row.truncate ? 'nowrap' : undefined,
-                        textTransform: row.label === 'You are' || row.label === 'Delivery' ? 'capitalize' : undefined,
+                        textTransform: row.label === 'Delivery' ? 'capitalize' : undefined,
                       }}>
                         {row.value}
                       </span>
                     </div>
                   ))}
-                </div>
-              </div>
-
-              {/* Escrow notice */}
-              <div style={{
-                display: 'flex', alignItems: 'flex-start', gap: 12,
-                background: '#eff6ff', border: '1px solid #bfdbfe',
-                borderRadius: 12, padding: '14px 16px', marginBottom: 14,
-              }}>
-                <Shield size={18} color="#2563eb" style={{ flexShrink: 0, marginTop: 1 }} />
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: '#1e3a8a', margin: '0 0 3px' }}>
-                    Protected by TrustTrade Escrow
-                  </p>
-                  <p style={{ fontSize: 12, color: '#3730a3', margin: 0 }}>
-                    Funds held securely until buyer confirms receipt. {payoutSchedule.copy}
-                  </p>
                 </div>
               </div>
 

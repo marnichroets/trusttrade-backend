@@ -545,6 +545,7 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues, no
           label="Escrow system online"
           tone="success"
           color={V.success}
+          href="https://stats.uptimerobot.com/eYBB7WwKES"
         />
         <AccountStatusPill
           icon={RadioTower}
@@ -563,13 +564,22 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues, no
   );
 }
 
-function AccountStatusPill({ icon: Icon, label, tone, color }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${tone === 'success' ? 'rgba(0,255,163,0.18)' : tone === 'warn' ? 'rgba(240,180,41,0.2)' : V.border}`, background: tone === 'success' ? 'rgba(0,255,163,0.06)' : tone === 'warn' ? 'rgba(240,180,41,0.06)' : 'rgba(255,255,255,0.025)', padding: '8px 11px', borderRadius: 999 }}>
+function AccountStatusPill({ icon: Icon, label, tone, color, href }) {
+  const pillStyle = { display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${tone === 'success' ? 'rgba(0,255,163,0.18)' : tone === 'warn' ? 'rgba(240,180,41,0.2)' : V.border}`, background: tone === 'success' ? 'rgba(0,255,163,0.06)' : tone === 'warn' ? 'rgba(240,180,41,0.06)' : 'rgba(255,255,255,0.025)', padding: '8px 11px', borderRadius: 999 };
+  const inner = (
+    <>
       <Icon size={13} color={color} />
       <span style={{ color: V.sub, fontSize: 12, fontWeight: 700 }}>{label}</span>
-    </div>
+    </>
   );
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" style={{ ...pillStyle, textDecoration: 'none' }}>
+        {inner}
+      </a>
+    );
+  }
+  return <div style={pillStyle}>{inner}</div>;
 }
 
 function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDisputes, platformStats, totalEscrowValue, reduceMotion, navigate, showExactValues }) {

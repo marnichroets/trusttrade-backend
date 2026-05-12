@@ -34,13 +34,17 @@ async def get_transaction_by_share_code(share_code: str):
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
+    item_price = transaction["item_price"]
+    platform_fee = transaction.get("platform_fee") or transaction.get("trusttrade_fee") or max(item_price * 0.02, 5)
+    total = transaction.get("total") or (item_price + platform_fee)
+
     return TransactionPreview(
         share_code=transaction["share_code"],
         transaction_id=transaction["transaction_id"],
         item_description=transaction["item_description"],
-        item_price=transaction["item_price"],
-        trusttrade_fee=transaction["trusttrade_fee"],
-        total=transaction["total"],
+        item_price=item_price,
+        trusttrade_fee=platform_fee,
+        total=total,
         fee_paid_by=transaction.get("fee_paid_by", "split"),
         payment_status=transaction["payment_status"],
         buyer_name=transaction["buyer_name"],

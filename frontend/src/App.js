@@ -1,3 +1,4 @@
+import { Component } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import DashboardLayout from './components/DashboardLayout';
 import { Toaster } from './components/ui/sonner';
@@ -42,6 +43,40 @@ import RefundPage from './pages/RefundPage';
 import ResetPassword from './pages/ResetPassword';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
+
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('App error boundary caught:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, background: '#f8fafc' }}>
+          <div style={{ fontSize: 32 }}>⚠️</div>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Something went wrong</h2>
+          <p style={{ fontSize: 14, color: '#64748b', margin: 0 }}>Please refresh the page. If the problem persists, contact support.</p>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/'; }}
+            style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#3b82f6', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function AppRouter() {
   const location = useLocation();
@@ -109,14 +144,16 @@ function AppRouter() {
 function App() {
   return (
     <div className="App">
-      <BrowserRouter>
-        <PlatformConfigProvider>
-          <AuthProvider>
-            <AppRouter />
-            <Toaster position="top-right" />
-          </AuthProvider>
-        </PlatformConfigProvider>
-      </BrowserRouter>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <PlatformConfigProvider>
+            <AuthProvider>
+              <AppRouter />
+              <Toaster position="top-right" />
+            </AuthProvider>
+          </PlatformConfigProvider>
+        </BrowserRouter>
+      </ErrorBoundary>
     </div>
   );
 }

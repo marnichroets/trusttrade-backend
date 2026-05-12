@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import PhotoUploader from '../components/PhotoUploader';
@@ -208,7 +208,7 @@ function NewTransaction() {
   const itemPrice = parseFloat(formData.item_price) || 0;
   const minimumTransactionAmount = getDefaultMinimumTransactionAmount(platformConfig);
   const maximumTransactionAmount = Number(platformConfig.maximum_transaction || 10000);
-  const payoutSchedule = getPayoutScheduleMessage(new Date(), platformConfig);
+  const payoutSchedule = useMemo(() => getPayoutScheduleMessage(new Date(), platformConfig), [platformConfig]);
   const platformFee = Math.max(itemPrice * 0.02, 5);
   const trusttradeFee = platformFee; // alias kept for any legacy references
   const sellerPayout = itemPrice; // seller receives full item price; fee is collected from buyer separately

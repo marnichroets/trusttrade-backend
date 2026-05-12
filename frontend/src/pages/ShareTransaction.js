@@ -212,7 +212,7 @@ function ShareTransaction() {
                 </div>
                 <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
                   <span className="font-semibold">Buyer Pays Total:</span>
-                  <span className="font-mono font-bold text-primary text-xl">R {transaction.total.toFixed(2)}</span>
+                  <span className="font-mono font-bold text-primary text-xl">R {(transaction.total ?? (transaction.item_price + Math.max(transaction.item_price * 0.02, 5))).toFixed(2)}</span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">The platform fee is collected by TrustTrade directly. The seller receives the full item value.</p>
               </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
 import Timeline from '../components/Timeline';
@@ -362,7 +362,7 @@ function TransactionDetail() {
   const [phoneVerificationContext, setPhoneVerificationContext] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const { config: platformConfig } = usePlatformConfig();
-  const payoutSchedule = getPayoutScheduleMessage(new Date(), platformConfig);
+  const payoutSchedule = useMemo(() => getPayoutScheduleMessage(new Date(), platformConfig), [platformConfig]);
   const navigate = useNavigate();
   const { transactionId } = useParams();
 

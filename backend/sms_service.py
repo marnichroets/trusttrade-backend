@@ -273,7 +273,7 @@ async def send_funds_released_sms(
     amount: float
 ) -> Dict[str, Any]:
     """Send SMS when funds are released to seller."""
-    message = f"TrustTrade: R{amount:.2f} has been released to your account. Thank you for using TrustTrade!"
+    message = f"TrustTrade: R{amount:.2f} released to wallet. Bank payout release scheduled — bank clearing may take up to 2 business days."
     return await send_sms(to_phone, message)
 
 

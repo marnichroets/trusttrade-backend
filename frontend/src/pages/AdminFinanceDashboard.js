@@ -689,7 +689,7 @@ export default function AdminFinanceDashboard() {
                 </div>
                 <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
                   <Clock className="h-3.5 w-3.5" />
-                  Same-day target · next-business-day target · 2 business day maximum messaging
+                  Next payout release · Bank clearing may take up to 2 business days
                 </span>
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-5">

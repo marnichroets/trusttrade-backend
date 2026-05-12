@@ -179,7 +179,7 @@ function FinalizedEscrowState({ transaction, uiState, payoutSchedule }) {
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 5 }}>
             <p style={{ fontSize: 15, fontWeight: 800, color: '#064e3b', margin: 0 }}>
-              Funds released from escrow
+              Funds released to wallet
             </p>
             <PayoutStatusBadge status={status} />
           </div>
@@ -294,7 +294,7 @@ function CurrentStateHeader({ uiState, flowType, userRole }) {
     if (uiState.state === 'ESCROW_LOCKED') return 'Funds secured in escrow';
     if (uiState.state === 'DELIVERY_PENDING') return flowType === 'delivery' ? 'Delivery in progress' : flowType === 'instant' ? 'Instant release processing' : 'Release conditions in progress';
     if (uiState.state === 'DELIVERED') return flowType === 'delivery' ? 'Awaiting buyer confirmation' : 'Release conditions met';
-    if (uiState.state === 'RELEASED') return 'Funds released — bank clearing pending';
+    if (uiState.state === 'RELEASED') return 'Bank payout release scheduled';
     if (uiState.state === 'COMPLETED') return 'Completed';
     if (uiState.state === 'DISPUTED') return 'Disputed';
     return uiState.label || 'Transaction status';

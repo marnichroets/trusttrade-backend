@@ -614,11 +614,11 @@ def get_delivery_confirmed_email(
 ) -> tuple[str, str]:
     """Generate delivery confirmed email content"""
     
-    subject = f"{share_code} - Delivery confirmed - funds releasing"
-    
+    subject = f"{share_code} — Release approved"
+
     if role.lower() == "seller":
-        intro_text = "The buyer has confirmed receiving the item. Funds released from escrow. Bank settlement may take up to 2 business days."
-        status_text = "Funds Releasing"
+        intro_text = "The buyer has confirmed receipt. Release approved — funds released to wallet. Bank clearing may take up to 2 business days."
+        status_text = "Release approved"
     else:
         intro_text = "Thank you for confirming delivery. The seller's funds will now be released. We hope you enjoy your purchase!"
         status_text = "Complete"
@@ -653,12 +653,12 @@ def get_funds_released_email(
 ) -> tuple[str, str]:
     """Generate funds released email content"""
     
-    subject = f"TrustTrade: Funds Released - {share_code}"
-    
+    subject = f"TrustTrade: Funds Released to Wallet - {share_code}"
+
     fee_amount = amount - net_amount
-    
-    intro_text = f"""<strong style="color: #10b981;">Congratulations! Your funds have been released!</strong>
-    
+
+    intro_text = f"""<strong style="color: #10b981;">Your funds have been released to wallet!</strong>
+
     <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 16px 0;">
         <strong>Payout Details:</strong><br><br>
         <table style="width: 100%;">
@@ -667,25 +667,25 @@ def get_funds_released_email(
             <tr style="font-weight: bold; font-size: 16px;"><td>You Receive:</td><td style="text-align: right; color: #10b981;">R {net_amount:,.2f}</td></tr>
         </table>
     </div>
-    
-    <p><strong>Expected Deposit:</strong> Payouts are processed as quickly as possible. Bank settlement may take up to 2 business days to your registered bank account.</p>
+
+    <p><strong>Bank payout release scheduled.</strong> Bank clearing may take up to 2 business days to your registered bank account.</p>
     """
-    
+
     details = {
         "Reference": share_code,
         "Item": item_description,
-        "Status": "Funds Released"
+        "Status": "Funds released to wallet"
     }
-    
+
     html_content = get_base_email_template(
-        heading="Funds Released",
+        heading="Funds Released to Wallet",
         greeting_name=recipient_name,
         intro_text=intro_text,
         details=details,
         cta_text="View Transaction",
         cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
         show_how_it_works=False,
-        status_badge="Funds Released",
+        status_badge="Funds released to wallet",
         status_color="#10b981"
     )
     

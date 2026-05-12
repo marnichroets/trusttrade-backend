@@ -43,9 +43,7 @@ export function getPendingPaymentExpiry(transaction = {}, now = new Date()) {
   const referenceDate = parseTransactionDate(
     transaction.awaiting_payment_at ||
     transaction.payment_requested_at ||
-    transaction.payment_due_at ||
-    transaction.created_at ||
-    transaction.updated_at
+    transaction.payment_due_at
   );
 
   if (!referenceDate) {
@@ -238,7 +236,7 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
   if (released) {
     return {
       state: 'RELEASED',
-      label: payout.includes('fail') ? 'Bank settlement pending' : 'Funds released',
+      label: payout.includes('fail') ? 'Bank settlement pending' : 'Bank payout release scheduled',
       description: PAYOUT_TIMING_COPY,
       secondaryLabel: PAYOUT_TIMING_SHORT,
       color: COLORS.success,

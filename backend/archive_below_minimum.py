@@ -65,15 +65,21 @@ def main():
                         help="Preview changes without writing to the database")
     parser.add_argument("--min", type=float, default=DEFAULT_MINIMUM,
                         help=f"Amount threshold in ZAR (default: {DEFAULT_MINIMUM:.0f})")
+    parser.add_argument("--mongo-url", default=settings.MONGO_URL,
+                        help="MongoDB connection string (overrides MONGO_URL env var)")
+    parser.add_argument("--db-name", default=settings.DB_NAME,
+                        help="Database name (overrides DB_NAME env var)")
     args = parser.parse_args()
 
-    client = MongoClient(settings.MONGO_URL, serverSelectionTimeoutMS=5000)
-    db = client[settings.DB_NAME]
+    client = MongoClient(args.mongo_url, serverSelectionTimeoutMS=10000)
+    db = client[args.db_name]
 
     now = datetime.now(timezone.utc).isoformat()
     threshold = args.min
 
+    mongo_display = args.mongo_url[:40] + "..." if len(args.mongo_url) > 40 else args.mongo_url
     print("\nTrustTrade — Archive sub-minimum transactions")
+    print(f"  DB        : {mongo_display}  [{args.db_name}]")
     print(f"  Threshold : R{threshold:.0f}")
     print(f"  Mode      : {'DRY RUN — no writes' if args.dry_run else 'LIVE — will write'}")
     print(f"  Timestamp : {now}\n")

@@ -129,8 +129,8 @@ async def create_deal(body: CreateDealRequest, request: Request):
             "expires_at": None, "auto_approved": False,
         },
         "dispute": None,
-        "created_at": now,
-        "updated_at": now,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
     }
 
     await db.transactions.insert_one(doc)

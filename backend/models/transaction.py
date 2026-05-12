@@ -3,7 +3,8 @@ TrustTrade Transaction Models
 Pydantic models for transaction data validation and serialization
 """
 
-from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, List
 
 
@@ -95,6 +96,13 @@ class Transaction(BaseModel):
     delivery_confirmed_at: Optional[str] = None
     released_at: Optional[str] = None
     created_at: Optional[str] = None  # Made optional for legacy records
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _coerce_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return v
 
 
 class TransactionCreate(BaseModel):

@@ -19,11 +19,11 @@ from core.database import get_database
 from core.security import get_user_from_token
 from models.user import (
     User, UserProfile, UserReport, UserReportCreate,
-    BankingDetailsUpdate, TermsAcceptance, VerificationStatus,
+    BankingDetailsUpdate, BankingChangeVerify, TermsAcceptance, VerificationStatus,
     PhoneOtpRequest, PhoneOtpVerify
 )
 from models.common import RiskAssessment
-from sms_service import send_otp_sms
+from sms_service import send_otp_sms, send_sms
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Users"])
@@ -964,7 +964,7 @@ async def get_banking_reset_status(request: Request):
     
     if not reset_request:
         return {"has_request": False}
-    
+
     return {
         "has_request": True,
         "request_id": reset_request.get("request_id"),
@@ -972,3 +972,350 @@ async def get_banking_reset_status(request: Request):
         "created_at": reset_request.get("created_at"),
         "approved_at": reset_request.get("approved_at")
     }
+
+
+# ============ BANKING DETAILS CHANGE FLOW ============
+
+# In-memory OTP store for banking change requests (request_id -> otp string)
+banking_change_otp_store = {}
+
+BANKING_CHANGE_MAX_PER_DAY = 3
+BANKING_CHANGE_OTP_EXPIRY_MINUTES = 10
+BANKING_CHANGE_MAX_ATTEMPTS = 5
+BANKING_CHANGE_COOLOFF_HOURS = 24
+
+
+@router.post("/users/banking-details/change-request")
+async def initiate_banking_change(request: Request, details: BankingDetailsUpdate):
+    """
+    Start a banking details change. Sends a 6-digit OTP to the user's
+    email and (if verified) SMS. New details sit in pending state until
+    OTP is confirmed and the 24-hour cooling-off period elapses.
+    """
+    from email_service import send_banking_change_otp_email
+
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+
+    if not user_doc.get("banking_details_completed"):
+        raise HTTPException(
+            status_code=400,
+            detail="No existing banking details found. Please use the standard setup flow."
+        )
+
+    # Block if another request is already in flight
+    existing = await db.banking_change_requests.find_one({
+        "user_id": user.user_id,
+        "status": {"$in": ["pending_verification", "verified"]},
+    })
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="You already have a pending change request. Please verify or cancel it first."
+        )
+
+    # Rate limit: max 3 requests per rolling 24 hours
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    recent_count = await db.banking_change_requests.count_documents({
+        "user_id": user.user_id,
+        "created_at": {"$gt": cutoff},
+    })
+    if recent_count >= BANKING_CHANGE_MAX_PER_DAY:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many change requests today. Please try again after 24 hours."
+        )
+
+    if not details.bank_name or not details.account_number or not details.branch_code:
+        raise HTTPException(status_code=400, detail="Please fill in all required fields.")
+    if len(details.account_number) < 8:
+        raise HTTPException(status_code=400, detail="Please enter a valid account number (minimum 8 digits).")
+
+    otp = ''.join(random.choices(string.digits, k=6))
+    request_id = f"bcr_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+
+    await db.banking_change_requests.insert_one({
+        "request_id": request_id,
+        "user_id": user.user_id,
+        "new_details": {
+            "bank_name": details.bank_name,
+            "account_holder": details.account_holder,
+            "account_number": details.account_number,
+            "branch_code": details.branch_code,
+            "account_type": details.account_type,
+            "id_number": details.id_number or "",
+        },
+        "otp_expires": (now + timedelta(minutes=BANKING_CHANGE_OTP_EXPIRY_MINUTES)).isoformat(),
+        "otp_attempts": 0,
+        "status": "pending_verification",
+        "created_at": now.isoformat(),
+    })
+
+    banking_change_otp_store[request_id] = otp
+
+    # Send OTP via email (primary channel — always)
+    try:
+        await send_banking_change_otp_email(user.email, user.name, otp)
+    except Exception as e:
+        logger.error(f"[BANKING_CHANGE] OTP email failed for {user.email}: {e}")
+
+    # Send OTP via SMS if user has a verified phone
+    phone = getattr(user, "phone", None) or user_doc.get("phone")
+    sms_sent_to = None
+    if phone and user_doc.get("phone_verified"):
+        try:
+            sms_msg = (
+                f"TrustTrade security code: {otp}. "
+                f"Banking details change verification. "
+                f"Expires in {BANKING_CHANGE_OTP_EXPIRY_MINUTES} minutes. "
+                f"Do NOT share this code."
+            )
+            await send_sms(phone, sms_msg)
+            p = phone.replace("+27", "").replace(" ", "")
+            sms_sent_to = f"+27{p[:2]}****{p[-2:]}" if len(p) >= 4 else None
+        except Exception as e:
+            logger.error(f"[BANKING_CHANGE] OTP SMS failed for {user.email}: {e}")
+
+    logger.info(f"[BANKING_CHANGE] Initiated for {user.email}, request_id={request_id}")
+
+    email_masked = f"{user.email[:3]}***@{user.email.split('@')[1]}"
+    return {
+        "request_id": request_id,
+        "otp_expires_in_minutes": BANKING_CHANGE_OTP_EXPIRY_MINUTES,
+        "email_sent_to": email_masked,
+        "sms_sent_to": sms_sent_to,
+    }
+
+
+@router.post("/users/banking-details/change-request/verify")
+async def verify_banking_change(request: Request, data: BankingChangeVerify):
+    """
+    Verify the OTP for a banking change request and start the 24-hour cooling-off.
+    """
+    from email_service import send_banking_change_confirmed_email
+
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    change_req = await db.banking_change_requests.find_one({
+        "request_id": data.request_id,
+        "user_id": user.user_id,
+        "status": "pending_verification",
+    })
+    if not change_req:
+        raise HTTPException(
+            status_code=404,
+            detail="Change request not found or already processed."
+        )
+
+    now = datetime.now(timezone.utc)
+
+    # Check OTP expiry
+    otp_expires = datetime.fromisoformat(change_req["otp_expires"].replace("Z", "+00:00"))
+    if now > otp_expires:
+        await db.banking_change_requests.update_one(
+            {"request_id": data.request_id},
+            {"$set": {"status": "expired"}}
+        )
+        banking_change_otp_store.pop(data.request_id, None)
+        raise HTTPException(
+            status_code=400,
+            detail="Verification code expired. Please start a new change request."
+        )
+
+    # Check attempt cap
+    attempts = change_req.get("otp_attempts", 0)
+    if attempts >= BANKING_CHANGE_MAX_ATTEMPTS:
+        await db.banking_change_requests.update_one(
+            {"request_id": data.request_id},
+            {"$set": {"status": "locked"}}
+        )
+        banking_change_otp_store.pop(data.request_id, None)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many incorrect attempts. Please start a new change request."
+        )
+
+    stored_otp = banking_change_otp_store.get(data.request_id)
+    if not stored_otp or stored_otp != data.otp.strip():
+        await db.banking_change_requests.update_one(
+            {"request_id": data.request_id},
+            {"$inc": {"otp_attempts": 1}}
+        )
+        remaining = BANKING_CHANGE_MAX_ATTEMPTS - attempts - 1
+        raise HTTPException(
+            status_code=400,
+            detail=f"Incorrect code. {max(remaining, 0)} attempt(s) remaining."
+        )
+
+    # OTP correct — start cooling-off period
+    activates_at = now + timedelta(hours=BANKING_CHANGE_COOLOFF_HOURS)
+
+    await db.banking_change_requests.update_one(
+        {"request_id": data.request_id},
+        {"$set": {
+            "status": "verified",
+            "verified_at": now.isoformat(),
+            "activates_at": activates_at.isoformat(),
+        }}
+    )
+    banking_change_otp_store.pop(data.request_id, None)
+
+    new_details = change_req["new_details"]
+    try:
+        await send_banking_change_confirmed_email(
+            user.email, user.name, new_details["bank_name"], activates_at.isoformat()
+        )
+    except Exception as e:
+        logger.error(f"[BANKING_CHANGE] Confirmation email failed for {user.email}: {e}")
+
+    logger.info(f"[BANKING_CHANGE] Verified for {user.email}, activates {activates_at.isoformat()}")
+
+    return {
+        "message": "Verification successful. New banking details will activate after the 24-hour security hold.",
+        "activates_at": activates_at.isoformat(),
+    }
+
+
+@router.get("/users/banking-details/change-request/status")
+async def get_banking_change_status(request: Request):
+    """
+    Return any in-flight banking change request for the current user.
+    Auto-activates the new details once the cooling-off period has elapsed.
+    """
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    change_req = await db.banking_change_requests.find_one(
+        {"user_id": user.user_id, "status": {"$in": ["pending_verification", "verified"]}},
+        sort=[("created_at", -1)],
+    )
+
+    if not change_req:
+        return {"has_pending": False}
+
+    now = datetime.now(timezone.utc)
+
+    # Auto-activate once cooling-off has passed
+    if change_req["status"] == "verified":
+        activates_at = datetime.fromisoformat(change_req["activates_at"].replace("Z", "+00:00"))
+        if now >= activates_at:
+            await _activate_banking_change(db, user, change_req)
+            return {"has_pending": False, "just_activated": True}
+
+    new_details = change_req["new_details"]
+    return {
+        "has_pending": True,
+        "request_id": change_req["request_id"],
+        "status": change_req["status"],
+        "created_at": change_req["created_at"],
+        "activates_at": change_req.get("activates_at"),
+        "new_bank_name": new_details["bank_name"],
+        "new_account_last4": new_details["account_number"][-4:],
+    }
+
+
+@router.delete("/users/banking-details/change-request")
+async def cancel_banking_change(request: Request):
+    """Cancel a pending or verified (still in cooling-off) banking change request."""
+    from email_service import send_banking_change_cancelled_email
+
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    change_req = await db.banking_change_requests.find_one({
+        "user_id": user.user_id,
+        "status": {"$in": ["pending_verification", "verified"]},
+    })
+    if not change_req:
+        raise HTTPException(status_code=404, detail="No pending change request found.")
+
+    banking_change_otp_store.pop(change_req["request_id"], None)
+
+    await db.banking_change_requests.update_one(
+        {"request_id": change_req["request_id"]},
+        {"$set": {
+            "status": "cancelled",
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+        }}
+    )
+
+    try:
+        await send_banking_change_cancelled_email(user.email, user.name)
+    except Exception as e:
+        logger.error(f"[BANKING_CHANGE] Cancellation email failed for {user.email}: {e}")
+
+    logger.info(f"[BANKING_CHANGE] Cancelled for {user.email}, request_id={change_req['request_id']}")
+    return {"success": True, "message": "Change request cancelled."}
+
+
+async def _activate_banking_change(db, user, change_req: dict):
+    """Apply verified banking details after the cooling-off period."""
+    from tradesafe_service import get_or_reuse_user_token, update_token_banking_details
+    from email_service import send_banking_details_activated_email
+
+    new_details = change_req["new_details"]
+    now = datetime.now(timezone.utc)
+
+    token_id = await get_or_reuse_user_token(
+        db=db,
+        user_id=user.user_id,
+        name=user.name,
+        email=user.email,
+        mobile=getattr(user, "phone", None) or "+27000000000",
+    )
+
+    if token_id:
+        try:
+            await update_token_banking_details(
+                token_id=token_id,
+                bank_name=new_details["bank_name"],
+                account_holder=new_details["account_holder"],
+                account_number=new_details["account_number"],
+                branch_code=new_details["branch_code"],
+                account_type=new_details["account_type"],
+                id_number=new_details.get("id_number", ""),
+                payout_interval="IMMEDIATE",
+                refund_interval="IMMEDIATE",
+            )
+        except Exception as e:
+            logger.error(f"[BANKING_CHANGE] TradeSafe token update failed: {e}")
+
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {
+            "banking_details": {
+                "bank_name": new_details["bank_name"],
+                "account_holder": new_details["account_holder"],
+                "account_number": new_details["account_number"][-4:],
+                "branch_code": new_details["branch_code"],
+                "account_type": new_details["account_type"],
+                "updated_at": now.isoformat(),
+            },
+            "banking_details_completed": True,
+            "tradesafe_token_id": token_id,
+        }}
+    )
+
+    await db.banking_change_requests.update_one(
+        {"request_id": change_req["request_id"]},
+        {"$set": {"status": "activated", "activated_at": now.isoformat()}}
+    )
+
+    try:
+        await send_banking_details_activated_email(user.email, user.name, new_details["bank_name"])
+    except Exception as e:
+        logger.error(f"[BANKING_CHANGE] Activation email failed for {user.email}: {e}")
+
+    logger.info(f"[BANKING_CHANGE] Activated for {user.email}, request_id={change_req['request_id']}")

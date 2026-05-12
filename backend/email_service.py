@@ -1103,6 +1103,113 @@ async def send_verification_status_email(
     return await send_email(to_email, to_name, subject, html)
 
 
+# ============ BANKING CHANGE EMAILS ============
+
+async def send_banking_change_otp_email(to_email: str, to_name: str, otp: str) -> bool:
+    """OTP verification email for a banking details change request."""
+    subject = "TrustTrade: Verify your banking details change"
+    html = get_base_email_template(
+        heading="Banking Details Change Verification",
+        greeting_name=to_name,
+        intro_text=(
+            "We received a request to change the banking details on your TrustTrade account. "
+            "Use the verification code below to confirm this request. "
+            "<strong>Do not share this code with anyone.</strong><br><br>"
+            "If you did not make this request, please contact us immediately at "
+            "<a href='mailto:trusttrade.register@gmail.com' style='color:#2563eb;'>trusttrade.register@gmail.com</a> "
+            "and secure your account."
+        ),
+        details={
+            "Verification Code": f"<span style='font-size:28px;font-weight:700;letter-spacing:6px;color:#0F1E35;font-family:monospace;'>{otp}</span>",
+            "Expires In": "10 minutes",
+            "Action Required": "Enter this code on the TrustTrade banking settings page",
+        },
+        show_how_it_works=False,
+        status_badge="Security Alert",
+        status_color="#dc2626",
+    )
+    return await send_email(to_email, to_name, subject, html)
+
+
+async def send_banking_change_confirmed_email(to_email: str, to_name: str, bank_name: str, activates_at_iso: str) -> bool:
+    """Sent when OTP is verified — cooling-off period has started."""
+    try:
+        from datetime import datetime as _dt
+        activates_dt = _dt.fromisoformat(activates_at_iso.replace("Z", "+00:00"))
+        activates_display = activates_dt.strftime("%d %B %Y at %H:%M UTC")
+    except Exception:
+        activates_display = activates_at_iso
+
+    subject = "TrustTrade: Banking details change — 24-hour security hold"
+    html = get_base_email_template(
+        heading="Banking Details Change Requested",
+        greeting_name=to_name,
+        intro_text=(
+            "Your banking details change has been verified. For your security, "
+            "the new details will be held for a <strong>24-hour cooling-off period</strong> before they become active. "
+            "During this window you can cancel the change from your account settings.<br><br>"
+            "If you did not make this change, please "
+            "<a href='mailto:trusttrade.register@gmail.com' style='color:#2563eb;'>contact support immediately</a>."
+        ),
+        details={
+            "New Bank": bank_name,
+            "Status": "Pending — cooling-off period",
+            "Activates": activates_display,
+        },
+        show_how_it_works=False,
+        status_badge="Change Pending",
+        status_color="#d97706",
+    )
+    return await send_email(to_email, to_name, subject, html)
+
+
+async def send_banking_details_activated_email(to_email: str, to_name: str, bank_name: str) -> bool:
+    """Sent when the 24-hour cooling-off period expires and details are activated."""
+    subject = "TrustTrade: Your banking details have been updated"
+    html = get_base_email_template(
+        heading="Banking Details Updated",
+        greeting_name=to_name,
+        intro_text=(
+            "The 24-hour security hold has passed and your new banking details are now active. "
+            "Future payouts will be sent to the new account.<br><br>"
+            "If you did not authorise this change, please "
+            "<a href='mailto:trusttrade.register@gmail.com' style='color:#dc2626;'>contact support immediately</a>."
+        ),
+        details={
+            "New Bank": bank_name,
+            "Status": "Active",
+            "Effective": "Now",
+        },
+        show_how_it_works=False,
+        status_badge="Details Updated",
+        status_color="#059669",
+    )
+    return await send_email(to_email, to_name, subject, html)
+
+
+async def send_banking_change_cancelled_email(to_email: str, to_name: str) -> bool:
+    """Sent when a pending banking change request is cancelled."""
+    subject = "TrustTrade: Banking details change cancelled"
+    html = get_base_email_template(
+        heading="Banking Details Change Cancelled",
+        greeting_name=to_name,
+        intro_text=(
+            "Your pending banking details change request has been cancelled. "
+            "Your existing banking details remain active and unchanged.<br><br>"
+            "If you did not cancel this request, please "
+            "<a href='mailto:trusttrade.register@gmail.com' style='color:#dc2626;'>contact support immediately</a>."
+        ),
+        details={
+            "Action": "Change cancelled",
+            "Your Details": "Unchanged — existing account still active",
+        },
+        show_how_it_works=False,
+        status_badge="Cancelled",
+        status_color="#6b7280",
+    )
+    return await send_email(to_email, to_name, subject, html)
+
+
 # ============ SMART DEAL EMAILS ============
 
 _SD_FRONTEND = os.environ.get("FRONTEND_URL", "https://www.trusttradesa.co.za")

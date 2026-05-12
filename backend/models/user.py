@@ -170,3 +170,9 @@ class PhoneOtpVerify(BaseModel):
     """Phone OTP verification"""
     phone_number: str
     otp: str
+
+
+class BankingChangeVerify(BaseModel):
+    """Verify an in-progress banking details change request"""
+    request_id: str
+    otp: str

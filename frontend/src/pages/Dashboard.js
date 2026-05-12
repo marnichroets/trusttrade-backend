@@ -335,15 +335,15 @@ function Dashboard() {
           inset: 0;
           pointer-events: none;
           background:
-            radial-gradient(circle at 24% 0%, rgba(0,209,255,0.08), transparent 36%),
-            radial-gradient(circle at 78% 18%, rgba(0,255,163,0.06), transparent 32%),
+            radial-gradient(circle at 24% 0%, rgba(0,209,255,0.04), transparent 36%),
+            radial-gradient(circle at 78% 18%, rgba(0,255,163,0.03), transparent 32%),
             linear-gradient(180deg, rgba(10,14,20,0), rgba(10,14,20,0.9));
         }
         .tt-command-panel {
           position: relative;
           border: 1px solid rgba(255,255,255,0.1);
           background: linear-gradient(145deg, rgba(28,33,40,0.88), rgba(8,12,20,0.96));
-          box-shadow: 0 18px 60px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.03);
+          box-shadow: 0 6px 20px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.03);
           backdrop-filter: blur(22px);
         }
         .tt-command-panel::after {
@@ -365,19 +365,19 @@ function Dashboard() {
         }
         .tt-live-row:hover {
           transform: translateY(-2px);
-          border-color: rgba(0,209,255,0.26) !important;
+          border-color: rgba(0,209,255,0.16) !important;
           background: rgba(0,209,255,0.03) !important;
         }
         .tt-activity-row:hover {
           transform: translateY(-1px);
-          border-color: rgba(0,209,255,0.24) !important;
+          border-color: rgba(0,209,255,0.14) !important;
           background: rgba(0,209,255,0.03) !important;
         }
         .tt-action:hover {
           transform: translateY(-2px);
-          border-color: rgba(0,209,255,0.34) !important;
+          border-color: rgba(0,209,255,0.20) !important;
           color: ${V.text} !important;
-          box-shadow: 0 10px 24px rgba(0,209,255,0.06);
+          box-shadow: 0 4px 12px rgba(0,209,255,0.04);
         }
         @media (prefers-reduced-motion: reduce) {
           .tt-live-row, .tt-action, .tt-activity-row { transition: none !important; }
@@ -544,7 +544,7 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues, no
           icon={ShieldCheck}
           label="Escrow system online"
           tone="muted"
-          color={V.sub}
+          color={V.dim}
         />
         <AccountStatusPill
           icon={RadioTower}
@@ -579,7 +579,7 @@ function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDispute
 
   return (
     <section className="tt-command-panel" style={{ minHeight: 500, padding: 22, overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 42%, rgba(0,209,255,0.12), transparent 32%), radial-gradient(circle at 72% 58%, rgba(0,255,163,0.08), transparent 30%)' }} />
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 42%, rgba(0,209,255,0.05), transparent 32%), radial-gradient(circle at 72% 58%, rgba(0,255,163,0.04), transparent 30%)' }} />
       <div style={{ position: 'relative', zIndex: 1, display: 'grid', minHeight: 456, gridTemplateRows: 'auto 1fr auto', gap: 18 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div>
@@ -593,7 +593,7 @@ function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDispute
           <button
             onClick={() => navigate('/transactions/new')}
             className="tt-action"
-            style={{ display: 'flex', alignItems: 'center', gap: 9, border: '1px solid rgba(0,209,255,0.24)', background: 'linear-gradient(135deg, rgba(0,209,255,0.1), rgba(0,255,163,0.06))', color: V.text, borderRadius: 6, padding: '12px 16px', cursor: 'pointer', fontWeight: 800 }}
+            style={{ display: 'flex', alignItems: 'center', gap: 9, border: '1px solid rgba(0,209,255,0.16)', background: 'linear-gradient(135deg, rgba(0,209,255,0.06), rgba(0,255,163,0.03))', color: V.text, borderRadius: 6, padding: '12px 16px', cursor: 'pointer', fontWeight: 800 }}
           >
             <Plus size={16} color={V.accent} />
             New Transaction
@@ -606,9 +606,9 @@ function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDispute
           <motion.div
             animate={reduceMotion ? {} : { x: ['-230px', '0px', '230px'], opacity: [0, 1, 1, 0] }}
             transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
-            style={{ position: 'absolute', zIndex: 2, width: 11, height: 11, borderRadius: '50%', background: '#E6FBFF', boxShadow: '0 0 18px rgba(0,209,255,0.55)' }}
+            style={{ position: 'absolute', zIndex: 2, width: 11, height: 11, borderRadius: '50%', background: '#E6FBFF', boxShadow: '0 0 8px rgba(0,209,255,0.22)' }}
           />
-          <div className="tt-hide-sm" style={{ position: 'absolute', left: '14%', right: '14%', top: '50%', height: 1, background: 'linear-gradient(90deg, rgba(0,209,255,0.14), rgba(0,255,163,0.5), rgba(240,180,41,0.16))' }} />
+          <div className="tt-hide-sm" style={{ position: 'absolute', left: '14%', right: '14%', top: '50%', height: 1, background: 'linear-gradient(90deg, rgba(0,209,255,0.10), rgba(0,255,163,0.18), rgba(240,180,41,0.10))' }} />
           <EscrowCore reduceMotion={reduceMotion} value={totalEscrowValue} showExactValues={showExactValues} />
         </div>
 
@@ -627,7 +627,7 @@ function FlowEndpoint({ label, value, icon: Icon, side }) {
   return (
     <div className="tt-hide-sm" style={{ position: 'absolute', [side]: 8, zIndex: 3, width: 170, border: `1px solid ${V.border}`, background: 'rgba(10,14,20,0.78)', padding: 14, backdropFilter: 'blur(16px)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', border: '1px solid rgba(0,209,255,0.22)', background: 'rgba(0,209,255,0.06)', borderRadius: 6 }}>
+        <div style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', border: '1px solid rgba(0,209,255,0.14)', background: 'rgba(0,209,255,0.04)', borderRadius: 6 }}>
           <Icon size={18} color={V.accent} />
         </div>
         <div>
@@ -645,16 +645,16 @@ function EscrowCore({ reduceMotion, value, showExactValues }) {
       <motion.div
         animate={reduceMotion ? {} : { rotate: 360 }}
         transition={{ duration: 24, repeat: Infinity, ease: 'linear' }}
-        style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'conic-gradient(from 80deg, transparent, rgba(0,209,255,0.46), rgba(0,255,163,0.36), rgba(240,180,41,0.16), transparent)', filter: 'drop-shadow(0 0 24px rgba(0,209,255,0.18))' }}
+        style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'conic-gradient(from 80deg, transparent, rgba(0,209,255,0.22), rgba(0,255,163,0.18), rgba(240,180,41,0.10), transparent)', filter: 'drop-shadow(0 0 12px rgba(0,209,255,0.08))' }}
       />
       <motion.div
-        animate={reduceMotion ? {} : { scale: [1, 1.08, 1], opacity: [0.55, 0.95, 0.55] }}
+        animate={reduceMotion ? {} : { scale: [1, 1.08, 1], opacity: [0.3, 0.6, 0.3] }}
         transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-        style={{ position: 'absolute', inset: 34, borderRadius: '50%', background: 'rgba(0,209,255,0.12)', filter: 'blur(18px)' }}
+        style={{ position: 'absolute', inset: 34, borderRadius: '50%', background: 'rgba(0,209,255,0.06)', filter: 'blur(18px)' }}
       />
-      <div style={{ position: 'relative', width: 164, height: 164, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.14)', background: 'linear-gradient(145deg, rgba(12,18,30,0.96), rgba(5,9,16,0.98))', display: 'grid', placeItems: 'center', boxShadow: 'inset 0 0 28px rgba(0,209,255,0.12), 0 0 40px rgba(0,209,255,0.1)' }}>
+      <div style={{ position: 'relative', width: 164, height: 164, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.14)', background: 'linear-gradient(145deg, rgba(12,18,30,0.96), rgba(5,9,16,0.98))', display: 'grid', placeItems: 'center', boxShadow: 'inset 0 0 16px rgba(0,209,255,0.06), 0 0 18px rgba(0,209,255,0.06)' }}>
         <div style={{ textAlign: 'center' }}>
-          <ShieldCheck size={42} color={V.success} style={{ margin: '0 auto 10px', filter: 'drop-shadow(0 0 10px rgba(0,255,163,0.35))' }} />
+          <ShieldCheck size={42} color={V.success} style={{ margin: '0 auto 10px', filter: 'drop-shadow(0 0 5px rgba(52,211,153,0.18))' }} />
           <p style={{ margin: 0, color: V.sub, fontSize: 10, fontFamily: V.mono, fontWeight: 800, letterSpacing: '0.12em' }}>LOCKED CORE</p>
           <p style={{ margin: '6px 0 0', color: V.text, fontFamily: V.mono, fontWeight: 800 }}>{displayMoney(value, showExactValues)}</p>
         </div>
@@ -697,7 +697,7 @@ function WalletCommand({ walletData, walletSegments, pendingDisputes, navigate, 
         </div>
 
         <div style={{ display: 'grid', placeItems: 'center', minHeight: 240 }}>
-          <div style={{ position: 'relative', width: 210, height: 210, borderRadius: '50%', background: ring, padding: 14, boxShadow: '0 0 42px rgba(0,209,255,0.08)' }}>
+          <div style={{ position: 'relative', width: 210, height: 210, borderRadius: '50%', background: ring, padding: 14, boxShadow: '0 0 16px rgba(0,0,0,0.10)' }}>
             <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: V.bg, display: 'grid', placeItems: 'center', border: `1px solid ${V.border}` }}>
               <div style={{ textAlign: 'center' }}>
                 <WalletCards size={31} color={V.accent} style={{ margin: '0 auto 8px' }} />
@@ -993,7 +993,7 @@ function TransactionRail({ transaction, pendingDisputes, index, user, navigate, 
               initial={false}
               animate={{ width: `${progress}%` }}
               transition={reduceMotion ? { duration: 0 } : { duration: 0.55, delay: index * 0.05 }}
-              style={{ position: 'absolute', left: 0, top: 12, height: 2, background: `linear-gradient(90deg, ${V.accent}, ${meta.color})`, boxShadow: `0 0 10px ${meta.color}55` }}
+              style={{ position: 'absolute', left: 0, top: 12, height: 2, background: `linear-gradient(90deg, ${V.accent}, ${meta.color})`, boxShadow: `0 0 4px ${meta.color}28` }}
             />
             <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(${flowSteps.length}, 1fr)` }}>
               {flowSteps.map((step, stepIndex) => {

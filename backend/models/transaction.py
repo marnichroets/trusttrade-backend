@@ -31,8 +31,9 @@ class Transaction(BaseModel):
     item_photos: List[str] = []
     item_price: float
     trusttrade_fee: Optional[float] = 0.0
+    platform_fee: Optional[float] = None  # 2% fee collected from buyer separately (not in escrow)
     total: Optional[float] = None
-    seller_receives: Optional[float] = None  # Pre-calculated payout after fee
+    seller_receives: Optional[float] = None  # Seller payout from escrow (= item_price under new fee model)
     fee_allocation: str = "SELLER_AGENT"  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
     delivery_method: str = "courier"  # "courier", "bank_deposit", "digital"
     auto_release_days: int = 3

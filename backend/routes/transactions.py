@@ -55,19 +55,25 @@ def calculate_money(item_price: float, fee_percent: float = 2.0) -> dict:
     """
     Calculate all money values using Decimal for precision.
     Returns values as floats with exactly 2 decimal places.
+
+    The platform_fee is collected from the buyer separately and is NOT held in escrow.
+    The escrow amount equals item_price, and the seller receives item_price in full.
     """
     price = Decimal(str(item_price))
     fee_rate = Decimal(str(fee_percent)) / Decimal("100")
-    
-    trusttrade_fee = (price * fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    total = (price + trusttrade_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    seller_receives = (price - trusttrade_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    
+
+    calculated_fee = (price * fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    minimum_fee = Decimal("5.00")
+    platform_fee = max(calculated_fee, minimum_fee)
+
+    total = (price + platform_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
     return {
         "item_price": float(price),
-        "trusttrade_fee": float(trusttrade_fee),
+        "platform_fee": float(platform_fee),
+        "trusttrade_fee": float(platform_fee),  # backwards-compat alias
         "total": float(total),
-        "seller_receives": float(seller_receives)
+        "seller_receives": float(price),  # seller receives full item_price from escrow
     }
 
 
@@ -376,10 +382,11 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
             detail=f"Maximum transaction amount is R{settings.MAXIMUM_TRANSACTION_AMOUNT:,.0f}. Please contact support for larger transactions."
         )
     
-    # Calculate fees using precise Decimal math (2% platform fee)
+    # Calculate fees using precise Decimal math (2% platform fee collected from buyer separately)
     money = calculate_money(transaction_data.item_price, settings.PLATFORM_FEE_PERCENT)
     item_price = money["item_price"]
-    trusttrade_fee = money["trusttrade_fee"]
+    platform_fee = money["platform_fee"]
+    trusttrade_fee = money["trusttrade_fee"]  # same value, kept for backwards compat
     total = money["total"]
     
     transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
@@ -484,10 +491,11 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "known_issues": transaction_data.known_issues or "None",
         "item_photos": [],
         "item_price": item_price,
+        "platform_fee": platform_fee,   # 2% collected from buyer separately, not in escrow
         "trusttrade_fee": trusttrade_fee,
         "total": total,
-        "seller_receives": money["seller_receives"],  # Pre-calculated for frontend
-        "fee_allocation": transaction_data.fee_allocation,  # TrustTrade fee allocation
+        "seller_receives": money["seller_receives"],  # item_price (seller gets full escrow amount)
+        "fee_allocation": "BUYER_AGENT",  # platform fee is always collected from the buyer
         "delivery_method": delivery_method,
         "auto_release_days": auto_release_days,
         "payment_status": "Pending Seller Confirmation" if transaction_data.creator_role == "buyer" else "Pending Buyer Confirmation",

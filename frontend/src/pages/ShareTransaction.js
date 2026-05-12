@@ -203,21 +203,18 @@ function ShareTransaction() {
             <div className="bg-primary/5 rounded-lg p-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Item Price:</span>
+                  <span className="text-slate-600">Item Value (escrow):</span>
                   <span className="font-mono font-medium">R {transaction.item_price.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">TrustTrade Fee (2%):</span>
-                  <span className="font-mono font-medium">R {transaction.trusttrade_fee.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Fee Paid By:</span>
-                  <Badge className="bg-blue-100 text-blue-800">{getFeePayerLabel(transaction.fee_paid_by)}</Badge>
+                  <span className="text-slate-600">TrustTrade Platform Fee (2%):</span>
+                  <span className="font-mono font-medium">R {(transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)).toFixed(2)}</span>
                 </div>
                 <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between">
-                  <span className="font-semibold">Total:</span>
+                  <span className="font-semibold">Buyer Pays Total:</span>
                   <span className="font-mono font-bold text-primary text-xl">R {transaction.total.toFixed(2)}</span>
                 </div>
+                <p className="text-xs text-slate-500 mt-1">The platform fee is collected by TrustTrade directly. The seller receives the full item value.</p>
               </div>
             </div>
           </div>

@@ -1130,9 +1130,9 @@ function TransactionDetail() {
                     <FileText size={18} color="#f97316" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#7c2d12', margin: '0 0 4px' }}>Action Required: Confirm Fee Agreement</p>
-                    <p style={{ fontSize: 13, color: '#ea580c', margin: '0 0 4px' }}>2% TrustTrade fee (min R5). {BANKING_DETAILS_PROMPT}</p>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#9a3412', margin: '0 0 14px' }}>You'll receive R {(transaction.seller_receives ?? (transaction.item_price - transaction.trusttrade_fee))?.toFixed(2)}</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#7c2d12', margin: '0 0 4px' }}>Action Required: Confirm Transaction</p>
+                    <p style={{ fontSize: 13, color: '#ea580c', margin: '0 0 4px' }}>A 2% TrustTrade platform fee is collected from the buyer separately. {BANKING_DETAILS_PROMPT}</p>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#9a3412', margin: '0 0 14px' }}>You'll receive R {(transaction.seller_receives ?? transaction.item_price)?.toFixed(2)}</p>
                     {profileIncompleteError && (
                       <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
                         <p style={{ fontSize: 13, fontWeight: 600, color: '#b91c1c', margin: '0 0 4px' }}>Complete your profile first</p>
@@ -1228,26 +1228,43 @@ function TransactionDetail() {
                 </div>
 
                 {/* Price summary */}
-                <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
-                  <p style={{ ...S.label, marginBottom: 12 }}>Payment Summary</p>
-                  {[
-                    { label: 'Item Price', value: `R ${transaction.item_price?.toFixed(2)}` },
-                    { label: 'TrustTrade Fee (2%, min R5)', value: `R ${Math.max(transaction.item_price * 0.02, 5)?.toFixed(2)}` },
-                    { label: selectedPaymentMethod === 'eft' ? 'EFT Processing (0.86%)' : selectedPaymentMethod === 'card' ? 'Card Processing (2.88%)' : selectedPaymentMethod === 'ozow' ? 'Ozow Processing (1.73%)' : 'Processing Fee', value: selectedPaymentMethod ? `R ${(transaction.item_price * (selectedPaymentMethod === 'eft' ? 0.0086 : selectedPaymentMethod === 'card' ? 0.0288 : 0.0173))?.toFixed(2)}` : '—' },
-                  ].map(r => (
-                    <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                      <span style={{ color: '#64748b' }}>{r.label}</span>
-                      <span style={{ fontWeight: 500, color: '#0f172a' }}>{r.value}</span>
+                {(() => {
+                  const platformFee = transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5);
+                  const processingRates = { eft: 0.0086, card: 0.0288, ozow: 0.0173 };
+                  const processingRate = processingRates[selectedPaymentMethod] ?? 0;
+                  const processingFee = transaction.item_price * processingRate;
+                  const totalAmount = transaction.item_price + platformFee + processingFee;
+                  return (
+                    <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
+                      <p style={{ ...S.label, marginBottom: 12 }}>Payment Breakdown</p>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                        <span style={{ color: '#64748b' }}>Item Value (held in escrow)</span>
+                        <span style={{ fontWeight: 500, color: '#0f172a' }}>R {transaction.item_price?.toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                        <span style={{ color: '#64748b' }}>TrustTrade Platform Fee (2%)</span>
+                        <span style={{ fontWeight: 500, color: '#0f172a' }}>R {platformFee?.toFixed(2)}</span>
+                      </div>
+                      {selectedPaymentMethod && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                          <span style={{ color: '#64748b' }}>
+                            {selectedPaymentMethod === 'eft' ? 'EFT Processing (0.86%)' : selectedPaymentMethod === 'card' ? 'Card Processing (2.88%)' : 'Ozow Processing (1.73%)'}
+                          </span>
+                          <span style={{ fontWeight: 500, color: '#0f172a' }}>R {processingFee?.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Total</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>
+                          {selectedPaymentMethod ? `R ${totalAmount?.toFixed(2)}` : <span style={{ color: '#94a3b8', fontWeight: 400, fontSize: 13 }}>Select method</span>}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
+                        The 2% platform fee is collected directly by TrustTrade and is not held in escrow. The seller receives the full item value.
+                      </p>
                     </div>
-                  ))}
-                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Total Amount</span>
-                    <span style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>
-                      {selectedPaymentMethod ? `R ${(transaction.item_price * (selectedPaymentMethod === 'eft' ? 1.0286 : selectedPaymentMethod === 'card' ? 1.0488 : 1.0373) + Math.max(transaction.item_price * 0.02, 5))?.toFixed(2)}` : <span style={{ color: '#94a3b8', fontWeight: 400, fontSize: 13 }}>Select method</span>}
-                    </span>
-                  </div>
-                  {transaction.fee_allocation !== 'BUYER_AGENT' && <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 6 }}>{transaction.fee_allocation === 'SELLER_AGENT' ? 'Fees deducted from seller payout' : 'Fees split between buyer and seller'}</p>}
-                </div>
+                  );
+                })()}
 
                 <button type="button" onClick={handleGetPaymentLink} onTouchEnd={(e) => { e.preventDefault(); handleGetPaymentLink(e); }} disabled={loadingPaymentLink || !selectedPaymentMethod} data-testid="make-payment-btn" className="action-btn" style={{ ...S.btn(selectedPaymentMethod ? '#3b82f6' : '#94a3b8'), width: '100%', justifyContent: 'center', fontSize: 15, padding: '13px 20px', opacity: (loadingPaymentLink || !selectedPaymentMethod) ? 0.7 : 1 }}>
                   {loadingPaymentLink ? <><Loader2 size={15} style={{ animation: 'spin 0.8s linear infinite' }} /> Loading Payment Page...</> : selectedPaymentMethod ? <><CreditCard size={15} /> Pay into Escrow</> : <><CreditCard size={15} style={{ opacity: 0.5 }} /> Select a payment method</>}
@@ -1595,8 +1612,9 @@ function TransactionDetail() {
               {transaction.item_condition && <span style={{ ...S.pill('#f1f5f9', '#64748b'), fontSize: 10, marginBottom: 14, display: 'inline-block' }}>{transaction.item_condition}</span>}
               <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12, marginTop: 12 }}>
                 {[
-                  { label: 'Price', value: `R ${transaction.item_price.toFixed(2)}` },
-                  { label: 'TrustTrade Fee', value: `R ${transaction.trusttrade_fee.toFixed(2)}`, color: '#64748b' },
+                  { label: 'Item Value', value: `R ${transaction.item_price.toFixed(2)}` },
+                  { label: 'Platform Fee (2%)', value: `R ${(transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)).toFixed(2)}`, color: '#64748b' },
+                  { label: 'Buyer Pays', value: `R ${(transaction.total ?? (transaction.item_price + (transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)))).toFixed(2)}`, color: '#2563eb' },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
                     <span style={{ color: '#94a3b8' }}>{r.label}</span>
@@ -1605,7 +1623,7 @@ function TransactionDetail() {
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Seller Receives</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', fontFamily: 'monospace' }}>R {(transaction.seller_receives ?? (transaction.item_price - transaction.trusttrade_fee))?.toFixed(2)}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', fontFamily: 'monospace' }}>R {(transaction.seller_receives ?? transaction.item_price)?.toFixed(2)}</span>
                 </div>
               </div>
             </div>

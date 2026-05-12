@@ -165,7 +165,7 @@ function NewTransaction() {
     item_condition: '',
     known_issues: '',
     item_price: '',
-    fee_allocation: 'SELLER_AGENT',
+    fee_allocation: 'BUYER_AGENT',
     delivery_method: 'courier',
   });
   const [confirmations, setConfirmations] = useState({
@@ -209,14 +209,9 @@ function NewTransaction() {
   const minimumTransactionAmount = getDefaultMinimumTransactionAmount(platformConfig);
   const maximumTransactionAmount = Number(platformConfig.maximum_transaction || 10000);
   const payoutSchedule = getPayoutScheduleMessage(new Date(), platformConfig);
-  const trusttradeFee = Math.max(itemPrice * 0.02, 5);
-
-  let sellerPayout = itemPrice;
-  if (formData.fee_allocation === 'SELLER_AGENT') {
-    sellerPayout = itemPrice - trusttradeFee;
-  } else if (formData.fee_allocation === 'SPLIT_AGENT') {
-    sellerPayout = itemPrice - (trusttradeFee / 2);
-  }
+  const platformFee = Math.max(itemPrice * 0.02, 5);
+  const trusttradeFee = platformFee; // alias kept for any legacy references
+  const sellerPayout = itemPrice; // seller receives full item price; fee is collected from buyer separately
 
   const canProceedStep1 = role && (
     role === 'buyer'
@@ -650,89 +645,39 @@ function NewTransaction() {
                 </div>
               </div>
 
-              {/* Fee Allocation */}
-              <div style={S.card}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 4px' }}>Who pays the TrustTrade fee?</h3>
-                <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 14px' }}>2% fee (min R5) covers escrow protection</p>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {[
-                    { value: 'SELLER_AGENT', label: 'Seller pays', badge: 'Recommended', testId: 'fee-seller-agent' },
-                    { value: 'BUYER_AGENT', label: 'Buyer pays', badge: null, testId: 'fee-buyer-agent' },
-                    { value: 'SPLIT_AGENT', label: 'Split 50/50', badge: null, testId: 'fee-split-agent' },
-                  ].map(opt => {
-                    const active = formData.fee_allocation === opt.value;
-                    return (
-                      <label
-                        key={opt.value}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 12,
-                          padding: '11px 14px', borderRadius: 10,
-                          border: `1.5px solid ${active ? '#3b82f6' : '#e2e8f0'}`,
-                          background: active ? '#eff6ff' : '#fff',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s',
-                        }}
-                      >
-                        <input
-                          type="radio"
-                          name="fee_allocation"
-                          value={opt.value}
-                          checked={active}
-                          onChange={handleChange}
-                          style={{ display: 'none' }}
-                          data-testid={opt.testId}
-                        />
-                        <div style={{
-                          width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
-                          border: `2px solid ${active ? '#3b82f6' : '#cbd5e1'}`,
-                          background: active ? '#3b82f6' : '#fff',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          transition: 'all 0.15s',
-                        }}>
-                          {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
-                        </div>
-                        <span style={{ fontSize: 13, fontWeight: 500, color: '#0f172a', flex: 1 }}>{opt.label}</span>
-                        {opt.badge && (
-                          <span style={{
-                            fontSize: 10, fontWeight: 700,
-                            background: '#ecfdf5', color: '#059669',
-                            padding: '2px 7px', borderRadius: 20,
-                            letterSpacing: '0.04em', textTransform: 'uppercase',
-                          }}>
-                            {opt.badge}
-                          </span>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* Price breakdown */}
               {itemPrice >= 100 && (
                 <div style={{
-                  background: 'linear-gradient(135deg, #0f1729 0%, #1e293b 100%)',
-                  borderRadius: 12, padding: '16px 20px', marginBottom: 14,
+                  background: ‘linear-gradient(135deg, #0f1729 0%, #1e293b 100%)’,
+                  borderRadius: 12, padding: ‘16px 20px’, marginBottom: 14,
                 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Item Price</span>
-                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: '#fff' }}>
+                  <div style={{ display: ‘flex’, justifyContent: ‘space-between’, marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: ‘rgba(255,255,255,0.5)’ }}>Item Value (into escrow)</span>
+                    <span style={{ fontSize: 12, fontFamily: ‘ui-monospace, monospace’, color: ‘#fff’ }}>
                       R {itemPrice.toFixed(2)}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>TrustTrade Fee (2%, min R5)</span>
-                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
-                      âˆ’ R {trusttradeFee.toFixed(2)}
+                  <div style={{ display: ‘flex’, justifyContent: ‘space-between’, marginBottom: 12 }}>
+                    <span style={{ fontSize: 12, color: ‘rgba(255,255,255,0.5)’ }}>TrustTrade Platform Fee (2%)</span>
+                    <span style={{ fontSize: 12, fontFamily: ‘ui-monospace, monospace’, color: ‘rgba(255,255,255,0.7)’ }}>
+                      + R {platformFee.toFixed(2)}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Seller Receives</span>
-                    <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#10b981' }}>
+                  <div style={{ display: ‘flex’, justifyContent: ‘space-between’, paddingTop: 10, borderTop: ‘1px solid rgba(255,255,255,0.1)’, marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: ‘#fff’ }}>Buyer Pays Total</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, fontFamily: ‘ui-monospace, monospace’, color: ‘#60a5fa’ }}>
+                      R {(itemPrice + platformFee).toFixed(2)}
+                    </span>
+                  </div>
+                  <div style={{ display: ‘flex’, justifyContent: ‘space-between’ }}>
+                    <span style={{ fontSize: 12, color: ‘rgba(255,255,255,0.5)’ }}>Seller Receives</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, fontFamily: ‘ui-monospace, monospace’, color: ‘#10b981’ }}>
                       R {sellerPayout.toFixed(2)}
                     </span>
                   </div>
+                  <p style={{ fontSize: 10, color: ‘rgba(255,255,255,0.35)’, margin: ‘10px 0 0’, lineHeight: 1.5 }}>
+                    The 2% platform fee is collected by TrustTrade and is not held in escrow.
+                  </p>
                 </div>
               )}
 
@@ -799,7 +744,9 @@ function NewTransaction() {
                       value: role === 'buyer' ? formData.seller_name : formData.buyer_name,
                     },
                     { label: 'Item', value: formData.item_description, truncate: true },
-                    { label: 'Price', value: `R ${itemPrice.toFixed(2)}`, mono: true },
+                    { label: 'Item Value', value: `R ${itemPrice.toFixed(2)}`, mono: true },
+                    { label: 'TrustTrade Fee (2%)', value: `R ${platformFee.toFixed(2)}`, mono: true },
+                    { label: 'Buyer Pays Total', value: `R ${(itemPrice + platformFee).toFixed(2)}`, mono: true, accent: '#2563eb' },
                     { label: 'Seller Receives', value: `R ${sellerPayout.toFixed(2)}`, mono: true, accent: '#10b981' },
                     { label: 'Photos', value: `${photos.length} uploaded` },
                     { label: 'Delivery', value: formData.delivery_method.replace('_', ' ') },

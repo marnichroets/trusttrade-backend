@@ -70,6 +70,13 @@ async def _finance_reconciliation_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from core.database import get_database, create_indexes
+    try:
+        db_instance = get_database()
+        await create_indexes(db_instance)
+    except Exception as e:
+        logger.warning(f"[STARTUP] Index creation failed (non-fatal): {e}")
+
     task = asyncio.create_task(_payment_polling_loop())
     finance_task = asyncio.create_task(_finance_reconciliation_loop())
     logger.info("[STARTUP] Background payment polling loop started (5-min interval)")

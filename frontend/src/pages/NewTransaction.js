@@ -371,7 +371,7 @@ function NewTransaction() {
 
         <form onSubmit={handleSubmit}>
 
-          {/* â”€â”€ Step 1: Role & Other Party â”€â”€ */}
+          {/* â"€â"€ Step 1: Role & Other Party â"€â"€ */}
           {step === 1 && (
             <div>
               <div style={S.card}>
@@ -501,7 +501,7 @@ function NewTransaction() {
             </div>
           )}
 
-          {/* â”€â”€ Step 2: Item Details â”€â”€ */}
+          {/* â"€â"€ Step 2: Item Details â"€â"€ */}
           {step === 2 && (
             <div>
               {/* Item basics */}
@@ -518,7 +518,7 @@ function NewTransaction() {
                       name="item_description"
                       value={formData.item_description}
                       onChange={handleChange}
-                      placeholder="Describe the item in detail â€” model, specs, what's included..."
+                      placeholder="Describe the item in detail - model, specs, what's included..."
                       rows={3}
                       data-testid="item-description-input"
                     />
@@ -564,7 +564,7 @@ function NewTransaction() {
                       name="known_issues"
                       value={formData.known_issues}
                       onChange={handleChange}
-                      placeholder="None â€” leave blank if no issues"
+                      placeholder="None - leave blank if no issues"
                     />
                   </div>
 
@@ -648,34 +648,34 @@ function NewTransaction() {
               {/* Price breakdown */}
               {itemPrice >= 100 && (
                 <div style={{
-                  background: ‘linear-gradient(135deg, #0f1729 0%, #1e293b 100%)’,
-                  borderRadius: 12, padding: ‘16px 20px’, marginBottom: 14,
+                  background: 'linear-gradient(135deg, #0f1729 0%, #1e293b 100%)',
+                  borderRadius: 12, padding: '16px 20px', marginBottom: 14,
                 }}>
-                  <div style={{ display: ‘flex’, justifyContent: ‘space-between’, marginBottom: 8 }}>
-                    <span style={{ fontSize: 12, color: ‘rgba(255,255,255,0.5)’ }}>Item Value (into escrow)</span>
-                    <span style={{ fontSize: 12, fontFamily: ‘ui-monospace, monospace’, color: ‘#fff’ }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Item Value (into escrow)</span>
+                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: '#fff' }}>
                       R {itemPrice.toFixed(2)}
                     </span>
                   </div>
-                  <div style={{ display: ‘flex’, justifyContent: ‘space-between’, marginBottom: 12 }}>
-                    <span style={{ fontSize: 12, color: ‘rgba(255,255,255,0.5)’ }}>TrustTrade Platform Fee (2%)</span>
-                    <span style={{ fontSize: 12, fontFamily: ‘ui-monospace, monospace’, color: ‘rgba(255,255,255,0.7)’ }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>TrustTrade Platform Fee (2%)</span>
+                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
                       + R {platformFee.toFixed(2)}
                     </span>
                   </div>
-                  <div style={{ display: ‘flex’, justifyContent: ‘space-between’, paddingTop: 10, borderTop: ‘1px solid rgba(255,255,255,0.1)’, marginBottom: 10 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: ‘#fff’ }}>Buyer Pays Total</span>
-                    <span style={{ fontSize: 15, fontWeight: 700, fontFamily: ‘ui-monospace, monospace’, color: ‘#60a5fa’ }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Buyer Pays Total</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#60a5fa' }}>
                       R {(itemPrice + platformFee).toFixed(2)}
                     </span>
                   </div>
-                  <div style={{ display: ‘flex’, justifyContent: ‘space-between’ }}>
-                    <span style={{ fontSize: 12, color: ‘rgba(255,255,255,0.5)’ }}>Seller Receives</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, fontFamily: ‘ui-monospace, monospace’, color: ‘#10b981’ }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Seller Receives</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#10b981' }}>
                       R {sellerPayout.toFixed(2)}
                     </span>
                   </div>
-                  <p style={{ fontSize: 10, color: ‘rgba(255,255,255,0.35)’, margin: ‘10px 0 0’, lineHeight: 1.5 }}>
+                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', margin: '10px 0 0', lineHeight: 1.5 }}>
                     The 2% platform fee is collected by TrustTrade and is not held in escrow.
                   </p>
                 </div>
@@ -692,7 +692,7 @@ function NewTransaction() {
             </div>
           )}
 
-          {/* â”€â”€ Step 3: Photos â”€â”€ */}
+          {/* â"€â"€ Step 3: Photos â"€â"€ */}
           {step === 3 && (
             <div>
               <div style={S.card}>
@@ -711,7 +711,7 @@ function NewTransaction() {
                   borderRadius: 10, padding: '10px 14px', marginBottom: 16, marginTop: 14,
                 }}>
                   <p style={{ fontSize: 12, color: '#92400e', margin: 0 }}>
-                    Upload <strong>1â€“5 clear photos</strong>. Include all angles and any defects.
+                    Upload <strong>1â€"5 clear photos</strong>. Include all angles and any defects.
                   </p>
                 </div>
 
@@ -729,7 +729,7 @@ function NewTransaction() {
             </div>
           )}
 
-          {/* â”€â”€ Step 4: Confirm â”€â”€ */}
+          {/* â"€â"€ Step 4: Confirm â"€â"€ */}
           {step === 4 && (
             <div>
               {/* Summary */}

@@ -129,7 +129,7 @@ export function getFlowCopy(transaction = {}) {
       securedLabel: 'Funds secured in escrow',
       securedBuyer: 'Your payment is secured in escrow. The instant release flow will process according to the agreed terms.',
       securedSeller: 'Payment is protected in escrow. No delivery dispatch action is required for this instant flow.',
-      progressLabel: 'Instant release processing',
+      progressLabel: 'Release approved',
       progressDescription: 'Release is being processed according to the instant escrow flow.',
       confirmationLabel: 'Release conditions met',
       confirmationDescription: 'The transaction is ready for escrow release according to the instant flow.',

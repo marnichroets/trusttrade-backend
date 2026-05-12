@@ -292,7 +292,7 @@ function CurrentStateHeader({ uiState, flowType, userRole }) {
     if (uiState.state === 'EXPIRED') return 'Transaction expired due to no payment';
     if (uiState.state === 'FUNDED') return 'Awaiting buyer payment';
     if (uiState.state === 'ESCROW_LOCKED') return 'Funds secured in escrow';
-    if (uiState.state === 'DELIVERY_PENDING') return flowType === 'delivery' ? 'Delivery in progress' : flowType === 'instant' ? 'Instant release processing' : 'Release conditions in progress';
+    if (uiState.state === 'DELIVERY_PENDING') return flowType === 'delivery' ? 'Delivery in progress' : flowType === 'instant' ? 'Release approved' : 'Release conditions in progress';
     if (uiState.state === 'DELIVERED') return flowType === 'delivery' ? 'Awaiting buyer confirmation' : 'Release conditions met';
     if (uiState.state === 'RELEASED') return 'Bank payout release scheduled';
     if (uiState.state === 'COMPLETED') return 'Completed';

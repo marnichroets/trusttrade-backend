@@ -543,8 +543,8 @@ function CommandHeader({ greeting, user, showExactValues, setShowExactValues, no
         <AccountStatusPill
           icon={ShieldCheck}
           label="Escrow system online"
-          tone="muted"
-          color={V.dim}
+          tone="success"
+          color={V.success}
         />
         <AccountStatusPill
           icon={RadioTower}

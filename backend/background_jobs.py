@@ -237,6 +237,76 @@ async def expire_stale_payment_transactions(db: AsyncIOMotorDatabase) -> Dict[st
     return summary
 
 
+async def expire_inactive_pre_escrow_transactions(db: AsyncIOMotorDatabase) -> Dict[str, Any]:
+    """
+    Mark stale pre-escrow transactions as expired after 48 hours of inactivity.
+
+    Targets transactions where both parties never completed confirmation and no
+    TradeSafe escrow was ever created. This is distinct from the unpaid-payment
+    expiry, which handles transactions that reached AWAITING_PAYMENT.
+    """
+    logger.info("=== Running pre-escrow inactivity expiry check ===")
+
+    summary = {
+        "checked": 0,
+        "expired": 0,
+        "errors": 0,
+    }
+
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+        candidates = await db.transactions.find({
+            "transaction_state": {"$in": ["CREATED", "PENDING_CONFIRMATION"]},
+            "tradesafe_id": {"$in": [None, ""]},
+            "created_at": {"$lt": cutoff},
+            "$or": [
+                {"archived": {"$ne": True}},
+                {"archived": {"$exists": False}},
+            ],
+        }, {"_id": 0}).to_list(250)
+
+        summary["checked"] = len(candidates)
+        if not candidates:
+            return summary
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        for txn in candidates:
+            try:
+                transaction_id = txn.get("transaction_id")
+                timeline = txn.get("timeline", [])
+                timeline.append({
+                    "status": "Transaction expired",
+                    "timestamp": now_iso,
+                    "by": "System",
+                    "details": "Transaction expired due to 48 hours of inactivity before escrow was created",
+                })
+
+                await db.transactions.update_one(
+                    {"transaction_id": transaction_id},
+                    {"$set": {
+                        "transaction_state": "EXPIRED",
+                        "payment_status": "Expired",
+                        "release_status": "Not Released",
+                        "expired_at": now_iso,
+                        "archived_at": now_iso,
+                        "archived": True,
+                        "timeline": timeline,
+                    }}
+                )
+                summary["expired"] += 1
+                logger.info(f"Expired inactive pre-escrow transaction {transaction_id}")
+            except Exception as exc:
+                summary["errors"] += 1
+                logger.error(f"Failed to expire pre-escrow transaction {txn.get('transaction_id')}: {exc}")
+    except Exception as exc:
+        summary["errors"] += 1
+        logger.error(f"Pre-escrow inactivity expiry job failed: {exc}")
+
+    logger.info(f"Pre-escrow inactivity expiry complete: {summary}")
+    return summary
+
+
 async def send_fallback_payment_notifications(db: AsyncIOMotorDatabase, txn: Dict) -> None:
     """Send payment secured notifications via fallback (with deduplication)"""
     from webhook_handler import (
@@ -565,6 +635,12 @@ async def start_background_jobs(
                 await expire_stale_payment_transactions(db)
             except Exception as e:
                 logger.error(f"Expiry job failed: {e}")
+
+            # Expire pre-escrow transactions with no activity for 48 hours - every iteration
+            try:
+                await expire_inactive_pre_escrow_transactions(db)
+            except Exception as e:
+                logger.error(f"Pre-escrow inactivity expiry job failed: {e}")
             
             # Auto-release - every 2nd iteration (6 minutes)
             if iteration % 2 == 0:

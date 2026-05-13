@@ -19,7 +19,7 @@ from models.dispute import Dispute, DisputeStatusUpdate
 from models.common import (
     RiskAssessment, AdminRefundRequest, AdminReleaseRequest,
     AdminNotesRequest, AdminStatusOverride, AdminSendEmail,
-    VerificationStatusUpdate
+    VerificationStatusUpdate, AdminCancelRequest
 )
 from email_service import (
     send_email, send_verification_status_email, send_refund_email,
@@ -443,6 +443,70 @@ async def admin_override_status(request: Request, transaction_id: str, status_da
     )
     
     return {"message": f"Status overridden to {status_data.status}", "transaction_id": transaction_id}
+
+
+_CANCELLABLE_STATES = {"CREATED", "PENDING_CONFIRMATION", "AWAITING_PAYMENT"}
+_CANCELLABLE_PAYMENT_STATUSES = {
+    "Pending Seller Confirmation", "Pending Buyer Confirmation",
+    "Ready for Payment", "Awaiting Payment", "Pending Payment",
+}
+
+
+@router.post("/transactions/{transaction_id}/cancel")
+async def admin_cancel_transaction(request: Request, transaction_id: str, cancel_data: AdminCancelRequest):
+    """Admin: Cancel and archive a transaction that hasn't progressed past the payment stage."""
+    db = get_database()
+    user = await require_admin(request, db)
+
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if transaction.get("archived"):
+        raise HTTPException(status_code=400, detail="Transaction is already archived")
+
+    state = transaction.get("transaction_state", "")
+    payment_status = transaction.get("payment_status", "")
+
+    if state not in _CANCELLABLE_STATES:
+        raise HTTPException(
+            status_code=400,
+            detail="Transaction cannot be cancelled: escrow has already been created or funds are secured"
+        )
+
+    if payment_status not in _CANCELLABLE_PAYMENT_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Transaction cannot be cancelled in its current payment status: {payment_status}"
+        )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    reason = cancel_data.reason.strip() or "Cancelled by admin"
+
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": "Transaction cancelled by admin",
+        "timestamp": now_iso,
+        "by": user.email,
+        "details": reason,
+    })
+
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "transaction_state": "CANCELLED",
+            "payment_status": "Cancelled",
+            "archived": True,
+            "archived_at": now_iso,
+            "cancelled_at": now_iso,
+            "cancelled_by": user.email,
+            "cancel_reason": reason,
+            "timeline": timeline,
+        }}
+    )
+
+    logger.info(f"[ADMIN_CANCEL] txn={transaction_id} cancelled by {user.email}: {reason}")
+    return {"message": "Transaction cancelled and archived", "transaction_id": transaction_id}
 
 
 # ============ DISPUTE MANAGEMENT ============

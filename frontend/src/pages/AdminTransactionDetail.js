@@ -119,6 +119,10 @@ function AdminTransactionDetail() {
           endpoint = `/admin/transactions/${transactionId}/notes`;
           data = { notes: adminNote };
           break;
+        case 'cancel_transaction':
+          endpoint = `/admin/transactions/${transactionId}/cancel`;
+          data.reason = adminNote || 'Cancelled by admin';
+          break;
         default:
           toast.error('Unknown action');
           return;
@@ -638,7 +642,7 @@ function AdminTransactionDetail() {
                   Suspend Buyer
                 </Button>
                 
-                <Button 
+                <Button
                   onClick={() => openConfirmModal('suspend_seller', 'Suspend Seller', `Suspend seller account (${transaction.seller_name})? They will not be able to use the platform.`)}
                   disabled={actionLoading}
                   className="w-full text-white justify-center"
@@ -648,6 +652,22 @@ function AdminTransactionDetail() {
                   <Ban className="w-4 h-4 mr-2" />
                   Suspend Seller
                 </Button>
+
+                {['CREATED', 'PENDING_CONFIRMATION', 'AWAITING_PAYMENT'].includes(transaction.transaction_state) && !transaction.archived && (
+                  <>
+                    <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: 4 }} />
+                    <Button
+                      onClick={() => openConfirmModal('cancel_transaction', 'Cancel Transaction', `Cancel transaction ${transaction.share_code}? This will archive the transaction and cannot be undone.`)}
+                      disabled={actionLoading}
+                      className="w-full text-white justify-center"
+                      style={{ backgroundColor: COLORS.error }}
+                      data-testid="cancel-transaction-btn"
+                    >
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Cancel Transaction
+                    </Button>
+                  </>
+                )}
               </div>
               
               {/* Admin Notes Section */}
@@ -751,12 +771,12 @@ function AdminTransactionDetail() {
               onClick={handleAction} 
               disabled={actionLoading}
               className="text-white"
-              style={{ 
-                backgroundColor: confirmModal.action.includes('refund') || confirmModal.action.includes('suspend') 
-                  ? COLORS.error 
-                  : confirmModal.action.includes('release') 
-                    ? COLORS.green 
-                    : COLORS.primary 
+              style={{
+                backgroundColor: confirmModal.action.includes('refund') || confirmModal.action.includes('suspend') || confirmModal.action === 'cancel_transaction'
+                  ? COLORS.error
+                  : confirmModal.action.includes('release')
+                    ? COLORS.green
+                    : COLORS.primary
               }}
             >
               {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm'}

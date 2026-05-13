@@ -48,3 +48,8 @@ class VerificationStatusUpdate(BaseModel):
     """Admin verification status update"""
     status: str  # "pending", "verified", "rejected"
     notes: str = ""
+
+
+class AdminCancelRequest(BaseModel):
+    """Admin cancel transaction request"""
+    reason: str = ""

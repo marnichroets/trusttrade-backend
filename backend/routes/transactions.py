@@ -576,7 +576,7 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     
     # If recipient was invited via phone, also send SMS
     if recipient_type == "phone" and recipient_phone:
-        share_link = f"{base_url}/share/{share_code}"
+        share_link = f"{base_url}/t/{share_code}"
         await send_transaction_invite_sms(
             to_phone=recipient_phone,
             sender_name=user.name,

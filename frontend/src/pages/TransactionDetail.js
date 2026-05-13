@@ -4,7 +4,6 @@ import DashboardLayout from '../components/DashboardLayout';
 import Timeline from '../components/Timeline';
 import TransactionActivityFeed from '../components/TransactionActivityFeed';
 import { TransactionTimeline } from '../components/TransactionTimeline';
-import TransactionStatusCard from '../components/TransactionStatusCard';
 import StepProgressTracker from '../components/StepProgressTracker';
 import { getFlowCopy, getTransactionFlowType, mapEscrowUiStateToTimelineState, resolveEscrowUiState } from '../components/transactionState';
 import { Textarea } from '../components/ui/textarea';
@@ -1005,27 +1004,6 @@ function TransactionDetail() {
             </div>
 
             <NextStepCard nextStep={nextStep} />
-
-            {/* Status card */}
-            <TransactionStatusCard transaction={transaction} userRole={isBuyer ? 'buyer' : (isSeller ? 'seller' : 'viewer')} />
-
-            {/* Escrow protection banner */}
-            <div style={{ background: 'linear-gradient(135deg,#0f1729,#1e293b)', borderRadius: 14, padding: '16px 20px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <Shield size={16} color="#10b981" />
-              </div>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#fff', margin: '0 0 6px' }}>TrustTrade Escrow Protection</p>
-                <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {['Funds held securely in escrow', 'Seller paid only after release conditions are met', payoutSchedule.copy].map((t, i) => (
-                    <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
-                      <CheckCircle2 size={11} color={i < 2 ? '#10b981' : '#60a5fa'} />
-                      {t}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
 
             {/* Risk warning */}
             {transaction.risk_level && transaction.risk_level !== 'low' && (

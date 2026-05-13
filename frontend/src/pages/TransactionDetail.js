@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
+import EmailVerificationPrompt from '../components/EmailVerificationPrompt';
 import Timeline from '../components/Timeline';
 import TransactionActivityFeed from '../components/TransactionActivityFeed';
 import { TransactionTimeline } from '../components/TransactionTimeline';
@@ -360,6 +361,7 @@ function TransactionDetail() {
   const [smsSent, setSmsSent] = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
   const [wrongAccount, setWrongAccount] = useState(null);
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
   const [phoneVerificationContext, setPhoneVerificationContext] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const { config: platformConfig } = usePlatformConfig();
@@ -525,7 +527,7 @@ function TransactionDetail() {
     if (!window.confirm('Are you sure you want to confirm delivery and release the funds to the seller?')) return;
     setConfirming(true);
     try { await api.patch(`${API}/transactions/${transactionId}/delivery`, { delivery_confirmed: true }, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
-    catch (error) { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery'); }
+    catch (error) { if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') { setEmailVerificationRequired(true); } else { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery'); } }
     finally { setConfirming(false); }
   };
 
@@ -543,7 +545,7 @@ function TransactionDetail() {
     if (!window.confirm(`Confirm you are satisfied and want to release the funds to the seller? ${payoutSchedule.copy} This action cannot be undone.`)) return;
     setAcceptingDelivery(true);
     try { await api.post(`${API}/tradesafe/release-instant/${transactionId}`, {}, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
-    catch (error) { toast.error(parseErrorMessage(error) || 'Failed to release funds'); }
+    catch (error) { if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') { setEmailVerificationRequired(true); } else { toast.error(parseErrorMessage(error) || 'Failed to release funds'); } }
     finally { setAcceptingDelivery(false); }
   };
 
@@ -663,7 +665,7 @@ function TransactionDetail() {
     if (!window.confirm(`Confirm you have received the item? This will release funds from escrow. ${payoutSchedule.copy} This action cannot be undone.`)) return;
     setAcceptingDelivery(true);
     try { await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
-    catch (error) { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); }
+    catch (error) { if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') { setEmailVerificationRequired(true); } else { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); } }
     finally { setAcceptingDelivery(false); }
   };
 
@@ -682,7 +684,7 @@ function TransactionDetail() {
     if (!window.confirm(`MANUAL OVERRIDE: Confirm receipt and release funds from escrow? ${payoutSchedule.copy}`)) return;
     setAcceptingDelivery(true);
     try { await api.post(`${API}/tradesafe/manual-accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
-    catch (error) { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); }
+    catch (error) { if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') { setEmailVerificationRequired(true); } else { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); } }
     finally { setAcceptingDelivery(false); }
   };
 
@@ -1019,6 +1021,7 @@ function TransactionDetail() {
       `}</style>
 
       <div className="transaction-detail-shell">
+        {emailVerificationRequired && <EmailVerificationPrompt />}
         {/* Back */}
         <button onClick={() => navigate('/transactions')} data-testid="back-to-transactions-btn" style={{ ...S.btnOutline, marginBottom: 20 }}>
           <ArrowLeft size={13} /> Back

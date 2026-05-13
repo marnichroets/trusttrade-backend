@@ -5,6 +5,7 @@ import PhotoUploader from '../components/PhotoUploader';
 import api from '../utils/api';
 import { toast } from 'sonner';
 import { ArrowLeft, ArrowRight, User, Camera, Shield, CheckCircle, Truck, Banknote, Zap, Check, AlertCircle } from 'lucide-react';
+import EmailVerificationPrompt from '../components/EmailVerificationPrompt';
 import { usePlatformConfig } from '../context/PlatformConfigContext';
 import { getDefaultMinimumTransactionAmount, getPayoutScheduleMessage } from '../utils/payoutSchedule';
 
@@ -173,6 +174,7 @@ function NewTransaction() {
     seller_details: false,
     item_accuracy: false,
   });
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
   const { config: platformConfig } = usePlatformConfig();
   const navigate = useNavigate();
 
@@ -282,8 +284,12 @@ function NewTransaction() {
       toast.success('Transaction created! Share the link with the other party.');
       navigate(`/transactions/${transactionId}`);
     } catch (error) {
-      console.error('Failed to create transaction:', error);
-      toast.error(parseErrorMessage(error));
+      if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') {
+        setEmailVerificationRequired(true);
+      } else {
+        console.error('Failed to create transaction:', error);
+        toast.error(parseErrorMessage(error));
+      }
     } finally {
       setLoading(false);
     }
@@ -744,6 +750,7 @@ function NewTransaction() {
           {/* â"€â"€ Step 4: Confirm â"€â"€ */}
           {step === 4 && (
             <div>
+              {emailVerificationRequired && <EmailVerificationPrompt />}
               {/* Summary */}
               <div style={S.card}>
                 <h2 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', margin: '0 0 18px' }}>Review & Confirm</h2>

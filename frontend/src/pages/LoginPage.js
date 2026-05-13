@@ -45,7 +45,7 @@ export default function LoginPage() {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
-  const [unverifiedEmail, setUnverifiedEmail] = useState(null);
+  const [registrationDone, setRegistrationDone] = useState(false);
 
   const [form, setForm] = useState({
     email: '',
@@ -120,7 +120,9 @@ export default function LoginPage() {
       const response = await api.post(endpoint, payload);
 
       if (response.data.needs_verification) {
-        navigate('/verify-email', { replace: true });
+        setRegistrationDone(true);
+        setIsLoginMode(true);
+        setForm(prev => ({ ...prev, password: '' }));
         return;
       }
 
@@ -139,13 +141,8 @@ export default function LoginPage() {
       navigate(destination, { replace: true });
     } catch (error) {
       const detail = error.response?.data?.detail || 'Authentication failed';
-      if (detail === 'EMAIL_NOT_VERIFIED') {
-        setUnverifiedEmail(form.email);
-        setAuthError('Please verify your email before logging in.');
-      } else {
-        setAuthError(detail);
-        toast.error(detail);
-      }
+      setAuthError(detail);
+      toast.error(detail);
     } finally {
       setLoading(false);
     }
@@ -330,22 +327,22 @@ export default function LoginPage() {
               </Button>
             </form>
             
+            {/* Registration success */}
+            {registrationDone && (
+              <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-800">Account created!</p>
+                  <p className="text-xs text-green-700 mt-0.5">A verification link was sent to your inbox. Sign in now to get started.</p>
+                </div>
+              </div>
+            )}
+
             {/* Auth Error */}
             {authError && (
               <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm text-red-700">{authError}</p>
-                  {unverifiedEmail && (
-                    <button
-                      type="button"
-                      className="mt-2 text-sm text-blue-600 hover:underline font-medium"
-                      onClick={() => navigate('/verify-email')}
-                    >
-                      Resend verification email →
-                    </button>
-                  )}
-                </div>
+                <p className="text-sm text-red-700">{authError}</p>
               </div>
             )}
             

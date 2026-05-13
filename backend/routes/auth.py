@@ -138,11 +138,20 @@ async def register(data: RegisterRequest, response: Response):
 
     await db.users.insert_one(user_data)
 
-    # Send verification email (fire-and-forget)
+    # Send verification, welcome, and admin notification emails (fire-and-forget)
     import asyncio, email_service
     frontend_url = settings.FRONTEND_URL
     verify_url = f"{frontend_url}/verify-email?token={verification_token}"
+    signup_at = datetime.now(timezone.utc).strftime("%d %b %Y, %H:%M UTC")
     asyncio.create_task(email_service.send_verification_email(email, data.name, verify_url))
+    asyncio.create_task(email_service.send_welcome_email(email, data.name, frontend_url))
+    asyncio.create_task(email_service.send_admin_new_user_email(
+        admin_email=settings.ADMIN_EMAIL,
+        user_name=data.name,
+        user_email=email,
+        signup_method="Email",
+        signup_at=signup_at,
+    ))
 
     logger.info(f"User registered (unverified): {email}")
 
@@ -178,13 +187,6 @@ async def login(data: LoginRequest, response: Response):
     if not verify_password(data.password, user_doc["password_hash"]):
         logger.warning(f"[LOGIN] Invalid password for: {email}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
-
-    # Block unverified email/password users
-    if not user_doc.get("email_verified", True):
-        raise HTTPException(
-            status_code=403,
-            detail="EMAIL_NOT_VERIFIED"
-        )
 
     # CRITICAL: Check and update admin status dynamically
     # This ensures existing users get admin status if ADMIN_EMAIL is set later
@@ -238,6 +240,7 @@ async def login(data: LoginRequest, response: Response):
         "phone": user_doc.get("phone"),
         "phone_verified": user_doc.get("phone_verified", False),
         "id_verified": user_doc.get("id_verified", False),
+        "email_verified": user_doc.get("email_verified", True),
         "session_token": session_token
     }
 
@@ -705,6 +708,15 @@ async def google_callback(
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "last_login": datetime.now(timezone.utc).isoformat(),
             })
+            import asyncio, email_service
+            signup_at = datetime.now(timezone.utc).strftime("%d %b %Y, %H:%M UTC")
+            asyncio.create_task(email_service.send_admin_new_user_email(
+                admin_email=settings.ADMIN_EMAIL,
+                user_name=name,
+                user_email=email,
+                signup_method="Google",
+                signup_at=signup_at,
+            ))
 
         session_token = secrets.token_urlsafe(32)
         expires_at = datetime.now(timezone.utc) + timedelta(days=7)

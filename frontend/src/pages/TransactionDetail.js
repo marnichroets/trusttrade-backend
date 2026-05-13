@@ -529,6 +529,24 @@ function TransactionDetail() {
     finally { setConfirming(false); }
   };
 
+  const handleConfirmInstantRelease = async () => {
+    if (!user?.phone_verified) {
+      toast.info(PHONE_VERIFICATION_PROMPT);
+      navigate('/verify/phone');
+      return;
+    }
+    const readiness = payoutReadiness?.payout_ready ? payoutReadiness : await checkPayoutReadiness();
+    if (readiness && !readiness.payout_ready) {
+      toast.warning(readiness.issues?.join(', ') || 'Seller payout setup incomplete');
+      return;
+    }
+    if (!window.confirm(`Confirm you are satisfied and want to release the funds to the seller? ${payoutSchedule.copy} This action cannot be undone.`)) return;
+    setAcceptingDelivery(true);
+    try { await api.post(`${API}/tradesafe/release-instant/${transactionId}`, {}, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
+    catch (error) { toast.error(parseErrorMessage(error) || 'Failed to release funds'); }
+    finally { setAcceptingDelivery(false); }
+  };
+
   const handleDownloadPDF = async () => {
     try {
       const response = await api.get(`${API}/transactions/${transactionId}/agreement-pdf`, { withCredentials: true, responseType: 'blob' });
@@ -910,6 +928,7 @@ function TransactionDetail() {
   const canAcceptDeliveryTS = isActionable && !isInstantFlow && hasEscrow && isBuyer && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState) && !transaction.delivery_confirmed;
   const canManualAcceptDelivery = isActionable && !isInstantFlow && hasEscrow && isBuyer && !transaction.delivery_confirmed && (transaction.payment_status === 'Delivery in Progress' || transaction.delivery_started_at || escrowState === 'INITIATED');
   const canConfirmDelivery = isActionable && isDeliveryFlow && !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
+  const canConfirmInstantRelease = isActionable && isInstantFlow && hasEscrow && isBuyer && escrowState === 'FUNDS_RECEIVED' && !transaction.delivery_confirmed;
   const shareLink = transaction.share_code ? `${window.location.origin}/t/${transaction.share_code}` : null;
   const _fa = (transaction.fee_allocation || 'SELLER_AGENT').toUpperCase();
   const totalSecurePayment = transaction.item_price + (
@@ -1081,7 +1100,7 @@ function TransactionDetail() {
               </div>
             )}
 
-            {isBuyer && !user?.phone_verified && (canFundEscrowSetup || canMakePayment || canAcceptDeliveryTS || canManualAcceptDelivery) && (
+            {isBuyer && !user?.phone_verified && (canFundEscrowSetup || canMakePayment || canAcceptDeliveryTS || canManualAcceptDelivery || canConfirmInstantRelease) && (
               <div style={S.actionCard('#3b82f6', '#eff6ff')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1098,7 +1117,7 @@ function TransactionDetail() {
               </div>
             )}
 
-            {isSeller && !user?.banking_details_completed && (isFinalized || canStartDelivery || canManualStartDelivery || canAcceptDeliveryTS || canManualAcceptDelivery) && (
+            {isSeller && !user?.banking_details_completed && (isFinalized || canStartDelivery || canManualStartDelivery || canAcceptDeliveryTS || canManualAcceptDelivery || canConfirmInstantRelease) && (
               <div style={S.actionCard('#f59e0b', '#fffbeb')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: '#fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1382,6 +1401,33 @@ function TransactionDetail() {
                     )}
                     <button onClick={handleManualAcceptDelivery} disabled={acceptingDelivery || checkingPayoutReadiness} data-testid="manual-accept-delivery-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: (acceptingDelivery || checkingPayoutReadiness) ? 0.6 : 1 }}>
                       {acceptingDelivery ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : <><CheckCircle2 size={13} /> Confirm receipt</>}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Instant release — buyer confirms satisfaction and releases funds */}
+            {canConfirmInstantRelease && (
+              <div style={S.actionCard('#10b981', '#ecfdf5')}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 9, background: '#a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <CheckCircle2 size={18} color="#059669" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: '#064e3b', margin: '0 0 4px' }}>Confirm & Release Payment</p>
+                    <p style={{ fontSize: 13, color: '#059669', margin: '0 0 4px' }}>Your funds are secured in escrow. Once you confirm you are happy with what you received, the payment is released to the seller.</p>
+                    <p style={{ fontSize: 12, color: '#047857', background: '#d1fae5', padding: '6px 10px', borderRadius: 6, margin: '0 0 14px' }}><strong>Important:</strong> Only confirm if you are satisfied. This cannot be undone.</p>
+                    {payoutReadiness && !payoutReadiness.payout_ready && (
+                      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: '#92400e', margin: '0 0 3px' }}>Seller Payout Setup Incomplete</p>
+                        <p style={{ fontSize: 12, color: '#b45309', margin: 0 }}>{payoutReadiness.issues?.join('. ') || 'Seller must complete payout setup before funds can be released.'}</p>
+                        {payoutReadiness.can_auto_sync && <p style={{ fontSize: 12, color: '#d97706', margin: '4px 0 0' }}>The system will attempt to sync automatically when you confirm.</p>}
+                      </div>
+                    )}
+                    {checkingPayoutReadiness && <p style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}><Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> Checking payout readiness…</p>}
+                    <button onClick={handleConfirmInstantRelease} disabled={acceptingDelivery || checkingPayoutReadiness} data-testid="confirm-instant-release-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: (acceptingDelivery || checkingPayoutReadiness) ? 0.6 : 1 }}>
+                      {acceptingDelivery ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : <><CheckCircle2 size={13} /> Confirm & Release Payment</>}
                     </button>
                   </div>
                 </div>

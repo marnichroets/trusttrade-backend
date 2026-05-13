@@ -1456,6 +1456,153 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
     }
 
 
+@router.post("/release-instant/{transaction_id}")
+async def release_instant_funds(request: Request, transaction_id: str):
+    """Buyer confirms and releases funds for a digital/instant delivery transaction."""
+    db = get_database()
+
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
+    if not is_buyer and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only the buyer can release funds")
+    if is_buyer and not user.is_admin:
+        buyer_user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+        require_verified_buyer_profile(buyer_user_doc)
+
+    delivery_method = (transaction.get("delivery_method") or "").lower()
+    if delivery_method not in ("digital", "instant", "immediate"):
+        raise HTTPException(status_code=400, detail="This release action is only available for digital/instant transactions")
+
+    current_state = transaction.get("tradesafe_state")
+    if current_state != "FUNDS_RECEIVED":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot release: expected FUNDS_RECEIVED state, got {current_state}"
+        )
+
+    allocation_id = transaction.get("tradesafe_allocation_id")
+    if not allocation_id:
+        raise HTTPException(status_code=400, detail="Transaction not properly linked to TradeSafe")
+
+    from tradesafe_service import check_payout_readiness, sync_banking_to_token
+
+    seller_token_id = transaction.get("tradesafe_seller_token_id")
+    logger.info(f"[INSTANT_RELEASE] txn={transaction_id} token={seller_token_id} by={user.email}")
+
+    if not seller_token_id:
+        raise HTTPException(status_code=400, detail="Cannot release: No seller token linked. Please contact support.")
+
+    seller_email = transaction.get("seller_email")
+    seller_user = await db.users.find_one({"email": seller_email.lower()}) if seller_email else None
+    seller_banking = (seller_user or {}).get("banking_details", {}) or {}
+    seller_mobile = (seller_user or {}).get("phone") or transaction.get("seller_phone")
+    seller_has_profile_banking = has_bank_details(seller_user)
+
+    payout_check = await check_payout_readiness(seller_token_id)
+    logger.info(f"[INSTANT_RELEASE] payout check txn={transaction_id} ready={payout_check.get('ready')} issues={payout_check.get('issues')}")
+
+    sync_attempted = False
+    sync_result = None
+    if not payout_check.get("ready") and seller_has_profile_banking:
+        sync_attempted = True
+        sync_result = await sync_banking_to_token(
+            token_id=seller_token_id,
+            bank_name=seller_banking.get("bank_name"),
+            account_number=seller_banking.get("account_number"),
+            branch_code=seller_banking.get("branch_code", ""),
+            account_type=seller_banking.get("account_type", "SAVINGS"),
+            mobile=seller_mobile,
+            user=seller_user,
+            transaction=transaction,
+            given_name=transaction.get("seller_name", "").split(" ")[0],
+            family_name=" ".join(transaction.get("seller_name", "").split(" ")[1:]) or "User",
+            email=transaction.get("seller_email")
+        )
+        if sync_result.get("success"):
+            payout_check = await check_payout_readiness(seller_token_id)
+
+    if not payout_check.get("ready"):
+        issues = payout_check.get("issues", ["Unknown"])
+        logger.error(f"[INSTANT_RELEASE] blocked txn={transaction_id} sync_attempted={sync_attempted} issues={issues}")
+        raise HTTPException(status_code=400, detail=f"Cannot release: Seller payout not ready. Issues: {', '.join(issues)}.")
+
+    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
+
+    result = await accept_delivery(
+        allocation_id,
+        seller_token_id=seller_token_id,
+        amount=float(net_amount),
+    )
+
+    if not result:
+        logger.error(f"[INSTANT_RELEASE] TradeSafe accept_delivery failed for {transaction_id}")
+        raise HTTPException(status_code=500, detail="TradeSafe release call failed. Funds have NOT been released. Please retry.")
+
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": "Buyer Confirmed & Released",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "by": user.name,
+        "details": "Buyer confirmed satisfaction and released funds (instant/digital delivery)"
+    })
+    timeline.append({
+        "status": "Funds Released",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "by": "System",
+        "details": f"R{net_amount:.2f} released to seller"
+    })
+
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "tradesafe_state": "FUNDS_RELEASED",
+            "payment_status": "Completed",
+            "payout_status": "awaiting_bank_payout",
+            "withdrawal_status": "pending",
+            "delivery_confirmed": True,
+            "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "release_status": "Released",
+            "released_at": datetime.now(timezone.utc).isoformat(),
+            "funds_released_at": datetime.now(timezone.utc).isoformat(),
+            "expected_settlement_window": "up to 2 business days",
+            "payout_sla_status": "on_track",
+            "timeline": timeline,
+            "net_amount": net_amount
+        }}
+    )
+
+    seller_phone = transaction.get("seller_phone")
+    if seller_email:
+        await send_funds_released_email(
+            to_email=seller_email,
+            to_name=transaction.get("seller_name"),
+            share_code=transaction.get("share_code", transaction_id),
+            item_description=transaction["item_description"],
+            amount=transaction["item_price"],
+            net_amount=net_amount
+        )
+    if seller_phone:
+        try:
+            await send_funds_released_sms(to_phone=seller_phone, amount=net_amount)
+        except Exception as e:
+            logger.error(f"Failed to send instant-release SMS: {e}")
+
+    return {
+        "status": "funds_released",
+        "message": "Payment confirmed and funds released to seller.",
+        "state": "FUNDS_RELEASED",
+        "net_amount": net_amount,
+        "tradesafe_result": result
+    }
+
+
 @router.get("/transaction-status/{transaction_id}")
 @router.get("/status/{transaction_id}")
 async def get_tradesafe_status(request: Request, transaction_id: str):

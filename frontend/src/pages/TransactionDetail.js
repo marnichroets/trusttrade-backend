@@ -16,7 +16,7 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, FileText, User, Download, CheckCircle2, Image as ImageIcon,
   Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, Shield,
-  Loader2, Phone, Lock, RefreshCw, Clock, Banknote
+  Loader2, Phone, Lock, RefreshCw, Clock, Banknote, MessageSquare
 } from 'lucide-react';
 
 const BASE_URL = process.env.REACT_APP_API_URL || 'https://trusttrade-backend-production-3efa.up.railway.app';
@@ -357,6 +357,8 @@ function TransactionDetail() {
   const [isLockedOut, setIsLockedOut] = useState(false);
   const [lockoutMinutes, setLockoutMinutes] = useState(0);
   const [syncing, setSyncing] = useState(false);
+  const [smsSent, setSmsSent] = useState(false);
+  const [sendingSms, setSendingSms] = useState(false);
   const [wrongAccount, setWrongAccount] = useState(null);
   const [phoneVerificationContext, setPhoneVerificationContext] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -945,6 +947,19 @@ function TransactionDetail() {
     }
     return null;
   })();
+
+  const handleSendInviteSms = async () => {
+    setSendingSms(true);
+    try {
+      const { data } = await api.post(`/transactions/${transaction.transaction_id}/send-invite-sms`);
+      setSmsSent(true);
+      toast.success(`SMS sent to ${data.phone}`);
+    } catch (err) {
+      toast.error(parseErrorMessage(err));
+    } finally {
+      setSendingSms(false);
+    }
+  };
 
   const handleCopyLink = async () => {
     if (!shareLink) return;
@@ -1628,6 +1643,30 @@ function TransactionDetail() {
                     WhatsApp
                   </a>
                 </div>
+                {(isBuyer ? transaction.seller_phone : isSeller ? transaction.buyer_phone : null) && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
+                    <button
+                      onClick={handleSendInviteSms}
+                      disabled={smsSent || sendingSms}
+                      data-testid="send-invite-sms-btn"
+                      style={{
+                        ...S.btnOutline,
+                        width: '100%',
+                        justifyContent: 'center',
+                        gap: 6,
+                        opacity: (smsSent || sendingSms) ? 0.6 : 1,
+                        color: smsSent ? '#10b981' : undefined,
+                        borderColor: smsSent ? '#a7f3d0' : undefined,
+                      }}
+                    >
+                      {sendingSms
+                        ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Sending…</>
+                        : smsSent
+                          ? <><Check size={13} /> SMS sent ✓</>
+                          : <><MessageSquare size={13} /> Send SMS</>}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

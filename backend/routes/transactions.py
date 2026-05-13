@@ -1291,6 +1291,71 @@ async def rate_transaction(request: Request, transaction_id: str, rating_data: R
     return {"message": "Rating submitted", "rating": rating_data.rating}
 
 
+@router.post("/transactions/{transaction_id}/send-invite-sms")
+async def send_invite_sms(request: Request, transaction_id: str):
+    """Resend the transaction invite SMS to the other party's phone number.
+    Rate-limited to once per 60 minutes per transaction."""
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    is_buyer = (
+        transaction.get("buyer_user_id") == user.user_id or
+        transaction.get("buyer_email", "").lower() == (user.email or "").lower()
+    )
+    is_seller = (
+        transaction.get("seller_user_id") == user.user_id or
+        transaction.get("seller_email", "").lower() == (user.email or "").lower()
+    )
+    if not is_buyer and not is_seller and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Not part of this transaction")
+
+    other_phone = transaction.get("seller_phone") if is_buyer else transaction.get("buyer_phone")
+    if not other_phone:
+        raise HTTPException(status_code=400, detail="Other party has no stored phone number")
+
+    # Rate limit: once per 60 minutes
+    last_sent = transaction.get("last_invite_sms_at")
+    if last_sent:
+        try:
+            last_dt = datetime.fromisoformat(last_sent.replace("Z", "+00:00"))
+            elapsed = datetime.now(timezone.utc) - last_dt
+            if elapsed < timedelta(hours=1):
+                remaining = int((timedelta(hours=1) - elapsed).total_seconds() / 60) + 1
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"SMS already sent recently. Try again in {remaining} minutes."
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    share_code = transaction.get("share_code", transaction_id)
+    share_link = f"{settings.FRONTEND_URL}/t/{share_code}"
+
+    await send_transaction_invite_sms(
+        to_phone=other_phone,
+        sender_name=user.name,
+        share_link=share_link,
+    )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {"last_invite_sms_at": now_iso}}
+    )
+
+    display_phone = normalize_phone_for_display(other_phone)
+    logger.info(f"[SMS_INVITE] {user.email} sent invite SMS for {transaction_id} to {display_phone}")
+    return {"phone": display_phone, "sent_at": now_iso}
+
+
 # ============ PLATFORM SETTINGS ============
 
 @router.get("/platform/settings")

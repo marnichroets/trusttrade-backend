@@ -2271,3 +2271,45 @@ async def withdraw_token_funds(token_id: str, amount: float, rtc: bool = True) -
         return bool(result["tokenAccountWithdraw"])
 
     return False
+
+
+async def trigger_seller_bank_settlement(
+    seller_token_id: str,
+    net_amount: float,
+    transaction_id: str = "",
+    source: str = "release",
+) -> Dict[str, Any]:
+    """
+    Call TOKEN_WITHDRAWAL for the seller's token immediately after FUNDS_RELEASED.
+    Returns {"success": bool, "error": str | None}.
+    """
+    logger.info(
+        f"[SETTLEMENT] Triggering bank settlement — "
+        f"txn={transaction_id!r} token={seller_token_id!r} amount=R{net_amount:.2f} source={source!r}"
+    )
+
+    if not seller_token_id:
+        logger.error(f"[SETTLEMENT] No seller token ID — txn={transaction_id!r}")
+        return {"success": False, "error": "No seller token ID"}
+
+    if net_amount <= 0:
+        logger.error(f"[SETTLEMENT] Invalid net_amount={net_amount} — txn={transaction_id!r}")
+        return {"success": False, "error": f"Invalid net_amount: {net_amount}"}
+
+    try:
+        ok = await withdraw_token_funds(seller_token_id, net_amount, rtc=True)
+    except Exception as exc:
+        logger.error(f"[SETTLEMENT] Exception during withdrawal — txn={transaction_id!r} token={seller_token_id!r}: {exc}")
+        return {"success": False, "error": str(exc)}
+
+    if ok:
+        logger.info(
+            f"[SETTLEMENT] SUCCESS — txn={transaction_id!r} token={seller_token_id!r} R{net_amount:.2f}"
+        )
+        return {"success": True, "error": None}
+
+    logger.error(
+        f"[SETTLEMENT] FAILED — TradeSafe returned false — "
+        f"txn={transaction_id!r} token={seller_token_id!r} R{net_amount:.2f}"
+    )
+    return {"success": False, "error": "TradeSafe tokenAccountWithdraw returned false"}

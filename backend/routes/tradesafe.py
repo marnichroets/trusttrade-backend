@@ -1226,6 +1226,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         "details": f"R{net_amount:.2f} released to seller"
     })
 
+    now_iso = datetime.now(timezone.utc).isoformat()
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
         {"$set": {
@@ -1234,10 +1235,10 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             "payout_status": "awaiting_bank_payout",
             "withdrawal_status": "pending",
             "delivery_confirmed": True,
-            "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "delivery_confirmed_at": now_iso,
             "release_status": "Released",
-            "released_at": datetime.now(timezone.utc).isoformat(),
-            "funds_released_at": datetime.now(timezone.utc).isoformat(),
+            "released_at": now_iso,
+            "funds_released_at": now_iso,
             "expected_settlement_window": "up to 2 business days",
             "payout_sla_status": "on_track",
             "timeline": timeline,
@@ -1245,6 +1246,39 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             "net_amount": net_amount
         }}
     )
+
+    # Trigger immediate bank settlement via TOKEN_WITHDRAWAL
+    from tradesafe_service import trigger_seller_bank_settlement
+    settlement_result = await trigger_seller_bank_settlement(
+        seller_token_id=seller_token_id,
+        net_amount=float(net_amount),
+        transaction_id=transaction_id,
+        source="manual_accept_delivery",
+    )
+    logger.info(f"[MANUAL_RELEASE] settlement result txn={transaction_id}: {settlement_result}")
+    if settlement_result["success"]:
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {
+                "withdrawal_status": "succeeded",
+                "withdrawal_triggered": True,
+                "withdrawal_triggered_at": now_iso,
+                "payout_status": "payout_processing",
+                "settlement_status": "bank_processing",
+            }}
+        )
+    else:
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {
+                "withdrawal_status": "failed",
+                "withdrawal_triggered": False,
+                "withdrawal_error": settlement_result.get("error"),
+                "payout_status": "payout_failed",
+                "settlement_status": "withdrawal_failed",
+                "payout_sla_status": "critical",
+            }}
+        )
 
     # Send notifications
     seller_email = transaction.get("seller_email")
@@ -1404,6 +1438,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         "details": f"R{net_amount:.2f} released to seller"
     })
 
+    now_iso = datetime.now(timezone.utc).isoformat()
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
         {"$set": {
@@ -1412,10 +1447,10 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             "payout_status": "awaiting_bank_payout",
             "withdrawal_status": "pending",
             "delivery_confirmed": True,
-            "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "delivery_confirmed_at": now_iso,
             "release_status": "Released",
-            "released_at": datetime.now(timezone.utc).isoformat(),
-            "funds_released_at": datetime.now(timezone.utc).isoformat(),
+            "released_at": now_iso,
+            "funds_released_at": now_iso,
             "expected_settlement_window": "up to 2 business days",
             "payout_sla_status": "on_track",
             "timeline": timeline,
@@ -1423,6 +1458,39 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             "net_amount": net_amount
         }}
     )
+
+    # Trigger immediate bank settlement via TOKEN_WITHDRAWAL
+    from tradesafe_service import trigger_seller_bank_settlement
+    settlement_result = await trigger_seller_bank_settlement(
+        seller_token_id=seller_token_id,
+        net_amount=float(net_amount),
+        transaction_id=transaction_id,
+        source="manual_accept_delivery",
+    )
+    logger.info(f"[MANUAL_RELEASE] settlement result txn={transaction_id}: {settlement_result}")
+    if settlement_result["success"]:
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {
+                "withdrawal_status": "succeeded",
+                "withdrawal_triggered": True,
+                "withdrawal_triggered_at": now_iso,
+                "payout_status": "payout_processing",
+                "settlement_status": "bank_processing",
+            }}
+        )
+    else:
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {
+                "withdrawal_status": "failed",
+                "withdrawal_triggered": False,
+                "withdrawal_error": settlement_result.get("error"),
+                "payout_status": "payout_failed",
+                "settlement_status": "withdrawal_failed",
+                "payout_sla_status": "critical",
+            }}
+        )
 
     # Send notifications
     seller_email = transaction.get("seller_email")
@@ -1559,6 +1627,7 @@ async def release_instant_funds(request: Request, transaction_id: str):
         "details": f"R{net_amount:.2f} released to seller"
     })
 
+    now_iso = datetime.now(timezone.utc).isoformat()
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
         {"$set": {
@@ -1567,16 +1636,49 @@ async def release_instant_funds(request: Request, transaction_id: str):
             "payout_status": "awaiting_bank_payout",
             "withdrawal_status": "pending",
             "delivery_confirmed": True,
-            "delivery_confirmed_at": datetime.now(timezone.utc).isoformat(),
+            "delivery_confirmed_at": now_iso,
             "release_status": "Released",
-            "released_at": datetime.now(timezone.utc).isoformat(),
-            "funds_released_at": datetime.now(timezone.utc).isoformat(),
+            "released_at": now_iso,
+            "funds_released_at": now_iso,
             "expected_settlement_window": "up to 2 business days",
             "payout_sla_status": "on_track",
             "timeline": timeline,
             "net_amount": net_amount
         }}
     )
+
+    # Trigger immediate bank settlement via TOKEN_WITHDRAWAL
+    from tradesafe_service import trigger_seller_bank_settlement
+    settlement_result = await trigger_seller_bank_settlement(
+        seller_token_id=seller_token_id,
+        net_amount=float(net_amount),
+        transaction_id=transaction_id,
+        source="release_instant",
+    )
+    logger.info(f"[INSTANT_RELEASE] settlement result txn={transaction_id}: {settlement_result}")
+    if settlement_result["success"]:
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {
+                "withdrawal_status": "succeeded",
+                "withdrawal_triggered": True,
+                "withdrawal_triggered_at": now_iso,
+                "payout_status": "payout_processing",
+                "settlement_status": "bank_processing",
+            }}
+        )
+    else:
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {
+                "withdrawal_status": "failed",
+                "withdrawal_triggered": False,
+                "withdrawal_error": settlement_result.get("error"),
+                "payout_status": "payout_failed",
+                "settlement_status": "withdrawal_failed",
+                "payout_sla_status": "critical",
+            }}
+        )
 
     seller_phone = transaction.get("seller_phone")
     if seller_email:

@@ -20,6 +20,7 @@ from routes.admin import router as admin_router
 from routes.monitoring import router as monitoring_router
 from routes.webhooks import router as webhooks_router
 from routes.smart_deals import router as smart_deals_router
+from routes.ai import router as ai_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -136,6 +137,7 @@ app.include_router(admin_router)
 app.include_router(monitoring_router)
 app.include_router(webhooks_router)
 app.include_router(smart_deals_router, prefix="/api/smart-deals", tags=["smart-deals"])
+app.include_router(ai_router)
 
 logger.info(f"[STARTUP] TradeSafe webhook URL: {settings.BACKEND_URL}/api/tradesafe-webhook")
 

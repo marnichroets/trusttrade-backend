@@ -10,11 +10,14 @@ from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, HTTPException, Request
 
+import asyncio
+
 from core.config import settings
 from core.database import get_database
 from core.security import get_user_from_token
 from models.dispute import Dispute, DisputeCreate, DisputeUpdate
 from email_service import send_dispute_opened_email
+from routes.ai import analyze_dispute
 from sms_service import normalize_phone_number
 
 logger = logging.getLogger(__name__)
@@ -101,7 +104,10 @@ async def create_dispute(request: Request, dispute_data: DisputeCreate):
     }
     
     await db.disputes.insert_one(dispute)
-    
+
+    # Kick off AI dispute analysis in the background (non-blocking)
+    asyncio.create_task(analyze_dispute(dispute_id, dispute, transaction))
+
     # Mark transaction as having a dispute
     await db.transactions.update_one(
         {"transaction_id": dispute_data.transaction_id},

@@ -40,6 +40,7 @@ from sms_service import (
 )
 
 
+from routes.ai import analyze_transaction_fraud
 from tradesafe_service import (
     create_tradesafe_transaction, get_tradesafe_transaction,
     get_payment_link, start_delivery, accept_delivery,
@@ -523,7 +524,10 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     }
     
     await db.transactions.insert_one(transaction)
-    
+
+    # Kick off AI fraud analysis in the background (non-blocking)
+    asyncio.create_task(analyze_transaction_fraud(transaction_id, transaction, user_doc or {}))
+
     # Get base URL for email links
     base_url = settings.FRONTEND_URL
     

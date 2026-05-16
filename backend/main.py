@@ -102,17 +102,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-origins = [
-    "https://trusttrade-frontend-v2-6odm5x7r0-marnichroets-9889s-projects.vercel.app",
-    "https://trusttrade-frontend-v2.vercel.app",
-    "https://trusttradesa.co.za",
-    "https://www.trusttradesa.co.za",
-    "http://localhost:3000",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -160,43 +152,3 @@ try:
 except Exception as e:
     logger.warning(f"Could not mount static directory: {e}")
 
-# Simple test email endpoint (no auth required for testing)
-@app.get("/api/test-email")
-async def public_test_email(to: str = "marnichr@gmail.com"):
-    """
-    Public endpoint to test email sending.
-    GET /api/test-email?to=email@example.com
-    """
-    from email_service import send_email
-    from datetime import datetime, timezone
-
-    logger.info(f"[EMAIL TEST] Public test to {to}")
-    print(f"[EMAIL TEST] Public test starting for {to}")
-
-    try:
-        result = await send_email(
-            to_email=to,
-            to_name="Test Recipient",
-            subject="TrustTrade Email Test",
-            html_content=f"""
-            <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
-                <h1 style="color: #1a2942;">TrustTrade Email Test</h1>
-                <p>This is a test email from TrustTrade.</p>
-                <p style="background: #e8f5e9; padding: 15px; border-radius: 8px; color: #2e7d32;">
-                    ✅ If you received this, the email system is working correctly!
-                </p>
-                <p style="color: #666; font-size: 12px;">Sent at: {datetime.now(timezone.utc).isoformat()}</p>
-            </div>
-            """
-        )
-
-        print(f"[EMAIL TEST] Result: {result}")
-
-        if result:
-            return {"success": True, "message": f"Test email sent to {to}"}
-        else:
-            return {"success": False, "message": "Email service returned False - check logs"}
-
-    except Exception as e:
-        print(f"[EMAIL TEST] Exception: {str(e)}")
-        return {"success": False, "error": str(e)}

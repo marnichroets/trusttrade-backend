@@ -9,6 +9,7 @@ import secrets
 import logging
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request, Response
+from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 
 from core.config import settings
@@ -19,6 +20,8 @@ from sms_service import (
     normalize_phone_number, generate_otp, send_otp_sms,
     create_otp_record, is_otp_valid, can_resend_otp, phones_match
 )
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -55,17 +58,23 @@ class OTPVerifyRequest(BaseModel):
 
 
 def hash_password(password: str) -> str:
-    """Hash password using SHA-256 with salt"""
-    salt = secrets.token_hex(16)
-    hashed = hashlib.sha256((password + salt).encode()).hexdigest()
-    return f"{salt}:{hashed}"
+    """Hash password using bcrypt."""
+    return _pwd_context.hash(password)
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
-    """Verify password against stored hash"""
+    """
+    Verify password against stored hash.
+    Supports both bcrypt (new) and legacy SHA-256 salt:hash format.
+    """
     try:
-        salt, hashed = stored_hash.split(':')
-        return hashlib.sha256((password + salt).encode()).hexdigest() == hashed
+        if stored_hash and ":" in stored_hash and len(stored_hash) < 120:
+            # Legacy SHA-256 format: "salt:hex_hash"
+            parts = stored_hash.split(":", 1)
+            if len(parts) == 2:
+                salt, hashed = parts
+                return hashlib.sha256((password + salt).encode()).hexdigest() == hashed
+        return _pwd_context.verify(password, stored_hash)
     except Exception:
         return False
 
@@ -187,6 +196,16 @@ async def login(data: LoginRequest, response: Response):
     if not verify_password(data.password, user_doc["password_hash"]):
         logger.warning(f"[LOGIN] Invalid password for: {email}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    # Transparently migrate legacy SHA-256 hashes to bcrypt on successful login
+    stored = user_doc["password_hash"]
+    if stored and ":" in stored and len(stored) < 120:
+        new_hash = hash_password(data.password)
+        await db.users.update_one(
+            {"user_id": user_doc["user_id"]},
+            {"$set": {"password_hash": new_hash}}
+        )
+        logger.info(f"[LOGIN] Migrated legacy SHA-256 hash to bcrypt for {email}")
 
     # CRITICAL: Check and update admin status dynamically
     # This ensures existing users get admin status if ADMIN_EMAIL is set later
@@ -628,10 +647,10 @@ async def google_callback(
         logger.warning("[GOOGLE_AUTH] No code in callback")
         return fail("no_code")
 
-    # CSRF check
+    # CSRF check — reject if cookie is absent OR if values differ
     stored_state = request.cookies.get("oauth_state")
-    if stored_state and state != stored_state:
-        logger.warning("[GOOGLE_AUTH] State mismatch (CSRF)")
+    if not stored_state or state != stored_state:
+        logger.warning("[GOOGLE_AUTH] State mismatch or missing cookie (CSRF)")
         return fail("invalid_state")
 
     try:

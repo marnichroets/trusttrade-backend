@@ -205,14 +205,22 @@ async def update_user_rating(email: str, new_rating: int, db):
         count += 1
     
     avg_rating = round(total_rating / count, 1) if count > 0 else 0.0
-    
+
+    # Count all completed transactions (not just rated ones)
+    completed_count = await db.transactions.count_documents({
+        "$and": [
+            {"$or": [{"buyer_email": email}, {"seller_email": email}]},
+            {"release_status": "Released"}
+        ]
+    })
+
     # Update user with new stats
     await db.users.update_one(
         {"email": email},
         {"$set": {
             "average_rating": avg_rating,
             "total_trades": count,
-            "successful_trades": count
+            "successful_trades": completed_count
         }}
     )
     
@@ -609,8 +617,8 @@ async def list_transactions(request: Request):
         or_conditions = [
             {"buyer_user_id": user.user_id},
             {"seller_user_id": user.user_id},
-            {"buyer_email": {"$regex": f"^{user_email_lower}$", "$options": "i"}},
-            {"seller_email": {"$regex": f"^{user_email_lower}$", "$options": "i"}}
+            {"buyer_email": user_email_lower},
+            {"seller_email": user_email_lower}
         ]
         
         if user_phone:
@@ -835,11 +843,23 @@ async def seller_confirm_transaction(request: Request, transaction_id: str, conf
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
     
-    # Only seller can confirm
+    if user.suspension_flag:
+        raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")
+
+    # Only seller can confirm — support email, user_id, and phone-invited sellers
     seller_email = transaction.get("seller_email", "").lower()
     user_email = user.email.lower() if user.email else ""
-    
-    if seller_email != user_email:
+    seller_user_id = transaction.get("seller_user_id", "")
+    seller_phone = transaction.get("seller_phone", "")
+    user_phone = normalize_phone_number(getattr(user, "phone", "") or "")
+
+    is_seller = (
+        (seller_email and seller_email == user_email)
+        or (seller_user_id and seller_user_id == user.user_id)
+        or (seller_phone and user_phone and normalize_phone_number(seller_phone) == user_phone)
+    )
+
+    if not is_seller:
         logger.warning(f"Non-seller tried to confirm: user={user_email}, seller={seller_email}")
         raise HTTPException(status_code=403, detail="Only seller can confirm transaction")
     
@@ -927,15 +947,18 @@ async def buyer_confirm_transaction(request: Request, transaction_id: str, confi
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    if user.suspension_flag:
+        raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")
+
     transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
-    
+
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    
+
     # Only buyer can confirm
     buyer_email = transaction.get("buyer_email", "").lower()
     user_email = user.email.lower() if user.email else ""
-    
+
     if buyer_email != user_email:
         logger.warning(f"Non-buyer tried to confirm: user={user_email}, buyer={buyer_email}")
         raise HTTPException(status_code=403, detail="Only buyer can confirm transaction")
@@ -1056,11 +1079,14 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    if user.suspension_flag:
+        raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")
+
     transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
-    
+
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    
+
     # Only buyer can confirm
     if transaction["buyer_user_id"] != user.user_id and transaction["buyer_email"] != user.email:
         raise HTTPException(status_code=403, detail="Only buyer can confirm delivery")
@@ -1093,12 +1119,17 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
             "by": user.name
         })
         
+        # Calculate net amount before updating DB so it can be persisted for withdrawal
+        money = calculate_money(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
+        net_amount = money["seller_receives"]
+
         await db.transactions.update_one(
             {"transaction_id": transaction_id},
             {"$set": {
                 "delivery_confirmed": True,
                 "release_status": "Released",
                 "payment_status": "Released",
+                "net_amount": net_amount,  # persisted so webhook withdrawal can read it
                 "released_at": datetime.now(timezone.utc).isoformat(),
                 "funds_released_at": datetime.now(timezone.utc).isoformat(),
                 "expected_settlement_window": "up to 2 business days",
@@ -1106,10 +1137,6 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
                 "timeline": timeline
             }}
         )
-        
-        # Calculate net amount after fee using Decimal precision
-        money = calculate_money(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
-        net_amount = money["seller_receives"]
         
         # Send funds released email
         await send_funds_released_email(

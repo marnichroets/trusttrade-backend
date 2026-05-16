@@ -249,7 +249,7 @@ async def create_user_token(
     family_name: str,
     email: str,
     mobile: str,
-    id_number: str = "8501015009087",  # Valid SA ID format for sandbox
+    id_number: str = "",
 ) -> Optional[Dict[str, Any]]:
     """
     Create a TrustTrade user token for a buyer or seller.
@@ -376,12 +376,30 @@ async def get_or_create_user_token(
     name_parts = name.strip().split(' ', 1)
     given_name = name_parts[0] if name_parts else "User"
     family_name = name_parts[1] if len(name_parts) > 1 else "User"
-    
+
     logger.info(f"Split name: given={given_name}, family={family_name}")
-    
+
     # Ensure mobile is in +27 format
     if mobile and len(str(mobile).strip()) >= 9:
         mobile = _normalize_mobile(mobile)
+
+    # Fetch SA ID number from user record — never use a fake fallback
+    id_number = ""
+    if db is not None:
+        user_doc_for_id = await db.users.find_one(
+            {"email": email.lower()},
+            {"id_number": 1, "sa_id_number": 1}
+        )
+        if user_doc_for_id:
+            id_number = (
+                user_doc_for_id.get("id_number")
+                or user_doc_for_id.get("sa_id_number")
+                or ""
+            )
+    if id_number:
+        logger.info(f"[TOKEN] Using stored ID number for {email}")
+    else:
+        logger.info(f"[TOKEN] No ID number stored for {email} — creating token without idNumber")
 
     # Create a new token
     logger.info(f"CREATING NEW token for {email}")
@@ -389,7 +407,8 @@ async def get_or_create_user_token(
         given_name=given_name,
         family_name=family_name,
         email=email,
-        mobile=mobile
+        mobile=mobile,
+        id_number=id_number,
     )
     
     if token_data:
@@ -619,7 +638,10 @@ async def create_tradesafe_transaction(
     # - AGENT party with fee/feeType: TrustTrade's 2% platform margin
     # - The AGENT is linked via token ID (TrustTrade organisation token on TradeSafe)
     #
-    TRUSTTRADE_AGENT_TOKEN = "32fbUbeMWjdor4uHBJdns"  # TrustTrade organisation token
+    TRUSTTRADE_AGENT_TOKEN = os.environ.get("TRUSTTRADE_ORG_TOKEN_ID", "")
+    if not TRUSTTRADE_AGENT_TOKEN:
+        logger.error("[TRADESAFE] TRUSTTRADE_ORG_TOKEN_ID not configured — cannot create escrow")
+        return {"error": "Payment service misconfigured. Please contact support."}
 
     variables = {
         "input": {
@@ -761,13 +783,7 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
         tradesafe_id: The TradeSafe transaction ID
         redirect_urls: Optional dict with success, failure, cancel URLs
     """
-    import traceback
-    
-    print("=== get_payment_link called ===")
-    print(f"tradesafe_id: {tradesafe_id}")
-    print(f"redirect_urls: {redirect_urls}")
-    print(f"TRADESAFE_ENV: {TRADESAFE_ENV}")
-    print(f"TRADESAFE_API_URL: {TRADESAFE_API_URL}")
+    logger.info(f"[PAYMENT] get_payment_link called: tradesafe_id={tradesafe_id}, env={TRADESAFE_ENV}")
     
     # Default redirect URLs (use environment variables)
     if not redirect_urls:
@@ -794,33 +810,25 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     
     try:
         result = await execute_graphql(query, {"id": tradesafe_id})
-        print("=== GET TRANSACTION RAW RESPONSE ===")
-        print(f"Result: {result}")
-        logger.info("=== GET TRANSACTION FOR PAYMENT ===")
-        logger.info(f"Result: {result}")
+        logger.info(f"[PAYMENT] transaction fetch result: {result}")
     except Exception as e:
-        print("=== ERROR fetching transaction ===")
-        print(f"Error: {str(e)}")
-        traceback.print_exc()
+        logger.error(f"[PAYMENT] error fetching transaction {tradesafe_id}: {str(e)}", exc_info=True)
         return None
     
     if not result or 'transaction' not in result:
         if result and 'errors' in result:
-            print(f"Transaction query errors: {result['errors']}")
-            logger.error(f"Transaction query error: {result['errors']}")
-        print(f"Could not fetch transaction {tradesafe_id}")
-        logger.error(f"Could not fetch transaction {tradesafe_id}")
+            logger.error(f"[PAYMENT] transaction query error: {result['errors']}")
+        logger.error(f"[PAYMENT] could not fetch transaction {tradesafe_id}")
         return None
-    
+
     tx = result['transaction']
     tx_state = tx.get('state')
-    print(f"Transaction state: {tx_state}")
+    logger.info(f"[PAYMENT] transaction {tradesafe_id} state: {tx_state}")
     
     # Check if transaction is already fully paid
     PAID_STATES = ['FUNDS_DEPOSITED', 'FUNDS_RELEASED', 'COMPLETED', 'DELIVERED']
     if tx_state in PAID_STATES:
-        print(f"=== Transaction already in {tx_state} state - no payment needed ===")
-        logger.info(f"Transaction {tradesafe_id} already in {tx_state} state")
+        logger.info(f"[PAYMENT] transaction {tradesafe_id} already in {tx_state} state — no payment needed")
         return {
             "tradesafe_id": tx['id'],
             "state": tx_state,
@@ -832,11 +840,10 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     
     # Check if there's already a deposit with payment link (for unpaid transactions)
     deposits = tx.get('deposits', [])
-    print(f"Existing deposits: {deposits}")
+    logger.info(f"[PAYMENT] existing deposits count: {len(deposits)}")
     for deposit in deposits:
         if deposit.get('paymentLink'):
-            print(f"Found existing payment link: {deposit['paymentLink']}")
-            logger.info(f"Found existing payment link: {deposit['paymentLink']}")
+            logger.info(f"[PAYMENT] reusing existing payment link for {tradesafe_id}")
             return {
                 "tradesafe_id": tx['id'],
                 "state": tx_state,
@@ -870,35 +877,25 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
             "redirects": redirect_urls
         }
         
-        print(f"=== TRYING PAYMENT METHOD: {method} ===")
-        print(f"Request variables: {variables}")
-        logger.info(f"=== TRYING PAYMENT METHOD: {method} ===")
-        
+        logger.info(f"[PAYMENT] trying method: {method} for {tradesafe_id}")
+
         try:
             result = await execute_graphql(mutation, variables)
-            print(f"Raw result for {method}: {result}")
+            logger.info(f"[PAYMENT] {method} raw result: {result}")
         except Exception as e:
-            print(f"Exception calling transactionDeposit with {method}: {str(e)}")
-            traceback.print_exc()
+            logger.error(f"[PAYMENT] exception with {method}: {str(e)}", exc_info=True)
             continue
-        
+
         if result and 'errors' in result:
             error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
-            print(f"Method {method} failed with errors: {result['errors']}")
-            logger.warning(f"Method {method} failed: {error_msg}")
+            logger.warning(f"[PAYMENT] method {method} failed: {error_msg}")
             continue
-        
+
         if result and 'transactionDeposit' in result:
             deposit = result['transactionDeposit']
             last_deposit = deposit
             payment_link = deposit.get('paymentLink')
-            
-            print(f"Deposit created with {method}:")
-            print(f"  deposit_id: {deposit.get('id')}")
-            print(f"  paymentLink: {payment_link}")
-            print(f"  value: {deposit.get('value')}")
-            print(f"  processingFee: {deposit.get('processingFee')}")
-            logger.info(f"Deposit created with {method}: link={payment_link}, value={deposit.get('value')}")
+            logger.info(f"[PAYMENT] deposit created with {method}: link={payment_link}, value={deposit.get('value')}")
             
             if payment_link:
                 # Got a payment link - return it
@@ -916,9 +913,7 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     # If we got a deposit but no payment link (EFT case), return deposit info
     # The frontend will show bank details or instruct user
     if last_deposit:
-        print("=== Returning EFT deposit info (no payment link) ===")
-        print(f"last_deposit: {last_deposit}")
-        logger.info("Returning EFT deposit info without payment link")
+        logger.info(f"[PAYMENT] returning EFT deposit info (no payment link) for {tradesafe_id}")
         return {
             "tradesafe_id": tradesafe_id,
             "state": "PENDING_PAYMENT",
@@ -931,7 +926,7 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
             "message": "Please use bank details for EFT payment. See transaction for bank account details."
         }
     
-    print("=== get_payment_link returning None - no deposit created ===")
+    logger.error(f"[PAYMENT] get_payment_link returning None — no deposit created for {tradesafe_id}")
     return None
 
 
@@ -1322,7 +1317,7 @@ async def update_token_banking_details(
 async def update_token_payout(token_id: str, interval: str = "WALLET") -> Dict[str, Any]:
     """Update only the payout interval on a TradeSafe token (no banking changes).
     Fetches existing user fields first — TradeSafe requires user in every tokenUpdate."""
-    org_token_id = os.environ.get("TRUSTTRADE_ORG_TOKEN_ID", "32fbUbeMWjdor4uHBJdns")
+    org_token_id = os.environ.get("TRUSTTRADE_ORG_TOKEN_ID", "")
     if token_id == org_token_id:
         interval = "WALLET"
     logger.info(f"[UPDATE_TOKEN_PAYOUT] token={token_id} interval={interval} refund=WALLET")
@@ -2168,30 +2163,34 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
             "debug_message": f"balance={balance}"
         }
     
-    # Minimum withdrawal threshold: R10.00 (1000 cents) due to payout fees
-    MINIMUM_WITHDRAWAL_CENTS = 1000
-    if balance < MINIMUM_WITHDRAWAL_CENTS:
-        logger.error(f"[WITHDRAW] Balance below minimum: {balance} cents < {MINIMUM_WITHDRAWAL_CENTS} cents")
+    # TradeSafe returns balance in ZAR (rands), not cents.
+    # Convert to float for comparison and mutation value.
+    try:
+        balance_rands = round(float(balance), 2)
+    except (TypeError, ValueError):
+        balance_rands = 0.0
+
+    MINIMUM_WITHDRAWAL_RANDS = 10.0  # R10 minimum due to payout fees
+    if balance_rands < MINIMUM_WITHDRAWAL_RANDS:
+        logger.error(f"[WITHDRAW] Balance R{balance_rands:.2f} below minimum R{MINIMUM_WITHDRAWAL_RANDS:.2f}")
         return {
             "success": False,
-            "error": "Minimum withdrawal is R10.00 due to payout fees",
-            "debug_message": f"Balance R{balance/100:.2f} is below minimum R{MINIMUM_WITHDRAWAL_CENTS/100:.2f}",
-            "balance_cents": balance,
-            "minimum_cents": MINIMUM_WITHDRAWAL_CENTS
+            "error": f"Minimum withdrawal is R{MINIMUM_WITHDRAWAL_RANDS:.2f} due to payout fees",
+            "debug_message": f"Balance R{balance_rands:.2f} is below minimum R{MINIMUM_WITHDRAWAL_RANDS:.2f}",
+            "balance_rands": balance_rands,
+            "minimum_rands": MINIMUM_WITHDRAWAL_RANDS,
         }
-    
+
     # Execute withdrawal mutation - TradeSafe requires BOTH token_id AND value
     # NOTE: tokenAccountWithdraw returns Boolean, NOT an object
-    # NOTE: value is in RANDS (Float), not cents (Int)
+    # NOTE: value is in RANDS (Float)
     mutation = """
     mutation tokenAccountWithdraw($id: ID!, $value: Float!) {
         tokenAccountWithdraw(id: $id, value: $value)
     }
     """
-    
-    # Convert cents to rands (TradeSafe expects Float in rands)
-    withdrawal_value_cents = int(balance)
-    withdrawal_value_rands = withdrawal_value_cents / 100.0
+
+    withdrawal_value_rands = balance_rands
     
     logger.info(f"[WITHDRAW] Executing tokenAccountWithdraw for {token_id}")
     logger.info(f"[WITHDRAW] Value sent: R{withdrawal_value_rands:.2f}")
@@ -2221,15 +2220,11 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
         withdrawal_success = result['tokenAccountWithdraw']
         
         if withdrawal_success is True:
-            # Withdrawal initiated - balance was captured before the call
             logger.info(f"[WITHDRAW] SUCCESS - Token: {token_id}, Withdrawn: R{withdrawal_value_rands:.2f}")
-            
             return {
                 "success": True,
                 "token_id": token_id,
-                "amount_cents": withdrawal_value_cents,
                 "amount_rands": withdrawal_value_rands,
-                "new_balance_cents": 0,
                 "new_balance_rands": 0.0,
                 "message": "Withdrawal initiated successfully. Bank settlement may take up to 2 business days."
             }
@@ -2253,14 +2248,13 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
 
 async def withdraw_token_funds(token_id: str, amount: float, rtc: bool = True) -> bool:
     """Withdraw funds from a TradeSafe token wallet to the linked bank account."""
-    rtc_str = "true" if rtc else "false"
     mutation = """
-    mutation withdraw {
-        tokenAccountWithdraw(id: "%s", value: %.2f, rtc: %s)
+    mutation tokenWithdrawFunds($id: ID!, $value: Float!, $rtc: Boolean) {
+        tokenAccountWithdraw(id: $id, value: $value, rtc: $rtc)
     }
-    """ % (token_id, amount, rtc_str)
-
-    result = await execute_graphql(mutation)
+    """
+    variables = {"id": token_id, "value": round(float(amount), 2), "rtc": rtc}
+    result = await execute_graphql(mutation, variables)
     logger.info(f"[WITHDRAW_FUNDS] token={token_id} amount=R{amount:.2f} rtc={rtc} response={result}")
 
     if result and "errors" in result:

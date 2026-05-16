@@ -324,25 +324,23 @@ async def admin_release_funds(request: Request, transaction_id: str, release_dat
     
     if transaction.get("release_status") == "Released":
         raise HTTPException(status_code=400, detail="Funds already released")
-    
-    # Calculate net amount
-    fee = transaction.get("trusttrade_fee", 0)
+
+    # Fee model is BUYER_AGENT: buyer pays fee separately, seller receives full item_price.
+    # Use the pre-calculated seller_receives field if present, otherwise use item_price.
     item_price = transaction.get("item_price", 0)
-    fee_paid_by = transaction.get("fee_paid_by", "split")
-    
-    if fee_paid_by == "seller":
-        net_amount = item_price - fee
-    elif fee_paid_by == "split":
-        net_amount = item_price - (fee / 2)
-    else:
-        net_amount = item_price
-    
+    net_amount = float(
+        transaction.get("seller_receives")
+        or transaction.get("net_amount")
+        or item_price
+    )
+
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
         {"$set": {
             "payment_status": "Released",
             "release_status": "Released",
             "delivery_confirmed": True,
+            "net_amount": net_amount,  # persist for withdrawal path
             "released_at": datetime.now(timezone.utc).isoformat(),
             "released_by": user.user_id,
             "admin_release_notes": release_data.notes
@@ -689,16 +687,11 @@ async def get_escrow_details(request: Request):
         buyer_email = txn.get("buyer_email")
         seller_email = txn.get("seller_email")
         
-        fee = txn.get("trusttrade_fee", 0)
         item_price = txn.get("item_price", 0)
-        fee_paid_by = txn.get("fee_paid_by", "split")
-        
-        if fee_paid_by == "seller":
-            payable_to_seller = item_price - fee
-        elif fee_paid_by == "split":
-            payable_to_seller = item_price - (fee / 2)
-        else:
-            payable_to_seller = item_price
+        # Fee model is BUYER_AGENT: seller receives full item_price
+        payable_to_seller = float(
+            txn.get("seller_receives") or txn.get("net_amount") or item_price
+        )
         
         if buyer_email not in user_balances:
             user_balances[buyer_email] = {"as_buyer": 0, "as_seller": 0, "transactions": []}

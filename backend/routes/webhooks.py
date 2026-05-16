@@ -3,8 +3,11 @@ TrustTrade Webhook Routes
 Handles TradeSafe webhook notifications and alerts
 """
 
+import hashlib
+import hmac
 import json
 import logging
+import os
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request
 
@@ -13,6 +16,8 @@ from core.security import get_user_from_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Webhooks"])
+
+TRADESAFE_WEBHOOK_SECRET = os.environ.get("TRADESAFE_WEBHOOK_SECRET", "")
 
 
 async def _bg(coro):
@@ -228,6 +233,29 @@ async def tradesafe_webhook(request: Request):
     logger.info(f"[WEBHOOK] Body size: {len(raw_body)} bytes")
     logger.info(f"[WEBHOOK] Raw body: {raw_body.decode('utf-8', errors='replace')}")
     logger.info("=" * 60)
+
+    # Verify HMAC signature when secret is configured.
+    # TradeSafe sends the signature in X-TradeSafe-Signature as a hex-encoded HMAC-SHA256.
+    if TRADESAFE_WEBHOOK_SECRET:
+        sig_header = (
+            request.headers.get("x-tradesafe-signature")
+            or request.headers.get("X-TradeSafe-Signature")
+            or ""
+        )
+        expected_sig = hmac.new(
+            TRADESAFE_WEBHOOK_SECRET.encode("utf-8"),
+            raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not sig_header or not hmac.compare_digest(sig_header.lower(), expected_sig.lower()):
+            logger.warning(
+                f"[WEBHOOK] Signature mismatch — received={sig_header!r} expected={expected_sig!r[:12]}... REJECTING"
+            )
+            # Return 401 so TradeSafe knows the secret is wrong, but log to investigate
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+        logger.info("[WEBHOOK] Signature verified OK")
+    else:
+        logger.warning("[WEBHOOK] TRADESAFE_WEBHOOK_SECRET not set — skipping signature check")
 
     # Always return 200 so TradeSafe doesn't keep retrying on parse errors
     if not raw_body:

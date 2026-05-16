@@ -33,12 +33,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tradesafe", tags=["TradeSafe"])
 
 
-def calculate_seller_receives(item_price: float, fee_percent: float = 1.5) -> float:
+def calculate_seller_receives(item_price: float, fee_percent: float = None) -> float:
     """Calculate seller payout using Decimal precision with minimum fee."""
+    if fee_percent is None:
+        fee_percent = settings.PLATFORM_FEE_PERCENT
     price = Decimal(str(item_price))
     fee_rate = Decimal(str(fee_percent)) / Decimal("100")
     calculated_fee = (price * fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    # Apply minimum fee of R5
     min_fee = Decimal("5.00")
     fee = max(calculated_fee, min_fee)
     return float((price - fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
@@ -266,7 +267,10 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     if not user:
         logger.warning("[ESCROW] failure exact reason: Not authenticated")
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
+    if user.suspension_flag:
+        raise HTTPException(status_code=403, detail="Account suspended. Contact admin.")
+
     # Get the TrustTrade transaction
     transaction = await db.transactions.find_one(
         {"transaction_id": data.transaction_id},

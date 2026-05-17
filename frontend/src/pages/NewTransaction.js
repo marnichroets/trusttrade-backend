@@ -768,7 +768,7 @@ function NewTransaction() {
                         <label style={S.label}>Pickup Address (Seller)</label>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           <input style={S.input} placeholder="Street address" value={courierForm.pickup_street} onChange={e => setCourierForm(p => ({ ...p, pickup_street: e.target.value }))} />
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
                             <input style={S.input} placeholder="Suburb / area" value={courierForm.pickup_area} onChange={e => setCourierForm(p => ({ ...p, pickup_area: e.target.value }))} />
                             <input style={S.input} placeholder="City" value={courierForm.pickup_city} onChange={e => setCourierForm(p => ({ ...p, pickup_city: e.target.value }))} />
                           </div>
@@ -781,7 +781,7 @@ function NewTransaction() {
                         <label style={S.label}>Delivery Address (Buyer)</label>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           <input style={S.input} placeholder="Street address" value={courierForm.delivery_street} onChange={e => setCourierForm(p => ({ ...p, delivery_street: e.target.value }))} />
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
                             <input style={S.input} placeholder="Suburb / area" value={courierForm.delivery_area} onChange={e => setCourierForm(p => ({ ...p, delivery_area: e.target.value }))} />
                             <input style={S.input} placeholder="City" value={courierForm.delivery_city} onChange={e => setCourierForm(p => ({ ...p, delivery_city: e.target.value }))} />
                           </div>
@@ -792,7 +792,7 @@ function NewTransaction() {
                       {/* Parcel dimensions */}
                       <div>
                         <label style={S.label}>Parcel Details</label>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: 8 }}>
                           {[
                             { label: 'Weight (kg)', key: 'weight' },
                             { label: 'Length (cm)', key: 'length' },
@@ -835,6 +835,9 @@ function NewTransaction() {
                               const name = q?.service_level?.name ?? q?.name ?? `Option ${i + 1}`;
                               const days = q?.service_level?.delivery_days ?? q?.delivery_days;
                               const isSelected = selectedQuote === q;
+                              const chargedWeight = q?.charged_weight;
+                              const actualWeight = q?.actual_weight;
+                              const isVolumetric = chargedWeight && actualWeight && chargedWeight > actualWeight;
                               return (
                                 <label key={i} style={{
                                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -853,9 +856,16 @@ function NewTransaction() {
                                       {days && <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>{days} day{days !== 1 ? 's' : ''}</span>}
                                     </div>
                                   </div>
-                                  <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', fontFamily: 'ui-monospace, monospace' }}>
-                                    R {Number(price).toFixed(2)}
-                                  </span>
+                                  <div style={{ textAlign: 'right' }}>
+                                    <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', fontFamily: 'ui-monospace, monospace', display: 'block' }}>
+                                      R {Number(price).toFixed(2)}
+                                    </span>
+                                    {isVolumetric && (
+                                      <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                        Charged weight: {chargedWeight}kg (volumetric)
+                                      </span>
+                                    )}
+                                  </div>
                                 </label>
                               );
                             })}

@@ -502,7 +502,11 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "item_price": item_price,
         "platform_fee": platform_fee,   # 2% collected from buyer separately, not in escrow
         "trusttrade_fee": trusttrade_fee,
-        "total": total,
+        "courier_quote_id": transaction_data.courier_quote_id,
+        "courier_service_name": transaction_data.courier_service_name,
+        "courier_fee": transaction_data.courier_fee or 0.0,
+        "courier_handling_fee": transaction_data.courier_handling_fee or 0.0,
+        "total": round(total + (transaction_data.courier_fee or 0.0) + (transaction_data.courier_handling_fee or 0.0), 2),
         "seller_receives": money["seller_receives"],  # item_price (seller gets full escrow amount)
         "fee_allocation": "BUYER_AGENT",  # platform fee is always collected from the buyer
         "delivery_method": delivery_method,

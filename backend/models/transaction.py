@@ -122,6 +122,10 @@ class TransactionCreate(BaseModel):
     buyer_details_confirmed: bool
     seller_details_confirmed: bool
     item_accuracy_confirmed: bool
+    courier_quote_id: Optional[str] = None
+    courier_service_name: Optional[str] = None
+    courier_fee: Optional[float] = None
+    courier_handling_fee: Optional[float] = None
 
 
 class TransactionUpdate(BaseModel):

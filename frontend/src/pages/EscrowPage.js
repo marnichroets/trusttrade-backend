@@ -91,8 +91,8 @@ export default function EscrowPage() {
               <div className="flex items-start gap-3">
                 <Clock className="w-5 h-5 text-green-600 mt-0.5" />
                 <div>
-                  <h3 className="font-semibold text-slate-900">Auto-Release</h3>
-                  <p className="text-sm text-slate-600">Funds auto-release after 48 hours if no dispute raised</p>
+                  <h3 className="font-semibold text-slate-900">Automatic Release</h3>
+                  <p className="text-sm text-slate-600">Funds are released when you confirm receipt, or automatically after the review period if no dispute is raised</p>
                 </div>
               </div>
             </div>

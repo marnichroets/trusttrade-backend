@@ -1073,6 +1073,12 @@ function TransactionDetail() {
             )}
 
             {/* AI Fraud Analysis */}
+            {!transaction.ai_fraud_analysis && !isFinalized && (
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Loader2 size={14} color="#94a3b8" style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: '#94a3b8' }}>AI fraud analysis pending…</span>
+              </div>
+            )}
             {transaction.ai_fraud_analysis && (() => {
               const fa = transaction.ai_fraud_analysis;
               const riskPalette = {
@@ -1653,7 +1659,7 @@ function TransactionDetail() {
                 <p style={{ fontSize: 15, fontWeight: 700, color: '#064e3b', margin: '0 0 6px' }}>Final Step: Confirm Delivery</p>
                 <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>{`Have you received the item and are satisfied? Confirming releases funds from escrow. ${payoutSchedule.copy} This cannot be undone.`}</p>
                 <button onClick={handleConfirmDelivery} disabled={confirming} data-testid="confirm-delivery-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: confirming ? 0.6 : 1 }}>
-                  {confirming ? 'Processing…' : 'Confirm Delivery'}
+                  {confirming ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : 'Confirm Delivery'}
                 </button>
               </div>
             )}

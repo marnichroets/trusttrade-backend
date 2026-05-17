@@ -366,11 +366,14 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     # Create escrow transaction
     logger.info("[ESCROW] calling TradeSafe API...")
     try:
+        courier_fee = float(transaction.get("courier_fee") or 0)
+        courier_handling_fee = float(transaction.get("courier_handling_fee") or 0)
+        escrow_amount = transaction["item_price"] + courier_fee + courier_handling_fee
         result = await create_tradesafe_transaction(
             internal_reference=data.transaction_id,
             title=f"TrustTrade - {transaction['item_description'][:50]}",
             description=transaction.get("item_description", "Item/Service"),
-            amount=transaction["item_price"],
+            amount=escrow_amount,
             buyer_name=transaction["buyer_name"],
             buyer_email=transaction["buyer_email"],
             seller_name=transaction["seller_name"],

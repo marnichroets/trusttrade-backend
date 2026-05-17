@@ -241,7 +241,7 @@ function FundPanel({ deal, onFunded }) {
             <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Waiting for payment confirmation</h3>
           </div>
           <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 12px", lineHeight: 1.5 }}>
-            TradeSafe will confirm once your payment clears. This page updates automatically — no need to refresh.
+            Our escrow provider will confirm once your payment clears. This page updates automatically — no need to refresh.
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <a href={payLink} target="_blank" rel="noopener noreferrer" style={{ ...btn(D.surfaceHi, D.textMuted, { border: `1px solid ${D.border}`, textDecoration: "none" }) }}>
@@ -258,7 +258,7 @@ function FundPanel({ deal, onFunded }) {
           <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Complete your payment</h3>
         </div>
         <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 16px", lineHeight: 1.5 }}>
-          Your TradeSafe escrow has been created. Click below to complete payment via <strong style={{ color: D.text }}>{selected.label}</strong>.
+          Your Secure Escrow has been created. Click below to complete payment via <strong style={{ color: D.text }}>{selected.label}</strong>.
         </p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <a
@@ -285,7 +285,7 @@ function FundPanel({ deal, onFunded }) {
         <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Fund Secure Vault Escrow</h3>
       </div>
       <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 16px", lineHeight: 1.5 }}>
-          Choose a payment method. Funds are held in TradeSafe Escrow and only released when <strong style={{ color: D.text }}>you approve</strong> the delivery. Bank settlement may take up to 2 business days.
+          Choose a payment method. Funds are held in Secure Escrow and only released when <strong style={{ color: D.text }}>you approve</strong> the delivery. Bank settlement may take up to 2 business days.
       </p>
 
       {/* Payment method selection */}
@@ -811,7 +811,7 @@ export function SmartDealDetail() {
         <FundPanel deal={deal} onFunded={load} />
       )}
 
-      {/* Client: awaiting TradeSafe payment confirmation */}
+      {/* Client: awaiting payment confirmation */}
       {isClient && deal.status === "PAYMENT_PENDING" && (
         <ActionCard accent={D.blue}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
@@ -819,7 +819,7 @@ export function SmartDealDetail() {
             <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Waiting for payment confirmation</h3>
           </div>
           <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 14px", lineHeight: 1.5 }}>
-            TradeSafe is waiting for your payment to clear. Once confirmed, the freelancer will be notified to start work. This page updates automatically.
+            Our escrow provider is waiting for your payment to clear. Once confirmed, the freelancer will be notified to start work. This page updates automatically.
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {deal.payment_link && (

@@ -794,6 +794,10 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
 
     # ===== PAYOUT PREFLIGHT: Step 1 - Verify seller token exists =====
     seller_token_id = transaction.get("tradesafe_seller_token_id")
+    _buyer_token_id = transaction.get("tradesafe_buyer_token_id")
+    if _buyer_token_id and seller_token_id == _buyer_token_id:
+        logger.error(f"[SECURITY] seller_token_id == buyer_token_id for txn={transaction_id} — aborting release")
+        raise HTTPException(status_code=500, detail="Internal error: token mismatch. Please contact support.")
 
     logger.info("=" * 60)
     logger.info(f"[PAYOUT_PREFLIGHT] === Release Initiated for {transaction_id} ===")
@@ -933,8 +937,12 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     )
     logger.info("=" * 60)
 
-    # Calculate net amount
-    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
+    # Include courier fees: TradeSafe applies the fee % on the full escrow amount, so
+    # the withdrawal must match what TradeSafe actually credited to the seller's wallet.
+    _courier_fee = float(transaction.get("courier_fee") or 0)
+    _courier_handling = float(transaction.get("courier_handling_fee") or 0)
+    _escrow_base = transaction["item_price"] + _courier_fee + _courier_handling
+    net_amount = calculate_seller_receives(_escrow_base, settings.PLATFORM_FEE_PERCENT)
 
     tradesafe_state = transaction.get("tradesafe_state")
     withdrawal_ok = None
@@ -1114,6 +1122,10 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
     from tradesafe_service import check_payout_readiness, sync_banking_to_token
 
     seller_token_id = transaction.get("tradesafe_seller_token_id")
+    _buyer_token_id = transaction.get("tradesafe_buyer_token_id")
+    if _buyer_token_id and seller_token_id == _buyer_token_id:
+        logger.error(f"[SECURITY] seller_token_id == buyer_token_id for txn={transaction_id} — aborting manual release")
+        raise HTTPException(status_code=500, detail="Internal error: token mismatch. Please contact support.")
     logger.info(f"[PAYOUT_PREFLIGHT] Manual release txn={transaction_id} token={seller_token_id} by={user.email}")
 
     if not seller_token_id:
@@ -1203,220 +1215,11 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         f"sync_attempted={sync_attempted}"
     )
 
-    # Calculate net amount before release so accept_delivery can request payout processing.
-    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
-
-    result = await accept_delivery(
-        allocation_id,
-        seller_token_id=seller_token_id,
-        amount=float(net_amount),
-    )
-
-    if not result:
-        logger.error(f"[PAYOUT_BLOCKED] Manual release: TradeSafe accept_delivery failed for {transaction_id}")
-        raise HTTPException(
-            status_code=500,
-            detail="TradeSafe release call failed. Funds have NOT been released. Please retry."
-        )
-
-    timeline = transaction.get("timeline", [])
-    timeline.append({
-        "status": "Delivery Confirmed (Manual)",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "by": user.name,
-        "details": f"Manual override by {'admin' if user.is_admin else 'buyer'}"
-    })
-    timeline.append({
-        "status": "Funds Released",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "by": "System",
-        "details": f"R{net_amount:.2f} released to seller"
-    })
-
-    now_iso = datetime.now(timezone.utc).isoformat()
-    await db.transactions.update_one(
-        {"transaction_id": transaction_id},
-        {"$set": {
-            "tradesafe_state": "FUNDS_RELEASED",
-            "payment_status": "Completed",
-            "payout_status": "awaiting_bank_payout",
-            "withdrawal_status": "pending",
-            "delivery_confirmed": True,
-            "delivery_confirmed_at": now_iso,
-            "release_status": "Released",
-            "released_at": now_iso,
-            "funds_released_at": now_iso,
-            "expected_settlement_window": "up to 2 business days",
-            "payout_sla_status": "on_track",
-            "timeline": timeline,
-            "manual_delivery_accept": True,
-            "net_amount": net_amount
-        }}
-    )
-
-    # Trigger immediate bank settlement via TOKEN_WITHDRAWAL
-    from tradesafe_service import trigger_seller_bank_settlement
-    settlement_result = await trigger_seller_bank_settlement(
-        seller_token_id=seller_token_id,
-        net_amount=float(net_amount),
-        transaction_id=transaction_id,
-        source="manual_accept_delivery",
-    )
-    logger.info(f"[MANUAL_RELEASE] settlement result txn={transaction_id}: {settlement_result}")
-    if settlement_result["success"]:
-        await db.transactions.update_one(
-            {"transaction_id": transaction_id},
-            {"$set": {
-                "withdrawal_status": "succeeded",
-                "withdrawal_triggered": True,
-                "withdrawal_triggered_at": now_iso,
-                "payout_status": "payout_processing",
-                "settlement_status": "bank_processing",
-            }}
-        )
-    else:
-        await db.transactions.update_one(
-            {"transaction_id": transaction_id},
-            {"$set": {
-                "withdrawal_status": "failed",
-                "withdrawal_triggered": False,
-                "withdrawal_error": settlement_result.get("error"),
-                "payout_status": "payout_failed",
-                "settlement_status": "withdrawal_failed",
-                "payout_sla_status": "critical",
-            }}
-        )
-
-    # Send notifications
-    seller_email = transaction.get("seller_email")
-    seller_phone = transaction.get("seller_phone")
-
-    if seller_email:
-        await send_funds_released_email(
-            to_email=seller_email,
-            to_name=transaction.get("seller_name"),
-            share_code=transaction.get("share_code", transaction_id),
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"],
-            net_amount=net_amount
-        )
-
-    if seller_phone:
-        try:
-            await send_funds_released_sms(
-                to_phone=seller_phone,
-                amount=net_amount,
-            )
-        except Exception as e:
-            logger.error(f"Failed to send funds released SMS: {e}")
-
-    return {
-        "status": "funds_released",
-        "message": "Delivery confirmed. Funds released to seller.",
-        "state": "FUNDS_RELEASED",
-        "net_amount": net_amount,
-        "tradesafe_result": result
-    }
-
-
-
-@router.post("/manual-accept-delivery/{transaction_id}")
-async def manual_accept_delivery(request: Request, transaction_id: str):
-    """Manual override: Accept delivery bypassing state checks."""
-    db = get_database()
-    
-    user = await get_user_from_token(request, db)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
-    
-    if not transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-    
-    # Only buyer or admin
-    is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
-    if not is_buyer and not user.is_admin:
-        raise HTTPException(status_code=403, detail="Only buyer or admin can confirm delivery")
-    
-    allocation_id = transaction.get("tradesafe_allocation_id")
-    if not allocation_id:
-        raise HTTPException(status_code=400, detail="No TradeSafe allocation ID found")
-
-    logger.info(f"MANUAL ACCEPT DELIVERY: {transaction_id}")
-
-    # ===== PAYOUT PREFLIGHT (same gate as normal release, no bypass) =====
-    from tradesafe_service import check_payout_readiness, sync_banking_to_token
-
-    seller_token_id = transaction.get("tradesafe_seller_token_id")
-    logger.info(f"[PAYOUT_PREFLIGHT] Manual release for {transaction_id} by {user.email}")
-    logger.info(f"[PAYOUT_PREFLIGHT] Seller token: {seller_token_id}")
-
-    if not seller_token_id:
-        logger.error(f"[PAYOUT_BLOCKED] Manual release: no seller token for {transaction_id}")
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot release: No seller token linked to this transaction."
-        )
-
-    seller_email = transaction.get("seller_email")
-    seller_user_doc = await db.users.find_one({"email": seller_email.lower()}) if seller_email else None
-    seller_banking = (seller_user_doc or {}).get("banking_details", {}) or {}
-    seller_mobile = (seller_user_doc or {}).get("phone") or transaction.get("seller_phone")
-
-    profile_ok = bool(
-        seller_user_doc
-        and seller_user_doc.get("banking_details_completed")
-        and seller_banking.get("bank_name")
-        and seller_banking.get("account_number")
-    )
-
-    payout_check = {"ready": False, "issues": ["Not checked yet"]}
-
-    if profile_ok:
-        logger.info(f"[PAYOUT_SYNC] Manual release syncing profile banking to token {seller_token_id}")
-
-        sync_result = await sync_banking_to_token(
-            token_id=seller_token_id,
-            bank_name=seller_banking.get("bank_name"),
-            account_number=seller_banking.get("account_number"),
-            branch_code=seller_banking.get("branch_code", ""),
-            account_type=seller_banking.get("account_type", "SAVINGS"),
-            mobile=seller_mobile,
-            user=seller_user_doc,
-            transaction=transaction,
-            given_name=transaction.get("seller_name", "").split(" ")[0],
-            family_name=" ".join(transaction.get("seller_name", "").split(" ")[1:]) or "User",
-            email=transaction.get("seller_email")
-        )
-
-        if sync_result.get("success"):
-            payout_check = await check_payout_readiness(seller_token_id)
-            logger.info(f"[PAYOUT_CHECK] Manual release ready after sync={payout_check.get('ready')}")
-        else:
-            logger.error(f"[PAYOUT_SYNC] Manual release sync failed: {sync_result.get('error')}")
-    else:
-        logger.warning("[PAYOUT_BLOCKED] Manual release: seller profile has no banking to sync")
-
-    payout_profile = build_payout_readiness_response(
-        transaction=transaction,
-        seller_user=seller_user_doc,
-        payout_check=payout_check,
-        seller_token_id=seller_token_id,
-    )
-
-    if not payout_profile["payout_eligible"]:
-        issues = payout_profile.get("issues", ["Unknown"])
-        logger.error(f"[PAYOUT_BLOCKED] Manual release blocked: {issues}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot release: Seller payout not ready. Issues: {', '.join(issues)}."
-        )
-
-    logger.info(f"[PAYOUT_READY] Manual release proceeding for {transaction_id}")
-
-    # Calculate net amount before release so accept_delivery can request payout processing.
-    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
+    # Include courier fees: TradeSafe applies the fee % on the full escrow amount.
+    _courier_fee = float(transaction.get("courier_fee") or 0)
+    _courier_handling = float(transaction.get("courier_handling_fee") or 0)
+    _escrow_base = transaction["item_price"] + _courier_fee + _courier_handling
+    net_amount = calculate_seller_receives(_escrow_base, settings.PLATFORM_FEE_PERCENT)
 
     result = await accept_delivery(
         allocation_id,
@@ -1569,6 +1372,10 @@ async def release_instant_funds(request: Request, transaction_id: str):
     from tradesafe_service import check_payout_readiness, sync_banking_to_token
 
     seller_token_id = transaction.get("tradesafe_seller_token_id")
+    _buyer_token_id = transaction.get("tradesafe_buyer_token_id")
+    if _buyer_token_id and seller_token_id == _buyer_token_id:
+        logger.error(f"[SECURITY] seller_token_id == buyer_token_id for txn={transaction_id} — aborting instant release")
+        raise HTTPException(status_code=500, detail="Internal error: token mismatch. Please contact support.")
     logger.info(f"[INSTANT_RELEASE] txn={transaction_id} token={seller_token_id} by={user.email}")
 
     if not seller_token_id:
@@ -1608,7 +1415,11 @@ async def release_instant_funds(request: Request, transaction_id: str):
         logger.error(f"[INSTANT_RELEASE] blocked txn={transaction_id} sync_attempted={sync_attempted} issues={issues}")
         raise HTTPException(status_code=400, detail=f"Cannot release: Seller payout not ready. Issues: {', '.join(issues)}.")
 
-    net_amount = calculate_seller_receives(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
+    # Include courier fees: TradeSafe applies the fee % on the full escrow amount.
+    _courier_fee = float(transaction.get("courier_fee") or 0)
+    _courier_handling = float(transaction.get("courier_handling_fee") or 0)
+    _escrow_base = transaction["item_price"] + _courier_fee + _courier_handling
+    net_amount = calculate_seller_receives(_escrow_base, settings.PLATFORM_FEE_PERCENT)
 
     result = await accept_delivery(
         allocation_id,

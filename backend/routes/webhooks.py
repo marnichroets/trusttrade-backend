@@ -249,7 +249,7 @@ async def tradesafe_webhook(request: Request):
         ).hexdigest()
         if not sig_header or not hmac.compare_digest(sig_header.lower(), expected_sig.lower()):
             logger.warning(
-                f"[WEBHOOK] Signature mismatch — received={sig_header!r} expected={expected_sig!r[:12]}... REJECTING"
+                f"[WEBHOOK] Signature mismatch - received={sig_header!r} expected={expected_sig[:12]!r}... REJECTING"
             )
             # Return 401 so TradeSafe knows the secret is wrong, but log to investigate
             raise HTTPException(status_code=401, detail="Invalid webhook signature")

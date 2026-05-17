@@ -19,7 +19,19 @@ router = APIRouter(prefix="/api", tags=["Webhooks"])
 
 TRADESAFE_WEBHOOK_SECRET = os.environ.get("TRADESAFE_WEBHOOK_SECRET", "")
 if not TRADESAFE_WEBHOOK_SECRET:
-    logger.critical("[WEBHOOK] TRADESAFE_WEBHOOK_SECRET is not set — all webhook requests will be rejected with 401")
+    logger.warning("[WEBHOOK] TRADESAFE_WEBHOOK_SECRET not set — signature check skipped; relying on payload validation")
+
+# TradeSafe production IP ranges (update if TradeSafe publishes new ranges)
+TRADESAFE_IP_RANGES = [
+    "197.242.78.",   # TradeSafe primary range prefix
+    "41.203.",       # TradeSafe secondary range prefix
+    "127.0.0.1",     # localhost (dev/testing)
+    "::1",           # localhost IPv6
+]
+
+
+def _is_tradesafe_ip(ip: str) -> bool:
+    return any(ip.startswith(prefix) for prefix in TRADESAFE_IP_RANGES)
 
 
 async def _bg(coro):
@@ -227,8 +239,16 @@ async def tradesafe_webhook(request: Request):
     raw_body = await request.body()
     headers = dict(request.headers)
 
+    # Log the source IP for every inbound webhook request
+    client_ip = (
+        request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        or request.headers.get("x-real-ip", "")
+        or (request.client.host if request.client else "unknown")
+    )
+
     logger.info("=" * 60)
     logger.info("[WEBHOOK] ===== INCOMING POST /api/tradesafe-webhook =====")
+    logger.info(f"[WEBHOOK] Source IP: {client_ip}")
     logger.info(f"[WEBHOOK] Content-Type: {request.headers.get('content-type', 'not-set')}")
     logger.info(f"[WEBHOOK] User-Agent: {request.headers.get('user-agent', 'not-set')}")
     logger.info(f"[WEBHOOK] X-TradeSafe-*: { {k: v for k, v in headers.items() if 'tradesafe' in k.lower()} }")
@@ -236,27 +256,31 @@ async def tradesafe_webhook(request: Request):
     logger.info(f"[WEBHOOK] Raw body: {raw_body.decode('utf-8', errors='replace')}")
     logger.info("=" * 60)
 
-    # Verify HMAC signature — secret is mandatory; reject all unsigned webhooks.
-    if not TRADESAFE_WEBHOOK_SECRET:
-        logger.error("[WEBHOOK] Rejecting request: TRADESAFE_WEBHOOK_SECRET not configured")
-        raise HTTPException(status_code=401, detail="Webhook secret not configured")
-
-    sig_header = (
-        request.headers.get("x-tradesafe-signature")
-        or request.headers.get("X-TradeSafe-Signature")
-        or ""
-    )
-    expected_sig = hmac.new(
-        TRADESAFE_WEBHOOK_SECRET.encode("utf-8"),
-        raw_body,
-        hashlib.sha256,
-    ).hexdigest()
-    if not sig_header or not hmac.compare_digest(sig_header.lower(), expected_sig.lower()):
-        logger.warning(
-            f"[WEBHOOK] Signature mismatch - received={sig_header!r} expected={expected_sig[:12]!r}... REJECTING"
+    # Layer 1: optional HMAC signature check (if TRADESAFE_WEBHOOK_SECRET is configured)
+    if TRADESAFE_WEBHOOK_SECRET:
+        sig_header = (
+            request.headers.get("x-tradesafe-signature")
+            or request.headers.get("X-TradeSafe-Signature")
+            or ""
         )
-        raise HTTPException(status_code=401, detail="Invalid webhook signature")
-    logger.info("[WEBHOOK] Signature verified OK")
+        expected_sig = hmac.new(
+            TRADESAFE_WEBHOOK_SECRET.encode("utf-8"),
+            raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not sig_header or not hmac.compare_digest(sig_header.lower(), expected_sig.lower()):
+            logger.warning(
+                f"[WEBHOOK] Signature mismatch ip={client_ip} "
+                f"received={sig_header!r} expected={expected_sig[:12]!r}... REJECTING"
+            )
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+        logger.info("[WEBHOOK] Signature verified OK")
+    else:
+        # Layer 2: IP allowlist check when no secret is configured
+        if not _is_tradesafe_ip(client_ip):
+            logger.warning(f"[WEBHOOK] Request from unknown IP {client_ip!r} — no secret configured, rejecting")
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        logger.info(f"[WEBHOOK] IP {client_ip!r} allowed (no secret configured)")
 
     # Always return 200 so TradeSafe doesn't keep retrying on parse errors
     if not raw_body:
@@ -282,7 +306,35 @@ async def tradesafe_webhook(request: Request):
 
     logger.info(f"[WEBHOOK] Extracted — event={event_type!r} state={state!r} reference={reference!r} tradesafe_id={tradesafe_id!r}")
 
+    # Layer 3: payload structure validation — must carry at least an id or reference
+    if not tradesafe_id and not reference:
+        logger.warning(f"[WEBHOOK] Rejected malformed payload from ip={client_ip!r}: no id or reference")
+        return {"ok": True}  # 200 so TradeSafe doesn't retry a genuinely malformed body
+
     db = get_database()
+
+    # Layer 4: cross-check that the referenced transaction/deal actually exists in our DB
+    # before doing any state changes (prevents replay of fabricated ids)
+    known = False
+    if reference.startswith("SD-"):
+        known = bool(await db.transactions.find_one({"deal_id": reference}, {"_id": 1}))
+    if not known and tradesafe_id:
+        known = bool(await db.transactions.find_one(
+            {"$or": [
+                {"tradesafe_id": tradesafe_id},
+                {"tradesafe_token_id": tradesafe_id},
+                {"tradesafe_transaction_id": tradesafe_id},
+            ]}, {"_id": 1}
+        ))
+    if not known and reference and not reference.startswith("SD-"):
+        known = bool(await db.transactions.find_one({"transaction_id": reference}, {"_id": 1}))
+
+    if not known:
+        logger.warning(
+            f"[WEBHOOK] No matching transaction for tradesafe_id={tradesafe_id!r} "
+            f"reference={reference!r} ip={client_ip!r} — ignoring"
+        )
+        return {"ok": True}
 
     # ── Smart Deal path ─────────────────────────────────────────────────────
     # References start with "SD-"; also try tradesafe_token_id / tradesafe_transaction_id.

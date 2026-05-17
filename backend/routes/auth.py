@@ -214,8 +214,8 @@ async def login(data: LoginRequest, response: Response):
     
     logger.info(f"[LOGIN] Admin check - email: {email}, ADMIN_EMAIL: {settings.ADMIN_EMAIL}, should_be_admin: {should_be_admin}, current_is_admin: {current_is_admin}")
     
-    if should_be_admin != current_is_admin:
-        # Update user's admin status in database
+    if settings.ADMIN_EMAIL and should_be_admin != current_is_admin:
+        # Only update when ADMIN_EMAIL is configured — avoid clearing manually-set admin flags
         new_role = "admin" if should_be_admin else "buyer"
         await db.users.update_one(
             {"user_id": user_doc["user_id"]},
@@ -282,8 +282,8 @@ async def get_current_user(request: Request):
         
         logger.info(f"[AUTH_ME] User: {email}, ADMIN_EMAIL: {settings.ADMIN_EMAIL}, should_be_admin: {should_be_admin}, current_is_admin: {user.is_admin}")
         
-        if should_be_admin != user.is_admin:
-            # Update user's admin status in database
+        if settings.ADMIN_EMAIL and should_be_admin != user.is_admin:
+            # Only update when ADMIN_EMAIL is configured — avoid clearing manually-set admin flags
             new_role = "admin" if should_be_admin else user.role
             await db.users.update_one(
                 {"user_id": user.user_id},

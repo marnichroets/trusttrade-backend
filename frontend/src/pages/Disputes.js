@@ -4,7 +4,7 @@ import DashboardLayout, { V } from '../components/DashboardLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import api from '../utils/api';
 import { toast } from 'sonner';
-import { AlertCircle, Plus, X } from 'lucide-react';
+import { AlertCircle, Plus, X, Loader2 } from 'lucide-react';
 
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;
@@ -59,6 +59,7 @@ function Disputes() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [aiAdviceState, setAiAdviceState] = useState({});
   const [formData, setFormData] = useState({
     transaction_id: '',
     dispute_type: 'Other',
@@ -113,6 +114,18 @@ function Disputes() {
     }
   };
 
+  const handleGetAdvice = async (dispute) => {
+    const id = dispute.dispute_id;
+    setAiAdviceState(prev => ({ ...prev, [id]: { loading: true, data: null } }));
+    try {
+      const res = await api.post('/ai/dispute-advice', { dispute_id: id });
+      setAiAdviceState(prev => ({ ...prev, [id]: { loading: false, data: res.data } }));
+    } catch {
+      toast.error('Could not get AI advice. Please try again.');
+      setAiAdviceState(prev => ({ ...prev, [id]: { loading: false, data: null } }));
+    }
+  };
+
   if (loading) {
     return <DashboardLayout user={null} loading><div /></DashboardLayout>;
   }
@@ -126,6 +139,7 @@ function Disputes() {
 
   return (
     <DashboardLayout user={user}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       <div style={{ maxWidth: 820, margin: '0 auto' }}>
 
         {/* Header */}
@@ -306,6 +320,67 @@ function Disputes() {
                     <p style={{ fontSize: 10, color: V.sub, fontFamily: V.mono, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>Description</p>
                     <p style={{ fontSize: 13, color: V.text, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{dispute.description}</p>
                   </div>
+
+                  {/* AI Advice */}
+                  {aiAdviceState[dispute.dispute_id]?.data ? (
+                    <div style={{
+                      marginBottom: 12, padding: '12px 14px',
+                      background: `${V.accent}12`, border: `1px solid ${V.accent}35`,
+                      borderRadius: 6,
+                    }}>
+                      <p style={{
+                        fontSize: 10, fontWeight: 700, color: V.accent, fontFamily: V.mono,
+                        textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8,
+                      }}>
+                        AI Advice
+                      </p>
+                      {aiAdviceState[dispute.dispute_id].data.summary && (
+                        <p style={{ fontSize: 12, color: V.text, lineHeight: 1.55, marginBottom: 8 }}>
+                          {aiAdviceState[dispute.dispute_id].data.summary}
+                        </p>
+                      )}
+                      {aiAdviceState[dispute.dispute_id].data.likely_outcome && (
+                        <p style={{ fontSize: 12, color: V.sub, marginBottom: 6 }}>
+                          <span style={{ fontWeight: 600, color: V.text }}>Likely outcome:</span>{' '}
+                          {aiAdviceState[dispute.dispute_id].data.likely_outcome}
+                        </p>
+                      )}
+                      {aiAdviceState[dispute.dispute_id].data.recommended_steps?.length > 0 && (
+                        <div style={{ marginTop: 6 }}>
+                          <p style={{ fontSize: 10, fontWeight: 700, color: V.sub, fontFamily: V.mono, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>
+                            Recommended steps
+                          </p>
+                          {aiAdviceState[dispute.dispute_id].data.recommended_steps.map((s, i) => (
+                            <p key={i} style={{ fontSize: 12, color: V.text, marginBottom: 3 }}>• {s}</p>
+                          ))}
+                        </div>
+                      )}
+                      {aiAdviceState[dispute.dispute_id].data.resolution_timeframe && (
+                        <p style={{ fontSize: 11, color: V.dim, fontFamily: V.mono, marginTop: 8 }}>
+                          Est. timeframe: {aiAdviceState[dispute.dispute_id].data.resolution_timeframe}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleGetAdvice(dispute)}
+                      disabled={aiAdviceState[dispute.dispute_id]?.loading}
+                      data-testid={`get-ai-advice-${dispute.dispute_id}`}
+                      style={{
+                        marginBottom: 12, padding: '6px 14px', borderRadius: 4,
+                        border: `1px solid ${V.accent}50`, background: 'transparent',
+                        color: V.accent, fontFamily: V.sans, fontSize: 12, fontWeight: 600,
+                        cursor: aiAdviceState[dispute.dispute_id]?.loading ? 'not-allowed' : 'pointer',
+                        opacity: aiAdviceState[dispute.dispute_id]?.loading ? 0.6 : 1,
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                      }}
+                    >
+                      {aiAdviceState[dispute.dispute_id]?.loading
+                        ? <><Loader2 size={11} style={{ animation: 'spin 0.8s linear infinite' }} /> Getting advice…</>
+                        : '✨ Get AI Advice'}
+                    </button>
+                  )}
 
                   <p style={{ fontSize: 11, color: V.dim, fontFamily: V.mono }}>
                     {new Date(dispute.created_at).toLocaleString()}

@@ -1055,6 +1055,42 @@ function TransactionDetail() {
               </div>
             )}
 
+            {/* AI Fraud Analysis */}
+            {transaction.ai_fraud_analysis && (() => {
+              const fa = transaction.ai_fraud_analysis;
+              const riskPalette = {
+                low:    { bg: '#ecfdf5', border: '#a7f3d0', heading: '#065f46', badge: '#d1fae5', badgeText: '#059669' },
+                medium: { bg: '#fffbeb', border: '#fde68a', heading: '#78350f', badge: '#fef3c7', badgeText: '#d97706' },
+                high:   { bg: '#fef2f2', border: '#fecaca', heading: '#7f1d1d', badge: '#fee2e2', badgeText: '#dc2626' },
+              };
+              const riskLabel = {
+                low:    'TrustTrade AI: Transaction looks good',
+                medium: 'TrustTrade AI noticed some unusual patterns — proceed carefully',
+                high:   'TrustTrade AI flagged this transaction — review before proceeding',
+              };
+              const pal = riskPalette[fa.risk_level] || riskPalette.low;
+              const label = riskLabel[fa.risk_level] || riskLabel.low;
+              return (
+                <div style={{
+                  background: pal.bg, border: `1px solid ${pal.border}`,
+                  borderLeft: `3px solid ${pal.badgeText}`, borderRadius: 14, padding: '16px 20px',
+                }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: pal.heading, margin: '0 0 8px' }}>{label}</p>
+                  {fa.summary && <p style={{ fontSize: 12, color: pal.heading, margin: '0 0 6px', lineHeight: 1.5 }}>{fa.summary}</p>}
+                  {fa.flags && fa.flags.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                      {fa.flags.map((f, i) => (
+                        <span key={i} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: pal.badge, color: pal.badgeText, fontWeight: 500 }}>{f}</span>
+                      ))}
+                    </div>
+                  )}
+                  <p style={{ fontSize: 11, color: '#94a3b8', margin: '10px 0 0', lineHeight: 1.4 }}>
+                    This is an AI suggestion only. TrustTrade does not make final decisions based on AI analysis.
+                  </p>
+                </div>
+              );
+            })()}
+
             {/* Confirmation status */}
             {!bothConfirmed && (
               <div style={{ ...S.card, padding: '18px 20px' }}>
@@ -1746,10 +1782,10 @@ function TransactionDetail() {
 
             {/* Escrow badge */}
             {hasEscrow && (
-              <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 12, padding: '12px 14px' }}>
+              <div style={{ background: isFinalized ? '#f0fdf4' : '#ecfdf5', border: `1px solid ${isFinalized ? '#86efac' : '#a7f3d0'}`, borderRadius: 12, padding: '12px 14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
-                  <Shield size={13} color="#059669" />
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#065f46' }}>Escrow Active</span>
+                  <Shield size={13} color={isFinalized ? '#16a34a' : '#059669'} />
+                  <span style={{ fontSize: 12, fontWeight: 600, color: isFinalized ? '#15803d' : '#065f46' }}>{isFinalized ? 'Escrow Completed' : 'Escrow Active'}</span>
                 </div>
                 <p style={{ fontSize: 11, color: '#059669', fontFamily: 'monospace', margin: '0 0 8px' }}>Ref: {transaction.tradesafe_id?.slice(0, 14)}…</p>
                 <span style={{ ...S.pill(uiState.bg || getEscrowStateBadge(escrowState).bg, uiState.color || getEscrowStateBadge(escrowState).text), fontSize: 11 }}>

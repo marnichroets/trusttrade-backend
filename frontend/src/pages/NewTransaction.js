@@ -174,6 +174,7 @@ function NewTransaction() {
     seller_details: false,
     item_accuracy: false,
   });
+  const [improveLoading, setImproveLoading] = useState(false);
   const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
   const { config: platformConfig } = usePlatformConfig();
   const navigate = useNavigate();
@@ -205,6 +206,24 @@ function NewTransaction() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleImproveDescription = async () => {
+    if (!formData.item_description || improveLoading) return;
+    setImproveLoading(true);
+    try {
+      const res = await api.post('/ai/improve-description', {
+        description: formData.item_description,
+        item_price: parseFloat(formData.item_price) || 0,
+        delivery_method: formData.delivery_method || 'courier',
+      });
+      setFormData(prev => ({ ...prev, item_description: res.data.improved }));
+      toast.success('Description improved!');
+    } catch {
+      toast.error('Could not improve description. Please try again.');
+    } finally {
+      setImproveLoading(false);
+    }
   };
 
   const itemPrice = parseFloat(formData.item_price) || 0;
@@ -540,6 +559,23 @@ function NewTransaction() {
                       rows={3}
                       data-testid="item-description-input"
                     />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+                      <button
+                        type="button"
+                        onClick={handleImproveDescription}
+                        disabled={!formData.item_description || improveLoading}
+                        data-testid="improve-description-btn"
+                        style={{
+                          padding: '5px 12px', borderRadius: 6, border: '1px solid #bfdbfe',
+                          background: 'transparent', color: '#2563eb', fontSize: 12, fontWeight: 600,
+                          cursor: !formData.item_description || improveLoading ? 'not-allowed' : 'pointer',
+                          opacity: !formData.item_description || improveLoading ? 0.5 : 1,
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        {improveLoading ? 'Improving…' : '✨ Improve with AI'}
+                      </button>
+                    </div>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

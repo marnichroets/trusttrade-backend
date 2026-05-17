@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import TrustLogo from './TrustLogo';
 import api from '../utils/api';
 import { buildUserActivityFeed, getUnreadActivityCount, markActivitySeen } from '../utils/transactionActivity';
+import SupportChat from './SupportChat';
 
 export const V = {
   bg:      '#0A0E14',
@@ -503,6 +504,7 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
           </span>
         </button>
       </nav>
+      <SupportChat />
     </div>
   );
 }

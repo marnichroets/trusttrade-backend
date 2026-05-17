@@ -52,14 +52,20 @@ async def get_quote(
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
-            f"{settings.SHIPLOGIC_API_URL}/shipments/rates",
+            f"{settings.SHIPLOGIC_API_URL}/rates",
             json=payload,
             headers=_headers(),
         )
         resp.raise_for_status()
         data = resp.json()
 
-    rates = data.get("rates", data if isinstance(data, list) else [])
+    raw = data.get("rates", data if isinstance(data, list) else [])
+    # Normalise: expose top-level `rate` (VAT-inclusive) as `price` so callers
+    # have a single unambiguous field regardless of ShipLogic response shape.
+    rates = [
+        {**r, "price": r.get("rate", 0)}
+        for r in raw
+    ]
     logger.info(f"[COURIER] Quote returned {len(rates)} rate(s)")
     return rates
 

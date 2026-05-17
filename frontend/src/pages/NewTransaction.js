@@ -265,7 +265,7 @@ function NewTransaction() {
   const platformFee = Math.max(itemPrice * 0.02, 5);
   const trusttradeFee = platformFee; // alias kept for any legacy references
   const sellerPayout = itemPrice; // seller receives full item price; fee is collected from buyer separately
-  const courierFee = selectedQuote ? (selectedQuote?.rate?.vat_inclusive_price ?? selectedQuote?.rate?.price ?? selectedQuote?.price ?? 0) : 0;
+  const courierFee = selectedQuote ? (selectedQuote?.price ?? selectedQuote?.rate ?? 0) : 0;
   const COURIER_HANDLING_FEE = 10;
   const courierHandlingFee = courierOn && selectedQuote ? COURIER_HANDLING_FEE : 0;
 
@@ -831,7 +831,7 @@ function NewTransaction() {
                           <label style={S.label}>Select a delivery option</label>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
                             {courierQuotes.map((q, i) => {
-                              const price = q?.rate?.vat_inclusive_price ?? q?.rate?.price ?? q?.price ?? 0;
+                              const price = q?.price ?? q?.rate ?? 0;
                               const name = q?.service_level?.name ?? q?.name ?? `Option ${i + 1}`;
                               const days = q?.service_level?.delivery_days ?? q?.delivery_days;
                               const isSelected = selectedQuote === q;

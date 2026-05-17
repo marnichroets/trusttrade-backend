@@ -102,6 +102,11 @@ class Settings:
     )
     PAYOUT_TIMEZONE: str = os.environ.get('PAYOUT_TIMEZONE', 'Africa/Johannesburg')
     
+    # Courier Guy (ShipLogic)
+    COURIER_ENABLED: bool = os.environ.get('COURIER_ENABLED', 'True').lower() not in ('false', '0', 'no')
+    SHIPLOGIC_API_KEY: str = os.environ.get('SHIPLOGIC_API_KEY', '9d5465e7231946e0a31e897f0bb2990d')
+    SHIPLOGIC_API_URL: str = os.environ.get('SHIPLOGIC_API_URL', 'https://sandbox.shiplogic.com')
+
     # Upload Paths
     UPLOAD_BASE_PATH: str = '/app/uploads'
     PHOTOS_PATH: str = '/app/uploads/photos'

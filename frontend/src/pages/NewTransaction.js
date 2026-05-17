@@ -181,7 +181,7 @@ function NewTransaction() {
   const [courierForm, setCourierForm] = useState({
     pickup_street: '', pickup_area: '', pickup_city: '', pickup_code: '',
     delivery_street: '', delivery_area: '', delivery_city: '', delivery_code: '',
-    weight: '1', length: '10', width: '10', height: '10',
+    weight: '2', length: '30', width: '20', height: '15',
   });
   const [courierQuotes, setCourierQuotes] = useState([]);
   const [courierLoading, setCourierLoading] = useState(false);
@@ -266,6 +266,8 @@ function NewTransaction() {
   const trusttradeFee = platformFee; // alias kept for any legacy references
   const sellerPayout = itemPrice; // seller receives full item price; fee is collected from buyer separately
   const courierFee = selectedQuote ? (selectedQuote?.rate?.vat_inclusive_price ?? selectedQuote?.rate?.price ?? selectedQuote?.price ?? 0) : 0;
+  const COURIER_HANDLING_FEE = 10;
+  const courierHandlingFee = courierOn && selectedQuote ? COURIER_HANDLING_FEE : 0;
 
   const canProceedStep1 = role && (
     role === 'buyer'
@@ -322,7 +324,12 @@ function NewTransaction() {
         item_price: itemPrice,
         fee_allocation: formData.fee_allocation,
         delivery_method: formData.delivery_method,
-        ...(courierOn && selectedQuote ? { courier_quote_id: selectedQuote?.service_level?.code || selectedQuote?.code || '' } : {}),
+        ...(courierOn && selectedQuote ? {
+          courier_quote_id: selectedQuote?.service_level?.code || selectedQuote?.id || selectedQuote?.code || '',
+          courier_service_name: selectedQuote?.service_level?.name || selectedQuote?.name || '',
+          courier_fee: courierFee,
+          courier_handling_fee: courierHandlingFee,
+        } : {}),
         buyer_details_confirmed: confirmations.buyer_details,
         seller_details_confirmed: confirmations.seller_details,
         item_accuracy_confirmed: confirmations.item_accuracy,
@@ -879,17 +886,25 @@ function NewTransaction() {
                     </span>
                   </div>
                   {courierFee > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Courier Guy Delivery</span>
-                      <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
-                        + R {courierFee.toFixed(2)}
-                      </span>
-                    </div>
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Courier Guy Delivery</span>
+                        <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
+                          + R {courierFee.toFixed(2)}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Handling fee</span>
+                        <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
+                          + R {COURIER_HANDLING_FEE.toFixed(2)}
+                        </span>
+                      </div>
+                    </>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: 10 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Buyer Pays Total</span>
                     <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#60a5fa' }}>
-                      R {(itemPrice + platformFee + courierFee).toFixed(2)}
+                      R {(itemPrice + platformFee + courierFee + courierHandlingFee).toFixed(2)}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>

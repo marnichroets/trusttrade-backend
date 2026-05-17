@@ -992,10 +992,10 @@ function TransactionDetail() {
   };
 
   const handleRefreshTracking = async () => {
-    if (!transaction?.waybill) return;
+    if (!transaction?.courier_waybill) return;
     setTrackingLoading(true);
     try {
-      const res = await api.get(`/courier/track/${transaction.waybill}`);
+      const res = await api.get(`/courier/track/${transaction.courier_waybill}`);
       setTrackingData(res.data);
       toast.success('Tracking updated');
     } catch {
@@ -1686,7 +1686,7 @@ function TransactionDetail() {
             )}
 
             {/* Courier Tracking */}
-            {COURIER_ENABLED && transaction.waybill && (
+            {COURIER_ENABLED && transaction.courier_waybill && (
               <div style={{ ...S.card, padding: '18px 20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1701,13 +1701,13 @@ function TransactionDetail() {
                   >
                     {trackingLoading
                       ? <><Loader2 size={11} style={{ animation: 'spin 0.8s linear infinite' }} /> Refreshing…</>
-                      : <><RefreshCw size={11} /> Refresh</>}
+                      : <><RefreshCw size={11} /> Refresh Tracking</>}
                   </button>
                 </div>
 
                 <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={S.label}>Waybill</span>
-                  <code style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 600, color: '#3b82f6' }}>{transaction.waybill}</code>
+                  <code style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 600, color: '#3b82f6' }}>{transaction.courier_waybill}</code>
                 </div>
 
                 {trackingData ? (

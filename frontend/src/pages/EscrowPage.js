@@ -84,8 +84,8 @@ export default function EscrowPage() {
               <div className="flex items-start gap-3">
                 <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
                 <div>
-                  <h3 className="font-semibold text-slate-900">Fraud Protection</h3>
-                  <p className="text-sm text-slate-600">Reduces risk for both buyers and sellers</p>
+                  <h3 className="font-semibold text-slate-900">Buyer & Seller Protection</h3>
+                  <p className="text-sm text-slate-600">Both sides are covered until the deal is done</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">

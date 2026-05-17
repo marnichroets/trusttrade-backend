@@ -1059,24 +1059,24 @@ function TransactionDetail() {
 
             <NextStepCard nextStep={nextStep} />
 
-            {/* Risk warning */}
+            {/* TrustTrade AI Check — quick warning banner for non-low risk */}
             {transaction.risk_level && transaction.risk_level !== 'low' && (
               <div style={{ ...S.actionCard(transaction.risk_level === 'high' ? '#ef4444' : '#f59e0b', transaction.risk_level === 'high' ? '#fef2f2' : '#fffbeb') }}>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <AlertTriangle size={16} color={transaction.risk_level === 'high' ? '#ef4444' : '#f59e0b'} style={{ flexShrink: 0, marginTop: 1 }} />
                   <div>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: transaction.risk_level === 'high' ? '#7f1d1d' : '#78350f', margin: '0 0 4px' }}>{transaction.risk_level === 'high' ? 'High Risk Transaction' : 'Proceed with Caution'}</p>
-                    <p style={{ fontSize: 13, color: transaction.risk_level === 'high' ? '#b91c1c' : '#92400e', margin: 0 }}>Our system has flagged potential risks. Please verify the other party's identity.</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: transaction.risk_level === 'high' ? '#7f1d1d' : '#78350f', margin: '0 0 4px' }}>{transaction.risk_level === 'high' ? 'Proceed carefully' : 'Some things to check'}</p>
+                    <p style={{ fontSize: 13, color: transaction.risk_level === 'high' ? '#b91c1c' : '#92400e', margin: 0 }}>Our AI spotted something worth a look. Take a moment to verify the other party before continuing.</p>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* AI Fraud Analysis */}
+            {/* TrustTrade AI Check */}
             {!transaction.ai_fraud_analysis && !isFinalized && (
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Loader2 size={14} color="#94a3b8" style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>AI fraud analysis pending…</span>
+                <span style={{ fontSize: 13, color: '#94a3b8' }}>AI check in progress...</span>
               </div>
             )}
             {transaction.ai_fraud_analysis && (() => {
@@ -1087,9 +1087,9 @@ function TransactionDetail() {
                 high:   { bg: '#fef2f2', border: '#fecaca', heading: '#7f1d1d', badge: '#fee2e2', badgeText: '#dc2626' },
               };
               const riskLabel = {
-                low:    'TrustTrade AI: Transaction looks good',
-                medium: 'TrustTrade AI noticed some unusual patterns — proceed carefully',
-                high:   'TrustTrade AI flagged this transaction — review before proceeding',
+                low:    'TrustTrade AI Check: Looks good ✓',
+                medium: 'TrustTrade AI Check: Some things to check',
+                high:   'TrustTrade AI Check: Proceed carefully',
               };
               const pal = riskPalette[fa.risk_level] || riskPalette.low;
               const label = riskLabel[fa.risk_level] || riskLabel.low;
@@ -1102,13 +1102,14 @@ function TransactionDetail() {
                   {fa.summary && <p style={{ fontSize: 12, color: pal.heading, margin: '0 0 6px', lineHeight: 1.5 }}>{fa.summary}</p>}
                   {fa.flags && fa.flags.length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+                      <span style={{ fontSize: 11, color: pal.heading, fontWeight: 500, width: '100%', marginBottom: 2 }}>Things to note:</span>
                       {fa.flags.map((f, i) => (
                         <span key={i} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: pal.badge, color: pal.badgeText, fontWeight: 500 }}>{f}</span>
                       ))}
                     </div>
                   )}
                   <p style={{ fontSize: 11, color: '#94a3b8', margin: '10px 0 0', lineHeight: 1.4 }}>
-                    This is an AI suggestion only. TrustTrade does not make final decisions based on AI analysis.
+                    This is a guide, not a guarantee. Always use your own judgement.
                   </p>
                 </div>
               );

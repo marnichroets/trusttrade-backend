@@ -323,7 +323,7 @@ function LandingPage() {
                 Money moves only when trust is earned.
               </h1>
               <p style={{ color: MUTED }} className="mt-7 max-w-2xl text-lg leading-8 sm:text-xl">
-                TrustTrade turns risky marketplace deals into protected escrow transactions, with payment locked, delivery tracked, and bank settlement handled after escrow release.
+                TrustTrade turns everyday online deals into protected escrow transactions, with payment locked, delivery tracked, and bank settlement handled after escrow release.
               </p>
 
               <div className="tt-hero-actions mt-8 flex flex-col gap-3 sm:flex-row">
@@ -977,7 +977,7 @@ function Footer({ scrollToHowItWorks }) {
               <TrustLogo size="small" dark />
             </div>
             <p style={{ color: MUTED }} className="max-w-xs text-sm leading-relaxed">
-              Secure escrow protection for online transactions in South Africa. Buy and sell without the scam risk.
+              Secure escrow protection for online transactions in South Africa. Buy and sell with total peace of mind.
             </p>
           </div>
 

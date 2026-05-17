@@ -24,6 +24,7 @@ const BASE_URL = process.env.REACT_APP_API_URL || 'https://trusttrade-backend-pr
 const API = BASE_URL ? `${BASE_URL}/api` : '/api';
 const PHONE_VERIFICATION_PROMPT = 'Verify your phone number to continue.';
 const BANKING_DETAILS_PROMPT = 'Add banking details to receive payouts.';
+const COURIER_ENABLED = process.env.REACT_APP_COURIER_ENABLED !== 'false';
 
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;
@@ -1685,7 +1686,7 @@ function TransactionDetail() {
             )}
 
             {/* Courier Tracking */}
-            {transaction.waybill && (
+            {COURIER_ENABLED && transaction.waybill && (
               <div style={{ ...S.card, padding: '18px 20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

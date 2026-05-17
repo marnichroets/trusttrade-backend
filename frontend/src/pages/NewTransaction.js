@@ -265,9 +265,10 @@ function NewTransaction() {
   const platformFee = Math.max(itemPrice * 0.02, 5);
   const trusttradeFee = platformFee; // alias kept for any legacy references
   const sellerPayout = itemPrice; // seller receives full item price; fee is collected from buyer separately
-  const courierFee = selectedQuote ? (selectedQuote?.price ?? selectedQuote?.rate ?? 0) : 0;
+  const isCourierDelivery = formData.delivery_method === 'courier';
+  const courierFee = isCourierDelivery && selectedQuote ? (selectedQuote?.price ?? selectedQuote?.rate ?? 0) : 0;
   const COURIER_HANDLING_FEE = 10;
-  const courierHandlingFee = courierOn && selectedQuote ? COURIER_HANDLING_FEE : 0;
+  const courierHandlingFee = isCourierDelivery && courierOn && selectedQuote ? COURIER_HANDLING_FEE : 0;
 
   const canProceedStep1 = role && (
     role === 'buyer'
@@ -1007,7 +1008,7 @@ function NewTransaction() {
                     { label: 'Item', value: formData.item_description, truncate: true },
                     { label: 'Item Value', value: `R ${itemPrice.toFixed(2)}`, mono: true },
                     { label: 'TrustTrade Fee (2%)', value: `R ${platformFee.toFixed(2)}`, mono: true },
-                    { label: 'Buyer Pays Total', value: `R ${(itemPrice + platformFee).toFixed(2)}`, mono: true, accent: '#2563eb' },
+                    { label: 'Buyer Pays Total', value: `R ${(itemPrice + platformFee + courierFee + courierHandlingFee).toFixed(2)}`, mono: true, accent: '#2563eb' },
                     { label: 'Seller Receives', value: `R ${sellerPayout.toFixed(2)}`, mono: true, accent: '#10b981' },
                     { label: 'Photos', value: `${photos.length} uploaded` },
                     { label: 'Delivery', value: formData.delivery_method.replace('_', ' ') },

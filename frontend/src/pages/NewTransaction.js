@@ -4,7 +4,7 @@ import DashboardLayout from '../components/DashboardLayout';
 import PhotoUploader from '../components/PhotoUploader';
 import api from '../utils/api';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, User, Camera, Shield, CheckCircle, Truck, Banknote, Zap, Check, AlertCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, User, Camera, Shield, CheckCircle, Truck, Banknote, Zap, Check, AlertCircle, Loader2 } from 'lucide-react';
 import EmailVerificationPrompt from '../components/EmailVerificationPrompt';
 import { usePlatformConfig } from '../context/PlatformConfigContext';
 import { getDefaultMinimumTransactionAmount, getPayoutScheduleMessage } from '../utils/payoutSchedule';
@@ -21,6 +21,8 @@ function parseErrorMessage(error) {
   }
   return 'An error occurred';
 }
+
+const COURIER_ENABLED = process.env.REACT_APP_COURIER_ENABLED !== 'false';
 
 const ITEM_CATEGORIES = [
   { value: 'electronics', label: 'Electronics' },
@@ -175,6 +177,15 @@ function NewTransaction() {
     item_accuracy: false,
   });
   const [improveLoading, setImproveLoading] = useState(false);
+  const [courierOn, setCourierOn] = useState(false);
+  const [courierForm, setCourierForm] = useState({
+    pickup_street: '', pickup_area: '', pickup_city: '', pickup_code: '',
+    delivery_street: '', delivery_area: '', delivery_city: '', delivery_code: '',
+    weight: '1', length: '10', width: '10', height: '10',
+  });
+  const [courierQuotes, setCourierQuotes] = useState([]);
+  const [courierLoading, setCourierLoading] = useState(false);
+  const [selectedQuote, setSelectedQuote] = useState(null);
   const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
   const { config: platformConfig } = usePlatformConfig();
   const navigate = useNavigate();
@@ -226,6 +237,27 @@ function NewTransaction() {
     }
   };
 
+  const handleGetQuote = async () => {
+    setCourierLoading(true);
+    setCourierQuotes([]);
+    setSelectedQuote(null);
+    try {
+      const res = await api.post('/courier/quote', {
+        pickup_address: { street_address: courierForm.pickup_street, local_area: courierForm.pickup_area, city: courierForm.pickup_city, code: courierForm.pickup_code, country: 'ZA', type: 'residential' },
+        delivery_address: { street_address: courierForm.delivery_street, local_area: courierForm.delivery_area, city: courierForm.delivery_city, code: courierForm.delivery_code, country: 'ZA', type: 'residential' },
+        parcel: { submitted_weight_kg: parseFloat(courierForm.weight) || 1, submitted_length_cm: parseFloat(courierForm.length) || 10, submitted_width_cm: parseFloat(courierForm.width) || 10, submitted_height_cm: parseFloat(courierForm.height) || 10 },
+      });
+      const rates = res.data.rates || [];
+      setCourierQuotes(rates);
+      if (rates.length === 0) toast.info('No courier options available for these addresses.');
+      else toast.success(`${rates.length} delivery option${rates.length !== 1 ? 's' : ''} found`);
+    } catch {
+      toast.error('Could not get courier quote. Please check the addresses and try again.');
+    } finally {
+      setCourierLoading(false);
+    }
+  };
+
   const itemPrice = parseFloat(formData.item_price) || 0;
   const minimumTransactionAmount = getDefaultMinimumTransactionAmount(platformConfig);
   const maximumTransactionAmount = Number(platformConfig.maximum_transaction || 10000);
@@ -233,6 +265,7 @@ function NewTransaction() {
   const platformFee = Math.max(itemPrice * 0.02, 5);
   const trusttradeFee = platformFee; // alias kept for any legacy references
   const sellerPayout = itemPrice; // seller receives full item price; fee is collected from buyer separately
+  const courierFee = selectedQuote ? (selectedQuote?.rate?.vat_inclusive_price ?? selectedQuote?.rate?.price ?? selectedQuote?.price ?? 0) : 0;
 
   const canProceedStep1 = role && (
     role === 'buyer'
@@ -289,6 +322,7 @@ function NewTransaction() {
         item_price: itemPrice,
         fee_allocation: formData.fee_allocation,
         delivery_method: formData.delivery_method,
+        ...(courierOn && selectedQuote ? { courier_quote_id: selectedQuote?.service_level?.code || selectedQuote?.code || '' } : {}),
         buyer_details_confirmed: confirmations.buyer_details,
         seller_details_confirmed: confirmations.seller_details,
         item_accuracy_confirmed: confirmations.item_accuracy,
@@ -699,6 +733,133 @@ function NewTransaction() {
                 </div>
               </div>
 
+              {/* Courier Guy Delivery */}
+              {COURIER_ENABLED && formData.delivery_method === 'courier' && (
+                <div style={S.card}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: courierOn ? 20 : 0 }}>
+                    <div style={{
+                      width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+                      border: `2px solid ${courierOn ? '#3b82f6' : '#cbd5e1'}`,
+                      background: courierOn ? '#3b82f6' : '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all 0.15s',
+                    }}>
+                      {courierOn && <Check size={12} color="#fff" />}
+                    </div>
+                    <input type="checkbox" checked={courierOn} onChange={e => { setCourierOn(e.target.checked); if (!e.target.checked) { setSelectedQuote(null); setCourierQuotes([]); } }} style={{ display: 'none' }} />
+                    <div>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Add Courier Guy delivery?</span>
+                      <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>Book a shipment and include the delivery cost in this transaction</span>
+                    </div>
+                  </label>
+
+                  {courierOn && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                      {/* Pickup */}
+                      <div>
+                        <label style={S.label}>Pickup Address (Seller)</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <input style={S.input} placeholder="Street address" value={courierForm.pickup_street} onChange={e => setCourierForm(p => ({ ...p, pickup_street: e.target.value }))} />
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                            <input style={S.input} placeholder="Suburb / area" value={courierForm.pickup_area} onChange={e => setCourierForm(p => ({ ...p, pickup_area: e.target.value }))} />
+                            <input style={S.input} placeholder="City" value={courierForm.pickup_city} onChange={e => setCourierForm(p => ({ ...p, pickup_city: e.target.value }))} />
+                          </div>
+                          <input style={{ ...S.input, maxWidth: 160 }} placeholder="Postal code" value={courierForm.pickup_code} onChange={e => setCourierForm(p => ({ ...p, pickup_code: e.target.value }))} />
+                        </div>
+                      </div>
+
+                      {/* Delivery */}
+                      <div>
+                        <label style={S.label}>Delivery Address (Buyer)</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <input style={S.input} placeholder="Street address" value={courierForm.delivery_street} onChange={e => setCourierForm(p => ({ ...p, delivery_street: e.target.value }))} />
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                            <input style={S.input} placeholder="Suburb / area" value={courierForm.delivery_area} onChange={e => setCourierForm(p => ({ ...p, delivery_area: e.target.value }))} />
+                            <input style={S.input} placeholder="City" value={courierForm.delivery_city} onChange={e => setCourierForm(p => ({ ...p, delivery_city: e.target.value }))} />
+                          </div>
+                          <input style={{ ...S.input, maxWidth: 160 }} placeholder="Postal code" value={courierForm.delivery_code} onChange={e => setCourierForm(p => ({ ...p, delivery_code: e.target.value }))} />
+                        </div>
+                      </div>
+
+                      {/* Parcel dimensions */}
+                      <div>
+                        <label style={S.label}>Parcel Details</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+                          {[
+                            { label: 'Weight (kg)', key: 'weight' },
+                            { label: 'Length (cm)', key: 'length' },
+                            { label: 'Width (cm)', key: 'width' },
+                            { label: 'Height (cm)', key: 'height' },
+                          ].map(f => (
+                            <div key={f.key}>
+                              <label style={{ ...S.label, fontSize: 10, marginBottom: 4 }}>{f.label}</label>
+                              <input style={S.input} type="number" min="0.1" step="0.1" value={courierForm[f.key]} onChange={e => setCourierForm(p => ({ ...p, [f.key]: e.target.value }))} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Get Quote button */}
+                      <button
+                        type="button"
+                        onClick={handleGetQuote}
+                        disabled={courierLoading || !courierForm.pickup_street || !courierForm.pickup_city || !courierForm.pickup_code || !courierForm.delivery_street || !courierForm.delivery_city || !courierForm.delivery_code}
+                        style={{
+                          alignSelf: 'flex-start', padding: '9px 18px', borderRadius: 8, border: 'none',
+                          background: '#3b82f6', color: '#fff', fontSize: 13, fontWeight: 600,
+                          cursor: courierLoading ? 'not-allowed' : 'pointer',
+                          opacity: (courierLoading || !courierForm.pickup_street || !courierForm.pickup_city || !courierForm.pickup_code || !courierForm.delivery_street || !courierForm.delivery_city || !courierForm.delivery_code) ? 0.5 : 1,
+                          display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'inherit',
+                        }}
+                      >
+                        {courierLoading
+                          ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Getting quotes…</>
+                          : <><Truck size={13} /> Get Quote</>}
+                      </button>
+
+                      {/* Quote results */}
+                      {courierQuotes.length > 0 && (
+                        <div>
+                          <label style={S.label}>Select a delivery option</label>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                            {courierQuotes.map((q, i) => {
+                              const price = q?.rate?.vat_inclusive_price ?? q?.rate?.price ?? q?.price ?? 0;
+                              const name = q?.service_level?.name ?? q?.name ?? `Option ${i + 1}`;
+                              const days = q?.service_level?.delivery_days ?? q?.delivery_days;
+                              const isSelected = selectedQuote === q;
+                              return (
+                                <label key={i} style={{
+                                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                  padding: '11px 14px', borderRadius: 10, cursor: 'pointer',
+                                  border: `1.5px solid ${isSelected ? '#3b82f6' : '#e2e8f0'}`,
+                                  background: isSelected ? '#eff6ff' : '#fff',
+                                  transition: 'all 0.15s',
+                                }}>
+                                  <input type="radio" checked={isSelected} onChange={() => setSelectedQuote(q)} style={{ display: 'none' }} />
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${isSelected ? '#3b82f6' : '#cbd5e1'}`, background: isSelected ? '#3b82f6' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      {isSelected && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+                                    </div>
+                                    <div>
+                                      <span style={{ fontSize: 13, fontWeight: 500, color: '#0f172a' }}>{name}</span>
+                                      {days && <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>{days} day{days !== 1 ? 's' : ''}</span>}
+                                    </div>
+                                  </div>
+                                  <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', fontFamily: 'ui-monospace, monospace' }}>
+                                    R {Number(price).toFixed(2)}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Price breakdown */}
               {itemPrice >= 100 && (
                 <div style={{
@@ -711,16 +872,24 @@ function NewTransaction() {
                       R {itemPrice.toFixed(2)}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: courierFee > 0 ? 8 : 12 }}>
                     <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>TrustTrade Platform Fee (2%)</span>
                     <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
                       + R {platformFee.toFixed(2)}
                     </span>
                   </div>
+                  {courierFee > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Courier Guy Delivery</span>
+                      <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
+                        + R {courierFee.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: 10 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Buyer Pays Total</span>
                     <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#60a5fa' }}>
-                      R {(itemPrice + platformFee).toFixed(2)}
+                      R {(itemPrice + platformFee + courierFee).toFixed(2)}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>

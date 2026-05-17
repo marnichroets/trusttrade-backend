@@ -364,6 +364,8 @@ function TransactionDetail() {
   const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
   const [phoneVerificationContext, setPhoneVerificationContext] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [trackingData, setTrackingData] = useState(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
   const { config: platformConfig } = usePlatformConfig();
   const payoutSchedule = useMemo(() => getPayoutScheduleMessage(new Date(), platformConfig), [platformConfig]);
   const navigate = useNavigate();
@@ -986,6 +988,20 @@ function TransactionDetail() {
     if (!shareLink) return;
     try { await navigator.clipboard.writeText(shareLink); setCopied(true); toast.success('Link copied!'); setTimeout(() => setCopied(false), 2000); }
     catch (err) { toast.error('Failed to copy link'); }
+  };
+
+  const handleRefreshTracking = async () => {
+    if (!transaction?.waybill) return;
+    setTrackingLoading(true);
+    try {
+      const res = await api.get(`/courier/track/${transaction.waybill}`);
+      setTrackingData(res.data);
+      toast.success('Tracking updated');
+    } catch {
+      toast.error('Could not fetch tracking info');
+    } finally {
+      setTrackingLoading(false);
+    }
   };
 
   // ── Render ──────────────────────────────────────────────────────────
@@ -1665,6 +1681,77 @@ function TransactionDetail() {
                 )}
                 {isBuyer && transaction.seller_rating && <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}><p style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>Seller's rating for you:</p><StarRating value={transaction.seller_rating} readOnly size="w-5 h-5" />{transaction.seller_review && <p style={{ fontSize: 13, color: '#64748b', fontStyle: 'italic', marginTop: 6 }}>"{transaction.seller_review}"</p>}</div>}
                 {isSeller && transaction.buyer_rating && <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}><p style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>Buyer's rating for you:</p><StarRating value={transaction.buyer_rating} readOnly size="w-5 h-5" />{transaction.buyer_review && <p style={{ fontSize: 13, color: '#64748b', fontStyle: 'italic', marginTop: 6 }}>"{transaction.buyer_review}"</p>}</div>}
+              </div>
+            )}
+
+            {/* Courier Tracking */}
+            {transaction.waybill && (
+              <div style={{ ...S.card, padding: '18px 20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Truck size={15} color="#3b82f6" />
+                    <p style={S.sectionTitle}>Courier Tracking</p>
+                  </div>
+                  <button
+                    onClick={handleRefreshTracking}
+                    disabled={trackingLoading}
+                    data-testid="refresh-tracking-btn"
+                    style={{ ...S.btnOutline, padding: '5px 12px', fontSize: 12 }}
+                  >
+                    {trackingLoading
+                      ? <><Loader2 size={11} style={{ animation: 'spin 0.8s linear infinite' }} /> Refreshing…</>
+                      : <><RefreshCw size={11} /> Refresh</>}
+                  </button>
+                </div>
+
+                <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={S.label}>Waybill</span>
+                  <code style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 600, color: '#3b82f6' }}>{transaction.waybill}</code>
+                </div>
+
+                {trackingData ? (
+                  <>
+                    <div style={{ marginBottom: 14 }}>
+                      <p style={{ ...S.label, marginBottom: 6 }}>Current Status</p>
+                      <span style={{ ...S.pill('#eff6ff', '#2563eb'), fontSize: 12, fontWeight: 600 }}>
+                        {trackingData.status || 'In transit'}
+                      </span>
+                      {trackingData.timestamp && (
+                        <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>
+                          Last update: {new Date(trackingData.timestamp).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+
+                    {trackingData.events && trackingData.events.length > 0 && (
+                      <div>
+                        <p style={{ ...S.label, marginBottom: 10 }}>History</p>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          {trackingData.events.slice(0, 6).map((evt, i, arr) => (
+                            <div key={i} style={{ display: 'flex', gap: 12 }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 3 }}>
+                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: i === 0 ? '#3b82f6' : '#cbd5e1', flexShrink: 0 }} />
+                                {i < arr.length - 1 && <div style={{ width: 2, flex: 1, minHeight: 18, background: '#f1f5f9', margin: '3px 0' }} />}
+                              </div>
+                              <div style={{ paddingBottom: 10 }}>
+                                <p style={{ fontSize: 13, color: '#0f172a', margin: '0 0 2px', fontWeight: i === 0 ? 600 : 400 }}>
+                                  {evt.status || evt.description || 'Update'}
+                                </p>
+                                <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>
+                                  {evt.created_at || evt.timestamp ? new Date(evt.created_at || evt.timestamp).toLocaleString() : ''}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', padding: '10px 0 2px' }}>
+                    Click Refresh to load tracking information.
+                  </p>
+                )}
               </div>
             )}
 

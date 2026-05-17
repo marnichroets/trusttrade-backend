@@ -91,7 +91,7 @@ class Settings:
 
     # Platform Constants
     MINIMUM_TRANSACTION_AMOUNT: float = float(os.environ.get('MINIMUM_TRANSACTION_AMOUNT', '500'))
-    MAXIMUM_TRANSACTION_AMOUNT: float = float(os.environ.get('MAXIMUM_TRANSACTION_AMOUNT', '10000'))
+    MAXIMUM_TRANSACTION_AMOUNT: float = float(os.environ.get('MAXIMUM_TRANSACTION_AMOUNT', '0'))
     PAYOUT_THRESHOLD: float = float(os.environ.get('PAYOUT_THRESHOLD', '100'))
     PLATFORM_FEE_PERCENT: float = float(os.environ.get('PLATFORM_FEE_PERCENT', '2'))
     PAYOUT_RELEASE_TIMES: List[str] = [time.strip() for time in os.environ.get('PAYOUT_RELEASE_TIMES', '10:00,15:00').split(',') if time.strip()]
@@ -104,7 +104,7 @@ class Settings:
     
     # Courier Guy (ShipLogic)
     COURIER_ENABLED: bool = os.environ.get('COURIER_ENABLED', 'True').lower() not in ('false', '0', 'no')
-    SHIPLOGIC_API_KEY: str = os.environ.get('SHIPLOGIC_API_KEY', '9d5465e7231946e0a31e897f0bb2990d')
+    SHIPLOGIC_API_KEY: str = os.environ.get('SHIPLOGIC_API_KEY', '')
     SHIPLOGIC_API_URL: str = os.environ.get('SHIPLOGIC_API_URL', 'https://api.shiplogic.com')
 
     # Upload Paths

@@ -2,8 +2,9 @@ import sys
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
@@ -143,11 +144,70 @@ app.include_router(courier_router)
 
 logger.info(f"[STARTUP] TradeSafe webhook URL: {settings.BACKEND_URL}/api/tradesafe-webhook")
 
-try:
-    Path(settings.UPLOAD_BASE_PATH).mkdir(parents=True, exist_ok=True)
-    app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_BASE_PATH), name="uploads")
-except Exception as e:
-    logger.warning(f"Could not mount uploads directory: {e}")
+Path(settings.UPLOAD_BASE_PATH).mkdir(parents=True, exist_ok=True)
+
+
+@app.get("/api/files/{file_path:path}")
+async def serve_upload(file_path: str, request: Request):
+    from core.database import get_database
+    from core.security import get_user_from_token
+
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # Prevent path traversal
+    if ".." in file_path or file_path.startswith("/") or file_path.startswith("\\"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    full_path = Path(settings.UPLOAD_BASE_PATH) / file_path
+    base = Path(settings.UPLOAD_BASE_PATH).resolve()
+    try:
+        full_path.resolve().relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if user.is_admin:
+        return FileResponse(str(full_path))
+
+    filename = Path(file_path).name
+
+    # Verification files embed user_id in the filename
+    if file_path.startswith("verification/"):
+        if user.user_id and user.user_id in filename:
+            return FileResponse(str(full_path))
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Photos: user must be buyer or seller of the transaction referencing this file
+    txn = await db.transactions.find_one(
+        {"$or": [{"buyer_email": user.email}, {"seller_email": user.email}],
+         "item_photos": filename}
+    )
+    if txn:
+        return FileResponse(str(full_path))
+
+    # Dispute evidence: user must have raised the dispute
+    dispute = await db.disputes.find_one(
+        {"raised_by_email": user.email, "evidence_photos": filename}
+    )
+    if dispute:
+        return FileResponse(str(full_path))
+
+    # Also allow access if user is a party to the transaction linked to the dispute
+    dispute_via_txn = await db.disputes.find_one({"evidence_photos": filename})
+    if dispute_via_txn:
+        txn2 = await db.transactions.find_one(
+            {"transaction_id": dispute_via_txn.get("transaction_id"),
+             "$or": [{"buyer_email": user.email}, {"seller_email": user.email}]}
+        )
+        if txn2:
+            return FileResponse(str(full_path))
+
+    raise HTTPException(status_code=403, detail="Access denied")
 
 try:
     static_dir = Path(__file__).parent / "static"

@@ -260,7 +260,7 @@ function NewTransaction() {
 
   const itemPrice = parseFloat(formData.item_price) || 0;
   const minimumTransactionAmount = getDefaultMinimumTransactionAmount(platformConfig);
-  const maximumTransactionAmount = Number(platformConfig.maximum_transaction || 10000);
+  const maximumTransactionAmount = Number(platformConfig.maximum_transaction || 0);
   const payoutSchedule = useMemo(() => getPayoutScheduleMessage(new Date(), platformConfig), [platformConfig]);
   const platformFee = Math.max(itemPrice * 0.02, 5);
   const trusttradeFee = platformFee; // alias kept for any legacy references
@@ -277,9 +277,9 @@ function NewTransaction() {
   );
 
   const amountTooLow = itemPrice > 0 && itemPrice < minimumTransactionAmount;
-  const amountTooHigh = itemPrice > maximumTransactionAmount;
+  const amountTooHigh = maximumTransactionAmount > 0 && itemPrice > maximumTransactionAmount;
   const canProceedStep2 = formData.item_description && formData.item_category &&
-    formData.item_condition && itemPrice >= minimumTransactionAmount && itemPrice <= maximumTransactionAmount;
+    formData.item_condition && itemPrice >= minimumTransactionAmount && !amountTooHigh;
   const amountError = amountTooLow
     ? `Minimum transaction amount is R${minimumTransactionAmount.toFixed(0)}.`
     : amountTooHigh
@@ -305,7 +305,7 @@ function NewTransaction() {
       toast.error(`Minimum transaction amount is R${minimumTransactionAmount.toFixed(0)}.`);
       return;
     }
-    if (itemPrice > maximumTransactionAmount) {
+    if (maximumTransactionAmount > 0 && itemPrice > maximumTransactionAmount) {
       toast.error(`Maximum transaction amount is R${maximumTransactionAmount.toLocaleString('en-ZA')}.`);
       return;
     }
@@ -671,7 +671,6 @@ function NewTransaction() {
                       name="item_price"
                       type="number"
                       min={minimumTransactionAmount}
-                      max={maximumTransactionAmount}
                       step="0.01"
                       value={formData.item_price}
                       onChange={handleChange}
@@ -680,7 +679,7 @@ function NewTransaction() {
                       data-testid="item-price-input"
                     />
                     <p style={{ fontSize: 11, color: amountError ? '#dc2626' : '#94a3b8', margin: '5px 0 0' }}>
-                      Minimum transaction amount is R{minimumTransactionAmount.toFixed(0)}. Maximum transaction amount is R{maximumTransactionAmount.toLocaleString('en-ZA')}.
+                      Minimum transaction amount is R{minimumTransactionAmount.toFixed(0)}. No maximum limit.
                     </p>
                     {amountError && (
                       <p style={{ fontSize: 11, color: '#dc2626', margin: '4px 0 0', fontWeight: 600 }}>

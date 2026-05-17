@@ -311,7 +311,7 @@ async def support_chat(request: Request, body: ChatRequest):
         "South Africa's secure peer-to-peer escrow platform.\n\n"
         "Key platform facts:\n"
         "- Escrow protects both buyer and seller: funds are held until the buyer confirms delivery\n"
-        "- Minimum transaction: R500 | Maximum: R500,000\n"
+        "- Minimum transaction: R500 | No maximum transaction limit\n"
         "- Platform fee: 2% of item price (minimum R5), paid by the buyer on top of the item price\n"
         "- Delivery methods: courier, bank deposit / digital delivery, hand-to-hand\n"
         "- Disputes can be raised if there is a problem with the transaction\n"

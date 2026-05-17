@@ -384,13 +384,13 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
             detail=f"Minimum transaction amount is R{settings.MINIMUM_TRANSACTION_AMOUNT:.0f}"
         )
     
-    # Validate maximum transaction amount (R500,000)
-    if transaction_data.item_price > settings.MAXIMUM_TRANSACTION_AMOUNT:
+    # No maximum transaction limit on TrustTrade
+    if settings.MAXIMUM_TRANSACTION_AMOUNT > 0 and transaction_data.item_price > settings.MAXIMUM_TRANSACTION_AMOUNT:
         raise HTTPException(
             status_code=400,
             detail=f"Maximum transaction amount is R{settings.MAXIMUM_TRANSACTION_AMOUNT:,.0f}. Please contact support for larger transactions."
         )
-    
+
     # Calculate fees using precise Decimal math (2% platform fee collected from buyer separately)
     money = calculate_money(transaction_data.item_price, settings.PLATFORM_FEE_PERCENT)
     item_price = money["item_price"]

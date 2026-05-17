@@ -590,7 +590,7 @@ async def create_tradesafe_transaction(
     # TradeSafe API expects amount in RANDS (NOT cents)
     amount_rands = float(amount)
     
-    # Calculate TrustTrade fee: 1.5% with R5 minimum
+    # Calculate TrustTrade fee: 2% with R5 minimum
     calculated_fee = round(amount_rands * (PLATFORM_FEE_PERCENT / 100), 2)
     trusttrade_fee = max(calculated_fee, MINIMUM_FEE_RANDS)
     
@@ -1109,7 +1109,7 @@ def validate_minimum_transaction(amount: float) -> tuple:
 def calculate_fees(amount: float, fee_allocation: str = "split") -> Dict[str, float]:
     """
     Calculate fee breakdown for transaction display.
-    TrustTrade charges 1.5% agent fee (minimum R5).
+    TrustTrade charges 2% agent fee (minimum R5).
     TradeSafe also charges their payment processing fee.
     
     Args:
@@ -1119,7 +1119,7 @@ def calculate_fees(amount: float, fee_allocation: str = "split") -> Dict[str, fl
     Returns:
         Fee breakdown dictionary
     """
-    # TrustTrade fee: 1.5% with R5 minimum
+    # TrustTrade fee: 2% with R5 minimum
     calculated_trusttrade = round(amount * (PLATFORM_FEE_PERCENT / 100), 2)
     trusttrade_fee = max(calculated_trusttrade, MINIMUM_FEE_RANDS)
     

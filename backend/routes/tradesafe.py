@@ -136,7 +136,7 @@ async def get_fee_calculation(amount: float, fee_allocation: str = "SELLER_AGENT
     
     Returns:
         - item_price: Original item price
-        - trusttrade_fee: TrustTrade platform fee (1.5%, min R5)
+        - trusttrade_fee: TrustTrade platform fee (2%, min R5)
         - processing_fee: Estimated payment processing fee (~2.5%)
         - total_fees: Combined fees
         - buyer_pays: What buyer will pay
@@ -148,7 +148,7 @@ async def get_fee_calculation(amount: float, fee_allocation: str = "SELLER_AGENT
             detail=f"Minimum transaction amount is R{settings.MINIMUM_TRANSACTION_AMOUNT:.0f}"
         )
     
-    # TrustTrade fee: 1.5% with R5 minimum
+    # TrustTrade fee: 2% with R5 minimum
     calculated_tt_fee = round(amount * (PLATFORM_FEE_PERCENT / 100), 2)
     trusttrade_fee = max(calculated_tt_fee, MINIMUM_FEE_RANDS)
     

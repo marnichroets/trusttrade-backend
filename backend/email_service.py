@@ -335,8 +335,8 @@ async def send_verification_email(email: str, name: str, verification_url: str) 
 async def send_welcome_email(email: str, name: str, frontend_url: str) -> bool:
     """Send a welcome email immediately after successful registration."""
     first_name = name.split()[0] if name else name
-    cta_link = f"{frontend_url}/transactions/new"
-    subject = "Welcome to TrustTrade"
+    cta_link = "https://trusttradesa.co.za/transactions/new"
+    subject = "Welcome to TrustTrade \U0001f389"
     html = f"""<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
@@ -344,45 +344,78 @@ async def send_welcome_email(email: str, name: str, frontend_url: str) -> bool:
 <table role="presentation" style="width:100%;border-collapse:collapse;background:#F0F2F5;">
 <tr><td style="padding:32px 16px;">
   <table role="presentation" style="max-width:560px;margin:0 auto;border-collapse:collapse;width:100%;">
+
+    <!-- Header -->
     <tr>
-      <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
-        <div style="font-family:'Space Grotesk',Arial,sans-serif;font-size:24px;font-weight:700;margin:0 auto 8px;display:inline-block;"><span style="color:#1a73e8;">Trust</span><span style="color:#E6EDF3;">Trade</span></div>
+      <td style="background:{BRAND_NAVY};padding:28px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
+        <div style="font-family:'Space Grotesk',Arial,sans-serif;font-size:26px;font-weight:700;margin:0 auto 10px;display:inline-block;"><span style="color:#1a73e8;">Trust</span><span style="color:#E6EDF3;">Trade</span></div>
         <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
       </td>
     </tr>
+
+    <!-- Welcome heading -->
     <tr>
-      <td style="background:white;padding:32px 32px 8px;">
-        <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:{BRAND_NAVY};">Welcome to TrustTrade</h1>
-        <p style="font-size:15px;color:{TEXT_DARK};margin:0 0 20px;line-height:1.5;">Hi {first_name},</p>
-        <p style="font-size:14px;color:{TEXT_DARK};line-height:1.7;margin:0 0 28px;">
-          Buy and sell safely &mdash; your payment is protected until you confirm delivery.
+      <td style="background:white;padding:32px 32px 0;">
+        <h1 style="margin:0 0 6px;font-size:24px;font-weight:700;color:{BRAND_NAVY};">Welcome to TrustTrade, {first_name}!</h1>
+        <p style="margin:0 0 24px;font-size:14px;color:{TEXT_MUTED};">Your account is ready. Here's everything you need to know.</p>
+      </td>
+    </tr>
+
+    <!-- Intro body -->
+    <tr>
+      <td style="background:white;padding:0 32px 28px;">
+        <p style="font-size:15px;color:{TEXT_DARK};line-height:1.7;margin:0 0 20px;">
+          We're excited to have you on board. TrustTrade is South Africa's secure escrow platform — we hold your payment safely until <strong>both parties are satisfied</strong>, then release the funds. No more getting scammed. No more chasing payments.
         </p>
 
-        <table style="width:100%;border-collapse:collapse;border:1px solid {BORDER_CLR};margin-bottom:32px;">
+        <!-- What is escrow -->
+        <table style="width:100%;border-collapse:collapse;border:1px solid {BORDER_CLR};margin-bottom:24px;">
           <tr>
             <td style="padding:10px 16px;background:{BRAND_NAVY};font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.65);font-weight:700;">
-              HOW IT WORKS
+              WHAT IS ESCROW?
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 20px;background:#f9fafb;">
+              <p style="font-size:14px;color:{TEXT_DARK};line-height:1.7;margin:0;">
+                Think of escrow as a trusted middleman. When you buy something, your money goes into a secure vault — not to the seller. The seller only gets paid once <strong>you confirm</strong> you've received what was agreed. If something goes wrong, we step in to resolve it.
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- How it works steps -->
+        <table style="width:100%;border-collapse:collapse;border:1px solid {BORDER_CLR};margin-bottom:28px;">
+          <tr>
+            <td style="padding:10px 16px;background:{BRAND_NAVY};font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.65);font-weight:700;">
+              HOW IT WORKS — 4 SIMPLE STEPS
             </td>
           </tr>
           <tr>
             <td style="padding:20px 20px 16px;">
               <table style="width:100%;border-collapse:collapse;">
                 <tr>
-                  <td style="padding:8px 0;">
-                    <span style="display:inline-block;width:24px;height:24px;background:{BRAND_NAVY};color:white;text-align:center;line-height:24px;font-size:11px;font-weight:700;margin-right:14px;vertical-align:middle;">1</span>
-                    <span style="font-size:14px;color:{TEXT_DARK};vertical-align:middle;font-weight:600;">Create a transaction</span>
+                  <td style="padding:10px 0;border-bottom:1px solid {BORDER_CLR};">
+                    <span style="display:inline-block;width:26px;height:26px;background:{BRAND_NAVY};color:white;text-align:center;line-height:26px;font-size:11px;font-weight:700;margin-right:14px;vertical-align:middle;">1</span>
+                    <span style="font-size:14px;color:{TEXT_DARK};vertical-align:middle;"><strong>Create a deal</strong> &mdash; enter the item details, price, and invite the other party</span>
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding:8px 0;">
-                    <span style="display:inline-block;width:24px;height:24px;background:{BRAND_NAVY};color:white;text-align:center;line-height:24px;font-size:11px;font-weight:700;margin-right:14px;vertical-align:middle;">2</span>
-                    <span style="font-size:14px;color:{TEXT_DARK};vertical-align:middle;font-weight:600;">Payment held safely in escrow</span>
+                  <td style="padding:10px 0;border-bottom:1px solid {BORDER_CLR};">
+                    <span style="display:inline-block;width:26px;height:26px;background:{BRAND_NAVY};color:white;text-align:center;line-height:26px;font-size:11px;font-weight:700;margin-right:14px;vertical-align:middle;">2</span>
+                    <span style="font-size:14px;color:{TEXT_DARK};vertical-align:middle;"><strong>Buyer pays into escrow</strong> &mdash; funds are held securely, not accessible to the seller yet</span>
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding:8px 0;">
-                    <span style="display:inline-block;width:24px;height:24px;background:{BRAND_NAVY};color:white;text-align:center;line-height:24px;font-size:11px;font-weight:700;margin-right:14px;vertical-align:middle;">3</span>
-                    <span style="font-size:14px;color:{TEXT_DARK};vertical-align:middle;font-weight:600;">Confirm and release</span>
+                  <td style="padding:10px 0;border-bottom:1px solid {BORDER_CLR};">
+                    <span style="display:inline-block;width:26px;height:26px;background:{BRAND_NAVY};color:white;text-align:center;line-height:26px;font-size:11px;font-weight:700;margin-right:14px;vertical-align:middle;">3</span>
+                    <span style="font-size:14px;color:{TEXT_DARK};vertical-align:middle;"><strong>Seller delivers</strong> &mdash; item is shipped or handed over as agreed</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:10px 0;">
+                    <span style="display:inline-block;width:26px;height:26px;background:{BRAND_NAVY};color:white;text-align:center;line-height:26px;font-size:11px;font-weight:700;margin-right:14px;vertical-align:middle;">4</span>
+                    <span style="font-size:14px;color:{TEXT_DARK};vertical-align:middle;"><strong>Buyer confirms receipt</strong> &mdash; funds are released to the seller. Everyone wins.</span>
                   </td>
                 </tr>
               </table>
@@ -390,15 +423,40 @@ async def send_welcome_email(email: str, name: str, frontend_url: str) -> bool:
           </tr>
         </table>
 
-        <div style="text-align:center;margin:0 0 32px;">
-          <a href="{cta_link}" style="display:inline-block;background:{BRAND_NAVY};color:white;padding:14px 40px;text-decoration:none;font-size:14px;font-weight:700;letter-spacing:0.3px;">
-            Start your first transaction &rarr;
+        <!-- Trust signals -->
+        <table style="width:100%;border-collapse:collapse;margin-bottom:32px;">
+          <tr>
+            <td style="width:33%;padding:14px 10px;text-align:center;vertical-align:top;">
+              <div style="font-size:22px;margin-bottom:6px;">&#128274;</div>
+              <p style="font-size:12px;font-weight:700;color:{BRAND_NAVY};margin:0 0 4px;">Funds Protected</p>
+              <p style="font-size:11px;color:{TEXT_MUTED};margin:0;line-height:1.5;">Money held in regulated escrow until you're satisfied</p>
+            </td>
+            <td style="width:33%;padding:14px 10px;text-align:center;vertical-align:top;">
+              <div style="font-size:22px;margin-bottom:6px;">&#9989;</div>
+              <p style="font-size:12px;font-weight:700;color:{BRAND_NAVY};margin:0 0 4px;">Dispute Resolution</p>
+              <p style="font-size:11px;color:{TEXT_MUTED};margin:0;line-height:1.5;">Our team steps in if anything goes wrong</p>
+            </td>
+            <td style="width:33%;padding:14px 10px;text-align:center;vertical-align:top;">
+              <div style="font-size:22px;margin-bottom:6px;">&#127466;&#127462;</div>
+              <p style="font-size:12px;font-weight:700;color:{BRAND_NAVY};margin:0 0 4px;">Built for SA</p>
+              <p style="font-size:11px;color:{TEXT_MUTED};margin:0;line-height:1.5;">EFT, card, and Ozow payments supported</p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- CTA -->
+        <div style="text-align:center;margin:0 0 8px;">
+          <a href="{cta_link}" style="display:inline-block;background:{BRAND_NAVY};color:white;padding:16px 44px;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:0.3px;border-bottom:3px solid {CYAN_LINE};">
+            Create Your First Deal &rarr;
           </a>
         </div>
+        <p style="text-align:center;font-size:12px;color:{TEXT_MUTED};margin:12px 0 0;">Questions? Reply to this email or visit <a href="https://trusttradesa.co.za/faq" style="color:#2563eb;">our FAQ</a>.</p>
       </td>
     </tr>
+
+    <!-- Footer -->
     <tr>
-      <td style="background:{BRAND_NAVY};padding:20px 32px;text-align:center;">
+      <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;">
         <p style="margin:0 0 6px;font-size:12px;color:rgba(255,255,255,0.45);">&copy; 2026 TrustTrade South Africa. All rights reserved.</p>
         <p style="margin:0 0 4px;font-size:12px;">
           <a href="https://www.trusttradesa.co.za" style="color:rgba(255,255,255,0.55);text-decoration:none;">trusttradesa.co.za</a>
@@ -410,12 +468,16 @@ async def send_welcome_email(email: str, name: str, frontend_url: str) -> bool:
         <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.25);">Secured by TrustTrade Escrow</p>
       </td>
     </tr>
+
   </table>
 </td></tr>
 </table>
 </body>
 </html>"""
     return await send_email(email, name, subject, html)
+
+
+REGISTRATION_NOTIFY_EMAIL = "trusttrade.register@gmail.com"
 
 
 async def send_admin_new_user_email(
@@ -427,9 +489,9 @@ async def send_admin_new_user_email(
     phone: str = None,
 ) -> bool:
     """Send an internal admin notification when a new user registers."""
-    if not admin_email:
-        return False
-    subject = f"New user signed up — {user_name}"
+    # Always notify the dedicated registration inbox regardless of admin_email setting
+    destination = REGISTRATION_NOTIFY_EMAIL
+    subject = "New TrustTrade Registration"
     rows = [
         ("Name", user_name),
         ("Email", user_email),
@@ -491,7 +553,7 @@ async def send_admin_new_user_email(
 </table>
 </body>
 </html>"""
-    return await send_email(admin_email, "TrustTrade Admin", subject, html)
+    return await send_email(destination, "TrustTrade Admin", subject, html)
 
 
 # ============ EMAIL TEMPLATES ============

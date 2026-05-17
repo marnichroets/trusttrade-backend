@@ -729,6 +729,7 @@ async def google_callback(
             })
             import asyncio, email_service
             signup_at = datetime.now(timezone.utc).strftime("%d %b %Y, %H:%M UTC")
+            asyncio.create_task(email_service.send_welcome_email(email, name, settings.FRONTEND_URL))
             asyncio.create_task(email_service.send_admin_new_user_email(
                 admin_email=settings.ADMIN_EMAIL,
                 user_name=name,

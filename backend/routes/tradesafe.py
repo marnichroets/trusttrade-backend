@@ -357,12 +357,6 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     logger.info(f"Buyer: {transaction['buyer_name']} ({transaction['buyer_email']}) Mobile: {buyer_mobile}")
     logger.info(f"Seller: {transaction['seller_name']} ({transaction['seller_email']}) Mobile: {seller_mobile}")
     
-    # Use fee_allocation from request, or fall back to stored value, or default
-    fee_allocation = data.fee_allocation or transaction.get("fee_allocation", "SELLER_AGENT")
-    logger.info(f"[ESCROW] Fee Allocation from request: {data.fee_allocation}")
-    logger.info(f"[ESCROW] Fee Allocation from DB: {transaction.get('fee_allocation')}")
-    logger.info(f"[ESCROW] Fee Allocation final: {fee_allocation}")
-    
     # Create escrow transaction
     logger.info("[ESCROW] calling TradeSafe API...")
     try:
@@ -379,8 +373,7 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
             seller_name=transaction["seller_name"],
             seller_email=transaction["seller_email"],
             buyer_mobile=buyer_mobile,
-         seller_mobile=seller_mobile,
-            fee_allocation=fee_allocation
+            seller_mobile=seller_mobile,
     )
     except Exception as e:
         logger.exception(f"[ESCROW ERROR] transaction_id={data.transaction_id} create_tradesafe_transaction failed: {e}")

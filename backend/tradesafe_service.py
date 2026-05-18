@@ -443,56 +443,16 @@ async def create_tradesafe_transaction(
     seller_email: str,
     buyer_mobile: str = None,
     seller_mobile: str = None,
-    fee_allocation: str = "SELLER_AGENT"
 ) -> Optional[Dict[str, Any]]:
     """
     Create a new escrow transaction with TrustTrade as AGENT to collect 2% platform fee.
-    
-    Args:
-        internal_reference: TrustTrade internal transaction ID
-        title: Transaction title
-        description: Item/service description
-        amount: Transaction amount in ZAR (Rands, not cents)
-        buyer_name: Buyer's name
-        buyer_email: Buyer's email
-        seller_name: Seller's name
-        seller_email: Seller's email
-        buyer_mobile: Buyer's mobile number
-        seller_mobile: Seller's mobile number
-        fee_allocation: Who pays fees - BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT (default: SELLER_AGENT)
-    
-    Fee Allocation Options:
-        - SELLER_AGENT: Seller pays TrustTrade 2% fee (deducted from payout)
-        - BUYER_AGENT: Buyer pays TrustTrade 2% fee (added to payment)
-        - SPLIT_AGENT: Split between buyer and seller
-    
-    Returns:
-        Transaction details including fee_allocation or error dict on failure
+    The AGENT party carries feeAllocation=SELLER so the seller bears the platform fee.
     """
-    # Normalize and validate fee_allocation
-    VALID_FEE_ALLOCATIONS = {
-        'BUYER_AGENT': 'BUYER_AGENT',
-        'SELLER_AGENT': 'SELLER_AGENT',
-        'SPLIT_AGENT': 'BUYER_SELLER_AGENT',  # TradeSafe uses BUYER_SELLER_AGENT for split
-        'BUYER_SELLER_AGENT': 'BUYER_SELLER_AGENT',
-        # Legacy mappings for backwards compatibility
-        'buyer': 'BUYER_AGENT',
-        'seller': 'SELLER_AGENT',
-        'split': 'BUYER_SELLER_AGENT',
-    }
-    
-    normalized_fee_allocation = VALID_FEE_ALLOCATIONS.get(
-        fee_allocation.upper() if fee_allocation else 'SELLER_AGENT',
-        'SELLER_AGENT'  # Default
-    )
-    
     logger.info("=== CREATE TRANSACTION REQUEST ===")
     logger.info(f"Reference: {internal_reference}")
     logger.info(f"Amount: R{amount}")
     logger.info(f"Buyer: {buyer_name} ({buyer_email}) Mobile: {buyer_mobile}")
     logger.info(f"Seller: {seller_name} ({seller_email}) Mobile: {seller_mobile}")
-    logger.info(f"Fee Allocation (input): {fee_allocation}")
-    logger.info(f"Fee Allocation (normalized): {normalized_fee_allocation}")
     logger.info(f"TrustTrade Platform Fee: {PLATFORM_FEE_PERCENT}%")
     
     # Validate minimum amount
@@ -598,7 +558,6 @@ async def create_tradesafe_transaction(
     logger.info(f"Item Amount: R{amount_rands}")
     logger.info(f"Calculated Fee ({PLATFORM_FEE_PERCENT}%): R{calculated_fee}")
     logger.info(f"TrustTrade Fee (min R{MINIMUM_FEE_RANDS}): R{trusttrade_fee}")
-    logger.info(f"Fee Allocation: {normalized_fee_allocation}")
     
     # GraphQL mutation for creating a transaction with AGENT
     mutation = """
@@ -649,7 +608,6 @@ async def create_tradesafe_transaction(
             "description": description,
             "industry": "GENERAL_GOODS_SERVICES",
             "currency": "ZAR",
-            "feeAllocation": normalized_fee_allocation,  # Dynamic fee allocation
             "reference": internal_reference,
             "parties": {
                 "create": [
@@ -666,6 +624,7 @@ async def create_tradesafe_transaction(
                         "token": TRUSTTRADE_AGENT_TOKEN,
                         "fee": PLATFORM_FEE_PERCENT,
                         "feeType": "PERCENT",
+                        "feeAllocation": "SELLER",
                     }
                 ]
             },
@@ -685,10 +644,9 @@ async def create_tradesafe_transaction(
     
     logger.info("=== TRANSACTION CREATE REQUEST ===")
     logger.info("=== FIELDS SENT TO TRADESAFE ===")
-    logger.info(f"Transaction feeAllocation: {normalized_fee_allocation}")
     logger.info(f"AGENT fee: {PLATFORM_FEE_PERCENT}")
     logger.info("AGENT feeType: PERCENT")
-    logger.info(f"AGENT feeAllocation: {normalized_fee_allocation}")
+    logger.info("AGENT feeAllocation: SELLER")
     logger.info(f"Allocation value: R{amount_rands}")
     logger.info(f"Variables: {variables}")
     
@@ -718,12 +676,12 @@ async def create_tradesafe_transaction(
         
         # Add fee breakdown and allocation to response
         tx['trusttrade_fee'] = trusttrade_fee
-        tx['fee_allocation'] = normalized_fee_allocation  # Store the fee allocation used
+        tx['fee_allocation'] = "SELLER"
         tx['fee_breakdown'] = {
             'item_amount': amount_rands,
             'trusttrade_fee_percent': PLATFORM_FEE_PERCENT,
             'trusttrade_fee_amount': trusttrade_fee,
-            'fee_allocation': normalized_fee_allocation
+            'fee_allocation': "SELLER"
         }
         
         # Store token IDs for payout tracking

@@ -207,8 +207,6 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
     freelancer_name = (freelancer_user or {}).get("name") or deal.get("freelancer_name") or deal["freelancer_email"]
     client_mobile = (client_user or {}).get("phone") or (client_user or {}).get("mobile")
     freelancer_mobile = (freelancer_user or {}).get("phone") or (freelancer_user or {}).get("mobile")
-    fee_allocation = "SELLER_AGENT" if deal["fee_paid_by"] == "FREELANCER" else "BUYER_AGENT"
-
     result = await create_tradesafe_transaction(
         internal_reference=deal_id,
         title=f"TrustTrade Smart Deal - {deal['title'][:50]}",
@@ -220,7 +218,6 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
         seller_email=deal["freelancer_email"],
         buyer_mobile=client_mobile,
         seller_mobile=freelancer_mobile,
-        fee_allocation=fee_allocation,
     )
     if not result or "error" in result:
         raise HTTPException(

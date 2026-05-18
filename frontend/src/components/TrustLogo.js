@@ -29,8 +29,7 @@ export function TrustLogo({ size = 'default', className = '', dark = false }) {
         />
       ) : (
         <svg width={s.box} height={s.box} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-          <path d="M12 2L3 7v5c0 5.25 3.75 10.15 9 11.35V2z" fill="#1a73e8"/>
-          <path d="M12 2v18.35C17.25 22.15 21 17.25 21 12V7L12 2z" fill="#1a73e8"/>
+          <path d="M12 2L3 6v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V6L12 2z" fill="#1a73e8"/>
           <rect x="9.8" y="9.8" width="4.4" height="3.6" rx="0.8" fill="white"/>
           <path d="M10.8 9.8V8.2a1.2 1.2 0 012.4 0v1.6" stroke="white" strokeWidth="1.3" strokeLinecap="round" fill="none"/>
           <path d="M7 14l3 3 7-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

@@ -374,9 +374,14 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     
     if transaction_data.creator_role == "seller":
         require_verified_phone_for_sensitive_action(user_doc, "seller")
+        if not user.is_admin and not has_bank_details(user_doc):
+            raise HTTPException(
+                status_code=400,
+                detail="Please add your banking details in My Profile before creating a deal"
+            )
         if not user.is_admin and (user_doc or {}).get("role") != "seller":
             await db.users.update_one({"user_id": user.user_id}, {"$set": {"role": "seller"}})
-    
+
     # Validate minimum transaction amount (R500)
     if transaction_data.item_price < settings.MINIMUM_TRANSACTION_AMOUNT:
         raise HTTPException(

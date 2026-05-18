@@ -214,6 +214,12 @@ function NewTransaction() {
     }
   };
 
+  const hasBankingDetails = Boolean(
+    user?.banking_details_completed &&
+    user?.banking_details?.bank_name &&
+    user?.banking_details?.account_number
+  );
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -379,6 +385,19 @@ function NewTransaction() {
             </div>
             <button type="button" onClick={() => navigate('/verify/phone')} style={{ ...S.btnPrimary, width: 'auto', height: 38, padding: '0 14px', background: '#f59e0b' }}>
               Verify phone
+            </button>
+          </div>
+        )}
+
+        {role === 'seller' && !hasBankingDetails && (
+          <div style={{ ...S.card, borderLeft: '3px solid #dc2626', background: '#fef2f2', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <AlertCircle size={18} color="#dc2626" style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#7f1d1d' }}>Add your banking details to receive payouts</p>
+              <p style={{ margin: 0, fontSize: 13, color: '#991b1b' }}>You must add your banking details before creating a deal as a seller.</p>
+            </div>
+            <button type="button" onClick={() => navigate('/settings/banking')} style={{ ...S.btnPrimary, width: 'auto', height: 38, padding: '0 14px', background: '#dc2626', flexShrink: 0 }}>
+              My Profile
             </button>
           </div>
         )}

@@ -815,15 +815,15 @@ function BankingSettings() {
 
         <div style={{
           display: 'flex', gap: 12,
-          background: `${V.accent}0A`, border: `1px solid ${V.accent}30`,
+          background: '#2d0a0a', border: '1px solid #ef444460',
           borderRadius: 4, padding: '14px 18px', marginBottom: 20,
         }}>
-          <ShieldCheck size={16} color={V.accent} style={{ flexShrink: 0, marginTop: 2 }} />
+          <AlertCircle size={16} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
-            <p style={{ fontWeight: 600, color: V.accent, fontSize: 13, margin: '0 0 4px' }}>Secure &amp; Private</p>
+            <p style={{ fontWeight: 700, color: '#ef4444', fontSize: 13, margin: '0 0 4px' }}>Banking details required</p>
             <p style={{ color: V.sub, fontSize: 12, margin: 0 }}>
-              Your banking details are sent directly to our secure payment processor.
-              TrustTrade does not store your bank account number or sensitive details.
+              You cannot create or accept deals as a seller until your banking details are saved.
+              Details are sent directly to our secure payment processor — TrustTrade does not store your full account number.
             </p>
           </div>
         </div>

@@ -1011,7 +1011,7 @@ export function SmartDealList() {
             </div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>Smart Deals</h1>
           </div>
-          <p style={{ fontSize: 13, color: D.textMuted, margin: 0 }}>Instant deals via shareable link</p>
+          <p style={{ fontSize: 13, color: D.textMuted, margin: 0 }}>Milestone-based payment contracts</p>
         </div>
         <button onClick={() => navigate("/smart-deals/new")} style={{ ...btn(D.blue) }}>
           + New Deal
@@ -1028,32 +1028,19 @@ export function SmartDealList() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <Zap size={16} color={D.accent} />
-          <span style={{ fontSize: 13, fontWeight: 700, color: D.accent, letterSpacing: "0.04em", textTransform: "uppercase" }}>How Smart Deals work</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: D.accent, letterSpacing: "0.04em", textTransform: "uppercase" }}>Smart Deals — Milestone-Based Escrow Contracts</span>
         </div>
 
-        {/* Key differentiator — lead with it */}
-        <div style={{
-          display: "flex", alignItems: "flex-start", gap: 10,
-          background: "rgba(0,209,255,0.07)", border: "1px solid rgba(0,209,255,0.2)",
-          borderRadius: 10, padding: "12px 14px", marginBottom: 14,
-        }}>
-          <Shield size={18} color={D.accent} style={{ flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: 14, fontWeight: 600, color: D.text, margin: 0, lineHeight: 1.5 }}>
-            The buyer does <span style={{ color: D.accent }}>not need to register</span> or create an account —
-            they just click the link and pay. This is the key difference from normal transactions.
-          </p>
-        </div>
-
-        <p style={{ fontSize: 13, color: D.textMuted, lineHeight: 1.65, margin: "0 0 16px" }}>
-          Create a secure payment link and share it via WhatsApp, Facebook or any chat.
-          The buyer clicks the link, pays into escrow, and you get paid once they confirm delivery.
-          Normal transactions require both parties to register — Smart Deals skip that entirely.
+        <p style={{ fontSize: 14, color: D.text, lineHeight: 1.65, margin: "0 0 16px" }}>
+          Set deliverables, deadlines and payment terms upfront. Funds are locked in escrow and released
+          as each milestone is completed. Both parties are protected throughout.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {[
-            { emoji: "📘", label: "Facebook Marketplace" },
-            { emoji: "💬", label: "WhatsApp deals" },
-            { emoji: "📸", label: "Instagram sales" },
+            { emoji: "🏗️", label: "Building & Construction" },
+            { emoji: "💻", label: "Freelance Work" },
+            { emoji: "🎨", label: "Design Projects" },
+            { emoji: "🔧", label: "Home Renovations" },
           ].map(({ emoji, label }) => (
             <span key={label} style={{
               display: "inline-flex", alignItems: "center", gap: 6,
@@ -1066,7 +1053,7 @@ export function SmartDealList() {
             </span>
           ))}
         </div>
-        <p style={{ fontSize: 11, color: D.textSoft, margin: "12px 0 0" }}>Perfect for peer-to-peer sales where trust matters and you can't ask the buyer to sign up first.</p>
+        <p style={{ fontSize: 11, color: D.textSoft, margin: "12px 0 0" }}>Pay as work is done — funds only release when you approve each milestone.</p>
       </div>
 
       {loading && (

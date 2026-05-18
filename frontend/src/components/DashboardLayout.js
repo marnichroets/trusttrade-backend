@@ -89,7 +89,7 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
     { icon: Plus,            label: 'New Transaction', path: '/transactions/new', highlight: true },
     { icon: FileText,        label: 'My Transactions', path: '/transactions' },
     { icon: AlertCircle,     label: 'Disputes',        path: '/disputes-dashboard' },
-    { icon: Briefcase,       label: 'Smart Deals',     path: '/smart-deals', desc: 'Share a link — buyer needs no account' },
+    { icon: Briefcase,       label: 'Smart Deals',     path: '/smart-deals', desc: 'Milestone contracts — pay as work is done' },
     { icon: Activity,        label: 'Live Activity',   path: '/activity' },
     { icon: User,            label: 'My Profile',      path: '/profile' },
   ];

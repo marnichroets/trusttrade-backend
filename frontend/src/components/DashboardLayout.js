@@ -89,7 +89,7 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
     { icon: Plus,            label: 'New Transaction', path: '/transactions/new', highlight: true },
     { icon: FileText,        label: 'My Transactions', path: '/transactions' },
     { icon: AlertCircle,     label: 'Disputes',        path: '/disputes-dashboard' },
-    { icon: Briefcase,       label: 'Smart Deals',     path: '/smart-deals' },
+    { icon: Briefcase,       label: 'Smart Deals',     path: '/smart-deals', desc: 'Instant deals via shareable link' },
     { icon: Activity,        label: 'Live Activity',   path: '/activity' },
     { icon: User,            label: 'My Profile',      path: '/profile' },
   ];
@@ -229,7 +229,7 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
         {/* Logo */}
         <div style={{ padding: '14px 14px 12px', borderBottom: `1px solid ${V.border}` }}>
           <NavLink to="/dashboard" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
-            <TrustLogo size="small" dark />
+            <TrustLogo size="default" dark />
           </NavLink>
         </div>
 
@@ -271,7 +271,25 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
                         color={isActive ? V.accent : V.dim}
                         style={{ flexShrink: 0 }}
                       />
-                      <span style={{ flex: 1 }}>{item.label}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        {item.label}
+                        {item.desc && (
+                          <span style={{
+                            display: 'block',
+                            fontSize: 9,
+                            fontWeight: 400,
+                            color: V.dim,
+                            letterSpacing: '0.01em',
+                            lineHeight: 1.3,
+                            marginTop: 1,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}>
+                            {item.desc}
+                          </span>
+                        )}
+                      </span>
                       {item.label === 'Live Activity' && unreadActivityCount > 0 && (
                         <span
                           data-testid="nav-notification-badge"

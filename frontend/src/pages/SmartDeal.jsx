@@ -1003,7 +1003,7 @@ export function SmartDealList() {
 
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", paddingBottom: 40 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
             <div style={{ width: 34, height: 34, borderRadius: 9, background: "linear-gradient(135deg, #3b82f6, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1011,11 +1011,48 @@ export function SmartDealList() {
             </div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>Smart Deals</h1>
           </div>
-          <p style={{ fontSize: 13, color: D.textMuted, margin: 0 }}>Secure Vault escrow-protected digital work</p>
+          <p style={{ fontSize: 13, color: D.textMuted, margin: 0 }}>Instant deals via shareable link</p>
         </div>
         <button onClick={() => navigate("/smart-deals/new")} style={{ ...btn(D.blue) }}>
           + New Deal
         </button>
+      </div>
+
+      {/* Hero explanation */}
+      <div style={{
+        background: "linear-gradient(135deg, #0d1f3c 0%, #071428 100%)",
+        border: `1px solid ${D.borderLight}`,
+        borderRadius: 14,
+        padding: "20px 22px",
+        marginBottom: 20,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <Zap size={16} color={D.accent} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: D.accent, letterSpacing: "0.04em", textTransform: "uppercase" }}>How Smart Deals work</span>
+        </div>
+        <p style={{ fontSize: 14, color: D.text, lineHeight: 1.65, margin: "0 0 16px" }}>
+          Smart Deals let you create a secure payment link and share it via WhatsApp, Facebook or any chat.
+          The other party clicks the link, pays into escrow, and you get paid when they confirm delivery.
+          <strong style={{ color: D.accent }}> No account needed for the buyer.</strong>
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {[
+            { emoji: "📘", label: "Facebook Marketplace sales" },
+            { emoji: "💬", label: "WhatsApp deals" },
+            { emoji: "📸", label: "Instagram sales" },
+          ].map(({ emoji, label }) => (
+            <span key={label} style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "5px 12px", borderRadius: 20,
+              background: "rgba(59,130,246,0.12)",
+              border: "1px solid rgba(59,130,246,0.25)",
+              fontSize: 12, fontWeight: 500, color: D.text,
+            }}>
+              {emoji} {label}
+            </span>
+          ))}
+        </div>
+        <p style={{ fontSize: 11, color: D.textSoft, margin: "12px 0 0" }}>Perfect for quick peer-to-peer sales where trust matters.</p>
       </div>
 
       {loading && (

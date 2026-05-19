@@ -1207,8 +1207,8 @@ function TransactionDetail() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#7c2d12', margin: '0 0 4px' }}>Action Required: Confirm Transaction</p>
-                    <p style={{ fontSize: 13, color: '#ea580c', margin: '0 0 4px' }}>A 2% TrustTrade platform fee is deducted from your payout. {BANKING_DETAILS_PROMPT}</p>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#9a3412', margin: '0 0 14px' }}>You'll receive R {(transaction.item_price - (transaction.trusttrade_fee ?? Math.max(transaction.item_price * 0.02, 5)))?.toFixed(2)}</p>
+                    <p style={{ fontSize: 13, color: '#ea580c', margin: '0 0 4px' }}>A 2% TrustTrade platform fee is included in the buyer's payment. You receive the full item value. {BANKING_DETAILS_PROMPT}</p>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#9a3412', margin: '0 0 14px' }}>You'll receive R {(transaction.seller_receives ?? transaction.item_price)?.toFixed(2)}</p>
                     {profileIncompleteError && (
                       <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
                         <p style={{ fontSize: 13, fontWeight: 600, color: '#b91c1c', margin: '0 0 4px' }}>Complete your profile first</p>

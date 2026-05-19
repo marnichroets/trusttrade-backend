@@ -212,6 +212,7 @@ async def handle_released_transaction(db, txn: dict, state: str = "FUNDS_RELEASE
         {"_id": txn["_id"]},
         {"$set": {
             "tradesafe_state": state,
+            "payment_status": "Completed",
             "release_status": "Released",
             "payout_status": txn.get("payout_status") or "awaiting_bank_payout",
             "withdrawal_status": txn.get("withdrawal_status") or "pending",
@@ -474,7 +475,7 @@ async def tradesafe_webhook(request: Request):
             logger.info(f"[WEBHOOK] {txn_id}: withdrawal {txn.get('withdrawal_status')}, skipping duplicate {state!r} event")
             await db.transactions.update_one(
                 {"_id": txn["_id"]},
-                {"$set": {"tradesafe_state": state}}
+                {"$set": {"tradesafe_state": state, "payment_status": "Completed", "release_status": "Released"}}
             )
 
         else:

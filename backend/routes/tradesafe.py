@@ -1014,7 +1014,7 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     now_iso = datetime.now(timezone.utc).isoformat()
     update_fields = {
         "tradesafe_state": "FUNDS_RELEASED",
-        "payment_status": "Released",
+        "payment_status": "Completed",
         "release_status": "Released",
         "payout_status": "awaiting_bank_payout" if withdrawal_ok is None else ("payout_processing" if withdrawal_ok else "payout_failed"),
         "withdrawal_status": "pending" if withdrawal_ok is None else ("succeeded" if withdrawal_ok else "failed"),
@@ -1697,6 +1697,130 @@ async def sync_tradesafe_status(request: Request, transaction_id: str):
         "state_changed": state_changed,
         "message": f"Status synced: {new_payment_status}" if state_changed else "Status already up to date"
     }
+
+
+@router.post("/manual-start-delivery/{transaction_id}")
+async def admin_manual_start_delivery(request: Request, transaction_id: str):
+    """Admin/Seller: Force start delivery, bypassing TradeSafe state checks."""
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    is_seller = transaction.get("seller_email") == user.email or transaction.get("seller_user_id") == user.user_id
+    if not is_seller and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Only seller or admin can trigger manual delivery start")
+
+    if is_seller and not user.is_admin:
+        seller_user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+        require_verified_seller_phone(seller_user_doc)
+
+    allocation_id = transaction.get("tradesafe_allocation_id")
+    if not allocation_id:
+        raise HTTPException(status_code=400, detail="No TradeSafe allocation ID — transaction not linked to escrow")
+
+    logger.info(f"[MANUAL_START_DELIVERY] txn={transaction_id} by={user.email} admin={user.is_admin}")
+
+    result = await start_delivery(allocation_id)
+    logger.info(f"[MANUAL_START_DELIVERY] TradeSafe start_delivery result: {result}")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": "Delivery Started (Manual Override)",
+        "timestamp": now_iso,
+        "by": user.name,
+        "details": f"Manual override by {'admin' if user.is_admin else 'seller'}"
+    })
+
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "tradesafe_state": "INITIATED",
+            "payment_status": "Delivery in Progress",
+            "delivery_started_at": now_iso,
+            "timeline": timeline,
+        }}
+    )
+
+    # Notify buyer
+    buyer_email = transaction.get("buyer_email")
+    buyer_phone = transaction.get("buyer_phone")
+    if buyer_email:
+        await send_delivery_started_email(
+            to_email=buyer_email,
+            to_name=transaction.get("buyer_name", "Buyer"),
+            share_code=transaction.get("share_code", transaction_id),
+            item_description=transaction["item_description"],
+            seller_name=transaction.get("seller_name", "Seller")
+        )
+    if buyer_phone:
+        try:
+            await send_delivery_sms(
+                to_phone=buyer_phone,
+                message=f"TrustTrade: Your item '{transaction['item_description'][:30]}' has been dispatched. Ref: {transaction.get('share_code', transaction_id)}"
+            )
+        except Exception as e:
+            logger.error(f"[MANUAL_START_DELIVERY] SMS failed: {e}")
+
+    return {
+        "status": "delivery_started",
+        "message": "Delivery marked as started (manual override).",
+        "state": "INITIATED",
+        "tradesafe_called": bool(result),
+    }
+
+
+@router.post("/cancel/{transaction_id}")
+async def admin_force_cancel_transaction(request: Request, transaction_id: str):
+    """Admin only: Force-cancel a transaction from any state."""
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    ts_state = (transaction.get("tradesafe_state") or "").upper()
+    if ts_state in ("FUNDS_RELEASED", "COMPLETE", "COMPLETED"):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot force-cancel: transaction has already been completed and funds released"
+        )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": "Transaction Force-Cancelled by Admin",
+        "timestamp": now_iso,
+        "by": user.email,
+        "details": "Administrative force-cancel override",
+    })
+
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "transaction_state": "CANCELLED",
+            "payment_status": "Cancelled",
+            "tradesafe_state": "CANCELLED",
+            "archived": True,
+            "archived_at": now_iso,
+            "cancelled_at": now_iso,
+            "cancelled_by": user.email,
+            "timeline": timeline,
+        }}
+    )
+
+    logger.info(f"[ADMIN_FORCE_CANCEL] txn={transaction_id} force-cancelled by {user.email}")
+    return {"message": "Transaction force-cancelled and archived", "transaction_id": transaction_id}
 
 
 @router.post("/banking-details")

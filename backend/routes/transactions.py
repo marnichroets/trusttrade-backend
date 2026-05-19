@@ -30,7 +30,7 @@ from models.transaction import (
 from models.common import RiskAssessment
 from pdf_generator import generate_escrow_agreement_pdf
 from email_service import (
-    send_transaction_created_email, send_payment_received_email,
+    send_transaction_created_email,
     send_funds_released_email, send_delivery_confirmed_email,
     send_delivery_started_email, send_immediate_payment_secured_email
 )
@@ -1267,44 +1267,6 @@ async def confirm_payment(request: Request, transaction_id: str, payment: Paymen
                 "timeline": timeline
             }}
         )
-        
-        # Send payment received emails
-        logger.info("=" * 60)
-        logger.info("[PAYMENT] === SENDING PAYMENT RECEIVED EMAILS ===")
-        logger.info(f"[PAYMENT] Transaction: {transaction_id}")
-        logger.info(f"[PAYMENT] Buyer Email: {transaction['buyer_email']}")
-        logger.info(f"[PAYMENT] Seller Email: {transaction['seller_email']}")
-        logger.info("=" * 60)
-        
-        try:
-            buyer_result = await send_payment_received_email(
-                to_email=transaction["buyer_email"],
-                to_name=transaction["buyer_name"],
-                share_code=transaction.get("share_code", transaction_id),
-                item_description=transaction["item_description"],
-                amount=transaction["item_price"],
-                role="buyer",
-                delivery_method=transaction.get("delivery_method", "courier")
-            )
-            logger.info(f"[PAYMENT] Buyer payment email result: {buyer_result}")
-        except Exception as e:
-            logger.error(f"[PAYMENT] Buyer payment email EXCEPTION: {str(e)}")
-        
-        try:
-            seller_result = await send_payment_received_email(
-                to_email=transaction["seller_email"],
-                to_name=transaction["seller_name"],
-                share_code=transaction.get("share_code", transaction_id),
-                item_description=transaction["item_description"],
-                amount=transaction["item_price"],
-                role="seller",
-                delivery_method=transaction.get("delivery_method", "courier")
-            )
-            logger.info(f"[PAYMENT] Seller payment email result: {seller_result}")
-        except Exception as e:
-            logger.error(f"[PAYMENT] Seller payment email EXCEPTION: {str(e)}")
-        
-        logger.info("[PAYMENT] === PAYMENT EMAILS COMPLETE ===")
         
         return {"message": "Payment confirmed", "status": "Paid", "auto_release_at": auto_release_at}
     

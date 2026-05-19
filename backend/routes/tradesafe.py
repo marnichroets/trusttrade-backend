@@ -24,8 +24,7 @@ from tradesafe_service import (
     ALLOWED_PAYMENT_METHODS, PLATFORM_FEE_PERCENT, MINIMUM_FEE_RANDS
 )
 from email_service import (
-    send_delivery_started_email, send_funds_released_email,
-    send_payment_received_email
+    send_delivery_started_email, send_funds_released_email
 )
 from sms_service import send_delivery_sms, send_funds_released_sms
 

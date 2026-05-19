@@ -930,12 +930,12 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     )
     logger.info("=" * 60)
 
-    # Include courier fees: TradeSafe applies the fee % on the full escrow amount, so
-    # the withdrawal must match what TradeSafe actually credited to the seller's wallet.
+    # Fee is charged to the buyer (feeAllocation=BUYER), so seller receives the full
+    # escrow base — no deduction from seller's payout.
     _courier_fee = float(transaction.get("courier_fee") or 0)
     _courier_handling = float(transaction.get("courier_handling_fee") or 0)
     _escrow_base = transaction["item_price"] + _courier_fee + _courier_handling
-    net_amount = calculate_seller_receives(_escrow_base, settings.PLATFORM_FEE_PERCENT)
+    net_amount = round(_escrow_base, 2)
 
     tradesafe_state = transaction.get("tradesafe_state")
     withdrawal_ok = None
@@ -1208,11 +1208,12 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         f"sync_attempted={sync_attempted}"
     )
 
-    # Include courier fees: TradeSafe applies the fee % on the full escrow amount.
+    # Fee is charged to the buyer (feeAllocation=BUYER), so seller receives the full
+    # escrow base — no deduction from seller's payout.
     _courier_fee = float(transaction.get("courier_fee") or 0)
     _courier_handling = float(transaction.get("courier_handling_fee") or 0)
     _escrow_base = transaction["item_price"] + _courier_fee + _courier_handling
-    net_amount = calculate_seller_receives(_escrow_base, settings.PLATFORM_FEE_PERCENT)
+    net_amount = round(_escrow_base, 2)
 
     result = await accept_delivery(
         allocation_id,
@@ -1408,11 +1409,12 @@ async def release_instant_funds(request: Request, transaction_id: str):
         logger.error(f"[INSTANT_RELEASE] blocked txn={transaction_id} sync_attempted={sync_attempted} issues={issues}")
         raise HTTPException(status_code=400, detail=f"Cannot release: Seller payout not ready. Issues: {', '.join(issues)}.")
 
-    # Include courier fees: TradeSafe applies the fee % on the full escrow amount.
+    # Fee is charged to the buyer (feeAllocation=BUYER), so seller receives the full
+    # escrow base — no deduction from seller's payout.
     _courier_fee = float(transaction.get("courier_fee") or 0)
     _courier_handling = float(transaction.get("courier_handling_fee") or 0)
     _escrow_base = transaction["item_price"] + _courier_fee + _courier_handling
-    net_amount = calculate_seller_receives(_escrow_base, settings.PLATFORM_FEE_PERCENT)
+    net_amount = round(_escrow_base, 2)
 
     result = await accept_delivery(
         allocation_id,

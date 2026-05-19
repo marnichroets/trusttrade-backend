@@ -935,10 +935,11 @@ function TransactionDetail() {
   const canConfirmDelivery = isActionable && isDeliveryFlow && !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
   const canConfirmInstantRelease = isActionable && isInstantFlow && hasEscrow && isBuyer && escrowState === 'FUNDS_RECEIVED' && !transaction.delivery_confirmed;
   const shareLink = transaction.share_code ? `${window.location.origin}/t/${transaction.share_code}` : null;
-  const _fa = (transaction.fee_allocation || 'SELLER_AGENT').toUpperCase();
+  const _fa = (transaction.fee_allocation || 'BUYER_AGENT').toUpperCase();
+  const _ttFee = transaction.trusttrade_fee ?? Math.max(transaction.item_price * 0.02, 5);
   const totalSecurePayment = transaction.item_price + (
-    _fa === 'BUYER_AGENT' ? (transaction.trusttrade_fee || 0) :
-    (_fa === 'SPLIT_AGENT' || _fa === 'BUYER_SELLER_AGENT') ? (transaction.trusttrade_fee || 0) / 2 :
+    ['BUYER_AGENT', 'BUYER'].includes(_fa) ? _ttFee :
+    ['SPLIT_AGENT', 'BUYER_SELLER_AGENT', 'SPLIT'].includes(_fa) ? _ttFee / 2 :
     0
   );
   const fundsSecured = hasEscrow && (
@@ -1206,7 +1207,7 @@ function TransactionDetail() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#7c2d12', margin: '0 0 4px' }}>Action Required: Confirm Transaction</p>
-                    <p style={{ fontSize: 13, color: '#ea580c', margin: '0 0 4px' }}>A 2% TrustTrade platform fee is collected from the buyer separately. {BANKING_DETAILS_PROMPT}</p>
+                    <p style={{ fontSize: 13, color: '#ea580c', margin: '0 0 4px' }}>A 2% TrustTrade platform fee is included in the buyer's payment. You receive the full item value. {BANKING_DETAILS_PROMPT}</p>
                     <p style={{ fontSize: 13, fontWeight: 600, color: '#9a3412', margin: '0 0 14px' }}>You'll receive R {(transaction.seller_receives ?? transaction.item_price)?.toFixed(2)}</p>
                     {profileIncompleteError && (
                       <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
@@ -1335,7 +1336,7 @@ function TransactionDetail() {
                         </span>
                       </div>
                       <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
-                        The 2% platform fee is collected directly by TrustTrade and is not held in escrow. The seller receives the full item value.
+                        TrustTrade 2% platform fee is included in your total. Seller receives the full item value.
                       </p>
                     </div>
                   );
@@ -1568,18 +1569,18 @@ function TransactionDetail() {
                     <div style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px', border: '1px solid #f1f5f9' }}>
                       <p style={{ ...S.label, marginBottom: 12 }}>Price Summary</p>
                       {[
-                        { label: 'Item Price', value: `R ${transaction.item_price.toFixed(2)}`, mono: true },
-                        { label: 'TrustTrade Fee (2%)', value: `R ${transaction.trusttrade_fee.toFixed(2)}`, mono: true },
-                        { label: 'Fee Paid By', value: getFeePayerLabel(transaction.fee_allocation), badge: true, testId: 'fee-payer-badge' },
+                        { label: 'Item Value', value: `R ${transaction.item_price.toFixed(2)}`, mono: true },
+                        { label: 'TrustTrade Fee (2%)', value: `R ${_ttFee.toFixed(2)}`, mono: true },
+                        { label: 'Seller Receives', value: `R ${transaction.item_price.toFixed(2)}`, mono: true },
                       ].map(r => (
                         <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f1f5f9' }}>
                           <span style={{ fontSize: 13, color: '#64748b' }}>{r.label}</span>
-                          {r.badge ? <span data-testid={r.testId} style={S.pill('#eff6ff', '#2563eb')}>{r.value}</span> : <span style={{ fontSize: 13, fontWeight: 500, color: '#0f172a', fontFamily: r.mono ? 'monospace' : 'inherit' }}>{r.value}</span>}
+                          <span style={{ fontSize: 13, fontWeight: 500, color: '#0f172a', fontFamily: 'monospace' }}>{r.value}</span>
                         </div>
                       ))}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Total Secure Payment</span>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: '#10b981', fontFamily: 'monospace' }}>R {totalSecurePayment.toFixed(2)}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Buyer Pays Total</span>
+                        <span style={{ fontSize: 18, fontWeight: 700, color: '#2563eb', fontFamily: 'monospace' }}>R {totalSecurePayment.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
@@ -1786,8 +1787,8 @@ function TransactionDetail() {
               <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12, marginTop: 12 }}>
                 {[
                   { label: 'Item Value', value: `R ${transaction.item_price.toFixed(2)}` },
-                  { label: 'Platform Fee (2%)', value: `R ${(transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)).toFixed(2)}`, color: '#64748b' },
-                  { label: 'Buyer Pays', value: `R ${(transaction.total ?? (transaction.item_price + (transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)))).toFixed(2)}`, color: '#2563eb' },
+                  { label: 'TrustTrade Fee (2%)', value: `R ${(transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)).toFixed(2)}`, color: '#64748b' },
+                  { label: 'Buyer Pays Total', value: `R ${(transaction.total ?? (transaction.item_price + (transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)))).toFixed(2)}`, color: '#2563eb' },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
                     <span style={{ color: '#94a3b8' }}>{r.label}</span>

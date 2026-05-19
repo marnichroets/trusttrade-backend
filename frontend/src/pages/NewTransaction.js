@@ -958,7 +958,7 @@ function NewTransaction() {
                     </span>
                   </div>
                   <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', margin: '10px 0 0', lineHeight: 1.5 }}>
-                    The 2% platform fee is collected by TrustTrade separately from the protected payment.
+                    TrustTrade 2% platform fee is included in the buyer's payment. Seller receives the full item value.
                   </p>
                 </div>
               )}

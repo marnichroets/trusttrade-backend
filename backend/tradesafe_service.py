@@ -608,7 +608,7 @@ async def create_tradesafe_transaction(
             "description": description,
             "industry": "GENERAL_GOODS_SERVICES",
             "currency": "ZAR",
-            "feeAllocation": "SELLER",
+            "feeAllocation": "BUYER",
             "reference": internal_reference,
             "parties": {
                 "create": [
@@ -625,7 +625,7 @@ async def create_tradesafe_transaction(
                         "token": TRUSTTRADE_AGENT_TOKEN,
                         "fee": PLATFORM_FEE_PERCENT,
                         "feeType": "PERCENT",
-                        "feeAllocation": "SELLER",
+                        "feeAllocation": "BUYER",
                     }
                 ]
             },
@@ -647,7 +647,7 @@ async def create_tradesafe_transaction(
     logger.info("=== FIELDS SENT TO TRADESAFE ===")
     logger.info(f"AGENT fee: {PLATFORM_FEE_PERCENT}")
     logger.info("AGENT feeType: PERCENT")
-    logger.info("AGENT feeAllocation: SELLER")
+    logger.info("AGENT feeAllocation: BUYER")
     logger.info(f"Allocation value: R{amount_rands}")
     logger.info(f"Variables: {variables}")
     
@@ -677,12 +677,12 @@ async def create_tradesafe_transaction(
         
         # Add fee breakdown and allocation to response
         tx['trusttrade_fee'] = trusttrade_fee
-        tx['fee_allocation'] = "SELLER"
+        tx['fee_allocation'] = "BUYER_AGENT"
         tx['fee_breakdown'] = {
             'item_amount': amount_rands,
             'trusttrade_fee_percent': PLATFORM_FEE_PERCENT,
             'trusttrade_fee_amount': trusttrade_fee,
-            'fee_allocation': "SELLER"
+            'fee_allocation': "BUYER_AGENT"
         }
         
         # Store token IDs for payout tracking

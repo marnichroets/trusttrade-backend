@@ -8,10 +8,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { AdminNavbar, Breadcrumbs } from '../components/AdminNavbar';
 import api, { API_URL } from '../utils/api';
 import { toast } from 'sonner';
-import { 
-  ArrowLeft, User, Mail, Phone, CreditCard, Calendar, Clock, 
-  Shield, CheckCircle, XCircle, FileText, Download, DollarSign, 
-  AlertTriangle, Loader2, Image as ImageIcon, Ban
+import {
+  ArrowLeft, User, Mail, Phone, CreditCard, Calendar, Clock,
+  Shield, CheckCircle, XCircle, FileText, Download, DollarSign,
+  AlertTriangle, Loader2, Image as ImageIcon, Ban, Truck
 } from 'lucide-react';
 
 const BACKEND_URL = API_URL.replace('/api', '');
@@ -122,6 +122,18 @@ function AdminTransactionDetail() {
         case 'cancel_transaction':
           endpoint = `/admin/transactions/${transactionId}/cancel`;
           data.reason = adminNote || 'Cancelled by admin';
+          break;
+        case 'force_start_delivery':
+          endpoint = `/tradesafe/start-delivery/${transactionId}`;
+          break;
+        case 'force_mark_delivered':
+          endpoint = `/tradesafe/manual-accept-delivery/${transactionId}`;
+          break;
+        case 'force_release_escrow':
+          endpoint = `/tradesafe/accept-delivery/${transactionId}`;
+          break;
+        case 'force_cancel':
+          endpoint = `/tradesafe/cancel/${transactionId}`;
           break;
         default:
           toast.error('Unknown action');
@@ -694,6 +706,59 @@ function AdminTransactionDetail() {
               </div>
             </Card>
 
+            {/* Admin Override Controls */}
+            <Card className="p-6" style={{ backgroundColor: COLORS.background, border: `2px solid ${COLORS.error}` }} data-testid="admin-override-panel">
+              <h2 className="text-lg font-semibold mb-1 flex items-center gap-2" style={{ color: COLORS.error }}>
+                <AlertTriangle className="w-5 h-5" /> Admin Override Controls
+              </h2>
+              <p className="text-xs mb-4" style={{ color: COLORS.subtext }}>Force state changes — bypasses normal validation. Use with caution.</p>
+              <div className="space-y-3">
+                <Button
+                  onClick={() => openConfirmModal('force_start_delivery', 'Force: Mark Delivery Started', `Force-move transaction ${transaction.share_code} to delivery state? This bypasses seller action and notifies the buyer.`)}
+                  disabled={actionLoading}
+                  className="w-full text-white justify-center"
+                  style={{ backgroundColor: '#7c3aed' }}
+                  data-testid="force-start-delivery-btn"
+                >
+                  <Truck className="w-4 h-4 mr-2" />
+                  Force: Mark Delivery Started
+                </Button>
+
+                <Button
+                  onClick={() => openConfirmModal('force_mark_delivered', 'Force: Mark Delivered', `Force-mark transaction ${transaction.share_code} as delivered? This triggers payout processing.`)}
+                  disabled={actionLoading}
+                  className="w-full text-white justify-center"
+                  style={{ backgroundColor: '#0891b2' }}
+                  data-testid="force-mark-delivered-btn"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Force: Mark Delivered
+                </Button>
+
+                <Button
+                  onClick={() => openConfirmModal('force_release_escrow', 'Force: Release Escrow', `Force-release escrow for transaction ${transaction.share_code}? Funds will be sent to the seller immediately.`)}
+                  disabled={actionLoading}
+                  className="w-full text-white justify-center"
+                  style={{ backgroundColor: COLORS.green }}
+                  data-testid="force-release-escrow-btn"
+                >
+                  <DollarSign className="w-4 h-4 mr-2" />
+                  Force: Release Escrow
+                </Button>
+
+                <Button
+                  onClick={() => openConfirmModal('force_cancel', 'Force: Cancel Transaction', `Force-cancel transaction ${transaction.share_code}? This archives the transaction from any state and cannot be undone.`)}
+                  disabled={actionLoading}
+                  className="w-full text-white justify-center"
+                  style={{ backgroundColor: COLORS.error }}
+                  data-testid="force-cancel-btn"
+                >
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Force: Cancel Transaction
+                </Button>
+              </div>
+            </Card>
+
             {/* Quick Info */}
             <Card className="p-6" style={{ backgroundColor: COLORS.background }}>
               <h3 className="text-sm font-semibold mb-3" style={{ color: COLORS.primary }}>Quick Info</h3>
@@ -772,11 +837,15 @@ function AdminTransactionDetail() {
               disabled={actionLoading}
               className="text-white"
               style={{
-                backgroundColor: confirmModal.action.includes('refund') || confirmModal.action.includes('suspend') || confirmModal.action === 'cancel_transaction'
+                backgroundColor: confirmModal.action === 'force_cancel' || confirmModal.action.includes('refund') || confirmModal.action.includes('suspend') || confirmModal.action === 'cancel_transaction'
                   ? COLORS.error
-                  : confirmModal.action.includes('release')
+                  : confirmModal.action === 'force_release_escrow' || confirmModal.action.includes('release')
                     ? COLORS.green
-                    : COLORS.primary
+                    : confirmModal.action === 'force_start_delivery'
+                      ? '#7c3aed'
+                      : confirmModal.action === 'force_mark_delivered'
+                        ? '#0891b2'
+                        : COLORS.primary
               }}
             >
               {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm'}

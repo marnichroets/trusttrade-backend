@@ -404,10 +404,11 @@ async def tradesafe_webhook(request: Request):
             auto_release_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
             should_send_payment_email = not txn.get("payment_secured_email_sent_at")
             set_fields = {
-                "payment_status": "Paid",
+                "payment_status": "Funds Secured",
                 "tradesafe_state": state,
                 "funds_received_at": now_iso,
                 "auto_release_at": auto_release_at,
+                "release_status": "In Escrow",
             }
             if should_send_payment_email:
                 set_fields["payment_secured_email_sent_at"] = now_iso
@@ -415,7 +416,7 @@ async def tradesafe_webhook(request: Request):
                 {"_id": txn["_id"]},
                 {"$set": set_fields}
             )
-            logger.info(f"[WEBHOOK] Regular txn {txn_id} → payment_status=Paid, auto_release_at={auto_release_at} (state={state})")
+            logger.info(f"[WEBHOOK] Regular txn {txn_id} → payment_status=Funds Secured, tradesafe_state={state}, auto_release_at={auto_release_at}")
             if should_send_payment_email:
                 import asyncio
                 import email_service

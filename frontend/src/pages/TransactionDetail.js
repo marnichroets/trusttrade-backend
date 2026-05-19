@@ -924,9 +924,10 @@ function TransactionDetail() {
   const canMakePayment = isActionable && hasEscrow && isBuyer && !isSeller && bothConfirmed && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
   console.log('Payment Button Debug:', { hasEscrow, isBuyer, isSeller, escrowState, paymentStatus: transaction.payment_status, canMakePayment });
   const isAwaitingBuyerPayment = isActionable && hasEscrow && isSeller && !isBuyer && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
-  const canStartDelivery = isActionable && isDeliveryFlow && hasEscrow && isSeller && escrowState === 'FUNDS_RECEIVED';
-  const deliveryMarkedStarted = isDeliveryFlow && hasEscrow && isSeller && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState) && !transaction.delivery_confirmed;
-  const canManualStartDelivery = isActionable && isDeliveryFlow && hasEscrow && isSeller &&
+  const canStartDelivery = isActionable && !isInstantFlow && hasEscrow && isSeller &&
+    ['FUNDS_RECEIVED', 'FUNDS_DEPOSITED'].includes(escrowState) && !transaction.delivery_confirmed;
+  const deliveryMarkedStarted = !isInstantFlow && hasEscrow && isSeller && ['INITIATED', 'SENT', 'DELIVERED'].includes(escrowState) && !transaction.delivery_confirmed;
+  const canManualStartDelivery = isActionable && !isInstantFlow && hasEscrow && isSeller &&
     (['Paid', 'Funds Secured'].includes(transaction.payment_status)) &&
     (['FUNDS_RECEIVED', 'FUNDS_DEPOSITED'].includes(escrowState)) &&
     !(['INITIATED', 'DELIVERED'].includes(escrowState));
@@ -934,6 +935,8 @@ function TransactionDetail() {
   const canManualAcceptDelivery = isActionable && !isInstantFlow && hasEscrow && isBuyer && !transaction.delivery_confirmed && (transaction.payment_status === 'Delivery in Progress' || transaction.delivery_started_at || escrowState === 'INITIATED');
   const canConfirmDelivery = isActionable && isDeliveryFlow && !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
   const canConfirmInstantRelease = isActionable && isInstantFlow && hasEscrow && isBuyer && escrowState === 'FUNDS_RECEIVED' && !transaction.delivery_confirmed;
+  const buyerWaitingForSellerDispatch = !isInstantFlow && hasEscrow && isBuyer &&
+    ['FUNDS_RECEIVED', 'FUNDS_DEPOSITED'].includes(escrowState) && !transaction.delivery_confirmed;
   const shareLink = transaction.share_code ? `${window.location.origin}/t/${transaction.share_code}` : null;
   const _fa = (transaction.fee_allocation || 'BUYER').toUpperCase();
   const _ttFee = transaction.trusttrade_fee ?? Math.max(transaction.item_price * 0.02, 5);
@@ -1416,6 +1419,24 @@ function TransactionDetail() {
                     <button onClick={handleManualStartDelivery} disabled={startingDelivery} data-testid="manual-start-delivery-btn" className="action-btn" style={{ ...S.btn('#f59e0b'), opacity: startingDelivery ? 0.6 : 1 }}>
                       {startingDelivery ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : <><Truck size={13} /> Mark as Dispatched</>}
                     </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Buyer waiting for seller to dispatch */}
+            {buyerWaitingForSellerDispatch && (
+              <div style={S.actionCard('#f59e0b', '#fffbeb')}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 9, background: '#fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Truck size={18} color="#d97706" />
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>Waiting for seller to dispatch</p>
+                    <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 10px' }}>Your funds are secured in escrow. The seller has been notified to dispatch your item.</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: '#d97706' }}>
+                      <Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Awaiting seller dispatch...
+                    </div>
                   </div>
                 </div>
               </div>

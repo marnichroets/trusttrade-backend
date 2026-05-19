@@ -1425,22 +1425,40 @@ function TransactionDetail() {
             )}
 
             {/* Buyer waiting for seller to dispatch */}
-            {buyerWaitingForSellerDispatch && (
+            {buyerWaitingForSellerDispatch && (() => {
+              const dm = transaction.delivery_method;
+              const heading = dm === 'bank_deposit'
+                ? 'Waiting for seller to confirm handover'
+                : dm === 'digital' || dm === 'instant' || dm === 'immediate'
+                  ? 'Waiting for seller to deliver'
+                  : 'Waiting for seller to dispatch';
+              const body = dm === 'bank_deposit'
+                ? 'Your funds are secured in escrow. The seller will confirm when the handover is arranged.'
+                : dm === 'digital' || dm === 'instant' || dm === 'immediate'
+                  ? 'Your funds are secured in escrow. The seller has been notified to deliver your item digitally.'
+                  : 'Your funds are secured in escrow. The seller has been notified to dispatch your item.';
+              const status = dm === 'bank_deposit'
+                ? 'Awaiting seller handover confirmation...'
+                : dm === 'digital' || dm === 'instant' || dm === 'immediate'
+                  ? 'Awaiting digital delivery...'
+                  : 'Awaiting seller dispatch...';
+              return (
               <div style={S.actionCard('#f59e0b', '#fffbeb')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: '#fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Truck size={18} color="#d97706" />
                   </div>
                   <div>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>Waiting for seller to dispatch</p>
-                    <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 10px' }}>Your funds are secured in escrow. The seller has been notified to dispatch your item.</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>{heading}</p>
+                    <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 10px' }}>{body}</p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: '#d97706' }}>
-                      <Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Awaiting seller dispatch...
+                      <Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> {status}
                     </div>
                   </div>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* Buyer accept delivery */}
             {canAcceptDeliveryTS && (

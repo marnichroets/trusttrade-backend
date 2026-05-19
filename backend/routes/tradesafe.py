@@ -45,6 +45,34 @@ def calculate_seller_receives(item_price: float, fee_percent: float = None) -> f
     return float((price - fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
+def compute_net_amount(transaction: dict) -> float:
+    """Compute seller net_amount after release based on fee_allocation stored on the transaction."""
+    item_price = float(transaction.get("item_price") or 0)
+    courier_fee = float(transaction.get("courier_fee") or 0)
+    courier_handling = float(transaction.get("courier_handling_fee") or 0)
+    escrow_base = item_price + courier_fee + courier_handling
+
+    fa = (transaction.get("fee_allocation") or "BUYER").upper()
+    if fa in ("BUYER_AGENT",):
+        fa = "BUYER"
+    elif fa in ("SELLER_AGENT",):
+        fa = "SELLER"
+
+    if fa == "SELLER":
+        # Seller bears the full platform fee — deduct from their payout
+        seller_deduction = max(round(item_price * (settings.PLATFORM_FEE_PERCENT / 100), 2), 5.0)
+        net = escrow_base - seller_deduction
+    elif fa == "BUYER_SELLER":
+        # Seller bears half the platform fee
+        full_fee = max(round(item_price * (settings.PLATFORM_FEE_PERCENT / 100), 2), 5.0)
+        seller_deduction = round(full_fee / 2, 2)
+        net = escrow_base - seller_deduction
+    else:  # BUYER — seller receives full escrow_base
+        net = escrow_base
+
+    return round(net, 2)
+
+
 def has_bank_details(user_doc: dict | None) -> bool:
     if not user_doc:
         return False
@@ -363,6 +391,9 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
         courier_fee = float(transaction.get("courier_fee") or 0)
         courier_handling_fee = float(transaction.get("courier_handling_fee") or 0)
         escrow_amount = transaction["item_price"] + courier_fee + courier_handling_fee
+        _txn_fa = (transaction.get("fee_allocation") or "BUYER").upper()
+        if _txn_fa not in ("BUYER", "SELLER", "BUYER_SELLER"):
+            _txn_fa = "BUYER"
         result = await create_tradesafe_transaction(
             internal_reference=data.transaction_id,
             title=f"TrustTrade - {transaction['item_description'][:50]}",
@@ -374,6 +405,7 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
             seller_email=transaction["seller_email"],
             buyer_mobile=buyer_mobile,
             seller_mobile=seller_mobile,
+            fee_allocation=_txn_fa,
     )
     except Exception as e:
         logger.exception(f"[ESCROW ERROR] transaction_id={data.transaction_id} create_tradesafe_transaction failed: {e}")
@@ -930,12 +962,7 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     )
     logger.info("=" * 60)
 
-    # Fee is charged to the buyer (feeAllocation=BUYER), so seller receives the full
-    # escrow base — no deduction from seller's payout.
-    _courier_fee = float(transaction.get("courier_fee") or 0)
-    _courier_handling = float(transaction.get("courier_handling_fee") or 0)
-    _escrow_base = transaction["item_price"] + _courier_fee + _courier_handling
-    net_amount = round(_escrow_base, 2)
+    net_amount = compute_net_amount(transaction)
 
     tradesafe_state = transaction.get("tradesafe_state")
     withdrawal_ok = None
@@ -1208,12 +1235,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         f"sync_attempted={sync_attempted}"
     )
 
-    # Fee is charged to the buyer (feeAllocation=BUYER), so seller receives the full
-    # escrow base — no deduction from seller's payout.
-    _courier_fee = float(transaction.get("courier_fee") or 0)
-    _courier_handling = float(transaction.get("courier_handling_fee") or 0)
-    _escrow_base = transaction["item_price"] + _courier_fee + _courier_handling
-    net_amount = round(_escrow_base, 2)
+    net_amount = compute_net_amount(transaction)
 
     result = await accept_delivery(
         allocation_id,
@@ -1409,12 +1431,7 @@ async def release_instant_funds(request: Request, transaction_id: str):
         logger.error(f"[INSTANT_RELEASE] blocked txn={transaction_id} sync_attempted={sync_attempted} issues={issues}")
         raise HTTPException(status_code=400, detail=f"Cannot release: Seller payout not ready. Issues: {', '.join(issues)}.")
 
-    # Fee is charged to the buyer (feeAllocation=BUYER), so seller receives the full
-    # escrow base — no deduction from seller's payout.
-    _courier_fee = float(transaction.get("courier_fee") or 0)
-    _courier_handling = float(transaction.get("courier_handling_fee") or 0)
-    _escrow_base = transaction["item_price"] + _courier_fee + _courier_handling
-    net_amount = round(_escrow_base, 2)
+    net_amount = compute_net_amount(transaction)
 
     result = await accept_delivery(
         allocation_id,

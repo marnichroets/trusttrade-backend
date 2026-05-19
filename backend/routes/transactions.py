@@ -52,29 +52,49 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Transactions"])
 
 
-def calculate_money(item_price: float, fee_percent: float = 2.0) -> dict:
+def calculate_money(item_price: float, fee_percent: float = 2.0, fee_allocation: str = "BUYER") -> dict:
     """
     Calculate all money values using Decimal for precision.
-    Returns values as floats with exactly 2 decimal places.
 
-    The platform_fee is collected from the buyer separately and is NOT held in escrow.
-    The escrow amount equals item_price, and the seller receives item_price in full.
+    fee_allocation:
+      BUYER        — buyer pays fee on top; seller receives full item_price
+      SELLER       — fee deducted from seller payout; buyer pays item_price only
+      BUYER_SELLER — fee split 50/50; buyer pays item_price + half fee; seller receives item_price - half fee
     """
     price = Decimal(str(item_price))
     fee_rate = Decimal(str(fee_percent)) / Decimal("100")
-
     calculated_fee = (price * fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     minimum_fee = Decimal("5.00")
     platform_fee = max(calculated_fee, minimum_fee)
 
-    total = (price + platform_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    fa = (fee_allocation or "BUYER").upper()
+    # Normalise legacy value
+    if fa in ("BUYER_AGENT",):
+        fa = "BUYER"
+    elif fa in ("SELLER_AGENT",):
+        fa = "SELLER"
+
+    if fa == "SELLER":
+        buyer_fee = Decimal("0.00")
+        seller_fee = platform_fee
+    elif fa == "BUYER_SELLER":
+        half = (platform_fee / Decimal("2")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        buyer_fee = half
+        seller_fee = half
+    else:  # BUYER (default)
+        buyer_fee = platform_fee
+        seller_fee = Decimal("0.00")
+
+    total = (price + buyer_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    seller_receives = (price - seller_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     return {
         "item_price": float(price),
         "platform_fee": float(platform_fee),
         "trusttrade_fee": float(platform_fee),  # backwards-compat alias
         "total": float(total),
-        "seller_receives": float(price),  # seller receives full item_price from escrow
+        "seller_receives": float(seller_receives),
+        "fee_allocation": fa,
     }
 
 
@@ -396,8 +416,17 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
             detail=f"Maximum transaction amount is R{settings.MAXIMUM_TRANSACTION_AMOUNT:,.0f}. Please contact support for larger transactions."
         )
 
-    # Calculate fees using precise Decimal math (2% platform fee collected from buyer separately)
-    money = calculate_money(transaction_data.item_price, settings.PLATFORM_FEE_PERCENT)
+    # Normalise fee_allocation value from request
+    _raw_fa = (transaction_data.fee_allocation or "BUYER").upper()
+    if _raw_fa in ("BUYER_AGENT",):
+        _raw_fa = "BUYER"
+    elif _raw_fa in ("SELLER_AGENT",):
+        _raw_fa = "SELLER"
+    elif _raw_fa not in ("BUYER", "SELLER", "BUYER_SELLER"):
+        _raw_fa = "BUYER"
+
+    # Calculate fees using precise Decimal math
+    money = calculate_money(transaction_data.item_price, settings.PLATFORM_FEE_PERCENT, fee_allocation=_raw_fa)
     item_price = money["item_price"]
     platform_fee = money["platform_fee"]
     trusttrade_fee = money["trusttrade_fee"]  # same value, kept for backwards compat
@@ -512,8 +541,8 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "courier_fee": transaction_data.courier_fee or 0.0,
         "courier_handling_fee": transaction_data.courier_handling_fee or 0.0,
         "total": round(total + (transaction_data.courier_fee or 0.0) + (transaction_data.courier_handling_fee or 0.0), 2),
-        "seller_receives": money["seller_receives"],  # item_price (seller gets full escrow amount)
-        "fee_allocation": "BUYER_AGENT",  # platform fee is always collected from the buyer
+        "seller_receives": money["seller_receives"],
+        "fee_allocation": _raw_fa,
         "delivery_method": delivery_method,
         "auto_release_days": auto_release_days,
         "payment_status": "Pending Seller Confirmation" if transaction_data.creator_role == "buyer" else "Pending Buyer Confirmation",

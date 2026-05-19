@@ -168,7 +168,7 @@ function NewTransaction() {
     item_condition: '',
     known_issues: '',
     item_price: '',
-    fee_allocation: 'BUYER_AGENT',
+    fee_allocation: 'BUYER',
     delivery_method: 'courier',
   });
   const [confirmations, setConfirmations] = useState({
@@ -285,7 +285,10 @@ function NewTransaction() {
   const payoutSchedule = useMemo(() => getPayoutScheduleMessage(new Date(), platformConfig), [platformConfig]);
   const platformFee = Math.max(itemPrice * 0.02, 5);
   const trusttradeFee = platformFee; // alias kept for any legacy references
-  const sellerPayout = itemPrice; // seller receives full item price; fee is collected from buyer separately
+  const feeAlloc = formData.fee_allocation || 'BUYER';
+  const buyerFeeContrib = feeAlloc === 'BUYER' ? platformFee : feeAlloc === 'BUYER_SELLER' ? platformFee / 2 : 0;
+  const sellerFeeContrib = feeAlloc === 'SELLER' ? platformFee : feeAlloc === 'BUYER_SELLER' ? platformFee / 2 : 0;
+  const sellerPayout = itemPrice - sellerFeeContrib;
   const isCourierDelivery = formData.delivery_method === 'courier';
   const courierFee = isCourierDelivery && selectedQuote ? (selectedQuote?.price ?? selectedQuote?.rate ?? 0) : 0;
   const COURIER_HANDLING_FEE = 10;
@@ -774,6 +777,45 @@ function NewTransaction() {
                 </div>
               </div>
 
+              {/* Fee Allocation */}
+              <div style={S.card}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 6px' }}>Who pays the TrustTrade platform fee?</h3>
+                <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 14px' }}>TrustTrade charges a 2% fee (min R5) to protect both parties.</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[
+                    {
+                      value: 'BUYER',
+                      label: 'Buyer pays',
+                      desc: itemPrice >= 100 ? `R${buyerFeeContrib > 0 ? (itemPrice + (Math.max(itemPrice * 0.02, 5))).toFixed(2) : itemPrice.toFixed(2)} total from buyer — seller receives full R${itemPrice.toFixed(2)}` : 'Fee added to buyer\'s payment — seller receives full item value.',
+                    },
+                    {
+                      value: 'SELLER',
+                      label: 'Seller pays',
+                      desc: itemPrice >= 100 ? `Buyer pays R${itemPrice.toFixed(2)} — seller receives R${(itemPrice - Math.max(itemPrice * 0.02, 5)).toFixed(2)} after fee` : 'Fee deducted from seller\'s payout.',
+                    },
+                    {
+                      value: 'BUYER_SELLER',
+                      label: 'Split 50/50',
+                      desc: itemPrice >= 100 ? `Buyer pays R${(itemPrice + Math.max(itemPrice * 0.02, 5) / 2).toFixed(2)} — seller receives R${(itemPrice - Math.max(itemPrice * 0.02, 5) / 2).toFixed(2)}` : 'Half from buyer, half from seller.',
+                    },
+                  ].map(opt => {
+                    const active = feeAlloc === opt.value;
+                    return (
+                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${active ? '#3b82f6' : '#e2e8f0'}`, background: active ? '#eff6ff' : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
+                        <input type="radio" name="fee_allocation" value={opt.value} checked={active} onChange={handleChange} style={{ display: 'none' }} />
+                        <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${active ? '#3b82f6' : '#cbd5e1'}`, background: active ? '#3b82f6' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
+                          {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{opt.label}</span>
+                          <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>{opt.desc}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Courier Guy Delivery */}
               {COURIER_ENABLED && formData.delivery_method === 'courier' && (
                 <div style={S.card}>
@@ -924,9 +966,11 @@ function NewTransaction() {
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: courierFee > 0 ? 8 : 12 }}>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>TrustTrade Platform Fee (2%)</span>
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                      TrustTrade Fee (2%){feeAlloc === 'BUYER' ? ' — paid by buyer' : feeAlloc === 'SELLER' ? ' — deducted from seller' : ' — split 50/50'}
+                    </span>
                     <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
-                      + R {platformFee.toFixed(2)}
+                      R {platformFee.toFixed(2)}
                     </span>
                   </div>
                   {courierFee > 0 && (
@@ -948,7 +992,7 @@ function NewTransaction() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: 10 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Buyer Pays Total</span>
                     <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#60a5fa' }}>
-                      R {(itemPrice + platformFee + courierFee + courierHandlingFee).toFixed(2)}
+                      R {(itemPrice + buyerFeeContrib + courierFee + courierHandlingFee).toFixed(2)}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -958,7 +1002,9 @@ function NewTransaction() {
                     </span>
                   </div>
                   <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', margin: '10px 0 0', lineHeight: 1.5 }}>
-                    TrustTrade 2% platform fee is included in the buyer's payment. Seller receives the full item value.
+                    {feeAlloc === 'BUYER' && 'TrustTrade 2% fee is included in the buyer\'s payment. Seller receives the full item value.'}
+                    {feeAlloc === 'SELLER' && 'TrustTrade 2% fee is deducted from the seller\'s payout. Buyer pays the item price only.'}
+                    {feeAlloc === 'BUYER_SELLER' && 'TrustTrade 2% fee is split equally — half from buyer, half from seller payout.'}
                   </p>
                 </div>
               )}
@@ -1041,7 +1087,7 @@ function NewTransaction() {
                     { label: 'Item', value: formData.item_description, truncate: true },
                     { label: 'Item Value', value: `R ${itemPrice.toFixed(2)}`, mono: true },
                     { label: 'TrustTrade Fee (2%)', value: `R ${platformFee.toFixed(2)}`, mono: true },
-                    { label: 'Buyer Pays Total', value: `R ${(itemPrice + platformFee + courierFee + courierHandlingFee).toFixed(2)}`, mono: true, accent: '#2563eb' },
+                    { label: 'Buyer Pays Total', value: `R ${(itemPrice + buyerFeeContrib + courierFee + courierHandlingFee).toFixed(2)}`, mono: true, accent: '#2563eb' },
                     { label: 'Seller Receives', value: `R ${sellerPayout.toFixed(2)}`, mono: true, accent: '#10b981' },
                     { label: 'Photos', value: `${photos.length} uploaded` },
                     { label: 'Delivery', value: formData.delivery_method.replace('_', ' ') },

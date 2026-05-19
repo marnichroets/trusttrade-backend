@@ -935,13 +935,11 @@ function TransactionDetail() {
   const canConfirmDelivery = isActionable && isDeliveryFlow && !hasEscrow && isBuyer && !transaction.delivery_confirmed && transaction.payment_status === 'Paid';
   const canConfirmInstantRelease = isActionable && isInstantFlow && hasEscrow && isBuyer && escrowState === 'FUNDS_RECEIVED' && !transaction.delivery_confirmed;
   const shareLink = transaction.share_code ? `${window.location.origin}/t/${transaction.share_code}` : null;
-  const _fa = (transaction.fee_allocation || 'BUYER_AGENT').toUpperCase();
+  const _fa = (transaction.fee_allocation || 'BUYER').toUpperCase();
   const _ttFee = transaction.trusttrade_fee ?? Math.max(transaction.item_price * 0.02, 5);
-  const totalSecurePayment = transaction.item_price + (
-    ['BUYER_AGENT', 'BUYER'].includes(_fa) ? _ttFee :
-    ['SPLIT_AGENT', 'BUYER_SELLER_AGENT', 'SPLIT'].includes(_fa) ? _ttFee / 2 :
-    0
-  );
+  const _buyerFee = ['BUYER_AGENT', 'BUYER'].includes(_fa) ? _ttFee : ['BUYER_SELLER', 'SPLIT_AGENT', 'BUYER_SELLER_AGENT', 'SPLIT'].includes(_fa) ? _ttFee / 2 : 0;
+  const _sellerFee = ['SELLER_AGENT', 'SELLER'].includes(_fa) ? _ttFee : ['BUYER_SELLER', 'SPLIT_AGENT', 'BUYER_SELLER_AGENT', 'SPLIT'].includes(_fa) ? _ttFee / 2 : 0;
+  const totalSecurePayment = transaction.item_price + _buyerFee;
   const fundsSecured = hasEscrow && (
     ['FUNDS_RECEIVED', 'FUNDS_DEPOSITED', 'INITIATED', 'SENT', 'DELIVERED', 'FUNDS_RELEASED'].includes(escrowState) ||
     ['Paid', 'Funds Secured', 'Delivery in Progress', 'Released'].includes(transaction.payment_status)
@@ -1207,7 +1205,9 @@ function TransactionDetail() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#7c2d12', margin: '0 0 4px' }}>Action Required: Confirm Transaction</p>
-                    <p style={{ fontSize: 13, color: '#ea580c', margin: '0 0 4px' }}>A 2% TrustTrade platform fee is included in the buyer's payment. You receive the full item value. {BANKING_DETAILS_PROMPT}</p>
+                    <p style={{ fontSize: 13, color: '#ea580c', margin: '0 0 4px' }}>
+                      {['SELLER_AGENT', 'SELLER'].includes(_fa) ? 'A 2% TrustTrade platform fee is deducted from your payout.' : ['BUYER_SELLER', 'SPLIT_AGENT', 'BUYER_SELLER_AGENT', 'SPLIT'].includes(_fa) ? 'The 2% TrustTrade platform fee is split — half from buyer, half deducted from your payout.' : 'A 2% TrustTrade platform fee is included in the buyer\'s payment. You receive the full item value.'} {BANKING_DETAILS_PROMPT}
+                    </p>
                     <p style={{ fontSize: 13, fontWeight: 600, color: '#9a3412', margin: '0 0 14px' }}>You'll receive R {(transaction.seller_receives ?? transaction.item_price)?.toFixed(2)}</p>
                     {profileIncompleteError && (
                       <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
@@ -1336,7 +1336,7 @@ function TransactionDetail() {
                         </span>
                       </div>
                       <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
-                        TrustTrade 2% platform fee is included in your total. Seller receives the full item value.
+                        {['SELLER_AGENT','SELLER'].includes(_fa) ? 'TrustTrade 2% fee is deducted from seller\'s payout.' : ['BUYER_SELLER','SPLIT_AGENT','BUYER_SELLER_AGENT','SPLIT'].includes(_fa) ? 'TrustTrade 2% fee is split — half from buyer, half from seller.' : 'TrustTrade 2% platform fee is included in your total. Seller receives the full item value.'}
                       </p>
                     </div>
                   );
@@ -1570,8 +1570,8 @@ function TransactionDetail() {
                       <p style={{ ...S.label, marginBottom: 12 }}>Price Summary</p>
                       {[
                         { label: 'Item Value', value: `R ${transaction.item_price.toFixed(2)}`, mono: true },
-                        { label: 'TrustTrade Fee (2%)', value: `R ${_ttFee.toFixed(2)}`, mono: true },
-                        { label: 'Seller Receives', value: `R ${transaction.item_price.toFixed(2)}`, mono: true },
+                        { label: `TrustTrade Fee (2%)${['BUYER_AGENT','BUYER'].includes(_fa) ? ' — buyer pays' : ['SELLER_AGENT','SELLER'].includes(_fa) ? ' — seller pays' : ' — split 50/50'}`, value: `R ${_ttFee.toFixed(2)}`, mono: true },
+                        { label: 'Seller Receives', value: `R ${(transaction.seller_receives ?? transaction.item_price).toFixed(2)}`, mono: true },
                       ].map(r => (
                         <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f1f5f9' }}>
                           <span style={{ fontSize: 13, color: '#64748b' }}>{r.label}</span>

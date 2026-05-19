@@ -195,12 +195,27 @@ function NewTransaction() {
   }, []);
 
   useEffect(() => {
-    if (user) {
-      if (role === 'buyer') {
-        setFormData(prev => ({ ...prev, buyer_name: user.name, buyer_email: user.email }));
-      } else {
-        setFormData(prev => ({ ...prev, seller_name: user.name, seller_email: user.email }));
-      }
+    if (!user) return;
+    if (role === 'buyer') {
+      setFormData(prev => ({
+        ...prev,
+        buyer_name: user.name,
+        buyer_email: user.email,
+        // When switching to buyer, preserve what was typed as "other party" (buyer fields)
+        // by moving it into the seller fields (now the other party).
+        seller_name: prev.seller_name === user.name || !prev.seller_name ? prev.buyer_name : prev.seller_name,
+        seller_email: prev.seller_email === user.email || !prev.seller_email ? prev.buyer_email : prev.seller_email,
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        seller_name: user.name,
+        seller_email: user.email,
+        // When switching to seller, preserve what was typed as "other party" (seller fields)
+        // by moving it into the buyer fields (now the other party).
+        buyer_name: prev.buyer_name === user.name || !prev.buyer_name ? prev.seller_name : prev.buyer_name,
+        buyer_email: prev.buyer_email === user.email || !prev.buyer_email ? prev.seller_email : prev.buyer_email,
+      }));
     }
   }, [role, user]);
 
@@ -714,9 +729,9 @@ function NewTransaction() {
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 14px' }}>How will the item be delivered?</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    { value: 'courier', icon: Truck, label: 'Physical Item — seller ships or hands over in person', desc: 'Buyer confirms receipt before payment is released.' },
-                    { value: 'bank_deposit', icon: Banknote, label: 'Cash on Collection — meet in person to exchange', desc: 'Payment is released once the handover is confirmed.' },
-                    { value: 'digital', icon: Zap, label: 'Digital Delivery — files, codes, or online services', desc: 'Payment is released once the digital delivery is confirmed.' },
+                    { value: 'courier', icon: Truck, label: 'Courier Guy — we book delivery for you', desc: 'Buyer confirms receipt before payment is released.' },
+                    { value: 'bank_deposit', icon: Banknote, label: 'In-Person Meeting — meet to exchange', desc: 'Payment is released once the handover is confirmed.' },
+                    { value: 'digital', icon: Zap, label: 'Digital Delivery — files, codes or online services', desc: 'e.g. graphic design, software, documents. Payment is released once the digital delivery is confirmed.' },
                   ].map(opt => {
                     const active = formData.delivery_method === opt.value;
                     return (

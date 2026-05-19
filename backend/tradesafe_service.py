@@ -608,6 +608,7 @@ async def create_tradesafe_transaction(
             "description": description,
             "industry": "GENERAL_GOODS_SERVICES",
             "currency": "ZAR",
+            "feeAllocation": "SELLER",
             "reference": internal_reference,
             "parties": {
                 "create": [

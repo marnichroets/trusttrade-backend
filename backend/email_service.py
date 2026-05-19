@@ -629,12 +629,13 @@ def get_payment_received_email(
     subject = f"TrustTrade: Payment Secured - {share_code}"
     flow = (delivery_method or "courier").lower()
     is_delivery = flow == "courier"
-    is_instant = flow == "digital"
-    
+    is_inperson = flow == "bank_deposit"
+    is_instant = flow in ("digital", "instant", "immediate")
+
     if role.lower() == "seller":
         if is_delivery:
             intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
-            
+
             <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>What you need to do:</strong><br>
                 1. Dispatch the item to the buyer<br>
@@ -642,17 +643,28 @@ def get_payment_received_email(
                 3. Wait for buyer confirmation<br><br>
                 <strong>Payout:</strong> processed as quickly as possible after escrow release; bank settlement may take up to 2 business days
             </div>"""
+        elif is_inperson:
+            intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
+
+            <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
+                <strong>What you need to do:</strong><br>
+                1. Meet the buyer to exchange the item<br>
+                2. Mark it as handed over in TrustTrade<br>
+                3. Buyer confirms receipt to release your funds<br><br>
+                <strong>Payout:</strong> processed as quickly as possible after escrow release; bank settlement may take up to 2 business days
+            </div>"""
         elif is_instant:
             intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
-            
+
             <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
-                <strong>Instant release flow:</strong><br>
-                No delivery dispatch action is required. TrustTrade will process release according to the agreed instant-flow conditions.<br><br>
+                <strong>Digital delivery:</strong><br>
+                Deliver your files, codes, or service to the buyer and mark the delivery complete in TrustTrade.<br>
+                Buyer confirms receipt to release your funds.<br><br>
                 <strong>Payout:</strong> processed as quickly as possible after escrow release; bank settlement may take up to 2 business days
             </div>"""
         else:
             intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
-            
+
             <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>What happens next:</strong><br>
                 Complete the agreed release conditions and update the transaction. Funds remain protected until release conditions are met.<br><br>
@@ -661,24 +673,36 @@ def get_payment_received_email(
     else:
         if is_delivery:
             intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
-            
+
             <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>What happens next:</strong><br>
                 1. Seller dispatches the item<br>
                 2. Inspect the item when you receive it<br>
-                3. Confirm receipt to release funds to seller<br><br>
+                3. Confirm receipt in TrustTrade to release funds to the seller<br><br>
+                <strong>Your money is protected</strong> until you confirm receipt.
+            </div>"""
+        elif is_inperson:
+            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
+
+            <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
+                <strong>What happens next:</strong><br>
+                1. Meet the seller to collect the item<br>
+                2. Inspect the item at handover<br>
+                3. Confirm receipt in TrustTrade to release funds to the seller<br><br>
                 <strong>Your money is protected</strong> until you confirm receipt.
             </div>"""
         elif is_instant:
             intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
-            
+
             <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
-                <strong>Instant release flow:</strong><br>
-                Funds are protected in escrow and release according to the agreed instant-flow conditions. No delivery dispatch step is required.
+                <strong>Digital delivery:</strong><br>
+                The seller will deliver the files, codes, or service to you.<br>
+                Once you are satisfied, confirm receipt in TrustTrade to release the funds.<br><br>
+                <strong>Your money is protected</strong> until you confirm receipt.
             </div>"""
         else:
             intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
-            
+
             <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>What happens next:</strong><br>
                 Funds remain protected until the agreed release conditions are met. Confirm completion only when satisfied.

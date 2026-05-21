@@ -963,70 +963,72 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
 
     net_amount = compute_net_amount(transaction)
 
-    tradesafe_state = transaction.get("tradesafe_state")
     withdrawal_ok = None
     withdrawal_error = None
 
-    if tradesafe_state == "DELIVERED":
-        # allocationCompleteDelivery was already called for this allocation.
-        # TradeSafe rejects allocationAcceptDelivery after allocationCompleteDelivery,
-        # so skip both mutations and trigger the bank withdrawal directly.
-        logger.info(
-            f"[ACCEPT_DELIVERY] State=DELIVERED — bypassing TradeSafe mutations, "
-            f"triggering direct withdrawal for {transaction_id}"
-        )
-        from tradesafe_service import withdraw_token_funds
-        try:
-            withdrawal_ok = await withdraw_token_funds(seller_token_id, float(net_amount), rtc=True)
-            logger.info(
-                f"[ACCEPT_DELIVERY] DELIVERED bypass withdrawal: "
-                f"token={seller_token_id} R{net_amount:.2f} ok={withdrawal_ok}"
-            )
-        except Exception as exc:
-            logger.error(f"[ACCEPT_DELIVERY] DELIVERED bypass withdrawal exception: {exc}")
-            withdrawal_ok = False
-            withdrawal_error = str(exc)
-        else:
-            withdrawal_error = None if withdrawal_ok else "TradeSafe tokenAccountWithdraw returned false"
-    else:
-        # Normal path — allocationStartDelivery → allocationAcceptDelivery back-to-back.
-        result = await accept_delivery(
-            allocation_id,
-            seller_token_id=transaction.get("tradesafe_seller_token_id"),
-            amount=float(net_amount),
+    result = await accept_delivery(
+        allocation_id,
+        seller_token_id=transaction.get("tradesafe_seller_token_id"),
+        amount=float(net_amount),
+    )
+
+    if not result:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to accept delivery on TradeSafe — allocation_id={allocation_id!r}. Check server logs."
         )
 
-        if not result:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to release funds on TradeSafe — allocation_id={allocation_id!r}. Check server logs."
-            )
+    # Capture the actual TradeSafe state returned by allocationAcceptDelivery.
+    # TradeSafe often returns DELIVERY_ACCEPTED here (their "80% complete" state) rather than
+    # FUNDS_RELEASED — funds only land in the seller token after TradeSafe completes async
+    # processing and fires the FUNDS_RELEASED webhook.  Hardcoding FUNDS_RELEASED here was
+    # causing an immediate tokenAccountWithdraw call on a zero-balance token, which failed and
+    # left withdrawal_status="failed", blocking the webhook-triggered retry.
+    ts_actual_state = (result.get("state") or "DELIVERY_ACCEPTED").upper()
+    logger.info(
+        f"[ACCEPT_DELIVERY] allocationAcceptDelivery returned state={ts_actual_state!r} "
+        f"allocation={allocation_id!r} txn={transaction_id}"
+    )
+
+    immediate_release = (ts_actual_state == "FUNDS_RELEASED")
 
     # Update timeline
     timeline = transaction.get("timeline", [])
     timeline.append({
-        "status": "Delivery Accepted - Funds Released",
+        "status": "Delivery Accepted - Funds Released" if immediate_release else "Delivery Accepted - Awaiting Release",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "by": user.name,
-        "details": f"Buyer confirmed receipt. R{net_amount:.2f} released to seller."
+        "details": f"Buyer confirmed receipt. R{net_amount:.2f} {'released to seller' if immediate_release else 'awaiting release to seller'}."
     })
 
     now_iso = datetime.now(timezone.utc).isoformat()
     update_fields = {
-        "tradesafe_state": "FUNDS_RELEASED",
-        "payment_status": "Completed",
-        "release_status": "Released",
-        "payout_status": "awaiting_bank_payout" if withdrawal_ok is None else ("payout_processing" if withdrawal_ok else "payout_failed"),
-        "withdrawal_status": "pending" if withdrawal_ok is None else ("succeeded" if withdrawal_ok else "failed"),
+        "tradesafe_state": ts_actual_state,
+        "payment_status": "Completed" if immediate_release else "Delivery Confirmed",
+        "release_status": "Released" if immediate_release else "Awaiting Release",
+        "payout_status": (
+            "payout_processing" if withdrawal_ok is True else
+            "payout_failed" if withdrawal_ok is False else
+            "awaiting_bank_payout" if immediate_release else
+            "pending_release"
+        ),
+        "withdrawal_status": (
+            "succeeded" if withdrawal_ok is True else
+            "failed" if withdrawal_ok is False else
+            "pending" if immediate_release else
+            "awaiting_release"
+        ),
         "delivery_confirmed": True,
         "delivery_confirmed_at": now_iso,
-        "released_at": now_iso,
-        "funds_released_at": now_iso,
         "expected_settlement_window": "up to 2 business days",
         "payout_sla_status": "on_track" if withdrawal_ok is not False else "critical",
         "timeline": timeline,
         "net_amount": net_amount
     }
+
+    if immediate_release:
+        update_fields["released_at"] = now_iso
+        update_fields["funds_released_at"] = now_iso
 
     if withdrawal_ok is True:
         update_fields.update({
@@ -1057,7 +1059,8 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         {"$set": update_fields}
     )
 
-    if withdrawal_ok is None:
+    if withdrawal_ok is None and immediate_release:
+        # TradeSafe confirmed funds are in the seller token — trigger bank withdrawal now
         latest_transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
         from routes.webhooks import attempt_transaction_withdrawal
         withdrawal_result = await attempt_transaction_withdrawal(
@@ -1066,45 +1069,60 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
             source="accept_delivery",
         )
         logger.info(f"[ACCEPT_DELIVERY] withdrawal result txn={transaction_id}: {withdrawal_result}")
-
-    # Send notifications
-    logger.info("=" * 60)
-    logger.info("[RELEASE] === SENDING FUNDS RELEASED NOTIFICATIONS ===")
-    logger.info(f"[RELEASE] Transaction: {transaction_id}")
-    logger.info(f"[RELEASE] Seller Email: {transaction['seller_email']}")
-    logger.info(f"[RELEASE] Seller Name: {transaction['seller_name']}")
-    logger.info(f"[RELEASE] Amount: R{transaction['item_price']}, Net: R{net_amount}")
-    logger.info("=" * 60)
-
-    try:
-        email_result = await send_funds_released_email(
-            to_email=transaction["seller_email"],
-            to_name=transaction["seller_name"],
-            share_code=transaction.get("share_code", transaction_id),
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"],
-            net_amount=net_amount
+    elif withdrawal_ok is None:
+        logger.info(
+            f"[ACCEPT_DELIVERY] Deferring bank withdrawal — TradeSafe state={ts_actual_state!r}, "
+            f"funds not yet in seller token. FUNDS_RELEASED webhook will trigger withdrawal. txn={transaction_id}"
         )
-        logger.info(f"[RELEASE] Funds released email result: {email_result}")
-    except Exception as e:
-        logger.error(f"[RELEASE] Funds released email EXCEPTION: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
 
-    seller_phone = transaction.get("seller_phone")
-    if seller_phone:
+    if immediate_release:
+        # Send notifications
+        logger.info("=" * 60)
+        logger.info("[RELEASE] === SENDING FUNDS RELEASED NOTIFICATIONS ===")
+        logger.info(f"[RELEASE] Transaction: {transaction_id}")
+        logger.info(f"[RELEASE] Seller Email: {transaction['seller_email']}")
+        logger.info(f"[RELEASE] Seller Name: {transaction['seller_name']}")
+        logger.info(f"[RELEASE] Amount: R{transaction['item_price']}, Net: R{net_amount}")
+        logger.info("=" * 60)
+
         try:
-            await send_funds_released_sms(
-                to_phone=seller_phone,
-                amount=net_amount,
+            email_result = await send_funds_released_email(
+                to_email=transaction["seller_email"],
+                to_name=transaction["seller_name"],
+                share_code=transaction.get("share_code", transaction_id),
+                item_description=transaction["item_description"],
+                amount=transaction["item_price"],
+                net_amount=net_amount
             )
+            logger.info(f"[RELEASE] Funds released email result: {email_result}")
         except Exception as e:
-            logger.error(f"Failed to send funds released SMS: {e}")
+            logger.error(f"[RELEASE] Funds released email EXCEPTION: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+        seller_phone = transaction.get("seller_phone")
+        if seller_phone:
+            try:
+                await send_funds_released_sms(
+                    to_phone=seller_phone,
+                    amount=net_amount,
+                )
+            except Exception as e:
+                logger.error(f"Failed to send funds released SMS: {e}")
+    else:
+        logger.info(
+            f"[ACCEPT_DELIVERY] Funds-released notifications deferred txn={transaction_id} "
+            f"state={ts_actual_state!r}"
+        )
 
     return {
-        "status": "funds_released",
-        "message": "Delivery confirmed. Funds have been released to seller.",
-        "state": "FUNDS_RELEASED",
+        "status": "funds_released" if immediate_release else "delivery_confirmed",
+        "message": (
+            "Delivery confirmed. Funds have been released to seller."
+            if immediate_release else
+            "Delivery confirmed. Funds will be released to seller once TradeSafe completes processing."
+        ),
+        "state": ts_actual_state,
         "net_amount": net_amount
     }
 
@@ -1249,6 +1267,13 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             detail="TradeSafe release call failed. Funds have NOT been released. Please retry."
         )
 
+    ts_actual_state = (result.get("state") or "DELIVERY_ACCEPTED").upper()
+    immediate_release = (ts_actual_state == "FUNDS_RELEASED")
+    logger.info(
+        f"[MANUAL_RELEASE] allocationAcceptDelivery returned state={ts_actual_state!r} "
+        f"allocation={allocation_id!r} txn={transaction_id}"
+    )
+
     timeline = transaction.get("timeline", [])
     timeline.append({
         "status": "Delivery Confirmed (Manual)",
@@ -1257,71 +1282,56 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
         "details": f"Manual override by {'admin' if user.is_admin else 'buyer'}"
     })
     timeline.append({
-        "status": "Funds Released",
+        "status": "Funds Released" if immediate_release else "Delivery Accepted - Awaiting Release",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "by": "System",
-        "details": f"R{net_amount:.2f} released to seller"
+        "details": f"R{net_amount:.2f} {'released to seller' if immediate_release else 'awaiting TradeSafe release'}"
     })
 
     now_iso = datetime.now(timezone.utc).isoformat()
+    update_fields = {
+        "tradesafe_state": ts_actual_state,
+        "payment_status": "Completed" if immediate_release else "Delivery Confirmed",
+        "payout_status": "awaiting_bank_payout" if immediate_release else "pending_release",
+        "withdrawal_status": "pending" if immediate_release else "awaiting_release",
+        "delivery_confirmed": True,
+        "delivery_confirmed_at": now_iso,
+        "release_status": "Released" if immediate_release else "Awaiting Release",
+        "expected_settlement_window": "up to 2 business days",
+        "payout_sla_status": "on_track",
+        "timeline": timeline,
+        "manual_delivery_accept": True,
+        "net_amount": net_amount
+    }
+    if immediate_release:
+        update_fields["released_at"] = now_iso
+        update_fields["funds_released_at"] = now_iso
+
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
-        {"$set": {
-            "tradesafe_state": "FUNDS_RELEASED",
-            "payment_status": "Completed",
-            "payout_status": "awaiting_bank_payout",
-            "withdrawal_status": "pending",
-            "delivery_confirmed": True,
-            "delivery_confirmed_at": now_iso,
-            "release_status": "Released",
-            "released_at": now_iso,
-            "funds_released_at": now_iso,
-            "expected_settlement_window": "up to 2 business days",
-            "payout_sla_status": "on_track",
-            "timeline": timeline,
-            "manual_delivery_accept": True,
-            "net_amount": net_amount
-        }}
+        {"$set": update_fields}
     )
 
-    # Trigger immediate bank settlement via TOKEN_WITHDRAWAL
-    from tradesafe_service import trigger_seller_bank_settlement
-    settlement_result = await trigger_seller_bank_settlement(
-        seller_token_id=seller_token_id,
-        net_amount=float(net_amount),
-        transaction_id=transaction_id,
-        source="manual_accept_delivery",
-    )
-    logger.info(f"[MANUAL_RELEASE] settlement result txn={transaction_id}: {settlement_result}")
-    if settlement_result["success"]:
-        await db.transactions.update_one(
-            {"transaction_id": transaction_id},
-            {"$set": {
-                "withdrawal_status": "succeeded",
-                "withdrawal_triggered": True,
-                "withdrawal_triggered_at": now_iso,
-                "payout_status": "payout_processing",
-                "settlement_status": "bank_processing",
-            }}
+    if immediate_release:
+        latest_transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+        from routes.webhooks import attempt_transaction_withdrawal
+        withdrawal_result = await attempt_transaction_withdrawal(
+            db,
+            latest_transaction or {**transaction, **update_fields},
+            source="manual_accept_delivery",
         )
+        logger.info(f"[MANUAL_RELEASE] withdrawal result txn={transaction_id}: {withdrawal_result}")
     else:
-        await db.transactions.update_one(
-            {"transaction_id": transaction_id},
-            {"$set": {
-                "withdrawal_status": "failed",
-                "withdrawal_triggered": False,
-                "withdrawal_error": settlement_result.get("error"),
-                "payout_status": "payout_failed",
-                "settlement_status": "withdrawal_failed",
-                "payout_sla_status": "critical",
-            }}
+        logger.info(
+            f"[MANUAL_RELEASE] Deferring bank withdrawal — TradeSafe state={ts_actual_state!r}, "
+            f"FUNDS_RELEASED webhook will trigger withdrawal. txn={transaction_id}"
         )
 
     # Send notifications
     seller_email = transaction.get("seller_email")
     seller_phone = transaction.get("seller_phone")
 
-    if seller_email:
+    if immediate_release and seller_email:
         await send_funds_released_email(
             to_email=seller_email,
             to_name=transaction.get("seller_name"),
@@ -1331,7 +1341,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             net_amount=net_amount
         )
 
-    if seller_phone:
+    if immediate_release and seller_phone:
         try:
             await send_funds_released_sms(
                 to_phone=seller_phone,
@@ -1341,9 +1351,13 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             logger.error(f"Failed to send funds released SMS: {e}")
 
     return {
-        "status": "funds_released",
-        "message": "Delivery confirmed. Funds released to seller.",
-        "state": "FUNDS_RELEASED",
+        "status": "funds_released" if immediate_release else "delivery_confirmed",
+        "message": (
+            "Delivery confirmed. Funds released to seller."
+            if immediate_release else
+            "Delivery confirmed. Funds will be released to seller once TradeSafe completes processing."
+        ),
+        "state": ts_actual_state,
         "net_amount": net_amount,
         "tradesafe_result": result
     }
@@ -1442,75 +1456,67 @@ async def release_instant_funds(request: Request, transaction_id: str):
         logger.error(f"[INSTANT_RELEASE] TradeSafe accept_delivery failed for {transaction_id}")
         raise HTTPException(status_code=500, detail="TradeSafe release call failed. Funds have NOT been released. Please retry.")
 
+    ts_actual_state = (result.get("state") or "DELIVERY_ACCEPTED").upper()
+    immediate_release = (ts_actual_state == "FUNDS_RELEASED")
+    logger.info(
+        f"[INSTANT_RELEASE] allocationAcceptDelivery returned state={ts_actual_state!r} "
+        f"allocation={allocation_id!r} txn={transaction_id}"
+    )
+
     timeline = transaction.get("timeline", [])
     timeline.append({
-        "status": "Buyer Confirmed & Released",
+        "status": "Buyer Confirmed & Released" if immediate_release else "Buyer Confirmed Delivery",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "by": user.name,
-        "details": "Buyer confirmed satisfaction and released funds (instant/digital delivery)"
+        "details": "Buyer confirmed satisfaction for instant/digital delivery"
     })
     timeline.append({
-        "status": "Funds Released",
+        "status": "Funds Released" if immediate_release else "Delivery Accepted - Awaiting Release",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "by": "System",
-        "details": f"R{net_amount:.2f} released to seller"
+        "details": f"R{net_amount:.2f} {'released to seller' if immediate_release else 'awaiting TradeSafe release'}"
     })
 
     now_iso = datetime.now(timezone.utc).isoformat()
+    update_fields = {
+        "tradesafe_state": ts_actual_state,
+        "payment_status": "Completed" if immediate_release else "Delivery Confirmed",
+        "payout_status": "awaiting_bank_payout" if immediate_release else "pending_release",
+        "withdrawal_status": "pending" if immediate_release else "awaiting_release",
+        "delivery_confirmed": True,
+        "delivery_confirmed_at": now_iso,
+        "release_status": "Released" if immediate_release else "Awaiting Release",
+        "expected_settlement_window": "up to 2 business days",
+        "payout_sla_status": "on_track",
+        "timeline": timeline,
+        "net_amount": net_amount
+    }
+    if immediate_release:
+        update_fields["released_at"] = now_iso
+        update_fields["funds_released_at"] = now_iso
+
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
-        {"$set": {
-            "tradesafe_state": "FUNDS_RELEASED",
-            "payment_status": "Completed",
-            "payout_status": "awaiting_bank_payout",
-            "withdrawal_status": "pending",
-            "delivery_confirmed": True,
-            "delivery_confirmed_at": now_iso,
-            "release_status": "Released",
-            "released_at": now_iso,
-            "funds_released_at": now_iso,
-            "expected_settlement_window": "up to 2 business days",
-            "payout_sla_status": "on_track",
-            "timeline": timeline,
-            "net_amount": net_amount
-        }}
+        {"$set": update_fields}
     )
 
-    # Trigger immediate bank settlement via TOKEN_WITHDRAWAL
-    from tradesafe_service import trigger_seller_bank_settlement
-    settlement_result = await trigger_seller_bank_settlement(
-        seller_token_id=seller_token_id,
-        net_amount=float(net_amount),
-        transaction_id=transaction_id,
-        source="release_instant",
-    )
-    logger.info(f"[INSTANT_RELEASE] settlement result txn={transaction_id}: {settlement_result}")
-    if settlement_result["success"]:
-        await db.transactions.update_one(
-            {"transaction_id": transaction_id},
-            {"$set": {
-                "withdrawal_status": "succeeded",
-                "withdrawal_triggered": True,
-                "withdrawal_triggered_at": now_iso,
-                "payout_status": "payout_processing",
-                "settlement_status": "bank_processing",
-            }}
+    if immediate_release:
+        latest_transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+        from routes.webhooks import attempt_transaction_withdrawal
+        withdrawal_result = await attempt_transaction_withdrawal(
+            db,
+            latest_transaction or {**transaction, **update_fields},
+            source="release_instant",
         )
+        logger.info(f"[INSTANT_RELEASE] withdrawal result txn={transaction_id}: {withdrawal_result}")
     else:
-        await db.transactions.update_one(
-            {"transaction_id": transaction_id},
-            {"$set": {
-                "withdrawal_status": "failed",
-                "withdrawal_triggered": False,
-                "withdrawal_error": settlement_result.get("error"),
-                "payout_status": "payout_failed",
-                "settlement_status": "withdrawal_failed",
-                "payout_sla_status": "critical",
-            }}
+        logger.info(
+            f"[INSTANT_RELEASE] Deferring bank withdrawal — TradeSafe state={ts_actual_state!r}, "
+            f"FUNDS_RELEASED webhook will trigger withdrawal. txn={transaction_id}"
         )
 
     seller_phone = transaction.get("seller_phone")
-    if seller_email:
+    if immediate_release and seller_email:
         await send_funds_released_email(
             to_email=seller_email,
             to_name=transaction.get("seller_name"),
@@ -1519,16 +1525,20 @@ async def release_instant_funds(request: Request, transaction_id: str):
             amount=transaction["item_price"],
             net_amount=net_amount
         )
-    if seller_phone:
+    if immediate_release and seller_phone:
         try:
             await send_funds_released_sms(to_phone=seller_phone, amount=net_amount)
         except Exception as e:
             logger.error(f"Failed to send instant-release SMS: {e}")
 
     return {
-        "status": "funds_released",
-        "message": "Payment confirmed and funds released to seller.",
-        "state": "FUNDS_RELEASED",
+        "status": "funds_released" if immediate_release else "delivery_confirmed",
+        "message": (
+            "Payment confirmed and funds released to seller."
+            if immediate_release else
+            "Payment confirmed. Funds will be released to seller once TradeSafe completes processing."
+        ),
+        "state": ts_actual_state,
         "net_amount": net_amount,
         "tradesafe_result": result
     }

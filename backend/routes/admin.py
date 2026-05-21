@@ -1763,10 +1763,16 @@ async def retry_transaction_withdrawal(request: Request, transaction_id: str):
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
-    if transaction.get("tradesafe_state") not in ("FUNDS_RELEASED", "COMPLETE", "COMPLETED"):
+    tradesafe_state = (transaction.get("tradesafe_state") or "").upper()
+    if tradesafe_state == "DELIVERY_ACCEPTED":
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot retry withdrawal while TradeSafe state is {transaction.get('tradesafe_state')!r}"
+            detail="Awaiting TradeSafe FUNDS_RELEASED webhook before withdrawal."
+        )
+    if tradesafe_state != "FUNDS_RELEASED":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot retry withdrawal while TradeSafe state is {tradesafe_state!r}. Withdrawal retry requires FUNDS_RELEASED."
         )
 
     withdrawal_status = transaction.get("withdrawal_status")
@@ -1779,8 +1785,13 @@ async def retry_transaction_withdrawal(request: Request, transaction_id: str):
     if not transaction.get("tradesafe_seller_token_id"):
         raise HTTPException(status_code=400, detail="Transaction has no seller token ID")
 
-    if transaction.get("settlement_reference") or transaction.get("bank_reference"):
-        raise HTTPException(status_code=400, detail="Transaction already has settlement/bank reference evidence")
+    if (
+        transaction.get("settlement_reference")
+        or transaction.get("bank_reference")
+        or transaction.get("tradesafe_withdrawal_id")
+        or transaction.get("withdrawal_completed_at")
+    ):
+        raise HTTPException(status_code=400, detail="Transaction already has withdrawal completion/reference evidence")
 
     try:
         net_amount = float(transaction.get("net_amount"))
@@ -1808,12 +1819,18 @@ async def retry_transaction_withdrawal(request: Request, transaction_id: str):
         transaction.get("tradesafe_allocation_id"),
     ]
     matches = _matching_statement_entries(rows, net_amount, references)
-    existing_acsp_withdrawal = [
+    processed_statement_statuses = {"ACSP", "PROCESSED", "PROCESSED_BY_TRADESAFE", "SUCCESS", "SUCCEEDED", "COMPLETED"}
+    processed_withdrawal_evidence = [
         row for row in matches
-        if row.get("category") == "withdrawal_debit" and str(row.get("status") or "").upper() == "ACSP"
+        if row.get("category") == "withdrawal_debit"
+        and str(row.get("status") or "").upper() in processed_statement_statuses
     ]
-    if existing_acsp_withdrawal:
-        raise HTTPException(status_code=400, detail="Existing ACSP withdrawal evidence found in tokenStatement; retry blocked")
+    if processed_withdrawal_evidence:
+        statuses = sorted({str(row.get("status") or "").upper() for row in processed_withdrawal_evidence})
+        raise HTTPException(
+            status_code=400,
+            detail=f"Existing processed withdrawal evidence found in tokenStatement ({', '.join(statuses)}); retry blocked"
+        )
 
     from routes.webhooks import attempt_transaction_withdrawal
     from services.reconciliation_service import write_audit_record
@@ -1827,7 +1844,7 @@ async def retry_transaction_withdrawal(request: Request, transaction_id: str):
         "transaction_id": transaction_id,
         "confirmation_reason": confirmation_reason,
         "token_balance_checked": token_balance,
-        "existing_acsp_withdrawal": False,
+        "existing_processed_withdrawal_evidence": False,
         "result": result,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
@@ -2030,7 +2047,8 @@ def _matching_statement_entries(entries: list, amount, references: list):
 
         if expected is not None and entry_amount is not None:
             try:
-                amount_matches = abs(float(entry_amount) - expected) <= 1.00
+                parsed_amount = float(entry_amount)
+                amount_matches = abs((abs(parsed_amount) if is_debit else parsed_amount) - expected) <= 1.00
             except (TypeError, ValueError):
                 amount_matches = False
 

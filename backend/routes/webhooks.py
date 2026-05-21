@@ -3,8 +3,7 @@ TrustTrade Webhook Routes
 Handles TradeSafe webhook notifications and alerts
 """
 
-import hashlib
-import hmac
+import ipaddress
 import json
 import logging
 import os
@@ -17,21 +16,43 @@ from core.security import get_user_from_token
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Webhooks"])
 
-TRADESAFE_WEBHOOK_SECRET = os.environ.get("TRADESAFE_WEBHOOK_SECRET", "")
-if not TRADESAFE_WEBHOOK_SECRET:
-    logger.warning("[WEBHOOK] TRADESAFE_WEBHOOK_SECRET not set — signature check skipped; relying on payload validation")
+DEFAULT_TRADESAFE_IP_RANGES = "197.242.78.0/24,41.203.0.0/16,127.0.0.1"
 
-# TradeSafe production IP ranges (update if TradeSafe publishes new ranges)
-TRADESAFE_IP_RANGES = [
-    "197.242.78.",   # TradeSafe primary range prefix
-    "41.203.",       # TradeSafe secondary range prefix
-    "127.0.0.1",     # localhost (dev/testing)
-    "::1",           # localhost IPv6
-]
+
+def _load_tradesafe_ip_ranges() -> list:
+    configured_ranges = os.environ.get("TRADESAFE_IP_RANGES") or DEFAULT_TRADESAFE_IP_RANGES
+    networks = []
+    for item in configured_ranges.split(","):
+        value = item.strip()
+        if not value:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(value, strict=False))
+        except ValueError:
+            logger.error(f"[WEBHOOK] Invalid TRADESAFE_IP_RANGES entry ignored: {value!r}")
+    if not networks:
+        logger.error("[WEBHOOK] No valid TRADESAFE_IP_RANGES configured; webhook allowlist will reject all requests")
+    return networks
+
+
+TRADESAFE_IP_RANGES = _load_tradesafe_ip_ranges()
+
+
+def _normalize_client_ip(ip: str) -> str:
+    ip = (ip or "").strip()
+    if ip.startswith("[") and "]" in ip:
+        return ip[1:ip.index("]")]
+    if ip.count(":") == 1 and "." in ip:
+        return ip.rsplit(":", 1)[0]
+    return ip
 
 
 def _is_tradesafe_ip(ip: str) -> bool:
-    return any(ip.startswith(prefix) for prefix in TRADESAFE_IP_RANGES)
+    try:
+        client_ip = ipaddress.ip_address(_normalize_client_ip(ip))
+    except ValueError:
+        return False
+    return any(client_ip in network for network in TRADESAFE_IP_RANGES)
 
 
 async def _bg(coro):
@@ -76,6 +97,7 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
     txn_id = txn.get("transaction_id")
     seller_token_id = txn.get("tradesafe_seller_token_id")
     net_amount = txn.get("net_amount")
+    status_before = txn.get("withdrawal_status")
     now_iso = datetime.now(timezone.utc).isoformat()
 
     if not txn_id:
@@ -88,11 +110,16 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
         except Exception as exc:
             logger.error(f"[FINANCE_AUDIT] failed action={action} txn={txn_id}: {exc}")
 
-    if txn.get("withdrawal_status") in ("in_progress", "succeeded"):
+    if status_before in ("in_progress", "succeeded"):
+        logger.info(
+            f"[WITHDRAWAL] skip txn={txn_id} seller_token_id={seller_token_id} "
+            f"requested_amount={net_amount} withdrawal_status_before={status_before} "
+            f"withdrawal_status_after={status_before} reason=already_{status_before}"
+        )
         return {
-            "success": txn.get("withdrawal_status") == "succeeded",
+            "success": status_before == "succeeded",
             "skipped": True,
-            "reason": f"withdrawal already {txn.get('withdrawal_status')}",
+            "reason": f"withdrawal already {status_before}",
         }
 
     try:
@@ -106,6 +133,11 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
         error = "Missing or invalid net_amount"
     else:
         error = None
+
+    logger.info(
+        f"[WITHDRAWAL] start txn={txn_id} seller_token_id={seller_token_id} "
+        f"requested_amount=R{withdrawal_amount:.2f} withdrawal_status_before={status_before} source={source}"
+    )
 
     if error:
         await db.transactions.update_one(
@@ -121,6 +153,11 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
                 "expected_settlement_window": "up to 2 business days",
                 "payout_sla_status": "critical",
             }}
+        )
+        logger.error(
+            f"[WITHDRAWAL] failed txn={txn_id} seller_token_id={seller_token_id} "
+            f"requested_amount=R{withdrawal_amount:.2f} withdrawal_status_before={status_before} "
+            f"withdrawal_status_after=failed error={error}"
         )
         await _audit("payout_failure", {"error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount})
         return {"success": False, "error": error}
@@ -146,19 +183,36 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
     )
 
     if claim.modified_count != 1:
+        logger.info(
+            f"[WITHDRAWAL] duplicate-prevented txn={txn_id} seller_token_id={seller_token_id} "
+            f"requested_amount=R{withdrawal_amount:.2f} withdrawal_status_before={status_before}"
+        )
         await _audit("withdrawal_duplicate_prevented", {"seller_token_id": seller_token_id, "amount": withdrawal_amount})
         return {"success": False, "skipped": True, "reason": "withdrawal already claimed"}
 
+    logger.info(
+        f"[WITHDRAWAL] claimed txn={txn_id} seller_token_id={seller_token_id} "
+        f"requested_amount=R{withdrawal_amount:.2f} withdrawal_status_before={status_before} "
+        f"withdrawal_status_after=in_progress"
+    )
     await _audit("withdrawal_requested", {"seller_token_id": seller_token_id, "amount": withdrawal_amount})
 
     try:
-        from tradesafe_service import withdraw_token_funds
-        withdrawal_ok = await withdraw_token_funds(seller_token_id, withdrawal_amount, rtc=True)
+        from tradesafe_service import withdraw_token_funds_result
+        tradesafe_response = await withdraw_token_funds_result(
+            seller_token_id,
+            withdrawal_amount,
+            rtc=True,
+            transaction_id=txn_id,
+            source=source,
+        )
+        withdrawal_ok = bool(tradesafe_response.get("success"))
     except Exception as exc:
         withdrawal_ok = False
         error = str(exc)
+        tradesafe_response = {"success": False, "error": error}
     else:
-        error = None if withdrawal_ok else "TradeSafe tokenAccountWithdraw returned false"
+        error = tradesafe_response.get("error")
 
     finished_at = datetime.now(timezone.utc).isoformat()
 
@@ -182,6 +236,11 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
                 "settlement_reference": None,
             }}
         )
+        logger.info(
+            f"[WITHDRAWAL] succeeded txn={txn_id} seller_token_id={seller_token_id} "
+            f"requested_amount=R{withdrawal_amount:.2f} withdrawal_status_before={status_before} "
+            f"withdrawal_status_after=succeeded tradesafe_response={tradesafe_response.get('raw_response')}"
+        )
         await _audit("withdrawal_succeeded", {"seller_token_id": seller_token_id, "amount": withdrawal_amount})
         return {"success": True, "seller_token_id": seller_token_id, "amount": withdrawal_amount}
 
@@ -198,6 +257,11 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
             "expected_settlement_window": "up to 2 business days",
             "payout_sla_status": "critical",
         }}
+    )
+    logger.error(
+        f"[WITHDRAWAL] failed txn={txn_id} seller_token_id={seller_token_id} "
+        f"requested_amount=R{withdrawal_amount:.2f} withdrawal_status_before={status_before} "
+        f"withdrawal_status_after=failed tradesafe_response={tradesafe_response.get('raw_response')} error={error}"
     )
     await _audit("payout_failure", {"error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount})
     return {"success": False, "error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount}
@@ -246,10 +310,11 @@ async def tradesafe_webhook(request: Request):
         or request.headers.get("x-real-ip", "")
         or (request.client.host if request.client else "unknown")
     )
+    client_ip = _normalize_client_ip(client_ip)
 
     logger.info("=" * 60)
     logger.info("[WEBHOOK] ===== INCOMING POST /api/tradesafe-webhook =====")
-    logger.info(f"[WEBHOOK] Source IP: {client_ip}")
+    logger.info(f"[WEBHOOK] incoming ip={client_ip}")
     logger.info(f"[WEBHOOK] Content-Type: {request.headers.get('content-type', 'not-set')}")
     logger.info(f"[WEBHOOK] User-Agent: {request.headers.get('user-agent', 'not-set')}")
     logger.info(f"[WEBHOOK] X-TradeSafe-*: { {k: v for k, v in headers.items() if 'tradesafe' in k.lower()} }")
@@ -257,31 +322,10 @@ async def tradesafe_webhook(request: Request):
     logger.info(f"[WEBHOOK] Raw body: {raw_body.decode('utf-8', errors='replace')}")
     logger.info("=" * 60)
 
-    # Layer 1: optional HMAC signature check (if TRADESAFE_WEBHOOK_SECRET is configured)
-    if TRADESAFE_WEBHOOK_SECRET:
-        sig_header = (
-            request.headers.get("x-tradesafe-signature")
-            or request.headers.get("X-TradeSafe-Signature")
-            or ""
-        )
-        expected_sig = hmac.new(
-            TRADESAFE_WEBHOOK_SECRET.encode("utf-8"),
-            raw_body,
-            hashlib.sha256,
-        ).hexdigest()
-        if not sig_header or not hmac.compare_digest(sig_header.lower(), expected_sig.lower()):
-            logger.warning(
-                f"[WEBHOOK] Signature mismatch ip={client_ip} "
-                f"received={sig_header!r} expected={expected_sig[:12]!r}... REJECTING"
-            )
-            raise HTTPException(status_code=401, detail="Invalid webhook signature")
-        logger.info("[WEBHOOK] Signature verified OK")
-    else:
-        # Layer 2: IP allowlist check when no secret is configured
-        if not _is_tradesafe_ip(client_ip):
-            logger.warning(f"[WEBHOOK] Request from unknown IP {client_ip!r} — no secret configured, rejecting")
-            raise HTTPException(status_code=401, detail="Unauthorized")
-        logger.info(f"[WEBHOOK] IP {client_ip!r} allowed (no secret configured)")
+    if not _is_tradesafe_ip(client_ip):
+        logger.warning(f"[WEBHOOK] REJECTED ip={client_ip}")
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    logger.info(f"[WEBHOOK] ACCEPTED ip={client_ip}")
 
     # Always return 200 so TradeSafe doesn't keep retrying on parse errors
     if not raw_body:
@@ -305,7 +349,7 @@ async def tradesafe_webhook(request: Request):
     reference = data.get("reference") or ""
     event_type = payload.get("event") or payload.get("type") or "unknown"
 
-    logger.info(f"[WEBHOOK] Extracted — event={event_type!r} state={state!r} reference={reference!r} tradesafe_id={tradesafe_id!r}")
+    logger.info(f"[WEBHOOK] state={state} reference={reference} tradesafe_id={tradesafe_id}")
 
     # Layer 3: payload structure validation — must carry at least an id or reference
     if not tradesafe_id and not reference:

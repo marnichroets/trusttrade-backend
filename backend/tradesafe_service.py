@@ -642,8 +642,8 @@ async def create_tradesafe_transaction(
                         "title": "Payment for item/service",
                         "description": description,
                         "value": amount_rands,
-                        "daysToDeliver": 7,
-                        "daysToInspect": 2
+                        "daysToDeliver": 1,
+                        "daysToInspect": 0
                     }
                 ]
             }
@@ -2212,8 +2212,14 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
     }
 
 
-async def withdraw_token_funds(token_id: str, amount: float, rtc: bool = True) -> bool:
-    """Withdraw funds from a TradeSafe token wallet to the linked bank account."""
+async def withdraw_token_funds_result(
+    token_id: str,
+    amount: float,
+    rtc: bool = True,
+    transaction_id: str = "",
+    source: str = "",
+) -> Dict[str, Any]:
+    """Withdraw funds from a TradeSafe token wallet and return the raw TradeSafe response."""
     mutation = """
     mutation tokenWithdrawFunds($id: ID!, $value: Float!, $rtc: Boolean) {
         tokenAccountWithdraw(id: $id, value: $value, rtc: $rtc)
@@ -2221,16 +2227,51 @@ async def withdraw_token_funds(token_id: str, amount: float, rtc: bool = True) -
     """
     variables = {"id": token_id, "value": round(float(amount), 2), "rtc": rtc}
     result = await execute_graphql(mutation, variables)
-    logger.info(f"[WITHDRAW_FUNDS] token={token_id} amount=R{amount:.2f} rtc={rtc} response={result}")
+    logger.info(
+        f"[WITHDRAW_FUNDS] txn={transaction_id or '-'} token={token_id} "
+        f"amount=R{amount:.2f} rtc={rtc} source={source or '-'} response={result}"
+    )
 
     if result and "errors" in result:
-        logger.error(f"[WITHDRAW_FUNDS] Error: {result['errors']}")
-        return False
+        logger.error(f"[WITHDRAW_FUNDS] txn={transaction_id or '-'} token={token_id} error={result['errors']}")
+        first_error = result["errors"][0] if result["errors"] else {}
+        return {
+            "success": False,
+            "error": first_error.get("message", "TradeSafe tokenAccountWithdraw failed"),
+            "raw_response": result,
+        }
 
     if result and "tokenAccountWithdraw" in result:
-        return bool(result["tokenAccountWithdraw"])
+        success = bool(result["tokenAccountWithdraw"])
+        return {
+            "success": success,
+            "error": None if success else "TradeSafe tokenAccountWithdraw returned false",
+            "raw_response": result,
+        }
 
-    return False
+    return {
+        "success": False,
+        "error": "Unexpected response from TradeSafe",
+        "raw_response": result,
+    }
+
+
+async def withdraw_token_funds(
+    token_id: str,
+    amount: float,
+    rtc: bool = True,
+    transaction_id: str = "",
+    source: str = "",
+) -> bool:
+    """Withdraw funds from a TradeSafe token wallet to the linked bank account."""
+    result = await withdraw_token_funds_result(
+        token_id,
+        amount,
+        rtc=rtc,
+        transaction_id=transaction_id,
+        source=source,
+    )
+    return bool(result.get("success"))
 
 
 async def trigger_seller_bank_settlement(

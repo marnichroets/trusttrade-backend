@@ -202,7 +202,7 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
         tradesafe_response = await withdraw_token_funds_result(
             seller_token_id,
             withdrawal_amount,
-            rtc=True,
+            rtc=False,
             transaction_id=txn_id,
             source=source,
         )

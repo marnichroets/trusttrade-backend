@@ -2215,21 +2215,27 @@ async def withdraw_token_full_balance(token_id: str) -> Dict[str, Any]:
 async def withdraw_token_funds_result(
     token_id: str,
     amount: float,
-    rtc: bool = True,
+    rtc: bool = False,
     transaction_id: str = "",
     source: str = "",
 ) -> Dict[str, Any]:
-    """Withdraw funds from a TradeSafe token wallet and return the raw TradeSafe response."""
+    """Withdraw funds from a TradeSafe token wallet using standard EFT."""
+    if rtc:
+        logger.warning(
+            f"[WITHDRAW_FUNDS] rtc=True requested but standard EFT is forced "
+            f"txn={transaction_id or '-'} token={token_id}"
+        )
+    effective_rtc = False
     mutation = """
     mutation tokenWithdrawFunds($id: ID!, $value: Float!, $rtc: Boolean) {
         tokenAccountWithdraw(id: $id, value: $value, rtc: $rtc)
     }
     """
-    variables = {"id": token_id, "value": round(float(amount), 2), "rtc": rtc}
+    variables = {"id": token_id, "value": round(float(amount), 2), "rtc": effective_rtc}
     result = await execute_graphql(mutation, variables)
     logger.info(
         f"[WITHDRAW_FUNDS] txn={transaction_id or '-'} token={token_id} "
-        f"amount=R{amount:.2f} rtc={rtc} source={source or '-'} response={result}"
+        f"amount=R{amount:.2f} rtc={effective_rtc} source={source or '-'} response={result}"
     )
 
     if result and "errors" in result:
@@ -2259,11 +2265,11 @@ async def withdraw_token_funds_result(
 async def withdraw_token_funds(
     token_id: str,
     amount: float,
-    rtc: bool = True,
+    rtc: bool = False,
     transaction_id: str = "",
     source: str = "",
 ) -> bool:
-    """Withdraw funds from a TradeSafe token wallet to the linked bank account."""
+    """Withdraw funds from a TradeSafe token wallet to the linked bank account using standard EFT."""
     result = await withdraw_token_funds_result(
         token_id,
         amount,
@@ -2298,7 +2304,7 @@ async def trigger_seller_bank_settlement(
         return {"success": False, "error": f"Invalid net_amount: {net_amount}"}
 
     try:
-        ok = await withdraw_token_funds(seller_token_id, net_amount, rtc=True)
+        ok = await withdraw_token_funds(seller_token_id, net_amount, rtc=False)
     except Exception as exc:
         logger.error(f"[SETTLEMENT] Exception during withdrawal — txn={transaction_id!r} token={seller_token_id!r}: {exc}")
         return {"success": False, "error": str(exc)}

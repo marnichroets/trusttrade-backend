@@ -773,7 +773,7 @@ async def create_tradesafe_transaction(
                         "description": description,
                         "value": amount_rands,
                         "daysToDeliver": 1,
-                        "daysToInspect": 0
+                        "daysToInspect": 1
                     }
                 ]
             }

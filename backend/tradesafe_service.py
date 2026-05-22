@@ -402,60 +402,94 @@ async def get_or_create_user_token(
     logger.info("=== GET OR CREATE TOKEN ===")
     logger.info(f"Name: {name}, Email: {email}, Mobile: {mobile}, User ID: {user_id}")
 
-    async def _resolve_stored_token(stored_token_id: str, update_filter: dict) -> Optional[str]:
+    async def _resolve_stored_token(stored_token_id: str, update_filter: dict) -> str:
         """
-        Verify a stored token.  If it is already IMMEDIATE + valid, return it.
-        Otherwise search TradeSafe for the best token for this email, update the
-        DB record, and return that.  Returns None if no usable token is found.
+        Verify a stored token and return the best token to use for this email.
+
+        NEVER returns None — always falls back to the stored token if anything
+        goes wrong, so we never silently drop a working token and create a new
+        one that TradeSafe hasn't seen yet.
+
+        Decision tree:
+          1. Fetch live details for the stored token.
+          2. If details unavailable (API error): return stored token as-is.
+          3. If valid + IMMEDIATE: return stored token (fast path).
+          4. Otherwise: search all tokens for a better one, verify it,
+             update DB, and return it.  If none found, still return the
+             stored token so the caller always has something to work with.
         """
+        logger.info(
+            f"[TOKEN_SELECT] Verifying stored token {stored_token_id!r} for {email!r}"
+        )
         token_details = await get_token_details(stored_token_id)
-        if _token_is_usable(token_details):
-            logger.info(
-                f"[TOKEN_SELECT] Stored token {stored_token_id!r} for {email!r} "
-                "is valid + IMMEDIATE — reusing"
+
+        if token_details is None:
+            # API call failed — play it safe and keep the stored token.
+            logger.warning(
+                f"[TOKEN_SELECT] Could not fetch details for token {stored_token_id!r} "
+                f"(TradeSafe API error or token not found) — using stored token as-is for {email!r}"
             )
             return stored_token_id
 
-        interval = ((token_details or {}).get("settings") or {}).get("payout", {}).get("interval") if token_details else None
-        is_valid = (token_details or {}).get("valid") if token_details else None
-        logger.warning(
-            f"[TOKEN_SELECT] Stored token {stored_token_id!r} for {email!r} is not usable "
-            f"(valid={is_valid}, payout={interval!r}) — searching TradeSafe for correct token"
+        is_valid = bool(token_details.get("valid", True))
+        interval = ((token_details.get("settings") or {}).get("payout") or {}).get("interval", "")
+        logger.info(
+            f"[TOKEN_SELECT] Token {stored_token_id!r} for {email!r}: "
+            f"valid={is_valid} payout_interval={interval!r}"
         )
 
+        if is_valid and interval == "IMMEDIATE":
+            logger.info(f"[TOKEN_SELECT] Token is valid+IMMEDIATE — reusing as-is")
+            return stored_token_id
+
+        # Token exists but isn't ideal — try to find a better one.
+        logger.warning(
+            f"[TOKEN_SELECT] Token {stored_token_id!r} not ideal "
+            f"(valid={is_valid}, payout={interval!r}) — searching TradeSafe for better token"
+        )
         best_token_id = await _find_best_token_for_email(email)
-        if best_token_id:
-            if best_token_id != stored_token_id and db is not None:
-                logger.info(
-                    f"[TOKEN_SELECT] Updating DB token for {email!r}: "
-                    f"{stored_token_id!r} → {best_token_id!r}"
-                )
-                await db.users.update_one(update_filter, {"$set": {"tradesafe_token_id": best_token_id}})
-            return best_token_id
 
-        logger.warning(
-            f"[TOKEN_SELECT] No IMMEDIATE+valid token found on TradeSafe for {email!r} — "
-            "will create a new one"
+        if not best_token_id or best_token_id == stored_token_id:
+            logger.warning(
+                f"[TOKEN_SELECT] No better token found for {email!r} — "
+                f"using stored token {stored_token_id!r} unchanged"
+            )
+            return stored_token_id
+
+        # Double-check the replacement is actually usable before committing.
+        best_details = await get_token_details(best_token_id)
+        if not _token_is_usable(best_details):
+            best_valid = (best_details or {}).get("valid") if best_details else None
+            best_interval = ((best_details or {}).get("settings") or {}).get("payout", {}).get("interval") if best_details else None
+            logger.warning(
+                f"[TOKEN_SELECT] Replacement token {best_token_id!r} for {email!r} "
+                f"failed verification (valid={best_valid}, payout={best_interval!r}) — "
+                f"keeping stored token {stored_token_id!r}"
+            )
+            return stored_token_id
+
+        logger.info(
+            f"[TOKEN_SELECT] Upgrading token for {email!r}: "
+            f"{stored_token_id!r} → {best_token_id!r} (valid+IMMEDIATE confirmed)"
         )
-        return None
+        if db is not None:
+            await db.users.update_one(update_filter, {"$set": {"tradesafe_token_id": best_token_id}})
+        return best_token_id
 
     # If we have db and user_id, try to reuse existing token
     if db is not None and user_id:
         user_doc = await db.users.find_one({"user_id": user_id})
         if user_doc and user_doc.get("tradesafe_token_id"):
             stored = user_doc["tradesafe_token_id"]
-            result = await _resolve_stored_token(stored, {"user_id": user_id})
-            if result:
-                return result
+            # _resolve_stored_token always returns a non-empty string
+            return await _resolve_stored_token(stored, {"user_id": user_id})
 
     # Also check by email if we have db access
     if db is not None:
         user_by_email = await db.users.find_one({"email": email.lower()})
         if user_by_email and user_by_email.get("tradesafe_token_id"):
             stored = user_by_email["tradesafe_token_id"]
-            result = await _resolve_stored_token(stored, {"email": email.lower()})
-            if result:
-                return result
+            return await _resolve_stored_token(stored, {"email": email.lower()})
     
     # Split name into given/family name
     name_parts = name.strip().split(' ', 1)
@@ -602,12 +636,23 @@ async def create_tradesafe_transaction(
     if not buyer_token:
         logger.error("=== BUYER TOKEN CREATION FAILED ===")
         return {"error": "Could not verify buyer details. Please check buyer information and try again."}
-    
+
     if not seller_token:
         logger.error("=== SELLER TOKEN CREATION FAILED ===")
         return {"error": "Could not verify seller details. Please check seller information and try again."}
-    
-    logger.info(f"Tokens created - Buyer: {buyer_token}, Seller: {seller_token}")
+
+    logger.info(
+        f"[TOKEN_RESOLVED] ref={internal_reference!r} "
+        f"buyer_email={buyer_email!r} buyer_token={buyer_token!r} "
+        f"seller_email={seller_email!r} seller_token={seller_token!r}"
+    )
+
+    if buyer_token == seller_token:
+        logger.error(
+            f"[TOKEN_CONFLICT] buyer_token == seller_token ({buyer_token!r}) "
+            f"for ref={internal_reference!r} — aborting to prevent TradeSafe rejection"
+        )
+        return {"error": "Internal token conflict: buyer and seller resolved to the same TradeSafe token. Please contact support."}
 
     # Pre-sync seller banking details to their TradeSafe token before escrow creation
     if seller_doc:
@@ -737,23 +782,34 @@ async def create_tradesafe_transaction(
 
     logger.info("=== TRANSACTION CREATE REQUEST ===")
     logger.info("=== FIELDS SENT TO TRADESAFE ===")
+    logger.info(f"AGENT token: {TRUSTTRADE_AGENT_TOKEN!r}")
+    logger.info(f"BUYER token: {buyer_token!r} ({buyer_email})")
+    logger.info(f"SELLER token: {seller_token!r} ({seller_email})")
     logger.info(f"AGENT fee: {PLATFORM_FEE_PERCENT}")
     logger.info("AGENT feeType: PERCENT")
     logger.info(f"AGENT feeAllocation: {_fa_norm}")
     logger.info(f"Allocation value: R{amount_rands}")
     logger.info(f"Variables: {variables}")
-    
+
     result = await execute_graphql(mutation, variables)
-    
+
     logger.info("=== TRANSACTION CREATE RESPONSE ===")
     logger.info(f"Result: {result}")
-    
+
     if result and 'errors' in result:
-        error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
-        debug_msg = result['errors'][0].get('extensions', {}).get('debugMessage', '') if result['errors'] else ''
+        first_err = result['errors'][0] if result['errors'] else {}
+        error_msg = first_err.get('message', 'Unknown error')
+        debug_msg = first_err.get('extensions', {}).get('debugMessage', '')
+        validation_errs = first_err.get('extensions', {}).get('validation', {})
         logger.error("=== TRANSACTION CREATION FAILED ===")
         logger.error(f"Error: {error_msg}")
         logger.error(f"Debug: {debug_msg}")
+        logger.error(f"Validation: {validation_errs}")
+        logger.error(f"Full error object: {first_err}")
+        logger.error(
+            f"[TOKEN_DIAG] buyer_token={buyer_token!r} seller_token={seller_token!r} "
+            f"agent_token={TRUSTTRADE_AGENT_TOKEN!r} ref={internal_reference!r}"
+        )
         return {"error": f"Payment processing error: {error_msg}"}
     
     if result and 'transactionCreate' in result:

@@ -339,6 +339,49 @@ async def create_user_token(
     return None
 
 
+async def _find_best_token_for_email(email: str) -> Optional[str]:
+    """
+    Search all TradeSafe tokens for the given email and return the ID of the
+    best one: prefers valid=True + payout interval=IMMEDIATE over WALLET or
+    invalid tokens.  Returns None if no token is found for the email.
+    """
+    logger.info(f"[TOKEN_SELECT] Searching TradeSafe for best token for email={email!r}")
+    all_tokens = await get_all_tokens()
+
+    candidates = [
+        t for t in all_tokens
+        if (t.get("user") or {}).get("email", "").lower() == email.lower()
+    ]
+
+    if not candidates:
+        logger.info(f"[TOKEN_SELECT] No tokens found on TradeSafe for {email!r}")
+        return None
+
+    logger.info(f"[TOKEN_SELECT] Found {len(candidates)} token(s) for {email!r}")
+
+    def _score(t: dict) -> int:
+        is_valid = bool(t.get("valid", True))
+        interval = ((t.get("settings") or {}).get("payout") or {}).get("interval", "")
+        return (1 if is_valid else 0) + (1 if interval == "IMMEDIATE" else 0)
+
+    best = max(candidates, key=_score)
+    interval = ((best.get("settings") or {}).get("payout") or {}).get("interval", "")
+    logger.info(
+        f"[TOKEN_SELECT] Best token for {email!r}: id={best['id']!r} "
+        f"valid={best.get('valid')} payout={interval!r} score={_score(best)}"
+    )
+    return best["id"]
+
+
+def _token_is_usable(token_details: Optional[Dict[str, Any]]) -> bool:
+    """Return True if a token has valid=True and payout interval=IMMEDIATE."""
+    if not token_details:
+        return False
+    is_valid = bool(token_details.get("valid", True))
+    interval = ((token_details.get("settings") or {}).get("payout") or {}).get("interval", "")
+    return is_valid and interval == "IMMEDIATE"
+
+
 async def get_or_create_user_token(
     name: str,
     email: str,
@@ -350,27 +393,69 @@ async def get_or_create_user_token(
     """
     Get existing or create new user token.
     Returns the token ID.
-    
+
     If user_id and db are provided, will check for and reuse existing token.
+    Always prefers a token with payout=IMMEDIATE and valid=True.  If the stored
+    token is a WALLET or invalid token, the function searches TradeSafe for the
+    correct token and updates the DB record before returning it.
     """
     logger.info("=== GET OR CREATE TOKEN ===")
     logger.info(f"Name: {name}, Email: {email}, Mobile: {mobile}, User ID: {user_id}")
-    
+
+    async def _resolve_stored_token(stored_token_id: str, update_filter: dict) -> Optional[str]:
+        """
+        Verify a stored token.  If it is already IMMEDIATE + valid, return it.
+        Otherwise search TradeSafe for the best token for this email, update the
+        DB record, and return that.  Returns None if no usable token is found.
+        """
+        token_details = await get_token_details(stored_token_id)
+        if _token_is_usable(token_details):
+            logger.info(
+                f"[TOKEN_SELECT] Stored token {stored_token_id!r} for {email!r} "
+                "is valid + IMMEDIATE — reusing"
+            )
+            return stored_token_id
+
+        interval = ((token_details or {}).get("settings") or {}).get("payout", {}).get("interval") if token_details else None
+        is_valid = (token_details or {}).get("valid") if token_details else None
+        logger.warning(
+            f"[TOKEN_SELECT] Stored token {stored_token_id!r} for {email!r} is not usable "
+            f"(valid={is_valid}, payout={interval!r}) — searching TradeSafe for correct token"
+        )
+
+        best_token_id = await _find_best_token_for_email(email)
+        if best_token_id:
+            if best_token_id != stored_token_id and db is not None:
+                logger.info(
+                    f"[TOKEN_SELECT] Updating DB token for {email!r}: "
+                    f"{stored_token_id!r} → {best_token_id!r}"
+                )
+                await db.users.update_one(update_filter, {"$set": {"tradesafe_token_id": best_token_id}})
+            return best_token_id
+
+        logger.warning(
+            f"[TOKEN_SELECT] No IMMEDIATE+valid token found on TradeSafe for {email!r} — "
+            "will create a new one"
+        )
+        return None
+
     # If we have db and user_id, try to reuse existing token
     if db is not None and user_id:
         user_doc = await db.users.find_one({"user_id": user_id})
         if user_doc and user_doc.get("tradesafe_token_id"):
-            token_id = user_doc["tradesafe_token_id"]
-            logger.info(f"REUSING existing token for {email}: {token_id}")
-            return token_id
-    
+            stored = user_doc["tradesafe_token_id"]
+            result = await _resolve_stored_token(stored, {"user_id": user_id})
+            if result:
+                return result
+
     # Also check by email if we have db access
     if db is not None:
         user_by_email = await db.users.find_one({"email": email.lower()})
         if user_by_email and user_by_email.get("tradesafe_token_id"):
-            token_id = user_by_email["tradesafe_token_id"]
-            logger.info(f"REUSING existing token found by email {email}: {token_id}")
-            return token_id
+            stored = user_by_email["tradesafe_token_id"]
+            result = await _resolve_stored_token(stored, {"email": email.lower()})
+            if result:
+                return result
     
     # Split name into given/family name
     name_parts = name.strip().split(' ', 1)

@@ -5,7 +5,7 @@ import { getTransactionFlowType, resolveEscrowUiState } from './transactionState
 const DELIVERY_STEPS = [
   { key: 'CREATED', label: 'Awaiting agreement', short: 'Agreement' },
   { key: 'CONFIRMED', label: 'Awaiting payment', short: 'Payment' },
-  { key: 'PAID', label: 'Funds secured in escrow', short: 'Secured' },
+  { key: 'PAID', label: 'Payment secured', short: 'Secured' },
   { key: 'SECURED', label: 'Delivery in progress', short: 'Delivery' },
   { key: 'DELIVERED', label: 'Awaiting buyer confirmation', short: 'Confirm' },
   { key: 'RELEASED', label: 'Funds released', short: 'Released' },
@@ -14,7 +14,7 @@ const DELIVERY_STEPS = [
 const INSTANT_STEPS = [
   { key: 'CREATED', label: 'Awaiting agreement', short: 'Agreement' },
   { key: 'CONFIRMED', label: 'Awaiting payment', short: 'Payment' },
-  { key: 'PAID', label: 'Funds secured in escrow', short: 'Secured' },
+  { key: 'PAID', label: 'Payment secured', short: 'Secured' },
   { key: 'PROCESSING', label: 'Release processing', short: 'Release' },
   { key: 'RELEASED', label: 'Funds released', short: 'Released' },
 ];
@@ -22,7 +22,7 @@ const INSTANT_STEPS = [
 const NEUTRAL_STEPS = [
   { key: 'CREATED', label: 'Awaiting agreement', short: 'Agreement' },
   { key: 'CONFIRMED', label: 'Awaiting payment', short: 'Payment' },
-  { key: 'PAID', label: 'Funds secured in escrow', short: 'Secured' },
+  { key: 'PAID', label: 'Payment secured', short: 'Secured' },
   { key: 'CONDITIONS', label: 'Release conditions', short: 'Conditions' },
   { key: 'RELEASED', label: 'Funds released', short: 'Released' },
 ];

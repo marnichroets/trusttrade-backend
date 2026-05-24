@@ -7,13 +7,13 @@ import { getPayoutScheduleMessage } from '../utils/payoutSchedule';
 const steps = [
   {
     title: 'Transaction Created',
-    description: 'Both parties agree to the item, price, and escrow terms before payment starts.',
+    description: 'Both parties agree to the item, price, and payment terms before the transaction starts.',
     icon: ShieldCheck,
     accent: 'from-blue-500 to-cyan-400',
   },
   {
     title: 'Buyer Pays Securely',
-    description: 'Payment is held in protected escrow while TrustTrade tracks the transaction.',
+    description: 'Payment is held securely by TrustTrade while the transaction progresses.',
     icon: CreditCard,
     accent: 'from-blue-600 to-indigo-400',
   },
@@ -83,13 +83,13 @@ export default function PremiumEscrowFlow({
           <div className="max-w-2xl">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1 text-sm font-medium text-emerald-100">
               <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              Escrow-protected payment flow
+              Fully protected payment flow
             </div>
             <h2 id="premium-escrow-flow-title" className="text-2xl font-bold tracking-normal text-white sm:text-3xl">
               Secure trade progression from agreement to payout
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
-              A clear four-step escrow journey designed for high-trust peer-to-peer transactions. {payoutSchedule.copy}
+              A clear four-step protected payment journey designed for high-trust peer-to-peer transactions. {payoutSchedule.copy}
             </p>
           </div>
 
@@ -109,7 +109,7 @@ export default function PremiumEscrowFlow({
           />
         </div>
 
-        <ol className="grid gap-4 md:grid-cols-4" aria-label="TrustTrade escrow flow steps">
+        <ol className="grid gap-4 md:grid-cols-4" aria-label="TrustTrade protected payment steps">
           {steps.map((step, index) => {
             const Icon = step.icon;
             const isActive = index === currentStep;

@@ -139,7 +139,7 @@ function PayoutStatusBadge({ status }) {
 
   return (
     <span
-      title="Funds have been released from escrow and are awaiting bank clearing."
+      title="Funds have been released and are awaiting bank clearing."
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -185,15 +185,15 @@ function FinalizedEscrowState({ transaction, uiState, payoutSchedule }) {
             <PayoutStatusBadge status={status} />
           </div>
           <p style={{ fontSize: 13, color: '#047857', margin: '0 0 14px', lineHeight: 1.6 }}>
-            Your payout is now moving through the banking system. Escrow release is complete; {payoutSchedule.copy}
+            Your payout is now moving through the banking system. Payment release is complete; {payoutSchedule.copy}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
             {[
-              ['Escrow state', uiState.label],
+              ['Payment state', uiState.label],
               ['Payout status', status.label],
               ['Settlement estimate', estimate.detail],
               ['Completed', formatDetailDate(completedAt)],
-              ['Protection', 'TrustTrade escrow'],
+              ['Protection', 'TrustTrade'],
             ].map(([label, value]) => (
               <div key={label} style={{ background: 'rgba(255,255,255,0.72)', border: '1px solid #d1fae5', borderRadius: 10, padding: '10px 12px' }}>
                 <p style={{ fontSize: 10, color: '#047857', fontWeight: 700, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</p>
@@ -212,7 +212,7 @@ function PayoutTimeline({ transaction, payoutSchedule }) {
   const status = getPayoutStatus(transaction);
   const estimate = getSettlementEstimate(transaction);
   const steps = [
-    { label: 'Escrow released', value: activity.releasedAt ? formatDetailDate(activity.releasedAt) : 'Waiting for escrow release', state: activity.releasedAt ? 'complete' : 'pending' },
+    { label: 'Payment released', value: activity.releasedAt ? formatDetailDate(activity.releasedAt) : 'Waiting for payment release', state: activity.releasedAt ? 'complete' : 'pending' },
     { label: 'Payout processing started', value: activity.processingStartedAt ? formatDetailDate(activity.processingStartedAt) : 'Starts after release', state: activity.processingStartedAt ? 'complete' : activity.releasedAt ? 'active' : 'pending' },
     { label: 'Bank processing', value: activity.settlementConfirmed ? 'Bank settlement evidence recorded' : 'Funds are moving through banking rails', state: activity.settlementConfirmed ? 'complete' : activity.releasedAt ? 'active' : 'pending' },
     { label: estimate.title, value: `${estimate.detail} ${estimate.holidayNote || ''}`.trim(), state: activity.releasedAt ? 'active' : 'pending' },
@@ -339,7 +339,7 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
 
   const steps = [
     {
-      label: 'Escrow Released',
+      label: 'Payment Released',
       detail: formatDetailDate(activity.releasedAt),
       state: 'complete',
     },
@@ -514,7 +514,7 @@ function CurrentStateHeader({ uiState, flowType, userRole }) {
   const title = (() => {
     if (uiState.state === 'EXPIRED') return 'Transaction expired due to no payment';
     if (uiState.state === 'FUNDED') return 'Awaiting buyer payment';
-    if (uiState.state === 'ESCROW_LOCKED') return 'Funds secured in escrow';
+    if (uiState.state === 'ESCROW_LOCKED') return 'Payment secured';
     if (uiState.state === 'DELIVERY_PENDING') return flowType === 'delivery' ? 'Delivery in progress' : flowType === 'instant' ? 'Release approved' : 'Release conditions in progress';
     if (uiState.state === 'DELIVERED') return flowType === 'delivery' ? 'Awaiting buyer confirmation' : 'Release conditions met';
     if (uiState.state === 'RELEASED') return 'Bank payout release scheduled';
@@ -784,7 +784,7 @@ function TransactionDetail() {
   };
 
   const handleSyncStatus = async () => {
-    if (!transaction.tradesafe_id) { toast.info('No escrow linked to sync'); fetchData(); return; }
+    if (!transaction.tradesafe_id) { toast.info('No payment linked to sync'); fetchData(); return; }
     setSyncing(true);
     try {
       const response = await api.post(`${API}/tradesafe/sync/${transactionId}`, {}, { withCredentials: true });
@@ -801,7 +801,7 @@ function TransactionDetail() {
       navigate('/verify/phone');
       return;
     }
-    if (!window.confirm('This will create a secure TrustTrade escrow. The buyer will then need to make payment. Proceed?')) return;
+    if (!window.confirm('This will set up the protected payment. The buyer will then need to make payment. Proceed?')) return;
     setCreatingEscrow(true); toast.info('Setting up protected payment...');
     try {
       await api.post(`${API}/tradesafe/create-transaction`, { transaction_id: transactionId, fee_allocation: transaction.fee_allocation || 'SELLER_AGENT' }, { withCredentials: true });
@@ -887,7 +887,7 @@ function TransactionDetail() {
       toast.warning(issues);
       return;
     }
-    if (!window.confirm(`Confirm you have received the item? This will release funds from escrow. ${payoutSchedule.copy} This action cannot be undone.`)) return;
+    if (!window.confirm(`Confirm you have received the item? This will release funds to the seller. ${payoutSchedule.copy} This action cannot be undone.`)) return;
     setAcceptingDelivery(true);
     try { await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
     catch (error) { if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') { setEmailVerificationRequired(true); } else { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); } }
@@ -906,7 +906,7 @@ function TransactionDetail() {
       toast.warning(issues);
       return;
     }
-    if (!window.confirm(`MANUAL OVERRIDE: Confirm receipt and release funds from escrow? ${payoutSchedule.copy}`)) return;
+    if (!window.confirm(`MANUAL OVERRIDE: Confirm receipt and release funds to seller? ${payoutSchedule.copy}`)) return;
     setAcceptingDelivery(true);
     try { await api.post(`${API}/tradesafe/manual-accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
     catch (error) { if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') { setEmailVerificationRequired(true); } else { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); } }
@@ -1389,7 +1389,7 @@ function TransactionDetail() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#1e3a5f', margin: '0 0 4px' }}>Action Required: Confirm Details</p>
-                    <p style={{ fontSize: 13, color: '#3b82f6', margin: '0 0 14px' }}>Review the transaction details and confirm to proceed with escrow protection.</p>
+                    <p style={{ fontSize: 13, color: '#3b82f6', margin: '0 0 14px' }}>Review the transaction details and confirm to proceed with protected payment.</p>
                     <button onClick={handleBuyerConfirm} disabled={confirming} data-testid="buyer-confirm-btn" className="action-btn" style={{ ...S.btn('#3b82f6'), opacity: confirming ? 0.6 : 1 }}>
                       {confirming ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Confirming…</> : <><CheckCircle2 size={13} /> Confirm Transaction</>}
                     </button>
@@ -1406,7 +1406,7 @@ function TransactionDetail() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#1e3a8a', margin: '0 0 4px' }}>{PHONE_VERIFICATION_PROMPT}</p>
-                    <p style={{ fontSize: 13, color: '#2563eb', margin: '0 0 14px' }}>Phone verification is required before you can continue with escrow actions.</p>
+                    <p style={{ fontSize: 13, color: '#2563eb', margin: '0 0 14px' }}>Phone verification is required to continue with this transaction.</p>
                     <button onClick={() => navigate('/verify/phone')} className="action-btn" style={{ ...S.btn('#3b82f6') }}>
                       <Shield size={13} /> Verify Phone
                     </button>
@@ -1471,10 +1471,10 @@ function TransactionDetail() {
                     <Shield size={18} color="#059669" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: '0 0 4px' }}>Your next step: Fund escrow</p>
-                    <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>{isDeliveryFlow ? 'Pay securely into escrow. Seller is paid only after you confirm delivery.' : 'Pay securely into escrow. Seller is paid only after release conditions are met.'}</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: '0 0 4px' }}>Your next step: Secure the payment</p>
+                    <p style={{ fontSize: 13, color: '#059669', margin: '0 0 14px' }}>{isDeliveryFlow ? 'Your payment is held safely and only released to the seller once you confirm delivery.' : 'Your payment is held safely and only released once all conditions are met.'}</p>
                     <button type="button" onClick={handleCreateEscrow} onTouchEnd={handleCreateEscrow} disabled={creatingEscrow} data-testid="create-escrow-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: creatingEscrow ? 0.6 : 1 }}>
-                      {creatingEscrow ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Preparing secure escrow...</> : <><Shield size={13} /> Fund Escrow Securely</>}
+                      {creatingEscrow ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Setting up protection...</> : <><Shield size={13} /> Set Up Protected Payment</>}
                     </button>
                   </div>
                 </div>
@@ -1489,8 +1489,8 @@ function TransactionDetail() {
                     <CreditCard size={18} color="#d97706" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>Waiting for buyer to fund escrow</p>
-                    <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 14px' }}>Share this link with the buyer. Funds will be protected once the buyer pays.</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>Waiting for buyer to pay</p>
+                    <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 14px' }}>Share this link with the buyer. Your payout is guaranteed once payment is secured.</p>
                     <button type="button" onClick={handleCopyLink} className="action-btn" style={{ ...S.btn('#f59e0b'), opacity: 1 }}>
                       {copied ? <><Check size={13} /> Link copied</> : <><Copy size={13} /> Copy buyer link</>}
                     </button>
@@ -1507,8 +1507,8 @@ function TransactionDetail() {
                     <CreditCard size={18} color="#3b82f6" />
                   </div>
                   <div>
-                    <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: '0 0 3px' }}>Fund Escrow</p>
-                    <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>{isDeliveryFlow ? 'Pay securely into escrow. Seller is paid only after you confirm delivery.' : 'Pay securely into escrow. Seller is paid only after release conditions are met.'}</p>
+                    <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: '0 0 3px' }}>Secure Payment</p>
+                    <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>{isDeliveryFlow ? 'Your payment is protected — seller receives funds only after you confirm delivery.' : 'Your payment is protected — seller receives funds only after release conditions are met.'}</p>
                   </div>
                 </div>
 
@@ -1550,7 +1550,7 @@ function TransactionDetail() {
                     <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
                       <p style={{ ...S.label, marginBottom: 12 }}>Payment Breakdown</p>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                        <span style={{ color: '#64748b' }}>Item Value (held in escrow)</span>
+                        <span style={{ color: '#64748b' }}>Item Value (held securely)</span>
                         <span style={{ fontWeight: 500, color: '#0f172a' }}>R {transaction.item_price?.toFixed(2)}</span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
@@ -1579,10 +1579,10 @@ function TransactionDetail() {
                 })()}
 
                 <button type="button" onClick={handleGetPaymentLink} onTouchEnd={(e) => { e.preventDefault(); handleGetPaymentLink(e); }} disabled={loadingPaymentLink || !selectedPaymentMethod} data-testid="make-payment-btn" className="action-btn" style={{ ...S.btn(selectedPaymentMethod ? '#3b82f6' : '#94a3b8'), width: '100%', justifyContent: 'center', fontSize: 15, padding: '13px 20px', opacity: (loadingPaymentLink || !selectedPaymentMethod) ? 0.7 : 1 }}>
-                  {loadingPaymentLink ? <><Loader2 size={15} style={{ animation: 'spin 0.8s linear infinite' }} /> Loading Payment Page...</> : selectedPaymentMethod ? <><CreditCard size={15} /> Pay into Escrow</> : <><CreditCard size={15} style={{ opacity: 0.5 }} /> Select a payment method</>}
+                  {loadingPaymentLink ? <><Loader2 size={15} style={{ animation: 'spin 0.8s linear infinite' }} /> Loading Payment Page...</> : selectedPaymentMethod ? <><CreditCard size={15} /> Pay Securely</> : <><CreditCard size={15} style={{ opacity: 0.5 }} /> Select a payment method</>}
                 </button>
                 <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                  <Shield size={11} /> Your payment is protected by TrustTrade Escrow
+                  <Shield size={11} /> Your payment is protected by TrustTrade
                 </p>
               </div>
             )}
@@ -1598,7 +1598,7 @@ function TransactionDetail() {
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>Waiting for buyer payment</p>
                     <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 10px' }}>Share this link with the buyer. Funds will be protected once the buyer pays.</p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: '#d97706' }}>
-                      <Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Waiting for buyer to fund escrow...
+                      <Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Waiting for buyer to pay...
                     </div>
                   </div>
                 </div>
@@ -1666,10 +1666,10 @@ function TransactionDetail() {
                   ? 'Waiting for seller to deliver'
                   : 'Waiting for seller to dispatch';
               const body = dm === 'bank_deposit'
-                ? 'Your funds are secured in escrow. The seller will confirm when the handover is arranged.'
+                ? 'Your payment is secured. The seller will confirm when the handover is arranged.'
                 : dm === 'digital' || dm === 'instant' || dm === 'immediate'
-                  ? 'Your funds are secured in escrow. The seller has been notified to deliver your item digitally.'
-                  : 'Your funds are secured in escrow. The seller has been notified to dispatch your item.';
+                  ? 'Your payment is secured. The seller has been notified to deliver your item digitally.'
+                  : 'Your payment is secured. The seller has been notified to dispatch your item.';
               const status = dm === 'bank_deposit'
                 ? 'Awaiting seller handover confirmation...'
                 : dm === 'digital' || dm === 'instant' || dm === 'immediate'
@@ -2087,7 +2087,7 @@ function TransactionDetail() {
                     {copied ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
                   </button>
                   <a
-                    href={`https://wa.me/?text=${encodeURIComponent(`I've created a secure TrustTrade escrow for you. Click the link to view and confirm the transaction: ${shareLink}`)}`}
+                    href={`https://wa.me/?text=${encodeURIComponent(`I've created a secure TrustTrade protected payment for you. Click the link to view and confirm the transaction: ${shareLink}`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{ background: '#25D366', color: 'white', padding: '6px 10px', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, borderRadius: 4, textDecoration: 'none', flexShrink: 0 }}
@@ -2148,17 +2148,34 @@ function TransactionDetail() {
               {syncing ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Syncing…</> : <><RefreshCw size={13} /> Refresh Status</>}
             </button>
 
-            {/* Escrow badge */}
+            {/* Protection badge */}
             {hasEscrow && (
               <div style={{ background: isFinalized ? '#f0fdf4' : '#ecfdf5', border: `1px solid ${isFinalized ? '#86efac' : '#a7f3d0'}`, borderRadius: 12, padding: '12px 14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
                   <Shield size={13} color={isFinalized ? '#16a34a' : '#059669'} />
-                  <span style={{ fontSize: 12, fontWeight: 600, color: isFinalized ? '#15803d' : '#065f46' }}>{isFinalized ? 'Escrow Completed' : 'Escrow Active'}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: isFinalized ? '#15803d' : '#065f46' }}>{isFinalized ? 'Payment Complete' : 'Payment Protected'}</span>
                 </div>
                 <p style={{ fontSize: 11, color: '#059669', fontFamily: 'monospace', margin: '0 0 8px' }}>Ref: {transaction.tradesafe_id?.slice(0, 14)}…</p>
                 <span style={{ ...S.pill(uiState.bg || getEscrowStateBadge(escrowState).bg, uiState.color || getEscrowStateBadge(escrowState).text), fontSize: 11 }}>
                   {uiState.label || getEscrowStateBadge(escrowState).label}
                 </span>
+              </div>
+            )}
+
+            {/* Trust signal strip */}
+            {!isFinalized && (
+              <div style={{ borderRadius: 10, border: '1px solid #e2e8f0', padding: '12px 14px', background: '#f8fafc' }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>How you're protected</p>
+                {[
+                  { icon: Shield, text: 'Funds held securely until both parties confirm' },
+                  { icon: CheckCircle2, text: 'Seller paid only after you confirm receipt' },
+                  { icon: Lock, text: '256-bit encrypted payments' },
+                ].map(({ icon: Icon, text }) => (
+                  <div key={text} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginBottom: 6 }}>
+                    <Icon size={11} color="#10b981" style={{ marginTop: 1, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: '#475569', lineHeight: 1.4 }}>{text}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>

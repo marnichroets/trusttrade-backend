@@ -185,7 +185,7 @@ const filterUserRelevantDisputes = (disputes, transactions, user) => {
 const flowSteps = [
   { label: 'Confirm', icon: CheckCircle },
   { label: 'Payment', icon: CreditCard },
-  { label: 'Escrow', icon: Lock },
+  { label: 'Protected', icon: Lock },
   { label: 'Delivery', icon: PackageCheck },
   { label: 'Release', icon: Banknote },
 ];
@@ -626,7 +626,7 @@ function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDispute
           <MetricCell icon={Activity} label="Active" value={activeCount} sub="transactions" color={V.accent} testId="active-transactions" />
           <MetricCell icon={AlertCircle} label="Pending" value={pendingCount} sub="need action" color={V.warn} testId="pending-confirmations" />
           <MetricCell icon={ShieldCheck} label="Verified" value={verifiedUsers} sub="users" color={V.success} testId="verified-users" />
-          <MetricCell icon={Lock} label="In escrow" value={displayMoney(totalEscrowValue, showExactValues)} sub="secured" color={V.success} testId="total-escrow" />
+          <MetricCell icon={Lock} label="Protected" value={displayMoney(totalEscrowValue, showExactValues)} sub="secured" color={V.success} testId="total-escrow" />
         </div>
       </div>
     </section>

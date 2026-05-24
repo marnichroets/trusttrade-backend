@@ -128,8 +128,8 @@ function AuthCallback() {
 
         if (!token) {
           console.error('[AuthCallback] No token in response!');
-          toast.error('Authentication error');
-          navigate('/', { replace: true });
+          toast.error('Sign-in failed. Please try again.');
+          navigate('/login', { replace: true });
           return;
         }
 
@@ -152,8 +152,8 @@ function AuthCallback() {
         
         if (!storedToken || !storedUser) {
           console.error('[AuthCallback] localStorage write failed');
-          toast.error('Failed to save login session');
-          navigate('/', { replace: true });
+          toast.error('Something went wrong. Please try signing in again.');
+          navigate('/login', { replace: true });
           return;
         }
 
@@ -180,8 +180,8 @@ function AuthCallback() {
       } catch (error) {
         console.error('[AuthCallback] Error:', error);
         setStatus('Authentication failed');
-        toast.error(`Login failed: ${error.response?.data?.detail || error.message}`);
-        navigate('/', { replace: true });
+        toast.error('Sign-in failed. Please try again or use email and password.');
+        navigate('/login', { replace: true });
       }
     };
 

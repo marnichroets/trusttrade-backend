@@ -802,11 +802,11 @@ function TransactionDetail() {
       return;
     }
     if (!window.confirm('This will create a secure TrustTrade escrow. The buyer will then need to make payment. Proceed?')) return;
-    setCreatingEscrow(true); toast.info('Creating escrow...');
+    setCreatingEscrow(true); toast.info('Setting up protected payment...');
     try {
       await api.post(`${API}/tradesafe/create-transaction`, { transaction_id: transactionId, fee_allocation: transaction.fee_allocation || 'SELLER_AGENT' }, { withCredentials: true });
-      toast.success('TrustTrade escrow created! Buyer can now make payment.'); fetchData();
-    } catch (error) { const errorMessage = error.response?.data?.detail || parseErrorMessage(error) || 'Failed to create escrow.'; toast.error(errorMessage); alert('Error: ' + errorMessage); }
+      toast.success('Protected payment created! Buyer can now make payment.'); fetchData();
+    } catch (error) { const errorMessage = error.response?.data?.detail || parseErrorMessage(error) || 'Failed to start the transaction. Please try again.'; toast.error(errorMessage); }
     finally { setCreatingEscrow(false); }
   };
 
@@ -827,7 +827,7 @@ function TransactionDetail() {
       if (response.data.already_paid) { toast.success('This transaction has already been paid.'); setTransaction(prev => ({ ...prev, tradesafe_state: response.data.state, status: 'paid' })); return; }
       if (response.data.payment_link) { const newWindow = window.open(response.data.payment_link, '_blank'); if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') window.location.href = response.data.payment_link; toast.success('Secure payment page opened.'); }
       else { setPaymentInfo(response.data); toast.info('Payment deposit created.'); }
-    } catch (error) { const errorMessage = error.response?.data?.detail || 'Payment processing error.'; toast.error(errorMessage); alert('Error: ' + errorMessage); }
+    } catch (error) { const errorMessage = error.response?.data?.detail || 'Unable to process payment. Please try again.'; toast.error(errorMessage); }
     finally { setLoadingPaymentLink(false); }
   };
 

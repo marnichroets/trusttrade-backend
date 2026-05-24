@@ -156,14 +156,14 @@ export default function LoginPage() {
           <Link to="/" className="inline-block mb-2">
             <TrustLogo size="large" className="mx-auto" />
           </Link>
-          <p className="text-sm text-slate-500">Secure Escrow for South Africa</p>
+          <p className="text-sm text-slate-500">Secure Payments for South Africa</p>
         </div>
         
         <Card className="shadow-premium-lg border-slate-200">
           <CardHeader className="text-center pb-4 pt-6">
             <CardTitle className="text-xl font-bold">{isLoginMode ? 'Welcome back' : 'Create account'}</CardTitle>
             <CardDescription className="text-sm">
-              {isLoginMode ? 'Sign in to manage your transactions' : 'Get started with secure escrow'}
+              {isLoginMode ? 'Sign in to manage your transactions' : 'Get started with secure payments'}
             </CardDescription>
           </CardHeader>
           

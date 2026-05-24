@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 def _headers() -> Dict[str, str]:
+    if not settings.SHIPLOGIC_API_KEY:
+        raise RuntimeError("SHIPLOGIC_API_KEY is not configured")
     return {
         "Authorization": f"Bearer {settings.SHIPLOGIC_API_KEY}",
         "Content-Type": "application/json",
@@ -131,12 +133,15 @@ async def book_shipment(
 async def track_shipment(waybill: str) -> Dict[str, Any]:
     """
     Return the current tracking status and event history for a shipment.
+    Raises LookupError if the waybill is not found (404).
     """
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{settings.SHIPLOGIC_API_URL}/shipments/{waybill}/tracking-events",
             headers=_headers(),
         )
+        if resp.status_code == 404:
+            raise LookupError(f"Waybill '{waybill}' not found")
         resp.raise_for_status()
         data = resp.json()
 

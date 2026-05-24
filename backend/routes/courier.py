@@ -6,6 +6,7 @@ Delivery quotes, bookings, and tracking via Courier Guy (ShipLogic).
 import logging
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
@@ -72,6 +73,28 @@ def _require_courier(user):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+def _map_exc(label: str, exc: Exception) -> HTTPException:
+    """Convert service exceptions to appropriate HTTP errors with friendly messages."""
+    if isinstance(exc, RuntimeError):
+        logger.error(f"[COURIER] {label}: {exc}")
+        return HTTPException(status_code=503, detail="Courier service is not configured")
+    if isinstance(exc, LookupError):
+        logger.warning(f"[COURIER] {label}: {exc}")
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, httpx.HTTPStatusError):
+        logger.error(f"[COURIER] {label} HTTP {exc.response.status_code}: {exc.response.text[:200]}")
+        if exc.response.status_code in (401, 403):
+            return HTTPException(status_code=502, detail="Courier service authentication failed")
+        if exc.response.status_code == 422:
+            return HTTPException(status_code=422, detail="Invalid address or parcel details")
+        return HTTPException(status_code=502, detail="Courier service unavailable")
+    if isinstance(exc, (httpx.ConnectError, httpx.TimeoutException)):
+        logger.error(f"[COURIER] {label} connection error: {exc}")
+        return HTTPException(status_code=502, detail="Courier service unavailable")
+    logger.error(f"[COURIER] {label}: {exc}")
+    return HTTPException(status_code=502, detail="Courier service unavailable")
+
+
 @router.post("/quote")
 async def quote(request: Request, body: QuoteRequest):
     """Get delivery price options for a parcel."""
@@ -87,8 +110,7 @@ async def quote(request: Request, body: QuoteRequest):
         )
         return {"rates": rates}
     except Exception as exc:
-        logger.error(f"[COURIER] Quote error: {exc}")
-        raise HTTPException(status_code=502, detail=f"Courier service error: {exc}")
+        raise _map_exc("Quote", exc)
 
 
 @router.post("/book")
@@ -114,8 +136,7 @@ async def book(request: Request, body: BookRequest):
         )
         return result
     except Exception as exc:
-        logger.error(f"[COURIER] Book error: {exc}")
-        raise HTTPException(status_code=502, detail=f"Courier service error: {exc}")
+        raise _map_exc("Book", exc)
 
 
 @router.get("/track/{waybill}")
@@ -129,5 +150,4 @@ async def track(request: Request, waybill: str):
         result = await track_shipment(waybill)
         return result
     except Exception as exc:
-        logger.error(f"[COURIER] Track error: {exc}")
-        raise HTTPException(status_code=502, detail=f"Courier service error: {exc}")
+        raise _map_exc("Track", exc)

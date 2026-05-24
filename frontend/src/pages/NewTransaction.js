@@ -272,8 +272,15 @@ function NewTransaction() {
       setCourierQuotes(rates);
       if (rates.length === 0) toast.info('No courier options available for these addresses.');
       else toast.success(`${rates.length} delivery option${rates.length !== 1 ? 's' : ''} found`);
-    } catch {
-      toast.error('Could not get courier quote. Please check the addresses and try again.');
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 502 || status === 503 || !status) {
+        toast.error('Courier booking unavailable right now. Please choose a different delivery method.');
+      } else if (status === 422) {
+        toast.error('Invalid address or parcel details. Please check and try again.');
+      } else {
+        toast.error('Could not get courier quote. Please check the addresses and try again.');
+      }
     } finally {
       setCourierLoading(false);
     }
@@ -923,22 +930,22 @@ function NewTransaction() {
                                   transition: 'all 0.15s',
                                 }}>
                                   <input type="radio" checked={isSelected} onChange={() => setSelectedQuote(q)} style={{ display: 'none' }} />
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
                                     <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${isSelected ? '#3b82f6' : '#cbd5e1'}`, background: isSelected ? '#3b82f6' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                       {isSelected && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
                                     </div>
-                                    <div>
-                                      <span style={{ fontSize: 13, fontWeight: 500, color: '#0f172a' }}>{name}</span>
-                                      {days && <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>{days} day{days !== 1 ? 's' : ''}</span>}
+                                    <div style={{ minWidth: 0 }}>
+                                      <span style={{ fontSize: 13, fontWeight: 500, color: '#0f172a', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                                      {days && <span style={{ fontSize: 11, color: '#94a3b8' }}>{days} business day{days !== 1 ? 's' : ''}</span>}
                                     </div>
                                   </div>
-                                  <div style={{ textAlign: 'right' }}>
+                                  <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
                                     <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', fontFamily: 'ui-monospace, monospace', display: 'block' }}>
                                       R {Number(price).toFixed(2)}
                                     </span>
                                     {isVolumetric && (
                                       <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                                        Charged weight: {chargedWeight}kg (volumetric)
+                                        Volumetric: {chargedWeight}kg
                                       </span>
                                     )}
                                   </div>
@@ -982,7 +989,7 @@ function NewTransaction() {
                         </span>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Handling fee</span>
+                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Courier handling fee <span style={{ fontSize: 10, opacity: 0.7 }}>(booking admin)</span></span>
                         <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
                           + R {COURIER_HANDLING_FEE.toFixed(2)}
                         </span>

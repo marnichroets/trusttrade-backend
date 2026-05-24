@@ -164,7 +164,7 @@ function PhoneVerification() {
               </div>
               <h1 className="text-2xl font-bold text-slate-900 mb-2">Verify Your Phone</h1>
               <p className="text-slate-600">
-                Verify your phone number to protect your escrow account.
+                Verify your phone number to protect your account.
               </p>
               <p className="text-sm text-slate-500 mt-2">
                 Phone verification helps protect buyers and sellers from fraud.

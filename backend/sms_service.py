@@ -255,7 +255,7 @@ async def send_funds_received_sms(
     amount: float
 ) -> Dict[str, Any]:
     """Send SMS when funds are received in escrow."""
-    message = f"TrustTrade: Payment of R{amount:.2f} received for '{item_description[:30]}'. Funds secured in escrow. Please deliver the item."
+    message = f"TrustTrade: Payment of R{amount:.2f} received for '{item_description[:30]}'. Funds secured — please deliver the item."
     return await send_sms(to_phone, message)
 
 

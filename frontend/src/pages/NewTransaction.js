@@ -1066,7 +1066,7 @@ function NewTransaction() {
                 <h2 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', margin: '0 0 18px' }}>Review & Confirm</h2>
 
                 {/* Parties side by side */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+                <div className="tt-party-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
                   {[
                     { roleLabel: 'Buyer', name: role === 'buyer' ? user.name : formData.buyer_name, email: role === 'buyer' ? user.email : formData.buyer_email, accent: '#3b82f6', bg: '#eff6ff', isYou: role === 'buyer' },
                     { roleLabel: 'Seller', name: role === 'seller' ? user.name : formData.seller_name, email: role === 'seller' ? user.email : formData.seller_email, accent: '#10b981', bg: '#ecfdf5', isYou: role === 'seller' },
@@ -1181,6 +1181,7 @@ function NewTransaction() {
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         input:focus, textarea:focus, select:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        @media (max-width: 480px) { .tt-party-grid { grid-template-columns: 1fr !important; } }
       `}</style>
     </DashboardLayout>
   );

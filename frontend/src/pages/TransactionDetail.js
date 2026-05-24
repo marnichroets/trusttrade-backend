@@ -1261,6 +1261,7 @@ function TransactionDetail() {
           .transaction-detail-grid { gap: 14px; }
           .td-tab { padding: 8px 8px; font-size: 11px; }
           .pm-opt { padding: 12px 12px !important; }
+          .td-parties-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
 
@@ -1797,7 +1798,7 @@ function TransactionDetail() {
                 {/* Overview tab */}
                 {activeTab === 'overview' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                    <div className="td-parties-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                       {[
                         { title: 'Buyer', icon: User, color: '#3b82f6', bg: '#eff6ff', name: transaction.buyer_name, email: transaction.buyer_email, phone: transaction.buyer_phone, confirmed: buyerConfirmed },
                         { title: 'Seller', icon: User, color: '#f97316', bg: '#fff7ed', name: transaction.seller_name, email: transaction.seller_email, phone: transaction.seller_phone, confirmed: sellerConfirmed },

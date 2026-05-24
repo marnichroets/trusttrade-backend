@@ -227,7 +227,7 @@ function PhoneVerification() {
 
             <div className="space-y-6">
               {/* OTP Input */}
-              <div className="grid grid-cols-6 gap-2">
+              <div className="grid grid-cols-6 gap-1 sm:gap-2">
                 {otp.map((digit, index) => (
                   <Input
                     key={index}
@@ -238,7 +238,7 @@ function PhoneVerification() {
                     value={digit}
                     onChange={(e) => handleOtpChange(index, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                    className="w-full h-14 text-center text-2xl font-bold"
+                    className="w-full h-10 sm:h-14 text-center text-xl sm:text-2xl font-bold px-0"
                     data-testid={`otp-input-${index}`}
                   />
                 ))}

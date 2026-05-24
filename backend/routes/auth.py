@@ -552,9 +552,9 @@ async def get_onboarding_status(request: Request):
         "needs_banking": needs_banking,
         "role": role,
         "onboarding_message": (
-            "Add payout details to receive escrow releases."
+            "Add your banking details to receive payouts."
             if needs_banking and not has_banking
-            else "Verify your phone number to protect your escrow account."
+            else "Verify your phone number to secure your account."
             if not has_phone
             else "Phone verification helps protect buyers and sellers from fraud."
         ),

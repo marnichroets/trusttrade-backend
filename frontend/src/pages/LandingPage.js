@@ -43,13 +43,13 @@ const LINE = '#183454';
 const flowStages = [
   {
     label: 'Buyer pays',
-    detail: 'Payment captured into protected escrow.',
+    detail: 'Payment captured and protected.',
     icon: 'CreditCard',
     tone: BLUE,
     state: 'captured',
   },
   {
-    label: 'Escrow locks',
+    label: 'Payment protected',
     detail: 'Funds cannot release before confirmation.',
     icon: 'Lock',
     tone: GREEN,
@@ -73,33 +73,33 @@ const flowStages = [
 
 const simulationStates = [
   { label: 'Buyer funds enter', state: 'captured', icon: 'CreditCard', tone: BLUE },
-  { label: 'Escrow vault locks', state: 'locked', icon: 'Lock', tone: GREEN },
+  { label: 'Payment protected', state: 'locked', icon: 'Lock', tone: GREEN },
   { label: 'Delivery verification', state: 'watching', icon: 'PackageCheck', tone: GOLD },
   { label: 'Dispute hold available', state: 'protected', icon: 'Scale', tone: '#fb7185' },
   { label: 'Payout unlock', state: 'released', icon: 'Banknote', tone: '#34d399' },
 ];
 
 const proofSignals = [
-  { value: 'SA', label: 'Banking-ready local escrow rails', icon: 'Landmark' },
-  { value: 'LOCK', label: 'Escrow lock active before release', icon: 'Lock' },
+  { value: 'SA', label: 'Banking-ready payment protection', icon: 'Landmark' },
+  { value: 'LOCK', label: 'Payment locked until confirmed', icon: 'Lock' },
   { value: 'VERIFY', label: 'Delivery verification monitored', icon: 'Fingerprint' },
   { value: 'HOLD', label: 'Dispute protection before payout', icon: 'Scale' },
 ];
 
 const buyerProof = [
   { icon: 'ShieldCheck', title: 'Payment stays protected', body: 'The seller is not paid while delivery is still unresolved.' },
-  { icon: 'Scale', title: 'Disputes have a path', body: 'If the deal breaks down, the money is still inside the escrow state.' },
+  { icon: 'Scale', title: 'Disputes have a path', body: 'If the deal breaks down, the money stays protected until the case is resolved.' },
   { icon: 'Fingerprint', title: 'State is visible', body: 'Both sides can see exactly what has happened and what remains.' },
 ];
 
 const sellerProof = [
-  { icon: 'BadgeCheck', title: 'Serious buyer signal', body: 'Escrow-backed payment shows intent before you hand over goods.' },
+  { icon: 'BadgeCheck', title: 'Serious buyer signal', body: 'A protected payment shows genuine intent before you hand over goods.' },
   { icon: 'TrendingUp', title: 'Clear release logic', body: 'The transaction tells you which confirmation unlocks payout.' },
   { icon: 'HandCoins', title: 'Less payment chasing', body: 'Funds are already secured, so the deal can focus on delivery.' },
 ];
 
 const liveSignals = [
-  ['Escrow core online', 'ShieldCheck'],
+  ['Payment protection online', 'ShieldCheck'],
   ['Funds secured', 'Lock'],
   ['Delivery watch active', 'PackageCheck'],
   ['Payout held', 'Banknote'],
@@ -316,14 +316,14 @@ function LandingPage() {
                 >
                   <Sparkles className="h-3.5 w-3.5 text-emerald-200" />
                 </motion.span>
-                SOUTH AFRICA'S ESCROW ENGINE
+                SOUTH AFRICA'S PAYMENT PROTECTION
               </div>
 
               <h1 className="mt-7 max-w-4xl text-5xl font-bold leading-[0.98] text-white sm:text-6xl lg:text-[4.15rem] xl:text-[4.65rem]" data-testid="hero-headline">
                 Money moves only when trust is earned.
               </h1>
               <p style={{ color: MUTED }} className="mt-7 max-w-2xl text-lg leading-8 sm:text-xl">
-                TrustTrade turns everyday online deals into protected escrow transactions, with payment locked, delivery tracked, and bank settlement handled after escrow release.
+                TrustTrade turns everyday online deals into protected payment transactions, with payment locked, delivery tracked, and bank settlement handled after funds are released.
               </p>
 
               <div className="tt-hero-actions mt-8 flex flex-col gap-3 sm:flex-row">
@@ -541,7 +541,7 @@ function LiveEscrowConsole({ reduceMotion }) {
       <div className="tt-console-inner border border-sky-300/18 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.22),transparent_34%),linear-gradient(145deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-5">
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p style={{ color: MUTED }} className="text-xs font-semibold">Live escrow transaction</p>
+            <p style={{ color: MUTED }} className="text-xs font-semibold">Live protected transaction</p>
             <h2 className="mt-1 text-2xl font-bold text-white">Camera kit sale</h2>
           </div>
           <motion.div
@@ -555,7 +555,7 @@ function LiveEscrowConsole({ reduceMotion }) {
 
         <div className="tt-mini-grid grid grid-cols-2 gap-3 sm:grid-cols-4">
           <MiniSignal label="Amount" value="R 18,500" icon="WalletCards" tone={BLUE} />
-          <MiniSignal label="Escrow" value="Locked" icon="Lock" tone={GREEN} />
+          <MiniSignal label="Protected" value="Locked" icon="Lock" tone={GREEN} />
           <MiniSignal label="Dispute" value="Armed" icon="Scale" tone="#fb7185" />
           <MiniSignal label="Payout" value="1-2 days" icon="Banknote" tone={GOLD} />
         </div>
@@ -681,7 +681,7 @@ function EscrowPipeline({ reduceMotion }) {
               A payment pipeline with a lock at the center.
             </h2>
             <p style={{ color: MUTED }} className="mt-5 max-w-xl text-lg leading-8">
-              The core interaction is simple: money flows in, escrow holds it, delivery creates proof, and funds release only after the right confirmation. Bank settlement may take up to 2 business days.
+              The core interaction is simple: money flows in, payment is protected, delivery creates proof, and funds release only after the right confirmation. Bank settlement may take up to 2 business days.
             </p>
           </motion.div>
 
@@ -710,7 +710,7 @@ function EscrowPipeline({ reduceMotion }) {
 
               <div className="mt-8 grid gap-6 border-t border-white/10 pt-6 md:grid-cols-[1fr_auto] md:items-center">
                 <div>
-                  <p style={{ color: MUTED }} className="text-sm font-semibold">Current escrow state</p>
+                  <p style={{ color: MUTED }} className="text-sm font-semibold">Current protection state</p>
                   <h3 className="mt-2 text-3xl font-bold text-white">Locked until delivery confirmation</h3>
                 </div>
                 <motion.div
@@ -782,7 +782,7 @@ function EditorialTrustSection({ reduceMotion }) {
         <EditorialBlock
           eyebrow="// BUYER PROTECTION"
           title="The buyer sees control instead of hoping the seller does the right thing."
-          body="Escrow changes the emotional shape of the deal. Payment is serious, but it is not final until delivery earns release."
+          body="Payment protection changes the emotional shape of the deal. Payment is serious, but it is not final until delivery earns release."
           proof={buyerProof}
           accent={BLUE}
           align="left"
@@ -902,7 +902,7 @@ function ProtectionConsole({ reduceMotion }) {
                 </div>
                 <div>
                   <h3 className="font-bold text-white">Money protection state</h3>
-                  <p style={{ color: MUTED }} className="text-sm">Escrow lock currently active</p>
+                  <p style={{ color: MUTED }} className="text-sm">Payment protection active</p>
                 </div>
               </div>
               <Zap className="h-5 w-5 text-sky-300" />
@@ -948,10 +948,10 @@ function FinalCta({ handleGetStarted }) {
           <div>
             <p style={{ color: BLUE, fontFamily: "'JetBrains Mono', monospace" }} className="text-xs font-bold">// START PROTECTED</p>
             <h2 className="mt-4 max-w-3xl text-4xl font-bold leading-tight text-white sm:text-5xl">
-              Build the deal around escrow from the first click.
+              Build the deal around payment protection from the first click.
             </h2>
             <p style={{ color: MUTED }} className="mt-4 max-w-2xl text-lg leading-8">
-              Create a secure transaction and give both sides a cleaner way to trade. Once funds are released from escrow, payouts are processed as quickly as possible and may take up to 2 business days.
+              Create a secure transaction and give both sides a cleaner way to trade. Once funds are released, payouts are processed as quickly as possible and may take up to 2 business days.
             </p>
           </div>
           <button
@@ -977,7 +977,7 @@ function Footer({ scrollToHowItWorks }) {
               <TrustLogo size="small" dark />
             </div>
             <p style={{ color: MUTED }} className="max-w-xs text-sm leading-relaxed">
-              Secure escrow protection for online transactions in South Africa. Buy and sell with total peace of mind.
+              Secure payment protection for online transactions in South Africa. Buy and sell with total peace of mind.
             </p>
           </div>
 
@@ -989,7 +989,7 @@ function Footer({ scrollToHowItWorks }) {
                   How It Works
                 </button>
               </li>
-              <li><a href="/escrow" style={{ color: MUTED }} className="transition-colors hover:text-white">Escrow Protection</a></li>
+              <li><a href="/escrow" style={{ color: MUTED }} className="transition-colors hover:text-white">Payment Protection</a></li>
               <li><a href="/disputes" style={{ color: MUTED }} className="transition-colors hover:text-white">Dispute Resolution</a></li>
             </ul>
           </div>

@@ -22,23 +22,22 @@ export default function EscrowPage() {
       <main className="max-w-4xl mx-auto px-4 py-12">
         <div className="flex items-center gap-3 mb-8">
           <ShieldCheck className="w-8 h-8 text-blue-600" />
-          <h1 className="text-3xl font-bold text-slate-900">Escrow Protection</h1>
+          <h1 className="text-3xl font-bold text-slate-900">Payment Protection</h1>
         </div>
-        
+
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 space-y-8">
           <section>
-            <h2 className="text-xl font-semibold text-slate-900 mb-4">What is Escrow?</h2>
+            <h2 className="text-xl font-semibold text-slate-900 mb-4">How are payments protected?</h2>
             <p className="text-slate-600 leading-relaxed">
-              Escrow is a secure payment method where a trusted third party (TrustTrade) holds the 
-              buyer's payment until both parties fulfill their obligations. This protects buyers from 
-              fraud and sellers from non-payment.
+              TrustTrade holds the buyer's payment securely until both parties fulfil their obligations.
+              This protects buyers from fraud and sellers from non-payment — nobody gets hurt.
             </p>
           </section>
 
           <PremiumEscrowFlow />
-          
+
           <section>
-            <h2 className="text-xl font-semibold text-slate-900 mb-4">How TrustTrade Escrow Works</h2>
+            <h2 className="text-xl font-semibold text-slate-900 mb-4">How TrustTrade Protects Your Payment</h2>
             <div className="grid md:grid-cols-2 gap-4">
               <div className="flex gap-3 p-4 bg-blue-50 rounded-lg">
                 <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">1</div>
@@ -51,7 +50,7 @@ export default function EscrowPage() {
                 <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold">2</div>
                 <div>
                   <h3 className="font-semibold text-slate-900">Buyer Pays</h3>
-                  <p className="text-sm text-slate-600">Buyer pays into TrustTrade escrow via EFT, card, or Ozow</p>
+                  <p className="text-sm text-slate-600">Buyer pays via EFT, card, or Ozow — funds are held securely, not paid to the seller yet</p>
                 </div>
               </div>
               <div className="flex gap-3 p-4 bg-blue-50 rounded-lg">

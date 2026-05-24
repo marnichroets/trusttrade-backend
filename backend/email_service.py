@@ -170,7 +170,7 @@ def get_base_email_template(
     hiw_html = ""
     if show_how_it_works:
         steps = [
-            ("01", "Buyer pays into escrow"),
+            ("01", "Buyer pays securely — funds held safely"),
             ("02", "Seller delivers the item"),
             ("03", "Buyer confirms delivery"),
             ("04", "Payout processing · up to 2 business days"),
@@ -216,7 +216,7 @@ def get_base_email_template(
     <tr>
       <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
         <div style="font-family:'Space Grotesk',Arial,sans-serif;font-size:24px;font-weight:700;margin:0 auto 10px;display:inline-block;"><span style="color:#1a73e8;">Trust</span><span style="color:#E6EDF3;">Trade</span></div>
-        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
+        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE PAYMENTS &middot; SOUTH AFRICA</p>
       </td>
     </tr>
 
@@ -266,7 +266,7 @@ def get_base_email_template(
           &nbsp;&middot;&nbsp;
           <a href="https://www.trusttradesa.co.za/terms" style="color:rgba(255,255,255,0.55);text-decoration:none;">Terms</a>
         </p>
-        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.25);">Secured by TrustTrade Escrow</p>
+        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.25);">Secured by TrustTrade</p>
       </td>
     </tr>
 
@@ -293,7 +293,7 @@ async def send_verification_email(email: str, name: str, verification_url: str) 
     <tr>
       <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
         <div style="font-family:'Space Grotesk',Arial,sans-serif;font-size:24px;font-weight:700;margin:0 auto 8px;display:inline-block;"><span style="color:#1a73e8;">Trust</span><span style="color:#E6EDF3;">Trade</span></div>
-        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
+        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE PAYMENTS &middot; SOUTH AFRICA</p>
       </td>
     </tr>
     <tr>
@@ -321,7 +321,7 @@ async def send_verification_email(email: str, name: str, verification_url: str) 
     <tr>
       <td style="background:{BRAND_NAVY};padding:20px 32px;text-align:center;">
         <p style="margin:0 0 4px;font-size:12px;color:rgba(255,255,255,0.45);">&copy; 2026 TrustTrade South Africa.</p>
-        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.25);">Secured by TrustTrade Escrow</p>
+        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.25);">Secured by TrustTrade</p>
       </td>
     </tr>
   </table>
@@ -349,7 +349,7 @@ async def send_welcome_email(email: str, name: str, frontend_url: str) -> bool:
     <tr>
       <td style="background:{BRAND_NAVY};padding:28px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
         <div style="font-family:'Space Grotesk',Arial,sans-serif;font-size:26px;font-weight:700;margin:0 auto 10px;display:inline-block;"><span style="color:#1a73e8;">Trust</span><span style="color:#E6EDF3;">Trade</span></div>
-        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE ESCROW &middot; SOUTH AFRICA</p>
+        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE PAYMENTS &middot; SOUTH AFRICA</p>
       </td>
     </tr>
 
@@ -365,20 +365,20 @@ async def send_welcome_email(email: str, name: str, frontend_url: str) -> bool:
     <tr>
       <td style="background:white;padding:0 32px 28px;">
         <p style="font-size:15px;color:{TEXT_DARK};line-height:1.7;margin:0 0 20px;">
-          We're excited to have you on board. TrustTrade is South Africa's secure escrow platform — we hold your payment safely until <strong>both parties are satisfied</strong>, then release the funds. No more getting scammed. No more chasing payments.
+          We're excited to have you on board. TrustTrade is South Africa's secure payment protection platform — we hold your payment safely until <strong>both parties are satisfied</strong>, then release the funds. No more getting scammed. No more chasing payments.
         </p>
 
         <!-- What is escrow -->
         <table style="width:100%;border-collapse:collapse;border:1px solid {BORDER_CLR};margin-bottom:24px;">
           <tr>
             <td style="padding:10px 16px;background:{BRAND_NAVY};font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.65);font-weight:700;">
-              WHAT IS ESCROW?
+              HOW ARE PAYMENTS PROTECTED?
             </td>
           </tr>
           <tr>
             <td style="padding:18px 20px;background:#f9fafb;">
               <p style="font-size:14px;color:{TEXT_DARK};line-height:1.7;margin:0;">
-                Think of escrow as a trusted middleman. When you buy something, your money goes into a secure vault — not to the seller. The seller only gets paid once <strong>you confirm</strong> you've received what was agreed. If something goes wrong, we step in to resolve it.
+                Think of TrustTrade as a trusted middleman. When you buy something, your money goes into a secure vault — not to the seller. The seller only gets paid once <strong>you confirm</strong> you've received what was agreed. If something goes wrong, we step in to resolve it.
               </p>
             </td>
           </tr>
@@ -403,7 +403,7 @@ async def send_welcome_email(email: str, name: str, frontend_url: str) -> bool:
                 <tr>
                   <td style="padding:10px 0;border-bottom:1px solid {BORDER_CLR};">
                     <span style="display:inline-block;width:26px;height:26px;background:{BRAND_NAVY};color:white;text-align:center;line-height:26px;font-size:11px;font-weight:700;margin-right:14px;vertical-align:middle;">2</span>
-                    <span style="font-size:14px;color:{TEXT_DARK};vertical-align:middle;"><strong>Buyer pays into escrow</strong> &mdash; funds are held securely, not accessible to the seller yet</span>
+                    <span style="font-size:14px;color:{TEXT_DARK};vertical-align:middle;"><strong>Buyer pays securely</strong> &mdash; funds are held safely, not accessible to the seller yet</span>
                   </td>
                 </tr>
                 <tr>
@@ -429,7 +429,7 @@ async def send_welcome_email(email: str, name: str, frontend_url: str) -> bool:
             <td style="width:33%;padding:14px 10px;text-align:center;vertical-align:top;">
               <div style="font-size:22px;margin-bottom:6px;">&#128274;</div>
               <p style="font-size:12px;font-weight:700;color:{BRAND_NAVY};margin:0 0 4px;">Funds Protected</p>
-              <p style="font-size:11px;color:{TEXT_MUTED};margin:0;line-height:1.5;">Money held in regulated escrow until you're satisfied</p>
+              <p style="font-size:11px;color:{TEXT_MUTED};margin:0;line-height:1.5;">Money held securely until you're satisfied</p>
             </td>
             <td style="width:33%;padding:14px 10px;text-align:center;vertical-align:top;">
               <div style="font-size:22px;margin-bottom:6px;">&#9989;</div>
@@ -465,7 +465,7 @@ async def send_welcome_email(email: str, name: str, frontend_url: str) -> bool:
           &nbsp;&middot;&nbsp;
           <a href="https://www.trusttradesa.co.za/terms" style="color:rgba(255,255,255,0.55);text-decoration:none;">Terms</a>
         </p>
-        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.25);">Secured by TrustTrade Escrow</p>
+        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.25);">Secured by TrustTrade</p>
       </td>
     </tr>
 
@@ -572,17 +572,17 @@ def get_transaction_created_email(
     subject = f"TrustTrade: New Transaction {share_code}"
     
     if role.lower() == "buyer":
-        intro_text = f"""A new escrow transaction has been created for your purchase. You are the <strong>Buyer</strong>.
-        
+        intro_text = f"""A new protected transaction has been created for your purchase. You are the <strong>Buyer</strong>.
+
         <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
             <strong>What happens next:</strong><br>
             1. Review and confirm the transaction details<br>
-            2. Make payment through our secure escrow<br>
+            2. Make your payment — funds are held securely until delivery is confirmed<br>
             3. Receive your item<br>
             4. Confirm delivery to release funds to seller
         </div>"""
     else:
-        intro_text = f"""A new escrow transaction has been created. You are the <strong>Seller</strong>.
+        intro_text = f"""A new protected transaction has been created. You are the <strong>Seller</strong>.
         
         <div style="background: #fff3e0; padding: 12px; border-radius: 8px; margin: 16px 0;">
             <strong>What happens next:</strong><br>
@@ -606,7 +606,7 @@ def get_transaction_created_email(
         greeting_name=recipient_name,
         intro_text=intro_text,
         details=details,
-        cta_text="Review and Pay into Escrow" if role.lower() == "buyer" else "View Transaction",
+        cta_text="Review and Pay Securely" if role.lower() == "buyer" else "View Transaction",
         cta_link=share_link,
         show_how_it_works=False,
         status_badge="New Transaction",
@@ -634,7 +634,7 @@ def get_payment_received_email(
 
     if role.lower() == "seller":
         if is_delivery:
-            intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
+            intro_text = """<strong style="color: #10b981;">Payment has been secured!</strong>
 
             <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>What you need to do:</strong><br>
@@ -644,7 +644,7 @@ def get_payment_received_email(
                 <strong>Payout:</strong> processed as quickly as possible after escrow release; bank settlement may take up to 2 business days
             </div>"""
         elif is_inperson:
-            intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
+            intro_text = """<strong style="color: #10b981;">Payment has been secured!</strong>
 
             <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>What you need to do:</strong><br>
@@ -654,7 +654,7 @@ def get_payment_received_email(
                 <strong>Payout:</strong> processed as quickly as possible after escrow release; bank settlement may take up to 2 business days
             </div>"""
         elif is_instant:
-            intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
+            intro_text = """<strong style="color: #10b981;">Payment has been secured!</strong>
 
             <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>Digital delivery:</strong><br>
@@ -663,7 +663,7 @@ def get_payment_received_email(
                 <strong>Payout:</strong> processed as quickly as possible after escrow release; bank settlement may take up to 2 business days
             </div>"""
         else:
-            intro_text = """<strong style="color: #10b981;">Payment has been secured in escrow!</strong>
+            intro_text = """<strong style="color: #10b981;">Payment has been secured!</strong>
 
             <div style="background: #e8f5e9; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>What happens next:</strong><br>
@@ -672,7 +672,7 @@ def get_payment_received_email(
             </div>"""
     else:
         if is_delivery:
-            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
+            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely with TrustTrade!</strong>
 
             <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>What happens next:</strong><br>
@@ -682,7 +682,7 @@ def get_payment_received_email(
                 <strong>Your money is protected</strong> until you confirm receipt.
             </div>"""
         elif is_inperson:
-            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
+            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely with TrustTrade!</strong>
 
             <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>What happens next:</strong><br>
@@ -692,7 +692,7 @@ def get_payment_received_email(
                 <strong>Your money is protected</strong> until you confirm receipt.
             </div>"""
         elif is_instant:
-            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
+            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely with TrustTrade!</strong>
 
             <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>Digital delivery:</strong><br>
@@ -701,7 +701,7 @@ def get_payment_received_email(
                 <strong>Your money is protected</strong> until you confirm receipt.
             </div>"""
         else:
-            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely in TrustTrade Escrow!</strong>
+            intro_text = """<strong style="color: #10b981;">Your payment has been secured safely with TrustTrade!</strong>
 
             <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin: 16px 0;">
                 <strong>What happens next:</strong><br>
@@ -721,7 +721,7 @@ def get_payment_received_email(
         "Reference": share_code,
         "Item": item_description,
         "Amount": f"R {amount:,.2f}",
-        "Status": "Funds Secured in Escrow"
+        "Status": "Payment Secured"
     }
     
     html_content = get_base_email_template(
@@ -757,12 +757,12 @@ def get_immediate_payment_secured_email(
     flow = (delivery_method or "courier").lower()
     protection_copy = "Your funds are protected until you confirm delivery."
     if flow == "digital":
-        protection_copy = "Your funds are protected in escrow and release according to the agreed instant-flow conditions."
+        protection_copy = "Your funds are protected and will be released according to the agreed instant-flow conditions."
     elif flow != "courier":
         protection_copy = "Your funds are protected until the agreed release conditions are met."
 
     intro_html = f"""
-    <p style='font-size: 18px; color: #10b981; font-weight: 700; margin: 0 0 16px 0;'>Your payment has been secured safely in TrustTrade Escrow.</p>
+    <p style='font-size: 18px; color: #10b981; font-weight: 700; margin: 0 0 16px 0;'>Your payment has been secured safely with TrustTrade.</p>
     <p style='font-size: 15px; color: #212529; margin: 0 0 20px 0; line-height: 1.6;'>{protection_copy}</p>
     """
     
@@ -779,7 +779,7 @@ def get_immediate_payment_secured_email(
         "Reference": share_code,
         "Item": item_description,
         "Amount": f"R {amount:,.2f}",
-        "Status": "Funds Secured in Escrow"
+        "Status": "Payment Secured"
     }
     
     html_content = get_base_email_template(
@@ -950,7 +950,7 @@ def get_dispute_opened_email(
     
     subject = f"{share_code} - Dispute opened - action required"
     
-    intro_text = "A dispute has been opened for this transaction. Our team will review the case and contact both parties. Funds will remain securely in escrow until the dispute is resolved. Please respond to any requests for additional information promptly."
+    intro_text = "A dispute has been opened for this transaction. Our team will review the case and contact both parties. Funds will remain securely protected until the dispute is resolved. Please respond to any requests for additional information promptly."
     
     details = {
         "Reference": share_code,
@@ -1076,7 +1076,7 @@ def get_verification_status_email(
     
     details = {
         "Status": status.upper(),
-        "Account": "TrustTrade Escrow"
+        "Account": "TrustTrade"
     }
     
     html_content = get_base_email_template(
@@ -1517,9 +1517,9 @@ async def send_smart_deal_created(
         heading="You've been invited to a Smart Deal",
         greeting_name=freelancer_name,
         intro_text=(
-            f"<strong>{client_name}</strong> wants to hire you through TrustTrade's secure escrow platform. "
+            f"<strong>{client_name}</strong> wants to hire you through TrustTrade's secure payment platform. "
             f"Review the deal details below and click the button to accept. "
-            f"Once you accept, the client funds the escrow — your payment is protected until you deliver and it's approved."
+            f"Once you accept, the client funds the deal — your payment is protected until you deliver and it's approved."
         ),
         details=details,
         cta_text="View &amp; Accept Deal",
@@ -1539,12 +1539,12 @@ async def send_smart_deal_accepted(deal: dict, client_name: str, freelancer_name
         name=client_name,
         intro=(
             f"Great news — <strong>{freelancer_name}</strong> has accepted your Smart Deal. "
-            f"The next step is to fund the escrow so work can begin. "
+            f"The next step is to fund the deal so work can begin. "
             f"Your payment is held securely and only released when you approve the delivery."
         ),
         deal=deal,
-        cta_text="Fund Escrow",
-        badge="Fund Escrow to Start",
+        cta_text="Fund Deal",
+        badge="Fund Deal to Start",
         badge_color="#3b82f6",
     )
     return await send_email(deal["client_email"], client_name, subject, html)
@@ -1637,7 +1637,7 @@ async def send_smart_deal_disputed(
 
     party_intro = (
         f"A dispute has been raised on this Smart Deal by <strong>{raised_by_name}</strong>. "
-        f"Funds remain securely in escrow while TrustTrade admin investigates. "
+        f"Funds remain securely protected while TrustTrade admin investigates. "
         f"You will be contacted if further information is required."
     )
     admin_intro = (

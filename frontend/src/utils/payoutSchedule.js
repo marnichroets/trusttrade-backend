@@ -186,3 +186,34 @@ export function getDefaultMinimumTransactionAmount(config = {}) {
 export function getPayoutClearingDisclaimer(config = {}) {
   return config.payout_clearing_disclaimer || DEFAULT_CLEARING_DISCLAIMER;
 }
+
+export function calculatePayoutSchedule(releasedAt, config = {}) {
+  const releasedDate = new Date(releasedAt);
+  const releaseParts = formatDateParts(releasedDate);
+  const releaseMinutes = releaseParts.hour * 60 + releaseParts.minute;
+
+  const releaseTimes = normalizeList(config.payout_release_times, DEFAULT_RELEASE_TIMES);
+  const release10 = parseHm(releaseTimes[0]);
+  const release15 = parseHm(releaseTimes[1] || releaseTimes[0]);
+  const threshold10 = release10.hour * 60 + release10.minute;
+  const threshold15 = release15.hour * 60 + release15.minute;
+
+  let payoutRunAt;
+
+  if (!isBusinessDay(releasedDate) || releaseMinutes >= threshold15) {
+    const nextBiz = nextBusinessDay(releasedDate);
+    const nextNextBiz = nextBusinessDay(nextBiz);
+    payoutRunAt = buildSaDate({ ...formatDateParts(nextNextBiz), hour: release10.hour, minute: release10.minute, second: 0 });
+  } else if (releaseMinutes >= threshold10) {
+    const nextBiz = nextBusinessDay(releasedDate);
+    payoutRunAt = buildSaDate({ ...formatDateParts(nextBiz), hour: release15.hour, minute: release15.minute, second: 0 });
+  } else {
+    const nextBiz = nextBusinessDay(releasedDate);
+    payoutRunAt = buildSaDate({ ...formatDateParts(nextBiz), hour: release10.hour, minute: release10.minute, second: 0 });
+  }
+
+  const pp = formatDateParts(payoutRunAt);
+  const bankRunLabel = `${String(pp.hour).padStart(2, '0')}:${String(pp.minute).padStart(2, '0')}`;
+
+  return { payoutRunAt, bankRunLabel };
+}

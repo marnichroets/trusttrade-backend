@@ -11,7 +11,7 @@ import { Textarea } from '../components/ui/textarea';
 import { Input } from '../components/ui/input';
 import { buildTransactionActivity } from '../utils/transactionActivity';
 import { usePlatformConfig } from '../context/PlatformConfigContext';
-import { getPayoutScheduleMessage } from '../utils/payoutSchedule';
+import { getPayoutScheduleMessage, calculatePayoutSchedule } from '../utils/payoutSchedule';
 import api from '../utils/api';
 import { toast } from 'sonner';
 import {
@@ -260,6 +260,228 @@ function PayoutTimeline({ transaction, payoutSchedule }) {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function getSADateKey(date) {
+  const d = new Date(date.getTime() + 2 * 60 * 60 * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+function PayoutTimelineTracker({ transaction, platformConfig }) {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  const activity = getPayoutActivity(transaction);
+  const releasedAt = activity.releasedAt ? new Date(activity.releasedAt) : null;
+  if (!releasedAt) return null;
+
+  const { payoutRunAt, bankRunLabel } = calculatePayoutSchedule(releasedAt, platformConfig || {});
+  const settlementConfirmed = activity.settlementConfirmed;
+
+  const inInspection = now < payoutRunAt;
+  const inBankProcessing = now >= payoutRunAt && !settlementConfirmed;
+  const completed = settlementConfirmed;
+
+  // Progress: 0→80% during inspection, 80→95% during bank processing, 100% complete
+  const totalMs = payoutRunAt.getTime() - releasedAt.getTime();
+  const elapsedMs = Math.min(now.getTime() - releasedAt.getTime(), totalMs);
+  const rawProgress = totalMs > 0 ? Math.round((elapsedMs / totalMs) * 80) : 0;
+  const progress = completed ? 100 : inBankProcessing ? 92 : Math.min(78, rawProgress);
+
+  // Countdown
+  const msUntilPayout = Math.max(0, payoutRunAt.getTime() - now.getTime());
+  const hoursUntilPayout = Math.floor(msUntilPayout / (1000 * 60 * 60));
+  const minutesUntilPayout = Math.floor((msUntilPayout % (1000 * 60 * 60)) / (1000 * 60));
+
+  const countdownText = completed
+    ? 'Payout complete'
+    : msUntilPayout === 0
+    ? 'Bank processing now'
+    : hoursUntilPayout > 0
+    ? `Expected payout in: ${hoursUntilPayout}h ${minutesUntilPayout}m`
+    : minutesUntilPayout > 0
+    ? `Expected payout in: ${minutesUntilPayout}m`
+    : 'Processing now';
+
+  // Date label helpers (SA timezone = UTC+2, no DST)
+  const relDayLabel = (target) => {
+    const tk = getSADateKey(target);
+    const nk = getSADateKey(now);
+    if (tk === nk) return 'Today';
+    const tmr = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    if (tk === getSADateKey(tmr)) return 'Tomorrow';
+    const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const utcDay = new Date(target.getTime() + 2 * 60 * 60 * 1000).getUTCDay();
+    return DAYS[utcDay];
+  };
+
+  // Payout time string from the UTC payoutRunAt (which was built in SAST)
+  const payoutH = String(new Date(payoutRunAt.getTime() + 2 * 60 * 60 * 1000).getUTCHours()).padStart(2, '0');
+  const payoutM = String(payoutRunAt.getUTCMinutes()).padStart(2, '0');
+  const payoutTimeStr = `${payoutH}:${payoutM}`;
+
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const saPayoutDate = new Date(payoutRunAt.getTime() + 2 * 60 * 60 * 1000);
+  const payoutDay = saPayoutDate.getUTCDate();
+  const payoutMonth = MONTHS[saPayoutDate.getUTCMonth()];
+  const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const payoutWeekday = WEEKDAYS[saPayoutDate.getUTCDay()];
+
+  const payoutBoldLabel = `${payoutWeekday} ${payoutDay} ${payoutMonth} at ${payoutTimeStr}`;
+  const inspectionEndLabel = `${relDayLabel(payoutRunAt)} ${payoutTimeStr}`;
+
+  const steps = [
+    {
+      label: 'Escrow Released',
+      detail: formatDetailDate(activity.releasedAt),
+      state: 'complete',
+    },
+    {
+      label: 'Payout Processing Started',
+      detail: formatDetailDate(activity.processingStartedAt || activity.releasedAt),
+      state: 'complete',
+    },
+    {
+      label: 'TradeSafe Inspection Period',
+      detail: inInspection
+        ? `Inspection ends: ${inspectionEndLabel}`
+        : `Completed — ${inspectionEndLabel}`,
+      state: completed ? 'complete' : inInspection ? 'active' : 'complete',
+    },
+    {
+      label: 'Bank Processing',
+      detail: `Estimated: next ${bankRunLabel} run`,
+      state: completed ? 'complete' : inBankProcessing ? 'active' : inInspection ? 'pending' : 'complete',
+    },
+    {
+      label: 'Expected in FNB',
+      detail: payoutBoldLabel,
+      state: completed ? 'complete' : 'pending',
+      highlight: !completed,
+    },
+  ];
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)',
+      border: '1px solid #bbf7d0',
+      borderLeft: '3px solid #10b981',
+      borderRadius: 14,
+      padding: '20px 22px',
+      boxShadow: '0 4px 20px rgba(16,185,129,0.08)',
+    }}>
+      <style>{`@keyframes payout-pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div>
+          <p style={{ fontSize: 11, color: '#059669', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 3px' }}>
+            Payout Timeline
+          </p>
+          <p style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+            {countdownText}
+          </p>
+        </div>
+        {!completed && msUntilPayout > 0 && (
+          <div style={{ background: '#dcfce7', border: '1px solid #86efac', borderRadius: 99, padding: '5px 12px', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+            <Clock size={11} color="#16a34a" />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#15803d', whiteSpace: 'nowrap' }}>
+              {hoursUntilPayout > 0 ? `${hoursUntilPayout}h ${minutesUntilPayout}m` : `${minutesUntilPayout}m`}
+            </span>
+          </div>
+        )}
+        {completed && (
+          <div style={{ background: '#dcfce7', border: '1px solid #86efac', borderRadius: 99, padding: '5px 12px', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <CheckCircle2 size={11} color="#16a34a" />
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#15803d' }}>Done</span>
+          </div>
+        )}
+      </div>
+
+      {/* Bold expected payout date */}
+      {!completed && (
+        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, padding: '8px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Banknote size={14} color="#059669" style={{ flexShrink: 0 }} />
+          <div>
+            <span style={{ fontSize: 12, color: '#059669' }}>Expected payout: </span>
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#065f46' }}>{payoutBoldLabel}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Progress bar */}
+      <div style={{ background: '#f1f5f9', borderRadius: 99, height: 5, marginBottom: 18, overflow: 'hidden' }}>
+        <div style={{
+          height: '100%',
+          background: completed ? '#10b981' : 'linear-gradient(90deg, #10b981, #34d399)',
+          borderRadius: 99,
+          width: `${progress}%`,
+          transition: 'width 1s ease',
+        }} />
+      </div>
+
+      {/* Steps */}
+      <div>
+        {steps.map((step, i) => (
+          <div key={i} style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 18, flexShrink: 0 }}>
+              <div style={{
+                width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: step.state === 'complete' ? '#10b981' : step.state === 'active' ? '#2563eb' : '#e2e8f0',
+                boxShadow: step.state === 'active' ? '0 0 0 4px rgba(37,99,235,0.12)' : 'none',
+              }}>
+                {step.state === 'complete' && <Check size={10} color="#fff" />}
+                {step.state === 'active' && (
+                  <Loader2 size={9} color="#fff" style={{ animation: 'spin 1s linear infinite' }} />
+                )}
+              </div>
+              {i < steps.length - 1 && (
+                <div style={{
+                  width: 2, flex: 1, minHeight: 14,
+                  background: step.state === 'complete' ? '#a7f3d0' : '#f1f5f9',
+                  margin: '3px 0',
+                }} />
+              )}
+            </div>
+
+            <div style={{ flex: 1, paddingBottom: i < steps.length - 1 ? 12 : 0 }}>
+              <p style={{
+                fontSize: 13,
+                fontWeight: step.state !== 'pending' ? 700 : 500,
+                color: step.state === 'pending' ? '#94a3b8' : '#0f172a',
+                margin: '0 0 2px',
+                lineHeight: 1.3,
+              }}>
+                {step.label}
+              </p>
+              {step.highlight && step.state !== 'complete' ? (
+                <span style={{
+                  fontSize: 13, fontWeight: 800, color: '#065f46',
+                  background: '#dcfce7', border: '1px solid #86efac',
+                  borderRadius: 6, padding: '2px 8px', display: 'inline-block',
+                }}>
+                  {step.detail}
+                </span>
+              ) : (
+                <p style={{
+                  fontSize: 12,
+                  color: step.state === 'pending' ? '#cbd5e1' : '#64748b',
+                  margin: 0, lineHeight: 1.4,
+                }}>
+                  {step.detail}
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -937,6 +1159,9 @@ function TransactionDetail() {
   const canConfirmInstantRelease = isActionable && isInstantFlow && hasEscrow && isBuyer && escrowState === 'FUNDS_RECEIVED' && !transaction.delivery_confirmed;
   const buyerWaitingForSellerDispatch = !isInstantFlow && hasEscrow && isBuyer &&
     ['FUNDS_RECEIVED', 'FUNDS_DEPOSITED'].includes(escrowState) && !transaction.delivery_confirmed;
+  const showPayoutTracker =
+    transaction.payment_status === 'Bank settlement pending' ||
+    transaction.payment_status === 'Payout Processing';
   const shareLink = transaction.share_code ? `${window.location.origin}/t/${transaction.share_code}` : null;
   const _fa = (transaction.fee_allocation || 'BUYER').toUpperCase();
   const _ttFee = transaction.trusttrade_fee ?? Math.max(transaction.item_price * 0.02, 5);
@@ -1143,8 +1368,15 @@ function TransactionDetail() {
             {isFinalized && (
               <>
                 <FinalizedEscrowState transaction={transaction} uiState={uiState} payoutSchedule={payoutSchedule} />
-                <PayoutTimeline transaction={transaction} payoutSchedule={payoutSchedule} />
+                {showPayoutTracker
+                  ? <PayoutTimelineTracker transaction={transaction} platformConfig={platformConfig} />
+                  : <PayoutTimeline transaction={transaction} payoutSchedule={payoutSchedule} />
+                }
               </>
+            )}
+
+            {!isFinalized && showPayoutTracker && (
+              <PayoutTimelineTracker transaction={transaction} platformConfig={platformConfig} />
             )}
 
             {/* Buyer confirm */}

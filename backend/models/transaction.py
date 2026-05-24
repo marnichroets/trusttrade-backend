@@ -33,6 +33,10 @@ class Transaction(BaseModel):
     item_price: float
     trusttrade_fee: Optional[float] = 0.0
     platform_fee: Optional[float] = None  # 2% fee collected from buyer separately (not in escrow)
+    courier_quote_id: Optional[str] = None
+    courier_service_name: Optional[str] = None
+    courier_fee: Optional[float] = 0.0
+    courier_handling_fee: Optional[float] = 0.0
     total: Optional[float] = None
     seller_receives: Optional[float] = None  # Seller payout from escrow (= item_price under new fee model)
     fee_allocation: str = "SELLER_AGENT"  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT

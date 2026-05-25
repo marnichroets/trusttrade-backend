@@ -48,7 +48,10 @@ except ImportError:
 TARGET_TOKEN_ID = "32xbU6asjfrBnNHfeg57I"
 USER_EMAIL = "marnichroets@gmail.com"
 
-MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
+MONGO_URL = os.environ.get("MONGO_URL")
+if not MONGO_URL:
+    print("[FATAL] MONGO_URL env var is not set", flush=True)
+    sys.exit(1)
 DB_NAME = os.environ.get("DB_NAME", "trusttrade")
 
 AUTH_URL = os.environ.get("TRADESAFE_AUTH_URL", "https://auth.tradesafe.co.za/oauth/token")

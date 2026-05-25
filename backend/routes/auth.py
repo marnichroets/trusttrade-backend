@@ -301,6 +301,20 @@ async def get_current_user(request: Request):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
 
+@router.get("/token")
+async def get_session_token(request: Request):
+    """Return the current session token (for admin API use)."""
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    token = (
+        request.cookies.get("session_token")
+        or (request.headers.get("Authorization", "").removeprefix("Bearer ").strip() or None)
+    )
+    return {"token": token, "user_id": user.user_id, "email": user.email}
+
+
 @router.post("/logout")
 async def logout(request: Request, response: Response):
     """Logout user and clear session"""

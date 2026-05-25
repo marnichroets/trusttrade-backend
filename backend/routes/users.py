@@ -845,7 +845,7 @@ async def update_user_banking_details(request: Request, details: BankingDetailsU
             "banking_details": {
                 "bank_name": details.bank_name,
                 "account_holder": details.account_holder,
-                "account_number": details.account_number[-4:],  # Only store last 4
+                "account_number": details.account_number,
                 "branch_code": details.branch_code,
                 "account_type": details.account_type,
                 "updated_at": datetime.now(timezone.utc).isoformat()
@@ -1298,7 +1298,7 @@ async def _activate_banking_change(db, user, change_req: dict):
             "banking_details": {
                 "bank_name": new_details["bank_name"],
                 "account_holder": new_details["account_holder"],
-                "account_number": new_details["account_number"][-4:],
+                "account_number": new_details["account_number"],
                 "branch_code": new_details["branch_code"],
                 "account_type": new_details["account_type"],
                 "updated_at": now.isoformat(),

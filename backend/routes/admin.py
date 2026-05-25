@@ -1875,6 +1875,86 @@ async def retry_transaction_withdrawal(request: Request, transaction_id: str):
     }
 
 
+@router.post("/transactions/{transaction_id}/force-withdrawal")
+async def admin_force_withdrawal(request: Request, transaction_id: str):
+    """
+    ADMIN ONLY: Directly call tokenAccountWithdraw on the seller's token for a specific amount.
+    Use when the normal withdrawal flow failed (e.g. bad account number that has since been fixed).
+    Body: {"amount": 500.00}  (in rands)
+    """
+    from tradesafe_service import withdraw_token_funds_result
+
+    db = get_database()
+    admin = await require_admin(request, db)
+
+    body = await request.json()
+    amount = body.get("amount")
+    if not amount or float(amount) <= 0:
+        raise HTTPException(status_code=400, detail="amount must be a positive number (in rands)")
+    amount = float(amount)
+
+    txn = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    seller_token_id = txn.get("tradesafe_seller_token_id")
+    if not seller_token_id:
+        raise HTTPException(status_code=400, detail="Transaction has no seller token ID")
+
+    logger.info("=" * 60)
+    logger.info("[FORCE_WITHDRAWAL] Admin: %s", admin.email)
+    logger.info("[FORCE_WITHDRAWAL] Transaction: %s", transaction_id)
+    logger.info("[FORCE_WITHDRAWAL] Seller Token: %s", seller_token_id)
+    logger.info("[FORCE_WITHDRAWAL] Amount: R%.2f", amount)
+    logger.info("=" * 60)
+
+    result = await withdraw_token_funds_result(
+        seller_token_id,
+        amount,
+        transaction_id=transaction_id,
+        source=f"admin-force:{admin.email}",
+    )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    audit = {
+        "admin_email": admin.email,
+        "admin_name": admin.name,
+        "action": "force_withdrawal" if result.get("success") else "force_withdrawal_failed",
+        "transaction_id": transaction_id,
+        "seller_token_id": seller_token_id,
+        "amount": amount,
+        "result": result,
+        "timestamp": now_iso,
+    }
+    await db.admin_actions.insert_one(audit)
+
+    if result.get("success"):
+        await db.transactions.update_one(
+            {"transaction_id": transaction_id},
+            {"$set": {
+                "withdrawal_triggered": True,
+                "withdrawal_triggered_at": now_iso,
+                "withdrawal_status": "in_progress",
+                "force_withdrawal_by": admin.email,
+                "force_withdrawal_at": now_iso,
+                "force_withdrawal_amount": amount,
+            }}
+        )
+        logger.info("[FORCE_WITHDRAWAL] SUCCESS — R%.2f from token %s", amount, seller_token_id)
+    else:
+        logger.error("[FORCE_WITHDRAWAL] FAILED — %s", result.get("error"))
+
+    return {
+        "success": result.get("success", False),
+        "transaction_id": transaction_id,
+        "seller_token_id": seller_token_id,
+        "amount": amount,
+        "error": result.get("error"),
+        "raw_response": result.get("raw_response"),
+    }
+
+
 @router.post("/transactions/{transaction_id}/resync-banking")
 async def resync_banking_to_transaction(request: Request, transaction_id: str):
     """

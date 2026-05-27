@@ -197,6 +197,82 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
     )
     await _audit("withdrawal_requested", {"seller_token_id": seller_token_id, "amount": withdrawal_amount})
 
+    # Verify the seller token actually holds enough balance before withdrawing.
+    # TradeSafe can lag crediting the seller token right after FUNDS_RELEASED, so if
+    # the balance is short we wait once (30s) and re-check before attempting payout.
+    from tradesafe_service import get_token_details
+
+    async def _token_balance(token_id: str):
+        details = await get_token_details(token_id)
+        if not details:
+            return None
+        bal = details.get("balance_rands")
+        if bal is None:
+            try:
+                bal = round(float(details.get("balance") or 0), 2)
+            except (TypeError, ValueError):
+                bal = None
+        return bal
+
+    balance_before = await _token_balance(seller_token_id)
+    logger.info(
+        f"[WITHDRAWAL] balance-check txn={txn_id} seller_token_id={seller_token_id} "
+        f"balance_before={balance_before} required=R{withdrawal_amount:.2f}"
+    )
+    await _audit("withdrawal_balance_check", {
+        "seller_token_id": seller_token_id, "balance": balance_before,
+        "required": withdrawal_amount, "phase": "before",
+    })
+
+    if balance_before is not None and balance_before < withdrawal_amount:
+        import asyncio
+        logger.warning(
+            f"[WITHDRAWAL] insufficient balance txn={txn_id} seller_token_id={seller_token_id} "
+            f"balance=R{balance_before:.2f} < required=R{withdrawal_amount:.2f} — "
+            f"waiting 30s for TradeSafe to credit, then retrying once"
+        )
+        await asyncio.sleep(30)
+        balance_after = await _token_balance(seller_token_id)
+        logger.info(
+            f"[WITHDRAWAL] balance-recheck txn={txn_id} seller_token_id={seller_token_id} "
+            f"balance_after={balance_after} required=R{withdrawal_amount:.2f}"
+        )
+        await _audit("withdrawal_balance_check", {
+            "seller_token_id": seller_token_id, "balance": balance_after,
+            "required": withdrawal_amount, "phase": "after",
+        })
+
+        if balance_after is not None and balance_after < withdrawal_amount:
+            error = (
+                f"Insufficient seller token balance after retry: "
+                f"R{balance_after:.2f} < required R{withdrawal_amount:.2f}"
+            )
+            finished_at = datetime.now(timezone.utc).isoformat()
+            await db.transactions.update_one(
+                {"transaction_id": txn_id},
+                {"$set": {
+                    "withdrawal_status": "failed",
+                    "withdrawal_triggered": False,
+                    "withdrawal_failed_at": finished_at,
+                    "withdrawal_error": error,
+                    "payout_status": "payout_failed",
+                    "settlement_status": "withdrawal_failed",
+                    "settlement_checked_at": finished_at,
+                    "expected_settlement_window": "up to 2 business days",
+                    "payout_sla_status": "critical",
+                }}
+            )
+            logger.error(
+                f"[WITHDRAWAL] failed txn={txn_id} seller_token_id={seller_token_id} "
+                f"requested_amount=R{withdrawal_amount:.2f} withdrawal_status_before={status_before} "
+                f"withdrawal_status_after=failed error={error}"
+            )
+            await _audit("payout_failure", {
+                "error": error, "seller_token_id": seller_token_id,
+                "amount": withdrawal_amount, "balance": balance_after,
+            })
+            return {"success": False, "error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount}
+
     try:
         from tradesafe_service import withdraw_token_funds_result
         tradesafe_response = await withdraw_token_funds_result(

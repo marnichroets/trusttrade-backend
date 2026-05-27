@@ -143,6 +143,7 @@ app.include_router(ai_router)
 app.include_router(courier_router)
 
 logger.info(f"[STARTUP] TradeSafe webhook URL: {settings.BACKEND_URL}/api/tradesafe-webhook")
+logger.info(f"[STARTUP] Courier (ShipLogic) enabled={settings.COURIER_ENABLED} key_set={bool(settings.SHIPLOGIC_API_KEY)}")
 
 Path(settings.UPLOAD_BASE_PATH).mkdir(parents=True, exist_ok=True)
 

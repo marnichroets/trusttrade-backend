@@ -406,6 +406,40 @@ async def handle_released_transaction(db, txn: dict, state: str = "FUNDS_RELEASE
     latest = await db.transactions.find_one({"_id": txn["_id"]}, {"_id": 0})
     result = await attempt_transaction_withdrawal(db, latest or txn, source=source)
     logger.info(f"[WITHDRAWAL] released-state withdrawal result txn={txn_id}: {result}")
+
+    # For IMMEDIATE payout tokens, TradeSafe pushes funds to the seller's bank
+    # automatically — attempt_transaction_withdrawal returns early with auto_settled
+    # and never reaches the normal notification path. Send the seller email/SMS here.
+    if result.get("payout_interval") == "IMMEDIATE" and result.get("skipped"):
+        import email_service
+        import sms_service
+        from webhook_handler import (
+            EmailEvent,
+            send_email_with_tracking,
+            send_sms_with_tracking,
+        )
+        doc = latest or txn
+        await send_email_with_tracking(
+            db, txn_id, EmailEvent.FUNDS_RELEASED_SELLER,
+            doc.get("seller_email", ""),
+            email_service.send_funds_released_email,
+            to_email=doc.get("seller_email", ""),
+            to_name=doc.get("seller_name", "Seller"),
+            share_code=doc.get("share_code", txn_id),
+            item_description=doc.get("item_description", ""),
+            amount=float(doc.get("item_price") or 0),
+            net_amount=float(doc.get("net_amount") or 0),
+        )
+        if doc.get("seller_phone"):
+            await send_sms_with_tracking(
+                db, txn_id, "funds_released_sms",
+                doc.get("seller_phone", ""),
+                sms_service.send_funds_released_sms,
+                to_phone=doc.get("seller_phone", ""),
+                amount=float(doc.get("net_amount") or 0),
+            )
+        logger.info(f"[WITHDRAWAL] IMMEDIATE auto_settled — seller notified txn={txn_id}")
+
     return result
 
 

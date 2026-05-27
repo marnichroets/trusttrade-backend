@@ -510,10 +510,10 @@ function NextStepCard({ nextStep }) {
   );
 }
 
-function CurrentStateHeader({ uiState, flowType, userRole }) {
+function CurrentStateHeader({ uiState, flowType, userRole, paymentProcessing }) {
   const title = (() => {
     if (uiState.state === 'EXPIRED') return 'Transaction expired due to no payment';
-    if (uiState.state === 'FUNDED') return 'Awaiting buyer payment';
+    if (uiState.state === 'FUNDED') return paymentProcessing ? 'Payment processing…' : 'Awaiting buyer payment';
     if (uiState.state === 'ESCROW_LOCKED') return 'Payment secured';
     if (uiState.state === 'DELIVERY_PENDING') return flowType === 'delivery' ? 'Delivery in progress' : flowType === 'instant' ? 'Release approved' : 'Release conditions in progress';
     if (uiState.state === 'DELIVERED') return flowType === 'delivery' ? 'Awaiting buyer confirmation' : 'Release conditions met';
@@ -567,6 +567,7 @@ function TransactionDetail() {
   const [payoutReadiness, setPayoutReadiness] = useState(null);
   const [checkingPayoutReadiness, setCheckingPayoutReadiness] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [needsPhoneVerification, setNeedsPhoneVerification] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -613,14 +614,77 @@ function TransactionDetail() {
     }
   }, [resendCooldown]);
 
+  // Is the transaction still waiting for the buyer's payment to be confirmed?
+  const isAwaitingPayment = (txn) => {
+    if (!txn) return false;
+    const ps = (txn.payment_status || '').toLowerCase();
+    const ts = (txn.tradesafe_state || '').toUpperCase();
+    return ps.includes('awaiting') || ts === 'CREATED' || ts === 'PENDING';
+  };
+
+  // Bug 3: auto-refresh the transaction status every 15s without a full page reload.
+  // While the payment is still awaiting confirmation we use the active TradeSafe
+  // sync endpoint so both buyer and seller see the status flip as soon as funds
+  // arrive, instead of waiting up to 30 minutes for the webhook.
   useEffect(() => {
     if (!transaction) return;
-    const isComplete = resolveEscrowUiState(transaction).terminal;
-    if (!isComplete) {
-      const interval = setInterval(() => fetchData(), 5000);
-      return () => clearInterval(interval);
+    if (resolveEscrowUiState(transaction).terminal) return;
+    if (paymentProcessing) return; // handled by the faster post-payment poll below
+    const interval = setInterval(async () => {
+      if (isAwaitingPayment(transaction) && transaction.tradesafe_id) {
+        try { await api.post(`${API}/tradesafe/sync/${transactionId}`, {}, { withCredentials: true }); } catch (e) {}
+      }
+      fetchData();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [transaction?.delivery_confirmed, transaction?.payment_status, transaction?.tradesafe_state, transaction?.tradesafe_id, transactionId, paymentProcessing]);
+
+  // Bug 2: if the buyer just initiated payment, enter "processing" mode on return.
+  useEffect(() => {
+    const flag = localStorage.getItem(`tt_payment_initiated_${transactionId}`);
+    if (!flag) return;
+    const ts = parseInt(flag, 10);
+    if (isNaN(ts) || Date.now() - ts > 30 * 60 * 1000) {
+      localStorage.removeItem(`tt_payment_initiated_${transactionId}`);
+      return;
     }
-  }, [transaction?.delivery_confirmed, transaction?.payment_status, transactionId]);
+    setPaymentProcessing(true);
+  }, [transactionId]);
+
+  // Bug 2: while processing, actively poll TradeSafe every 10s for up to 5 minutes.
+  // Stop (and clear the flag) as soon as the payment is confirmed or the window elapses.
+  useEffect(() => {
+    if (!paymentProcessing) return;
+    // If the transaction is already past awaiting payment, we're done.
+    if (transaction && !isAwaitingPayment(transaction)) {
+      setPaymentProcessing(false);
+      localStorage.removeItem(`tt_payment_initiated_${transactionId}`);
+      return;
+    }
+    let cancelled = false;
+    const startedAt = Date.now();
+    const MAX_MS = 5 * 60 * 1000;
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        if (transaction?.tradesafe_id) {
+          await api.post(`${API}/tradesafe/sync/${transactionId}`, {}, { withCredentials: true });
+        }
+      } catch (e) {}
+      if (!cancelled) await fetchData();
+    };
+    poll();
+    const interval = setInterval(() => {
+      if (Date.now() - startedAt > MAX_MS) {
+        clearInterval(interval);
+        setPaymentProcessing(false);
+        localStorage.removeItem(`tt_payment_initiated_${transactionId}`);
+        return;
+      }
+      poll();
+    }, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [paymentProcessing, transaction?.tradesafe_id, transaction?.payment_status, transaction?.tradesafe_state, transactionId]);
 
   // Refresh immediately when user returns to tab after completing payment
   useEffect(() => {
@@ -825,6 +889,10 @@ function TransactionDetail() {
       const response = await api.get(`${API}/tradesafe/payment-url/${transactionId}?payment_method=${selectedPaymentMethod}`, { withCredentials: true });
       setPaymentInfo(response.data);
       if (response.data.already_paid) { toast.success('This transaction has already been paid.'); setTransaction(prev => ({ ...prev, tradesafe_state: response.data.state, status: 'paid' })); return; }
+      // Mark that the buyer has started paying so we can show a "Payment processing"
+      // state and actively poll for confirmation when they return to this page.
+      localStorage.setItem(`tt_payment_initiated_${transactionId}`, String(Date.now()));
+      setPaymentProcessing(true);
       if (response.data.payment_link) { const newWindow = window.open(response.data.payment_link, '_blank'); if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') window.location.href = response.data.payment_link; toast.success('Secure payment page opened.'); }
       else { setPaymentInfo(response.data); toast.info('Payment deposit created.'); }
     } catch (error) { const errorMessage = error.response?.data?.detail || 'Unable to process payment. Please try again.'; toast.error(errorMessage); }
@@ -1278,7 +1346,7 @@ function TransactionDetail() {
           {/* ── Left column ─────────────────────────────── */}
           <div className="transaction-detail-main" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            <CurrentStateHeader uiState={uiState} flowType={flowType} userRole={isBuyer ? 'buyer' : isSeller ? 'seller' : 'viewer'} />
+            <CurrentStateHeader uiState={uiState} flowType={flowType} userRole={isBuyer ? 'buyer' : isSeller ? 'seller' : 'viewer'} paymentProcessing={paymentProcessing} />
 
             {/* Step Progress */}
             <div style={{ ...S.card, padding: '18px 20px' }}>
@@ -1500,7 +1568,25 @@ function TransactionDetail() {
             )}
 
             {/* Make payment */}
-            {canMakePayment && (
+            {/* Bug 2: buyer just paid — show processing state with active polling + manual refresh */}
+            {paymentProcessing && (
+              <div style={S.actionCard('#3b82f6', '#eff6ff')}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 9, background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Loader2 size={18} color="#3b82f6" style={{ animation: 'spin 0.8s linear infinite' }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: '#1e3a8a', margin: '0 0 4px' }}>Payment processing…</p>
+                    <p style={{ fontSize: 13, color: '#1d4ed8', margin: '0 0 14px' }}>Your payment is being confirmed, this usually takes less than a minute.</p>
+                    <button type="button" onClick={handleSyncStatus} disabled={syncing} data-testid="refresh-status-btn" className="action-btn" style={{ ...S.btn('#3b82f6'), opacity: syncing ? 0.6 : 1 }}>
+                      {syncing ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Refreshing…</> : <><RefreshCw size={13} /> Refresh Status</>}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {canMakePayment && !paymentProcessing && (
               <div style={{ ...S.card, padding: '22px 24px' }}>
                 <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1514,9 +1600,9 @@ function TransactionDetail() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                   {[
-                    { id: 'eft', emoji: '🏦', label: 'EFT Bank Transfer', desc: 'Direct bank transfer — most affordable', fee: '0.86%', badge: 'Recommended', badgeColor: '#10b981' },
-                    { id: 'card', emoji: '💳', label: 'Credit / Debit Card', desc: 'Pay instantly with Visa or Mastercard', fee: '2.88%' },
-                    { id: 'ozow', emoji: '⚡', label: 'Ozow Instant EFT', desc: 'Fast instant payment from your bank app', fee: '1.73%' },
+                    { id: 'eft', emoji: '🏦', label: 'EFT Bank Transfer', desc: 'Direct bank transfer', badge: 'Recommended', badgeColor: '#10b981' },
+                    { id: 'card', emoji: '💳', label: 'Credit / Debit Card', desc: 'Pay instantly with Visa or Mastercard' },
+                    { id: 'ozow', emoji: '⚡', label: 'Ozow Instant EFT', desc: 'Fast instant payment from your bank app' },
                   ].map(pm => (
                     <div key={pm.id} onClick={() => setSelectedPaymentMethod(pm.id)} data-testid={`payment-method-${pm.id}`} className={`pm-opt${selectedPaymentMethod === pm.id ? ' selected' : ''}`} style={{ border: `1.5px solid ${selectedPaymentMethod === pm.id ? '#3b82f6' : '#e2e8f0'}`, borderRadius: 12, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.15s', background: selectedPaymentMethod === pm.id ? '#eff6ff' : '#fff' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1531,7 +1617,6 @@ function TransactionDetail() {
                           </div>
                           <div style={{ display: 'flex', gap: 12 }}>
                             <span style={{ fontSize: 12, color: '#64748b' }}>{pm.desc}</span>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Fee: {pm.fee}</span>
                           </div>
                         </div>
                       </div>
@@ -1539,13 +1624,11 @@ function TransactionDetail() {
                   ))}
                 </div>
 
-                {/* Price summary */}
+                {/* Price summary — single canonical amount shown everywhere in the flow.
+                    The buyer always pays item value + their share of the 2% platform fee
+                    (totalSecurePayment); this is exactly what TradeSafe charges. The payment
+                    method does NOT change this amount. */}
                 {(() => {
-                  const platformFee = transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5);
-                  const processingRates = { eft: 0.0086, card: 0.0288, ozow: 0.0173 };
-                  const processingRate = processingRates[selectedPaymentMethod] ?? 0;
-                  const processingFee = transaction.item_price * processingRate;
-                  const totalAmount = transaction.item_price + platformFee + processingFee;
                   return (
                     <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
                       <p style={{ ...S.label, marginBottom: 12 }}>Payment Breakdown</p>
@@ -1553,23 +1636,15 @@ function TransactionDetail() {
                         <span style={{ color: '#64748b' }}>Item Value (held securely)</span>
                         <span style={{ fontWeight: 500, color: '#0f172a' }}>R {transaction.item_price?.toFixed(2)}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                        <span style={{ color: '#64748b' }}>TrustTrade Platform Fee (2%)</span>
-                        <span style={{ fontWeight: 500, color: '#0f172a' }}>R {platformFee?.toFixed(2)}</span>
-                      </div>
-                      {selectedPaymentMethod && (
+                      {_buyerFee > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                          <span style={{ color: '#64748b' }}>
-                            {selectedPaymentMethod === 'eft' ? 'EFT Processing (0.86%)' : selectedPaymentMethod === 'card' ? 'Card Processing (2.88%)' : 'Ozow Processing (1.73%)'}
-                          </span>
-                          <span style={{ fontWeight: 500, color: '#0f172a' }}>R {processingFee?.toFixed(2)}</span>
+                          <span style={{ color: '#64748b' }}>TrustTrade Platform Fee{['BUYER_SELLER','SPLIT_AGENT','BUYER_SELLER_AGENT','SPLIT'].includes(_fa) ? ' (your half)' : ' (2%)'}</span>
+                          <span style={{ fontWeight: 500, color: '#0f172a' }}>R {_buyerFee?.toFixed(2)}</span>
                         </div>
                       )}
                       <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Total</span>
-                        <span style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>
-                          {selectedPaymentMethod ? `R ${totalAmount?.toFixed(2)}` : <span style={{ color: '#94a3b8', fontWeight: 400, fontSize: 13 }}>Select method</span>}
-                        </span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>R {totalSecurePayment.toFixed(2)}</span>
                       </div>
                       <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
                         {['SELLER_AGENT','SELLER'].includes(_fa) ? 'TrustTrade 2% fee is deducted from seller\'s payout.' : ['BUYER_SELLER','SPLIT_AGENT','BUYER_SELLER_AGENT','SPLIT'].includes(_fa) ? 'TrustTrade 2% fee is split — half from buyer, half from seller.' : 'TrustTrade 2% platform fee is included in your total. Seller receives the full item value.'}
@@ -1596,10 +1671,13 @@ function TransactionDetail() {
                   </div>
                   <div>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#78350f', margin: '0 0 4px' }}>Waiting for buyer payment</p>
-                    <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 10px' }}>Share this link with the buyer. Funds will be protected once the buyer pays.</p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: '#d97706' }}>
+                    <p style={{ fontSize: 13, color: '#92400e', margin: '0 0 10px' }}>Share this link with the buyer. Funds will be protected once the buyer pays. This status updates automatically.</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: '#d97706', marginBottom: 12 }}>
                       <Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Waiting for buyer to pay...
                     </div>
+                    <button type="button" onClick={handleSyncStatus} disabled={syncing} data-testid="refresh-status-btn-seller" className="action-btn" style={{ ...S.btn('#d97706'), opacity: syncing ? 0.6 : 1 }}>
+                      {syncing ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Refreshing…</> : <><RefreshCw size={13} /> Refresh Status</>}
+                    </button>
                   </div>
                 </div>
               </div>

@@ -118,6 +118,35 @@ def _first_non_empty(*values):
             return v
     return None
 
+
+def _parse_created_at(value) -> datetime:
+    """Parse a TradeSafe createdAt value into a comparable, tz-aware datetime.
+
+    Returns a UTC datetime.min for missing/unparseable values so those tokens
+    always sort as the oldest when selecting the most recently created token.
+    """
+    epoch_min = datetime.min.replace(tzinfo=timezone.utc)
+    if not value:
+        return epoch_min
+    s = str(value).strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    dt = None
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                dt = datetime.strptime(s, fmt)
+                break
+            except ValueError:
+                continue
+    if dt is None:
+        return epoch_min
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
 # =========================================================
 
 
@@ -342,8 +371,12 @@ async def create_user_token(
 async def _find_best_token_for_email(email: str) -> Optional[str]:
     """
     Search all TradeSafe tokens for the given email and return the ID of the
-    best one: prefers valid=True + payout interval=IMMEDIATE over WALLET or
-    invalid tokens.  Returns None if no token is found for the email.
+    most recently created token that is valid=True AND has payout
+    interval=IMMEDIATE.
+
+    WALLET or invalid tokens are NEVER returned — seller payouts must always go
+    to an IMMEDIATE+valid token. Returns None if no such token exists for the
+    email (the caller then creates a fresh IMMEDIATE token).
     """
     logger.info(f"[TOKEN_SELECT] Searching TradeSafe for best token for email={email!r}")
     all_tokens = await get_all_tokens()
@@ -359,16 +392,26 @@ async def _find_best_token_for_email(email: str) -> Optional[str]:
 
     logger.info(f"[TOKEN_SELECT] Found {len(candidates)} token(s) for {email!r}")
 
-    def _score(t: dict) -> int:
+    def _is_immediate_valid(t: dict) -> bool:
         is_valid = bool(t.get("valid", True))
         interval = ((t.get("settings") or {}).get("payout") or {}).get("interval", "")
-        return (1 if is_valid else 0) + (1 if interval == "IMMEDIATE" else 0)
+        return is_valid and interval == "IMMEDIATE"
 
-    best = max(candidates, key=_score)
-    interval = ((best.get("settings") or {}).get("payout") or {}).get("interval", "")
+    immediate_valid = [t for t in candidates if _is_immediate_valid(t)]
+
+    if not immediate_valid:
+        logger.warning(
+            f"[TOKEN_SELECT] No valid+IMMEDIATE token exists for {email!r} "
+            f"(only WALLET/invalid tokens found) — refusing to select a WALLET token"
+        )
+        return None
+
+    # Among all valid+IMMEDIATE tokens, pick the most recently created one.
+    best = max(immediate_valid, key=lambda t: _parse_created_at(t.get("createdAt")))
     logger.info(
         f"[TOKEN_SELECT] Best token for {email!r}: id={best['id']!r} "
-        f"valid={best.get('valid')} payout={interval!r} score={_score(best)}"
+        f"createdAt={best.get('createdAt')!r} "
+        f"(most recent of {len(immediate_valid)} valid+IMMEDIATE token(s))"
     )
     return best["id"]
 
@@ -402,21 +445,23 @@ async def get_or_create_user_token(
     logger.info("=== GET OR CREATE TOKEN ===")
     logger.info(f"Name: {name}, Email: {email}, Mobile: {mobile}, User ID: {user_id}")
 
-    async def _resolve_stored_token(stored_token_id: str, update_filter: dict) -> str:
+    async def _resolve_stored_token(stored_token_id: str, update_filter: dict) -> Optional[str]:
         """
-        Verify a stored token and return the best token to use for this email.
+        Verify a stored token and return the best IMMEDIATE+valid token for this
+        email, or None if no usable token exists (caller then creates one).
 
-        NEVER returns None — always falls back to the stored token if anything
-        goes wrong, so we never silently drop a working token and create a new
-        one that TradeSafe hasn't seen yet.
+        A WALLET / invalid token is NEVER returned — seller payouts must always
+        resolve to an IMMEDIATE+valid token.
 
         Decision tree:
           1. Fetch live details for the stored token.
-          2. If details unavailable (API error): return stored token as-is.
+          2. If details unavailable (API error): return stored token as-is —
+             we can't tell if it's WALLET, and dropping a possibly-good token to
+             create a duplicate is worse than reusing it during an outage.
           3. If valid + IMMEDIATE: return stored token (fast path).
-          4. Otherwise: search all tokens for a better one, verify it,
-             update DB, and return it.  If none found, still return the
-             stored token so the caller always has something to work with.
+          4. Otherwise: search all tokens for the most recent IMMEDIATE+valid
+             one, update DB, and return it. If none exists, return None so the
+             caller creates a fresh IMMEDIATE token instead of using WALLET.
         """
         logger.info(
             f"[TOKEN_SELECT] Verifying stored token {stored_token_id!r} for {email!r}"
@@ -442,54 +487,57 @@ async def get_or_create_user_token(
             logger.info(f"[TOKEN_SELECT] Token is valid+IMMEDIATE — reusing as-is")
             return stored_token_id
 
-        # Token exists but isn't ideal — try to find a better one.
+        # Token exists but is WALLET/invalid — find the proper IMMEDIATE+valid one.
         logger.warning(
-            f"[TOKEN_SELECT] Token {stored_token_id!r} not ideal "
-            f"(valid={is_valid}, payout={interval!r}) — searching TradeSafe for better token"
+            f"[TOKEN_SELECT] Token {stored_token_id!r} not usable for payout "
+            f"(valid={is_valid}, payout={interval!r}) — searching TradeSafe for IMMEDIATE+valid token"
         )
         best_token_id = await _find_best_token_for_email(email)
 
-        if not best_token_id or best_token_id == stored_token_id:
+        if not best_token_id:
             logger.warning(
-                f"[TOKEN_SELECT] No better token found for {email!r} — "
-                f"using stored token {stored_token_id!r} unchanged"
+                f"[TOKEN_SELECT] No IMMEDIATE+valid token exists for {email!r} — "
+                f"will NOT reuse WALLET/invalid token {stored_token_id!r}; a new token will be created"
             )
-            return stored_token_id
+            return None
 
-        # Double-check the replacement is actually usable before committing.
-        best_details = await get_token_details(best_token_id)
-        if not _token_is_usable(best_details):
-            best_valid = (best_details or {}).get("valid") if best_details else None
-            best_interval = ((best_details or {}).get("settings") or {}).get("payout", {}).get("interval") if best_details else None
+        if best_token_id == stored_token_id:
+            # Listing says it's IMMEDIATE+valid but the detail fetch disagreed —
+            # trust the (more authoritative) detail fetch and create a new one.
             logger.warning(
-                f"[TOKEN_SELECT] Replacement token {best_token_id!r} for {email!r} "
-                f"failed verification (valid={best_valid}, payout={best_interval!r}) — "
-                f"keeping stored token {stored_token_id!r}"
+                f"[TOKEN_SELECT] Best token resolved back to stored {stored_token_id!r} "
+                f"which failed detail verification — creating a new token instead"
             )
-            return stored_token_id
+            return None
 
         logger.info(
             f"[TOKEN_SELECT] Upgrading token for {email!r}: "
-            f"{stored_token_id!r} → {best_token_id!r} (valid+IMMEDIATE confirmed)"
+            f"{stored_token_id!r} → {best_token_id!r} (most recent valid+IMMEDIATE)"
         )
         if db is not None:
             await db.users.update_one(update_filter, {"$set": {"tradesafe_token_id": best_token_id}})
         return best_token_id
 
+    resolved_token_id: Optional[str] = None
+
     # If we have db and user_id, try to reuse existing token
     if db is not None and user_id:
         user_doc = await db.users.find_one({"user_id": user_id})
         if user_doc and user_doc.get("tradesafe_token_id"):
-            stored = user_doc["tradesafe_token_id"]
-            # _resolve_stored_token always returns a non-empty string
-            return await _resolve_stored_token(stored, {"user_id": user_id})
+            resolved_token_id = await _resolve_stored_token(
+                user_doc["tradesafe_token_id"], {"user_id": user_id}
+            )
 
-    # Also check by email if we have db access
-    if db is not None:
+    # Also check by email if we have db access and haven't resolved a token yet
+    if resolved_token_id is None and db is not None:
         user_by_email = await db.users.find_one({"email": email.lower()})
         if user_by_email and user_by_email.get("tradesafe_token_id"):
-            stored = user_by_email["tradesafe_token_id"]
-            return await _resolve_stored_token(stored, {"email": email.lower()})
+            resolved_token_id = await _resolve_stored_token(
+                user_by_email["tradesafe_token_id"], {"email": email.lower()}
+            )
+
+    if resolved_token_id:
+        return resolved_token_id
     
     # Split name into given/family name
     name_parts = name.strip().split(' ', 1)
@@ -1612,8 +1660,12 @@ async def get_all_tokens() -> List[Dict[str, Any]]:
     Fetch ALL tokens from TradeSafe using page-based pagination (Laravel style).
     TradeSafe uses page/first variables, not cursor-based pagination.
     """
-    # TradeSafe uses Laravel GraphQL pagination: page + first, paginatorInfo has currentPage/lastPage
-    query = """
+    # TradeSafe uses Laravel GraphQL pagination: page + first, paginatorInfo has currentPage/lastPage.
+    # createdAt is requested so token selection can prefer the most recently created token, but it is
+    # injected via a flag so we can transparently fall back if the API rejects the field (see below).
+    def _build_query(include_created_at: bool) -> str:
+        created_at_line = "createdAt" if include_created_at else ""
+        return """
     query tokens($first: Int!, $page: Int) {
         tokens(first: $first, page: $page) {
             data {
@@ -1621,6 +1673,7 @@ async def get_all_tokens() -> List[Dict[str, Any]]:
                 name
                 balance
                 valid
+                %s
                 user {
                     givenName
                     familyName
@@ -1646,7 +1699,10 @@ async def get_all_tokens() -> List[Dict[str, Any]]:
             }
         }
     }
-    """
+    """ % created_at_line
+
+    include_created_at = True
+    query = _build_query(include_created_at)
 
     all_tokens = []
     current_page = 1
@@ -1657,6 +1713,18 @@ async def get_all_tokens() -> List[Dict[str, Any]]:
 
         result = await execute_graphql(query, variables)
         logger.info(f"get_all_tokens: raw TradeSafe response page {current_page}: {result}")
+
+        # If TradeSafe rejects the createdAt field, retry the same page without it so token
+        # selection still works (we just lose the recency tie-break in that rare case).
+        if include_created_at and result and "errors" in result:
+            logger.warning(
+                "get_all_tokens: tokens query failed with createdAt — retrying without it. "
+                f"errors={result.get('errors')}"
+            )
+            include_created_at = False
+            query = _build_query(include_created_at)
+            result = await execute_graphql(query, variables)
+            logger.info(f"get_all_tokens: retry (no createdAt) response page {current_page}: {result}")
 
         if not result or "tokens" not in result:
             logger.error(f"get_all_tokens: unexpected/empty response on page {current_page}: {result}")

@@ -110,7 +110,7 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
         except Exception as exc:
             logger.error(f"[FINANCE_AUDIT] failed action={action} txn={txn_id}: {exc}")
 
-    if status_before in ("in_progress", "succeeded"):
+    if status_before in ("in_progress", "succeeded", "auto_settled"):
         logger.info(
             f"[WITHDRAWAL] skip txn={txn_id} seller_token_id={seller_token_id} "
             f"requested_amount={net_amount} withdrawal_status_before={status_before} "
@@ -161,6 +161,45 @@ async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook")
         )
         await _audit("payout_failure", {"error": error, "seller_token_id": seller_token_id, "amount": withdrawal_amount})
         return {"success": False, "error": error}
+
+    # For IMMEDIATE payout tokens TradeSafe automatically transfers funds to the
+    # seller's bank account when they are released — calling tokenAccountWithdraw
+    # on these tokens is incorrect and will be rejected. Only WALLET tokens need
+    # an explicit withdrawal call.
+    from tradesafe_service import get_token_details as _get_token_details
+    _token_info = await _get_token_details(seller_token_id)
+    _payout_interval = (
+        ((_token_info or {}).get("settings") or {}).get("payout") or {}
+    ).get("interval")
+
+    if _payout_interval == "IMMEDIATE":
+        logger.info(
+            f"[WITHDRAWAL] auto-payout txn={txn_id} seller_token_id={seller_token_id} "
+            f"payout_interval=IMMEDIATE — skipping tokenAccountWithdraw, "
+            f"TradeSafe handles IMMEDIATE payouts automatically"
+        )
+        await _audit("withdrawal_skipped_auto_payout", {
+            "seller_token_id": seller_token_id,
+            "payout_interval": _payout_interval,
+        })
+        await db.transactions.update_one(
+            {"transaction_id": txn_id},
+            {"$set": {
+                "withdrawal_status": "auto_settled",
+                "withdrawal_triggered": False,
+                "payout_status": "auto_settled",
+                "settlement_status": "auto_settled",
+                "settlement_checked_at": now_iso,
+                "payout_interval": _payout_interval,
+            }}
+        )
+        return {
+            "success": True,
+            "skipped": True,
+            "seller_token_id": seller_token_id,
+            "payout_interval": _payout_interval,
+            "reason": "IMMEDIATE payout — TradeSafe auto-settles, tokenAccountWithdraw not called",
+        }
 
     claim = await db.transactions.update_one(
         {

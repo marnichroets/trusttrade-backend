@@ -1638,7 +1638,7 @@ function TransactionDetail() {
                       </div>
                       {_buyerFee > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                          <span style={{ color: '#64748b' }}>TrustTrade Platform Fee{['BUYER_SELLER','SPLIT_AGENT','BUYER_SELLER_AGENT','SPLIT'].includes(_fa) ? ' (your half)' : ' (2%)'}</span>
+                          <span style={{ color: '#64748b' }}>TrustTrade Platform Fee{['BUYER_SELLER','SPLIT_AGENT','BUYER_SELLER_AGENT','SPLIT'].includes(_fa) ? ' (2% split — your half)' : ' (2%)'}</span>
                           <span style={{ fontWeight: 500, color: '#0f172a' }}>R {_buyerFee?.toFixed(2)}</span>
                         </div>
                       )}

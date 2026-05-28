@@ -596,7 +596,6 @@ async def tradesafe_webhook(request: Request):
         if state in FUNDED_STATES:
             now_iso = datetime.now(timezone.utc).isoformat()
             auto_release_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
-            should_send_payment_email = not txn.get("payment_secured_email_sent_at")
             set_fields = {
                 "payment_status": "Funds Secured",
                 "tradesafe_state": state,
@@ -604,36 +603,50 @@ async def tradesafe_webhook(request: Request):
                 "auto_release_at": auto_release_at,
                 "release_status": "In Escrow",
             }
-            if should_send_payment_email:
-                set_fields["payment_secured_email_sent_at"] = now_iso
             await db.transactions.update_one(
                 {"_id": txn["_id"]},
                 {"$set": set_fields}
             )
             logger.info(f"[WEBHOOK] Regular txn {txn_id} → payment_status=Funds Secured, tradesafe_state={state}, auto_release_at={auto_release_at}")
-            if should_send_payment_email:
-                import asyncio
-                import email_service
-                delivery_method = txn.get("delivery_method", "courier")
-                share_code = txn.get("share_code", txn_id)
-                asyncio.create_task(_bg(email_service.send_payment_received_email(
-                    to_email=txn["buyer_email"],
-                    to_name=txn.get("buyer_name", "Buyer"),
-                    share_code=share_code,
-                    item_description=txn["item_description"],
-                    amount=txn["item_price"],
-                    role="buyer",
-                    delivery_method=delivery_method,
-                )))
-                asyncio.create_task(_bg(email_service.send_payment_received_email(
-                    to_email=txn["seller_email"],
-                    to_name=txn.get("seller_name", "Seller"),
-                    share_code=share_code,
-                    item_description=txn["item_description"],
-                    amount=txn["item_price"],
-                    role="seller",
-                    delivery_method=delivery_method,
-                )))
+
+            # Send payment-secured emails via send_email_with_tracking so that the
+            # emails_sent[] deduplication array is populated.  The fallback job
+            # (background_jobs.py) also uses the same mechanism, which prevents the
+            # seller from ever receiving a duplicate "Payment Secured" email.
+            import asyncio
+            import email_service
+            from webhook_handler import send_email_with_tracking, EmailEvent
+            delivery_method = txn.get("delivery_method", "courier")
+            share_code = txn.get("share_code", txn_id)
+
+            # Buyer confirmation — "your payment is secured, seller will now dispatch"
+            asyncio.create_task(_bg(send_email_with_tracking(
+                db, txn_id, EmailEvent.PAYMENT_SECURED_BUYER,
+                txn.get("buyer_email", ""),
+                email_service.send_immediate_payment_secured_email,
+                to_email=txn.get("buyer_email", ""),
+                to_name=txn.get("buyer_name", "Buyer"),
+                share_code=share_code,
+                item_description=txn["item_description"],
+                amount=txn["item_price"],
+                delivery_method=delivery_method,
+            )))
+
+            # Seller notification — ONLY fires here (on real FUNDS_DEPOSITED/FUNDS_RECEIVED
+            # webhook from TradeSafe).  The emails_sent[] entry prevents the fallback job
+            # from sending a second copy.
+            asyncio.create_task(_bg(send_email_with_tracking(
+                db, txn_id, EmailEvent.PAYMENT_SECURED_SELLER,
+                txn.get("seller_email", ""),
+                email_service.send_payment_received_email,
+                to_email=txn.get("seller_email", ""),
+                to_name=txn.get("seller_name", "Seller"),
+                share_code=share_code,
+                item_description=txn["item_description"],
+                amount=txn["item_price"],
+                role="seller",
+                delivery_method=delivery_method,
+            )))
 
         elif state in RELEASED_STATES and txn.get("withdrawal_status") not in ("in_progress", "succeeded"):
             # Funds settled in seller token wallet — trigger bank payout now.

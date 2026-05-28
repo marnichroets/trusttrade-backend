@@ -60,8 +60,15 @@ function getStepIndex(transaction, uiState, steps) {
 
 export function StepProgressTracker({ transaction }) {
   const uiState = resolveEscrowUiState(transaction);
-  const steps = getSteps(transaction);
-  const currentStep = getStepIndex(transaction, uiState, steps);
+  const allSteps = getSteps(transaction);
+  const currentStep = getStepIndex(transaction, uiState, allSteps);
+
+  // Only show steps relevant to the current state: every completed step,
+  // the current step, and the immediately-upcoming one for context. Hiding
+  // far-future steps (e.g. "Funds Released" when the buyer hasn't paid yet)
+  // stops sellers misreading greyed-out terminal steps as a problem.
+  const visibleCount = Math.min(allSteps.length, currentStep + 2);
+  const steps = allSteps.slice(0, visibleCount);
 
   if (uiState.state === 'EXPIRED') {
     return (
@@ -79,6 +86,9 @@ export function StepProgressTracker({ transaction }) {
     );
   }
 
+  // Progress line width is based on the visible window, not the full pipeline.
+  const lineDenominator = Math.max(steps.length - 1, 1);
+
   return (
     <div className="w-full min-w-0">
       {/* Desktop: Horizontal */}
@@ -86,7 +96,7 @@ export function StepProgressTracker({ transaction }) {
         <div className="absolute top-4 left-0 right-0 h-0.5 bg-slate-200" />
         <div
           className="absolute top-4 left-0 h-0.5 bg-emerald-500 transition-all duration-500"
-          style={{ width: `${(currentStep / (steps.length - 1)) * 100}%` }}
+          style={{ width: `${(Math.min(currentStep, steps.length - 1) / lineDenominator) * 100}%` }}
         />
 
         {steps.map((step, idx) => {
@@ -122,13 +132,13 @@ export function StepProgressTracker({ transaction }) {
       {/* Mobile: Compact */}
       <div className="sm:hidden min-w-0">
         <div className="flex items-center justify-between gap-3 mb-2">
-          <span className="text-xs text-slate-500 shrink-0">Step {currentStep + 1} of {steps.length}</span>
-          <span className="text-xs font-medium text-blue-600 text-right min-w-0 break-words">{steps[currentStep]?.label}</span>
+          <span className="text-xs text-slate-500 shrink-0">Step {currentStep + 1} of {allSteps.length}</span>
+          <span className="text-xs font-medium text-blue-600 text-right min-w-0 break-words">{allSteps[currentStep]?.label}</span>
         </div>
         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-emerald-500 to-blue-500 transition-all duration-500"
-            style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
+            style={{ width: `${((currentStep + 1) / allSteps.length) * 100}%` }}
           />
         </div>
       </div>

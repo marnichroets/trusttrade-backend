@@ -254,9 +254,36 @@ class ImproveDescriptionRequest(BaseModel):
     delivery_method: str = "courier"
 
 
+IMPROVED_DESCRIPTION_MAX_CHARS = 150
+
+
+def _trim_to_one_sentence(text: str, max_chars: int = IMPROVED_DESCRIPTION_MAX_CHARS) -> str:
+    """Force the model output to a single sentence no longer than max_chars.
+
+    Picks the first sentence boundary (. ! ?), strips trailing whitespace,
+    then truncates with an ellipsis if it still exceeds the limit. Used to
+    enforce the 150-char one-sentence contract regardless of what the model
+    actually returned.
+    """
+    collapsed = " ".join((text or "").split())
+    if not collapsed:
+        return ""
+    # First sentence-terminator wins.
+    first_match = re.search(r"[.!?]", collapsed)
+    if first_match:
+        first_sentence = collapsed[: first_match.end()].strip()
+    else:
+        first_sentence = collapsed
+    if len(first_sentence) <= max_chars:
+        return first_sentence
+    # Hard cap: trim to max_chars-1 then append an ellipsis.
+    truncated = first_sentence[: max_chars - 1].rstrip()
+    return f"{truncated}…"
+
+
 @router.post("/improve-description")
 async def improve_description(request: Request, body: ImproveDescriptionRequest):
-    """Return a polished, professional version of a transaction item description."""
+    """Return a single-sentence (≤150 char) polished item description."""
     db = get_database()
     user = await get_user_from_token(request, db)
     if not user:
@@ -266,22 +293,29 @@ async def improve_description(request: Request, body: ImproveDescriptionRequest)
     if not client:
         raise HTTPException(status_code=503, detail="AI service not configured")
 
-    prompt = f"""You are helping a South African seller write a clear, professional escrow transaction description.
+    prompt = f"""You are helping a South African seller write a one-line escrow item description.
 
 Original description: {body.description}
 Item price: R{body.item_price:,.2f}
 Delivery method: {body.delivery_method}
 
-Rewrite the description to be clear, professional, and suitable for an escrow agreement. Include all relevant details: condition, specifications, and what's included in the sale. Keep it concise (2-4 sentences). Return ONLY the improved description text — no preamble, no commentary."""
+STRICT OUTPUT RULES:
+- Return EXACTLY ONE sentence.
+- Maximum {IMPROVED_DESCRIPTION_MAX_CHARS} characters total.
+- No preamble, no commentary, no quotes, no markdown, no line breaks.
+- Capture the essentials only (item, condition, any one key detail).
+
+Output the single sentence and nothing else."""
 
     response = await client.messages.create(
         model=MODEL,
-        max_tokens=512,
+        max_tokens=120,
         messages=[{"role": "user", "content": prompt}],
     )
 
-    improved = next((b.text for b in response.content if b.type == "text"), body.description)
-    return {"original": body.description, "improved": improved.strip()}
+    raw = next((b.text for b in response.content if b.type == "text"), body.description)
+    improved = _trim_to_one_sentence(raw, IMPROVED_DESCRIPTION_MAX_CHARS)
+    return {"original": body.description, "improved": improved}
 
 
 class ChatMessage(BaseModel):

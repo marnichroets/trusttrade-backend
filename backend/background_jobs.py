@@ -106,16 +106,19 @@ async def verify_single_transaction(
         
         logger.info(f"TradeSafe state for {transaction_id}: {ts_state}")
         
-        # Check if funds have been received — only act on confirmed payment states
+        # Check if funds have been received — only act on confirmed payment states.
+        # NOTE: FUNDS_RECEIVED = deposit attempted; FUNDS_DEPOSITED = actually cleared.
+        # The Payment Secured email must only fire on FUNDS_DEPOSITED, same rule as
+        # the primary webhook path in routes/webhooks.py.
         if ts_state in ["FUNDS_RECEIVED", "FUNDS_DEPOSITED"]:
             current_state = txn.get("transaction_state")
-            
+
             # Only update if not already in a more advanced state
             if current_state in ["AWAITING_PAYMENT", "CREATED", "PENDING_CONFIRMATION", None]:
                 logger.info(f"FALLBACK: Payment detected for {transaction_id}, updating state to PAYMENT_SECURED")
-                
+
                 now = datetime.now(timezone.utc).isoformat()
-                
+
                 # Build timeline entry
                 timeline = txn.get("timeline", [])
                 timeline.append({
@@ -124,7 +127,7 @@ async def verify_single_transaction(
                     "by": "System",
                     "details": f"Payment verified via fallback job. TradeSafe state: {ts_state}"
                 })
-                
+
                 auto_release_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
                 # Update transaction
                 update_data = {
@@ -138,16 +141,23 @@ async def verify_single_transaction(
                     "auto_release_at": auto_release_at,
                     "timeline": timeline
                 }
-                
+
                 await db.transactions.update_one(
                     {"transaction_id": transaction_id},
                     {"$set": update_data}
                 )
-                
-                # Send emails ONLY if not already sent
-                await send_fallback_payment_notifications(db, txn)
-                
-                return {"updated": True, "action": "state_updated_to_PAYMENT_SECURED"}
+
+                # Send Payment Secured emails ONLY on FUNDS_DEPOSITED (funds cleared).
+                # FUNDS_RECEIVED is a precursor state and would email prematurely.
+                if ts_state == "FUNDS_DEPOSITED":
+                    await send_fallback_payment_notifications(db, txn)
+                    return {"updated": True, "action": "state_updated_to_PAYMENT_SECURED_with_email"}
+
+                logger.info(
+                    f"FALLBACK: {transaction_id} state advanced on {ts_state} but Payment Secured "
+                    f"emails withheld until FUNDS_DEPOSITED"
+                )
+                return {"updated": True, "action": "state_updated_to_PAYMENT_SECURED_no_email"}
         
         return {"updated": False, "reason": "no_payment_detected", "ts_state": ts_state}
         

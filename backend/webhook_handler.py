@@ -318,56 +318,67 @@ async def process_webhook(
     if mapped_state == TransactionState.PAYMENT_SECURED.value:
         update_data["funds_received_at"] = now
         update_data["payment_verified"] = True
-        
-        # Send buyer email (IMMEDIATE - must arrive before TradeSafe's email)
-        email_sent = await send_email_with_tracking(
-            db, transaction_id, EmailEvent.PAYMENT_SECURED_BUYER,
-            transaction["buyer_email"],
-            email_service.send_immediate_payment_secured_email,
-            to_email=transaction["buyer_email"],
-            to_name=transaction["buyer_name"],
-            share_code=share_code,
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"]
-        )
-        if email_sent:
-            notifications_sent.append("buyer_email")
-        
-        # Send seller email
-        email_sent = await send_email_with_tracking(
-            db, transaction_id, EmailEvent.PAYMENT_SECURED_SELLER,
-            transaction["seller_email"],
-            email_service.send_payment_received_email,
-            to_email=transaction["seller_email"],
-            to_name=transaction["seller_name"],
-            share_code=share_code,
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"],
-            role="seller"
-        )
-        if email_sent:
-            notifications_sent.append("seller_email")
-        
-        # SMS notifications
-        if transaction.get("buyer_phone"):
-            await send_sms_with_tracking(
-                db, transaction_id, "payment_secured_buyer_sms",
-                transaction["buyer_phone"],
-                sms_service.send_funds_received_sms,
-                to_phone=transaction["buyer_phone"],
-                message=f"TrustTrade: Your payment of R{transaction['item_price']:.2f} is now secured in escrow. Ref: {share_code}"
+
+        # Payment Secured email/SMS fire ONLY when TradeSafe confirms the funds
+        # have cleared (FUNDS_DEPOSITED). FUNDS_RECEIVED is a precursor
+        # ("deposit attempted") and previously caused premature emails that
+        # told sellers they'd been paid before the money was actually in escrow.
+        funds_cleared = (new_state or "").upper() == "FUNDS_DEPOSITED"
+        if not funds_cleared:
+            logger.info(
+                f"[WEBHOOK_HANDLER] {transaction_id} state={new_state!r} mapped=PAYMENT_SECURED — "
+                f"state advanced but Payment Secured emails/SMS withheld until FUNDS_DEPOSITED"
             )
-            notifications_sent.append("buyer_sms")
-        
-        if transaction.get("seller_phone"):
-            await send_sms_with_tracking(
-                db, transaction_id, "payment_secured_seller_sms",
-                transaction["seller_phone"],
-                sms_service.send_funds_received_sms,
-                to_phone=transaction["seller_phone"],
-                message=f"TrustTrade: Payment of R{transaction['item_price']:.2f} received! Please deliver the item. Ref: {share_code}"
+        else:
+            # Send buyer email (IMMEDIATE - must arrive before TradeSafe's email)
+            email_sent = await send_email_with_tracking(
+                db, transaction_id, EmailEvent.PAYMENT_SECURED_BUYER,
+                transaction["buyer_email"],
+                email_service.send_immediate_payment_secured_email,
+                to_email=transaction["buyer_email"],
+                to_name=transaction["buyer_name"],
+                share_code=share_code,
+                item_description=transaction["item_description"],
+                amount=transaction["item_price"]
             )
-            notifications_sent.append("seller_sms")
+            if email_sent:
+                notifications_sent.append("buyer_email")
+
+            # Send seller email
+            email_sent = await send_email_with_tracking(
+                db, transaction_id, EmailEvent.PAYMENT_SECURED_SELLER,
+                transaction["seller_email"],
+                email_service.send_payment_received_email,
+                to_email=transaction["seller_email"],
+                to_name=transaction["seller_name"],
+                share_code=share_code,
+                item_description=transaction["item_description"],
+                amount=transaction["item_price"],
+                role="seller"
+            )
+            if email_sent:
+                notifications_sent.append("seller_email")
+
+            # SMS notifications
+            if transaction.get("buyer_phone"):
+                await send_sms_with_tracking(
+                    db, transaction_id, "payment_secured_buyer_sms",
+                    transaction["buyer_phone"],
+                    sms_service.send_funds_received_sms,
+                    to_phone=transaction["buyer_phone"],
+                    message=f"TrustTrade: Your payment of R{transaction['item_price']:.2f} is now secured in escrow. Ref: {share_code}"
+                )
+                notifications_sent.append("buyer_sms")
+
+            if transaction.get("seller_phone"):
+                await send_sms_with_tracking(
+                    db, transaction_id, "payment_secured_seller_sms",
+                    transaction["seller_phone"],
+                    sms_service.send_funds_received_sms,
+                    to_phone=transaction["seller_phone"],
+                    message=f"TrustTrade: Payment of R{transaction['item_price']:.2f} received! Please deliver the item. Ref: {share_code}"
+                )
+                notifications_sent.append("seller_sms")
     
     elif mapped_state == TransactionState.DELIVERY_IN_PROGRESS.value:
         update_data["delivery_started_at"] = now

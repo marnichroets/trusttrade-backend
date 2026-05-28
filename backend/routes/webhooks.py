@@ -588,7 +588,14 @@ async def tradesafe_webhook(request: Request):
 
     if txn:
         txn_id = txn.get("transaction_id", "?")
+        # TradeSafe lifecycle for EFT/Ozow:
+        #   FUNDS_RECEIVED  → deposit ATTEMPT recorded (not yet cleared)
+        #   FUNDS_DEPOSITED → funds ACTUALLY in escrow (cleared, safe to act on)
+        # We update local state on either signal so the UI advances, but the
+        # "Payment Secured" email/SMS must wait for FUNDS_DEPOSITED to avoid
+        # telling the seller "you're paid" while funds are still in flight.
         FUNDED_STATES = {"FUNDS_RECEIVED", "FUNDS_DEPOSITED"}
+        EMAIL_TRIGGER_STATES = {"FUNDS_DEPOSITED"}
         # TradeSafe fires FUNDS_RELEASED after allocationCompleteDelivery settles.
         # This is our signal to trigger the bank withdrawal.
         RELEASED_STATES = {"FUNDS_RELEASED", "COMPLETE", "COMPLETED"}
@@ -609,44 +616,51 @@ async def tradesafe_webhook(request: Request):
             )
             logger.info(f"[WEBHOOK] Regular txn {txn_id} → payment_status=Funds Secured, tradesafe_state={state}, auto_release_at={auto_release_at}")
 
-            # Send payment-secured emails via send_email_with_tracking so that the
-            # emails_sent[] deduplication array is populated.  The fallback job
-            # (background_jobs.py) also uses the same mechanism, which prevents the
-            # seller from ever receiving a duplicate "Payment Secured" email.
-            import asyncio
-            import email_service
-            from webhook_handler import send_email_with_tracking, EmailEvent
-            delivery_method = txn.get("delivery_method", "courier")
-            share_code = txn.get("share_code", txn_id)
+            if state not in EMAIL_TRIGGER_STATES:
+                # FUNDS_RECEIVED only — hold the Payment Secured email until the
+                # follow-up FUNDS_DEPOSITED webhook confirms the money actually cleared.
+                logger.info(
+                    f"[WEBHOOK] {txn_id} state={state!r} — state advanced but Payment Secured "
+                    f"emails withheld until FUNDS_DEPOSITED"
+                )
+            else:
+                # Send payment-secured emails via send_email_with_tracking so that the
+                # emails_sent[] deduplication array is populated.  The fallback job
+                # (background_jobs.py) also uses the same mechanism, which prevents the
+                # seller from ever receiving a duplicate "Payment Secured" email.
+                import asyncio
+                import email_service
+                from webhook_handler import send_email_with_tracking, EmailEvent
+                delivery_method = txn.get("delivery_method", "courier")
+                share_code = txn.get("share_code", txn_id)
 
-            # Buyer confirmation — "your payment is secured, seller will now dispatch"
-            asyncio.create_task(_bg(send_email_with_tracking(
-                db, txn_id, EmailEvent.PAYMENT_SECURED_BUYER,
-                txn.get("buyer_email", ""),
-                email_service.send_immediate_payment_secured_email,
-                to_email=txn.get("buyer_email", ""),
-                to_name=txn.get("buyer_name", "Buyer"),
-                share_code=share_code,
-                item_description=txn["item_description"],
-                amount=txn["item_price"],
-                delivery_method=delivery_method,
-            )))
+                # Buyer confirmation — "your payment is secured, seller will now dispatch"
+                asyncio.create_task(_bg(send_email_with_tracking(
+                    db, txn_id, EmailEvent.PAYMENT_SECURED_BUYER,
+                    txn.get("buyer_email", ""),
+                    email_service.send_immediate_payment_secured_email,
+                    to_email=txn.get("buyer_email", ""),
+                    to_name=txn.get("buyer_name", "Buyer"),
+                    share_code=share_code,
+                    item_description=txn["item_description"],
+                    amount=txn["item_price"],
+                    delivery_method=delivery_method,
+                )))
 
-            # Seller notification — ONLY fires here (on real FUNDS_DEPOSITED/FUNDS_RECEIVED
-            # webhook from TradeSafe).  The emails_sent[] entry prevents the fallback job
-            # from sending a second copy.
-            asyncio.create_task(_bg(send_email_with_tracking(
-                db, txn_id, EmailEvent.PAYMENT_SECURED_SELLER,
-                txn.get("seller_email", ""),
-                email_service.send_payment_received_email,
-                to_email=txn.get("seller_email", ""),
-                to_name=txn.get("seller_name", "Seller"),
-                share_code=share_code,
-                item_description=txn["item_description"],
-                amount=txn["item_price"],
-                role="seller",
-                delivery_method=delivery_method,
-            )))
+                # Seller notification — ONLY fires on FUNDS_DEPOSITED. The emails_sent[]
+                # entry prevents the fallback job from sending a second copy.
+                asyncio.create_task(_bg(send_email_with_tracking(
+                    db, txn_id, EmailEvent.PAYMENT_SECURED_SELLER,
+                    txn.get("seller_email", ""),
+                    email_service.send_payment_received_email,
+                    to_email=txn.get("seller_email", ""),
+                    to_name=txn.get("seller_name", "Seller"),
+                    share_code=share_code,
+                    item_description=txn["item_description"],
+                    amount=txn["item_price"],
+                    role="seller",
+                    delivery_method=delivery_method,
+                )))
 
         elif state in RELEASED_STATES and txn.get("withdrawal_status") not in ("in_progress", "succeeded"):
             # Funds settled in seller token wallet — trigger bank payout now.

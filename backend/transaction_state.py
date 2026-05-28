@@ -236,17 +236,22 @@ def map_tradesafe_state(ts_state: str) -> str:
         # Payment states
         "CREATED": TransactionState.AWAITING_PAYMENT.value,
         "PENDING": TransactionState.AWAITING_PAYMENT.value,
+        # Both FUNDS_RECEIVED (deposit attempted) and FUNDS_DEPOSITED (funds
+        # cleared) advance our local state to PAYMENT_SECURED. The "Payment
+        # Secured" email trigger is gated separately on FUNDS_DEPOSITED — see
+        # routes/webhooks.py and webhook_handler.py.
         "FUNDS_RECEIVED": TransactionState.PAYMENT_SECURED.value,
-        
+        "FUNDS_DEPOSITED": TransactionState.PAYMENT_SECURED.value,
+
         # Delivery states
         "INITIATED": TransactionState.DELIVERY_IN_PROGRESS.value,
         "SENT": TransactionState.DELIVERY_IN_PROGRESS.value,
         "DELIVERED": TransactionState.DELIVERED.value,
-        
+
         # Completion states
         "FUNDS_RELEASED": TransactionState.COMPLETED.value,
         "COMPLETED": TransactionState.COMPLETED.value,
-        
+
         # Terminal states
         "REFUNDED": TransactionState.REFUNDED.value,
         "CANCELLED": TransactionState.CANCELLED.value,

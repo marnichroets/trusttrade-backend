@@ -812,10 +812,10 @@ async def update_user_banking_details(request: Request, details: BankingDetailsU
     account_number_clean = details.account_number.strip()
     if not account_number_clean.isdigit():
         raise HTTPException(status_code=400, detail="Account number must contain digits only.")
-    if len(account_number_clean) < 8:
+    if len(account_number_clean) < 11:
         raise HTTPException(
             status_code=400,
-            detail=f"Account number is too short ({len(account_number_clean)} digits). Enter the full bank account number (minimum 8 digits).",
+            detail=f"Account number is too short ({len(account_number_clean)} digits). Enter the full bank account number (minimum 11 digits).",
         )
     details.account_number = account_number_clean
 
@@ -1047,10 +1047,10 @@ async def initiate_banking_change(request: Request, details: BankingDetailsUpdat
     account_number_clean = details.account_number.strip()
     if not account_number_clean.isdigit():
         raise HTTPException(status_code=400, detail="Account number must contain digits only.")
-    if len(account_number_clean) < 8:
+    if len(account_number_clean) < 11:
         raise HTTPException(
             status_code=400,
-            detail=f"Account number is too short ({len(account_number_clean)} digits). Enter the full bank account number (minimum 8 digits).",
+            detail=f"Account number is too short ({len(account_number_clean)} digits). Enter the full bank account number (minimum 11 digits).",
         )
     details.account_number = account_number_clean
 

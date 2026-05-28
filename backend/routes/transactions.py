@@ -109,13 +109,20 @@ def has_verified_phone(user_doc: dict | None) -> bool:
 
 
 def has_bank_details(user_doc: dict | None) -> bool:
-    banking = (user_doc or {}).get("banking_details") or {}
-    return bool(
-        user_doc
-        and user_doc.get("banking_details_completed")
-        and banking.get("bank_name")
-        and banking.get("account_number")
-    )
+    """True only when the seller can actually receive a payout.
+
+    Defers to tradesafe_service.has_valid_banking_for_payout so the rules
+    used by transaction-create gating, payout readiness, and the TradeSafe
+    sync guard stay identical.
+    """
+    from tradesafe_service import has_valid_banking_for_payout
+    return has_valid_banking_for_payout(user_doc)
+
+
+def banking_needs_update(user_doc: dict | None) -> bool:
+    """True when banking exists but the account number is invalid (too short / non-digit)."""
+    from tradesafe_service import banking_needs_update as _needs_update
+    return _needs_update(user_doc)
 
 
 def require_verified_phone_to_continue(user_doc: dict | None):
@@ -395,9 +402,25 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     if transaction_data.creator_role == "seller":
         require_verified_phone_for_sensitive_action(user_doc, "seller")
         if not user.is_admin and not has_bank_details(user_doc):
+            # Distinguish "never set" from "set but invalid" so the frontend
+            # can route the user to the right CTA (add vs fix).
+            if banking_needs_update(user_doc):
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "code": "BANKING_NEEDS_UPDATE",
+                        "message": (
+                            "Your stored banking account number is invalid (too short). "
+                            "Update your banking details in My Profile before creating a deal."
+                        ),
+                    },
+                )
             raise HTTPException(
                 status_code=400,
-                detail="Please add your banking details in My Profile before creating a deal"
+                detail={
+                    "code": "BANKING_MISSING",
+                    "message": "Please add your banking details in My Profile before creating a deal",
+                },
             )
         if not user.is_admin and (user_doc or {}).get("role") != "seller":
             await db.users.update_one({"user_id": user.user_id}, {"$set": {"role": "seller"}})

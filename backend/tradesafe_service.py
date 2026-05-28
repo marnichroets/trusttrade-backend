@@ -182,6 +182,99 @@ def _normalize_mobile(mobile: str) -> str:
     return '+27' + m
 
 
+# Minimum bank-account-number length accepted for TradeSafe sync.
+# SA bank accounts are 9–11 digits depending on the bank (FNB 11, Capitec 10,
+# Standard Bank 10/11, Nedbank 10, ABSA 9/11). TradeSafe silently rejects
+# payouts ("RJCT") when the stored account number is truncated, so we enforce
+# the strictest realistic floor (11 digits) and reject anything shorter at the
+# moment of sync.
+BANK_ACCOUNT_MIN_DIGITS = 11
+
+
+def _clean_account_number(account_number) -> str:
+    """Strip whitespace and any embedded spaces from an account number."""
+    if account_number is None:
+        return ""
+    return str(account_number).strip().replace(" ", "")
+
+
+def validate_account_number_for_sync(account_number) -> Dict[str, Any]:
+    """Single source of truth for "is this account number safe to send to TradeSafe?".
+
+    Returns a dict with keys:
+      - valid:  bool
+      - cleaned: str   (digits-only, whitespace stripped)
+      - error:  str | None   (human-readable; safe to surface to the user)
+      - code:   str | None   (machine-readable; one of MISSING / NON_DIGIT / TOO_SHORT)
+
+    Callers MUST refuse to call tokenUpdate / tokenCreate banking sync when
+    valid=False. This guard lives in the service layer (not the route layer)
+    so it fires regardless of which entry point triggered the sync (admin fix,
+    pre-escrow pre_sync, banking change activation, etc.).
+    """
+    cleaned = _clean_account_number(account_number)
+    if not cleaned:
+        return {
+            "valid": False,
+            "cleaned": "",
+            "error": "Banking account number is missing. Update your banking details before continuing.",
+            "code": "MISSING",
+        }
+    if not cleaned.isdigit():
+        return {
+            "valid": False,
+            "cleaned": cleaned,
+            "error": "Banking account number must contain digits only. Update your banking details to fix this.",
+            "code": "NON_DIGIT",
+        }
+    if len(cleaned) < BANK_ACCOUNT_MIN_DIGITS:
+        return {
+            "valid": False,
+            "cleaned": cleaned,
+            "error": (
+                f"Banking account number is too short ({len(cleaned)} digits). "
+                f"SA bank accounts must be at least {BANK_ACCOUNT_MIN_DIGITS} digits — "
+                "please update your banking details with the full account number."
+            ),
+            "code": "TOO_SHORT",
+        }
+    return {"valid": True, "cleaned": cleaned, "error": None, "code": None}
+
+
+def has_valid_banking_for_payout(user_doc: Optional[Dict[str, Any]]) -> bool:
+    """True only when the user's stored banking_details would pass the sync guard.
+
+    Use this anywhere the app needs to decide "can this user actually receive
+    a payout?" — login responses, transaction-create gates, payout-readiness
+    checks. Returns False if banking_details is missing, the completion flag is
+    off, OR the account number would be rejected by validate_account_number_for_sync.
+    """
+    if not user_doc:
+        return False
+    banking = user_doc.get("banking_details") or {}
+    if not user_doc.get("banking_details_completed"):
+        return False
+    if not banking.get("bank_name"):
+        return False
+    return validate_account_number_for_sync(banking.get("account_number")).get("valid", False)
+
+
+def banking_needs_update(user_doc: Optional[Dict[str, Any]]) -> bool:
+    """True when banking_details exists but the account number is invalid.
+
+    Distinct from "banking missing entirely" — this surfaces the case where
+    the user *thinks* they're set up but their stored account number is too
+    short (e.g. the 4-digit-truncation bug). UI uses this to render an
+    explicit "fix your banking details" prompt instead of "add banking".
+    """
+    if not user_doc:
+        return False
+    banking = user_doc.get("banking_details") or {}
+    if not banking.get("account_number"):
+        return False
+    return not validate_account_number_for_sync(banking.get("account_number")).get("valid", False)
+
+
 async def get_tradesafe_token() -> Optional[str]:
     """
     Get OAuth access token from TradeSafe using client credentials grant.
@@ -712,6 +805,23 @@ async def create_tradesafe_transaction(
         seller_branch_code = seller_banking.get("branch_code", "")
         seller_account_type = seller_banking.get("account_type", "savings")
         if seller_bank_name and seller_account_number:
+            # Block escrow creation outright when the stored account number is
+            # invalid — we'd rather fail loudly here than create a transaction
+            # that produces a stuck RJCT payout later. Other sync failures (rate
+            # limit, transient TradeSafe error) stay non-blocking so the pre_sync
+            # call doesn't break valid flows.
+            pre_check = validate_account_number_for_sync(seller_account_number)
+            if not pre_check["valid"]:
+                logger.error(
+                    f"[PRE_SYNC] REJECTED — seller {seller_email!r} has invalid stored "
+                    f"account number: {pre_check['error']} (code={pre_check['code']})"
+                )
+                return {
+                    "error": pre_check["error"],
+                    "code": "INVALID_SELLER_BANKING",
+                    "field": "seller_account_number",
+                }
+
             logger.info(f"[PRE_SYNC] Syncing seller banking to token {seller_token} before escrow creation")
             sync_result = await sync_banking_to_token(
                 token_id=seller_token,
@@ -724,6 +834,15 @@ async def create_tradesafe_transaction(
             )
             if sync_result.get("success"):
                 logger.info("[PRE_SYNC] Seller banking synced successfully")
+            elif sync_result.get("code") in ("MISSING", "NON_DIGIT", "TOO_SHORT"):
+                # Defence-in-depth: should be caught above, but if the guard ever
+                # diverges from sync_banking_to_token, still abort here.
+                logger.error(f"[PRE_SYNC] Banking guard failed at sync layer: {sync_result.get('error')}")
+                return {
+                    "error": sync_result.get("error"),
+                    "code": "INVALID_SELLER_BANKING",
+                    "field": "seller_account_number",
+                }
             else:
                 logger.warning(f"[PRE_SYNC] Seller banking sync failed (non-blocking): {sync_result.get('error')}")
         else:
@@ -1393,7 +1512,23 @@ async def update_token_banking_details(
     logger.info(f"Token ID: {token_id}")
     logger.info(f"Bank: {bank_name}, Account: ***{account_number[-4:] if account_number else 'N/A'}")
     logger.info(f"Payout: {payout_interval}, Refund: {refund_interval}")
-    
+
+    # ROOT GUARD: refuse to attach a truncated/invalid account number to a TradeSafe
+    # token. Letting a short number through silently is what causes RJCT payouts.
+    acct_check = validate_account_number_for_sync(account_number)
+    if not acct_check["valid"]:
+        logger.error(
+            f"[TOKEN_UPDATE] REJECTED — invalid account number for token {token_id}: "
+            f"{acct_check['error']} (code={acct_check['code']})"
+        )
+        return {
+            "success": False,
+            "error": acct_check["error"],
+            "code": acct_check["code"],
+            "field": "account_number",
+        }
+    account_number = acct_check["cleaned"]
+
     # Map account type
     account_type_map = {
         "savings": "SAVINGS",
@@ -1928,7 +2063,27 @@ async def _sync_banking_to_token_impl(
 
     if not bank_name or not account_number:
         logger.error("[PAYOUT_SYNC] FAILED: Missing bank_name or account_number")
-        return {"success": False, "error": "Missing required banking fields"}
+        return {"success": False, "error": "Missing required banking fields", "code": "MISSING"}
+
+    # ROOT GUARD: every path that attaches banking to a TradeSafe token funnels
+    # through this function (pre-escrow pre_sync, admin force-sync, banking change
+    # activation, smart-deals seller sync, withdrawal retry). A short / non-digit
+    # account_number here is what produced silent RJCT payouts and the
+    # 4-digit-truncation incident, so we hard-fail before the API call rather
+    # than letting TradeSafe quietly accept a bad value.
+    acct_check = validate_account_number_for_sync(account_number)
+    if not acct_check["valid"]:
+        logger.error(
+            f"[PAYOUT_SYNC] REJECTED — invalid account number for token {token_id}: "
+            f"{acct_check['error']} (code={acct_check['code']})"
+        )
+        return {
+            "success": False,
+            "error": acct_check["error"],
+            "code": acct_check["code"],
+            "field": "account_number",
+        }
+    account_number = acct_check["cleaned"]
 
     # Map bank name to exact TradeSafe enum
     try:

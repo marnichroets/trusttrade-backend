@@ -268,20 +268,20 @@ async def login(data: LoginRequest, response: Response):
 async def get_current_user(request: Request):
     """Get current authenticated user"""
     db = get_database()
-    
+
     try:
         user = await get_user_from_token(request, db)
         if not user:
             raise HTTPException(status_code=401, detail="Not authenticated")
-        
+
         # CRITICAL: Dynamically check and update admin status
         # This ensures admin status is always current based on ADMIN_EMAIL
         email = user.email.lower() if user.email else ""
         admin_email = settings.ADMIN_EMAIL.lower() if settings.ADMIN_EMAIL else ""
         should_be_admin = (email == admin_email) if admin_email else False
-        
+
         logger.info(f"[AUTH_ME] User: {email}, ADMIN_EMAIL: {settings.ADMIN_EMAIL}, should_be_admin: {should_be_admin}, current_is_admin: {user.is_admin}")
-        
+
         if settings.ADMIN_EMAIL and should_be_admin != user.is_admin:
             # Only update when ADMIN_EMAIL is configured — avoid clearing manually-set admin flags
             new_role = "admin" if should_be_admin else user.role
@@ -292,8 +292,29 @@ async def get_current_user(request: Request):
             logger.info(f"[AUTH_ME] Updated admin status for {email}: is_admin={should_be_admin}, role={new_role}")
             user.is_admin = should_be_admin
             user.role = new_role
-        
-        return user
+
+        # Surface banking-account validity so the frontend can prompt users to
+        # fix a stored account number that's too short BEFORE they hit a
+        # transaction-create or payout failure. Computed at every /me call so a
+        # backfilled / freshly-updated user record is reflected immediately.
+        user_doc = await db.users.find_one({"user_id": user.user_id}, {"banking_details": 1, "banking_details_completed": 1})
+        from tradesafe_service import (
+            has_valid_banking_for_payout,
+            banking_needs_update as _banking_needs_update,
+            validate_account_number_for_sync,
+        )
+        banking_valid = has_valid_banking_for_payout(user_doc)
+        needs_update = _banking_needs_update(user_doc)
+        update_error = None
+        if needs_update:
+            stored = ((user_doc or {}).get("banking_details") or {}).get("account_number")
+            update_error = validate_account_number_for_sync(stored).get("error")
+
+        payload = user.model_dump()
+        payload["banking_account_valid"] = banking_valid
+        payload["banking_needs_update"] = needs_update
+        payload["banking_update_message"] = update_error
+        return payload
     except HTTPException:
         raise
     except Exception as e:

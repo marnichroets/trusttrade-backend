@@ -73,14 +73,13 @@ def compute_net_amount(transaction: dict) -> float:
 
 
 def has_bank_details(user_doc: dict | None) -> bool:
-    if not user_doc:
-        return False
-    banking = user_doc.get("banking_details") or {}
-    return bool(
-        user_doc.get("banking_details_completed")
-        and banking.get("bank_name")
-        and banking.get("account_number")
-    )
+    """True only when the seller's stored account number would pass the TradeSafe sync guard.
+
+    Centralised in tradesafe_service so payout-readiness, transaction-create
+    gating, and the sync-time guard always agree on what counts as valid banking.
+    """
+    from tradesafe_service import has_valid_banking_for_payout
+    return has_valid_banking_for_payout(user_doc)
 
 
 def has_verified_phone(user_doc: dict | None) -> bool:

@@ -806,7 +806,19 @@ async def update_user_banking_details(request: Request, details: BankingDetailsU
     
     logger.info("=== BANKING DETAILS UPDATE ===")
     logger.info(f"User: {user.email} ({user.user_id})")
-    
+
+    if not details.bank_name or not details.account_number or not details.branch_code:
+        raise HTTPException(status_code=400, detail="Please fill in all required fields.")
+    account_number_clean = details.account_number.strip()
+    if not account_number_clean.isdigit():
+        raise HTTPException(status_code=400, detail="Account number must contain digits only.")
+    if len(account_number_clean) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Account number is too short ({len(account_number_clean)} digits). Enter the full bank account number (minimum 8 digits).",
+        )
+    details.account_number = account_number_clean
+
     # Get or create TradeSafe token
     token_id = await get_or_reuse_user_token(
         db=db,
@@ -1032,8 +1044,15 @@ async def initiate_banking_change(request: Request, details: BankingDetailsUpdat
 
     if not details.bank_name or not details.account_number or not details.branch_code:
         raise HTTPException(status_code=400, detail="Please fill in all required fields.")
-    if len(details.account_number) < 8:
-        raise HTTPException(status_code=400, detail="Please enter a valid account number (minimum 8 digits).")
+    account_number_clean = details.account_number.strip()
+    if not account_number_clean.isdigit():
+        raise HTTPException(status_code=400, detail="Account number must contain digits only.")
+    if len(account_number_clean) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Account number is too short ({len(account_number_clean)} digits). Enter the full bank account number (minimum 8 digits).",
+        )
+    details.account_number = account_number_clean
 
     otp = ''.join(random.choices(string.digits, k=6))
     request_id = f"bcr_{uuid.uuid4().hex[:12]}"

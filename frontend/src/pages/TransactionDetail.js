@@ -305,9 +305,9 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
     : msUntilPayout === 0
     ? 'Bank processing now'
     : hoursUntilPayout > 0
-    ? `Expected payout in: ${hoursUntilPayout}h ${minutesUntilPayout}m`
+    ? `Estimated payout in: ${hoursUntilPayout}h ${minutesUntilPayout}m`
     : minutesUntilPayout > 0
-    ? `Expected payout in: ${minutesUntilPayout}m`
+    ? `Estimated payout in: ${minutesUntilPayout}m`
     : 'Processing now';
 
   // Date label helpers (SA timezone = UTC+2, no DST)
@@ -361,7 +361,7 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
       state: completed ? 'complete' : inBankProcessing ? 'active' : inInspection ? 'pending' : 'complete',
     },
     {
-      label: 'Expected in FNB',
+      label: 'Estimated in FNB',
       detail: payoutBoldLabel,
       state: completed ? 'complete' : 'pending',
       highlight: !completed,
@@ -405,14 +405,19 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
         )}
       </div>
 
-      {/* Bold expected payout date */}
+      {/* Bold estimated payout date */}
       {!completed && (
-        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, padding: '8px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Banknote size={14} color="#059669" style={{ flexShrink: 0 }} />
-          <div>
-            <span style={{ fontSize: 12, color: '#059669' }}>Expected payout: </span>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#065f46' }}>{payoutBoldLabel}</span>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Banknote size={14} color="#059669" style={{ flexShrink: 0 }} />
+            <div>
+              <span style={{ fontSize: 12, color: '#059669' }}>Estimated payout: </span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#065f46' }}>{payoutBoldLabel}</span>
+            </div>
           </div>
+          <p style={{ fontSize: 11, color: '#94a3b8', margin: '6px 2px 0', lineHeight: 1.4 }}>
+            Estimates based on standard processing. Actual timing may vary by 1–2 hours.
+          </p>
         </div>
       )}
 
@@ -483,6 +488,109 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Seller-facing preview shown while funds are sitting in escrow (PAYMENT_SECURED)
+// but the release hasn't happened yet. Gives the seller a same-page answer to
+// "when am I getting paid?" by estimating: earliest release time → bank run via
+// calculatePayoutSchedule → date the money lands. All dates labelled "Estimated"
+// (not "Expected") with a subtle clarifying note.
+function SellerExpectedPayoutCard({ transaction, platformConfig }) {
+  const fundsReceivedAt = transaction.funds_received_at
+    || transaction.payment_verified_at
+    || null;
+  if (!fundsReceivedAt) return null;
+
+  // Earliest release timestamp the seller can hope for. Prefer the backend-set
+  // auto_release_at; fall back to funds_received_at + delivery-method default if
+  // the field hasn't been written yet.
+  const deliveryMethod = (transaction.delivery_method || 'courier').toLowerCase();
+  const AUTO_RELEASE_DAYS_BY_METHOD = {
+    courier: 3,
+    postnet: 5,
+    bank_deposit: 2,
+    digital: 0,
+    instant: 0,
+    meet_in_person: 1,
+    collection: 1,
+    other: 3,
+  };
+  const fallbackDays = AUTO_RELEASE_DAYS_BY_METHOD[deliveryMethod] ?? 3;
+  const estimatedReleaseAt = transaction.auto_release_at
+    ? new Date(transaction.auto_release_at)
+    : new Date(new Date(fundsReceivedAt).getTime() + fallbackDays * 24 * 60 * 60 * 1000);
+
+  // Walk the estimated release through the bank-run schedule to get the date
+  // the money actually lands in the seller's bank.
+  const { payoutRunAt, bankRunLabel } = calculatePayoutSchedule(estimatedReleaseAt, platformConfig || {});
+
+  const dateFmt = (d) => new Date(d).toLocaleDateString('en-ZA', {
+    weekday: 'long', day: '2-digit', month: 'short', year: 'numeric',
+  });
+
+  const earliestReleaseLabel = dateFmt(estimatedReleaseAt);
+  const payoutLandsLabel = dateFmt(payoutRunAt);
+  const releasePlainEnglish = deliveryMethod === 'digital'
+    ? 'as soon as the buyer confirms (auto-releases shortly otherwise)'
+    : 'when the buyer confirms receipt or the auto-release timer expires';
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)',
+      border: '1px solid #bbf7d0',
+      borderLeft: '3px solid #10b981',
+      borderRadius: 14,
+      padding: '18px 20px',
+      boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div>
+          <p style={{ fontSize: 11, color: '#059669', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 3px' }}>
+            Payout Timeline
+          </p>
+          <p style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+            Funds secured in escrow — here's when to expect your money
+          </p>
+        </div>
+        <div style={{ background: '#dcfce7', border: '1px solid #86efac', borderRadius: 99, padding: '5px 12px', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+          <Shield size={11} color="#16a34a" />
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#15803d', whiteSpace: 'nowrap' }}>Protected</span>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
+        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, padding: '10px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Shield size={14} color="#059669" style={{ flexShrink: 0 }} />
+            <div>
+              <span style={{ fontSize: 12, color: '#059669' }}>Estimated release from escrow: </span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#065f46' }}>{earliestReleaseLabel}</span>
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0 22px', lineHeight: 1.4 }}>
+            Funds release {releasePlainEnglish}.
+          </p>
+        </div>
+
+        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, padding: '10px 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Banknote size={14} color="#059669" style={{ flexShrink: 0 }} />
+            <div>
+              <span style={{ fontSize: 12, color: '#059669' }}>Estimated in your bank: </span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#065f46' }}>{payoutLandsLabel}</span>
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0 22px', lineHeight: 1.4 }}>
+            Next bank run after release: {bankRunLabel}.
+          </p>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, lineHeight: 1.4 }}>
+        Estimates based on standard processing. Actual timing may vary by 1–2 hours.
+      </p>
     </div>
   );
 }
@@ -1525,6 +1633,14 @@ function TransactionDetail() {
 
             {!isFinalized && showPayoutTracker && (
               <PayoutTimelineTracker transaction={transaction} platformConfig={platformConfig} />
+            )}
+
+            {/* Seller preview: as soon as funds are in escrow ("Funds Secured" /
+                "Payment Secured"), show an estimated payout date so the seller
+                knows when to expect their money. Hidden once the post-release
+                timeline takes over (isFinalized or showPayoutTracker). */}
+            {isSeller && fundsSecured && !isFinalized && !showPayoutTracker && (
+              <SellerExpectedPayoutCard transaction={transaction} platformConfig={platformConfig} />
             )}
 
             {/* Buyer confirm */}

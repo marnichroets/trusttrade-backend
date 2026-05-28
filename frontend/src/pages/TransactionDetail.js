@@ -563,7 +563,9 @@ function TransactionDetail() {
   const [loadingPaymentLink, setLoadingPaymentLink] = useState(false);
   const [paymentInfo, setPaymentInfo] = useState(null);
   const [startingDelivery, setStartingDelivery] = useState(false);
+  const [dispatchedLocally, setDispatchedLocally] = useState(false);
   const [acceptingDelivery, setAcceptingDelivery] = useState(false);
+  const [deliveryConfirmedLocally, setDeliveryConfirmedLocally] = useState(false);
   const [payoutReadiness, setPayoutReadiness] = useState(null);
   const [checkingPayoutReadiness, setCheckingPayoutReadiness] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
@@ -815,7 +817,13 @@ function TransactionDetail() {
     }
     if (!window.confirm('Are you sure you want to confirm delivery and release the funds to the seller?')) return;
     setConfirming(true);
-    try { await api.patch(`${API}/transactions/${transactionId}/delivery`, { delivery_confirmed: true }, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
+    try {
+      await api.patch(`${API}/transactions/${transactionId}/delivery`, { delivery_confirmed: true }, { withCredentials: true });
+      setDeliveryConfirmedLocally(true);
+      setTransaction(prev => prev ? { ...prev, delivery_confirmed: true, payment_status: 'Payment processing' } : prev);
+      toast.success(payoutSchedule.copy);
+      fetchData();
+    }
     catch (error) { if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') { setEmailVerificationRequired(true); } else { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery'); } }
     finally { setConfirming(false); }
   };
@@ -833,7 +841,13 @@ function TransactionDetail() {
     }
     if (!window.confirm(`Confirm you are satisfied and want to release the funds to the seller? ${payoutSchedule.copy} This action cannot be undone.`)) return;
     setAcceptingDelivery(true);
-    try { await api.post(`${API}/tradesafe/release-instant/${transactionId}`, {}, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
+    try {
+      await api.post(`${API}/tradesafe/release-instant/${transactionId}`, {}, { withCredentials: true });
+      setDeliveryConfirmedLocally(true);
+      setTransaction(prev => prev ? { ...prev, delivery_confirmed: true, tradesafe_state: 'FUNDS_RELEASED', payment_status: 'Payment processing' } : prev);
+      toast.success(payoutSchedule.copy);
+      fetchData();
+    }
     catch (error) { if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') { setEmailVerificationRequired(true); } else { toast.error(parseErrorMessage(error) || 'Failed to release funds'); } }
     finally { setAcceptingDelivery(false); }
   };
@@ -909,8 +923,9 @@ function TransactionDetail() {
     setStartingDelivery(true);
     try {
       await api.post(`${API}/tradesafe/start-delivery/${transactionId}`, {}, { withCredentials: true });
+      setDispatchedLocally(true);
       setTransaction(prev => prev ? { ...prev, tradesafe_state: 'INITIATED', payment_status: 'Delivery in Progress', delivery_started_at: new Date().toISOString() } : prev);
-      toast.success('Delivery marked as dispatched.');
+      toast.success('Delivery marked — buyer has been notified.');
       await fetchData();
     }
     catch (error) { toast.error(parseErrorMessage(error) || 'Failed to start delivery.'); }
@@ -927,8 +942,9 @@ function TransactionDetail() {
     setStartingDelivery(true);
     try {
       await api.post(`${API}/tradesafe/manual-start-delivery/${transactionId}`, {}, { withCredentials: true });
+      setDispatchedLocally(true);
       setTransaction(prev => prev ? { ...prev, tradesafe_state: 'INITIATED', payment_status: 'Delivery in Progress', delivery_started_at: new Date().toISOString() } : prev);
-      toast.success('Delivery marked as dispatched.');
+      toast.success('Delivery marked — buyer has been notified.');
       await fetchData();
     }
     catch (error) { toast.error(parseErrorMessage(error) || 'Failed to start delivery.'); }
@@ -957,7 +973,13 @@ function TransactionDetail() {
     }
     if (!window.confirm(`Confirm you have received the item? This will release funds to the seller. ${payoutSchedule.copy} This action cannot be undone.`)) return;
     setAcceptingDelivery(true);
-    try { await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true }); toast.success(payoutSchedule.copy); fetchData(); }
+    try {
+      await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true });
+      setDeliveryConfirmedLocally(true);
+      setTransaction(prev => prev ? { ...prev, delivery_confirmed: true, tradesafe_state: 'FUNDS_RELEASED', payment_status: 'Payment processing' } : prev);
+      toast.success(payoutSchedule.copy);
+      fetchData();
+    }
     catch (error) { if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') { setEmailVerificationRequired(true); } else { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); } }
     finally { setAcceptingDelivery(false); }
   };
@@ -1699,23 +1721,43 @@ function TransactionDetail() {
               </div>
             )}
 
+            {/* Seller transaction complete success screen */}
+            {isSeller && (isFinalized || deliveryConfirmedLocally) && (() => {
+              const sellerAmount = transaction.seller_receives ?? (transaction.item_price - _sellerFee);
+              const fmtAmount = `R ${Number(sellerAmount).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              return (
+                <div style={{ ...S.actionCard('#10b981', '#ecfdf5'), padding: '20px 20px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 10 }}>
+                    <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <CheckCircle2 size={28} color="#059669" />
+                    </div>
+                    <p style={{ fontSize: 18, fontWeight: 700, color: '#064e3b', margin: 0 }}>Transaction Complete!</p>
+                    <p style={{ fontSize: 14, color: '#047857', margin: 0 }}>Your payment of <strong>{fmtAmount}</strong> is being processed by TrustTrade.</p>
+                    <p style={{ fontSize: 13, color: '#059669', background: '#d1fae5', borderRadius: 8, padding: '8px 14px', margin: 0 }}>{payoutSchedule.copy}</p>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Seller delivery success state */}
-            {deliveryMarkedStarted && (
+            {!isFinalized && !deliveryConfirmedLocally && (deliveryMarkedStarted || dispatchedLocally) && (
               <div style={S.actionCard('#10b981', '#ecfdf5')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: '#a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <CheckCircle2 size={18} color="#059669" />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: '0 0 4px' }}>Delivery marked as dispatched</p>
-                    <p style={{ fontSize: 13, color: '#047857', margin: 0 }}>Waiting for buyer confirmation. No duplicate dispatch action is needed.</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <p style={{ fontSize: 14, fontWeight: 600, color: '#064e3b', margin: 0 }}>Dispatched ✅</p>
+                    </div>
+                    <p style={{ fontSize: 13, color: '#047857', margin: 0 }}>Delivery marked — buyer has been notified. Waiting for their confirmation.</p>
                   </div>
                 </div>
               </div>
             )}
 
             {/* Seller start delivery */}
-            {canStartDelivery && (
+            {canStartDelivery && !dispatchedLocally && (
               <div style={S.actionCard('#8b5cf6', '#f5f3ff')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: '#ede9fe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1733,7 +1775,7 @@ function TransactionDetail() {
             )}
 
             {/* Manual start delivery */}
-            {!canStartDelivery && canManualStartDelivery && !transaction.delivery_started_at && (
+            {!canStartDelivery && canManualStartDelivery && !transaction.delivery_started_at && !dispatchedLocally && (
               <div style={S.actionCard('#f59e0b', '#fffbeb')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: '#fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

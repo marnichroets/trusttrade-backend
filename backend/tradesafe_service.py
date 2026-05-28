@@ -611,6 +611,8 @@ async def create_tradesafe_transaction(
     buyer_mobile: str = None,
     seller_mobile: str = None,
     fee_allocation: str = "BUYER",
+    days_to_deliver: int = 1,
+    days_to_inspect: int = 1,
 ) -> Optional[Dict[str, Any]]:
     """
     Create a new escrow transaction with TrustTrade as AGENT to collect 2% platform fee.
@@ -820,8 +822,8 @@ async def create_tradesafe_transaction(
                         "title": "Payment for item/service",
                         "description": description,
                         "value": amount_rands,
-                        "daysToDeliver": 1,
-                        "daysToInspect": 1
+                        "daysToDeliver": days_to_deliver,
+                        "daysToInspect": days_to_inspect
                     }
                 ]
             }

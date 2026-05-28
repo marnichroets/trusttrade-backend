@@ -2097,6 +2097,112 @@ async def force_sync_token(
     }
 
 
+# ============ FIX BANKING (MONGO + TRADESAFE IN ONE CALL) ============
+
+class FixBankingRequest(BaseModel):
+    account_number: str
+
+
+@router.post("/users/{email}/fix-banking")
+async def fix_user_banking(email: str, body: FixBankingRequest, request: Request):
+    """
+    ADMIN ONLY: Repair a user's banking account number in both MongoDB and
+    on their TradeSafe token in one call.
+
+    Validates account_number is exactly 11 digits, writes it to
+    users.banking_details.account_number, then calls tokenUpdate on the user's
+    tradesafe_token_id using the existing banking metadata (bank_name,
+    branch_code, account_type) already stored on the user record.
+    """
+    db = get_database()
+    admin = await require_admin(request, db)
+
+    account_number = (body.account_number or "").strip()
+    if not account_number.isdigit():
+        raise HTTPException(status_code=400, detail="account_number must contain digits only.")
+    if len(account_number) != 11:
+        raise HTTPException(
+            status_code=400,
+            detail=f"account_number must be exactly 11 digits (got {len(account_number)}).",
+        )
+
+    user_doc = await db.users.find_one({"email": email.lower()})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail=f"No user found with email={email}")
+
+    token_id = user_doc.get("tradesafe_token_id")
+    if not token_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"User {email} has no tradesafe_token_id — cannot sync to TradeSafe.",
+        )
+
+    banking = user_doc.get("banking_details") or {}
+    bank_name = banking.get("bank_name")
+    branch_code = banking.get("branch_code") or ""
+    account_type = banking.get("account_type") or "savings"
+
+    if not bank_name:
+        raise HTTPException(
+            status_code=400,
+            detail=f"User {email} has no bank_name on record — set banking details first.",
+        )
+
+    logger.info("=" * 60)
+    logger.info(f"[FIX_BANKING] Admin: {admin.email}")
+    logger.info(f"[FIX_BANKING] Target user: {email}")
+    logger.info(f"[FIX_BANKING] Token: {token_id}")
+    logger.info(f"[FIX_BANKING] Bank: {bank_name}")
+    logger.info(f"[FIX_BANKING] New account: ***{account_number[-4:]} ({len(account_number)} digits)")
+    logger.info("=" * 60)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    new_banking = {
+        "bank_name": bank_name,
+        "account_holder": banking.get("account_holder", ""),
+        "account_number": account_number,
+        "branch_code": branch_code,
+        "account_type": account_type,
+        "updated_at": now_iso,
+    }
+    await db.users.update_one(
+        {"user_id": user_doc["user_id"]},
+        {"$set": {
+            "banking_details": new_banking,
+            "banking_details_completed": True,
+        }},
+    )
+    logger.info(f"[FIX_BANKING] MongoDB updated for {email}")
+
+    from tradesafe_service import sync_banking_to_token
+
+    name_parts = (user_doc.get("name") or "").split()
+    sync_result = await sync_banking_to_token(
+        token_id=token_id,
+        bank_name=bank_name,
+        account_number=account_number,
+        branch_code=branch_code,
+        account_type=account_type,
+        mobile=user_doc.get("phone"),
+        user=user_doc,
+        given_name=name_parts[0] if name_parts else None,
+        family_name=" ".join(name_parts[1:]) if len(name_parts) > 1 else None,
+        email=user_doc.get("email"),
+    )
+
+    logger.info(f"[FIX_BANKING] TradeSafe sync result for {email}: {sync_result}")
+
+    return {
+        "success": bool(sync_result.get("success")),
+        "user_email": email,
+        "token_id": token_id,
+        "mongodb_updated": True,
+        "account_number_last4": account_number[-4:],
+        "account_number_length": len(account_number),
+        "tradesafe_sync": sync_result,
+    }
+
+
 # ============ SMART DEALS ============
 
 def _payout_amount(txn: dict):

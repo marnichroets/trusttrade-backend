@@ -210,16 +210,17 @@ function ActionCard({ accent, children }) {
 
 // ─── FundPanel ────────────────────────────────────────────────────────────
 
-function FundPanel({ deal, onFunded }) {
+function FundPanel({ deal }) {
   const [method, setMethod] = useState("eft");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
-  const [payLink, setPayLink] = useState(null);
-  const [waiting, setWaiting] = useState(false);
 
-  const selected = PAYMENT_METHODS.find(m => m.id === method);
-  const fee = deal.amount * (selected.fee / 100);
-  const total = deal.amount + fee;
+  // The client always pays the 2% TrustTrade fee on top of the deal amount, matching
+  // the values the backend stored at deal creation (deal.platform_fee / deal.total).
+  const platformFee = deal.platform_fee != null
+    ? Number(deal.platform_fee)
+    : Math.max(Number(deal.amount) * 0.02, 5);
+  const total = deal.total != null ? Number(deal.total) : Number(deal.amount) + platformFee;
   const fmt = v => `R ${Number(v).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}`;
 
   async function handleFund() {
@@ -229,62 +230,22 @@ function FundPanel({ deal, onFunded }) {
         method: "POST",
         body: JSON.stringify({ payment_method: method }),
       });
+      // Same as a normal transaction: send the client to the TradeSafe payment page.
+      // The deal stays PAYMENT_PENDING and only becomes FUNDED on the FUNDS_DEPOSITED
+      // webhook — we must NEVER advance it here without confirmed payment.
       if (res.payment_link) {
-        setPayLink(res.payment_link);
-      } else {
-        onFunded();
+        window.location.href = res.payment_link;
+        return;
       }
+      setErr(
+        res.message ||
+        "Could not open the secure payment page. Please try again or choose a different payment method."
+      );
     } catch (e) {
       setErr(e.message);
     } finally {
       setLoading(false);
     }
-  }
-
-  if (payLink) {
-    if (waiting) {
-      return (
-        <ActionCard accent={D.blue}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <div style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${D.blue}`, borderTopColor: "transparent", animation: "spin 0.8s linear infinite", flexShrink: 0 }} />
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Waiting for payment confirmation</h3>
-          </div>
-          <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 12px", lineHeight: 1.5 }}>
-            Our escrow provider will confirm once your payment clears. This page updates automatically — no need to refresh.
-          </p>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <a href={payLink} target="_blank" rel="noopener noreferrer" style={{ ...btn(D.surfaceHi, D.textMuted, { border: `1px solid ${D.border}`, textDecoration: "none" }) }}>
-              Open payment page again
-            </a>
-          </div>
-        </ActionCard>
-      );
-    }
-    return (
-      <ActionCard accent={D.blue}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <Lock size={15} color={D.accent} />
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Complete your payment</h3>
-        </div>
-        <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 16px", lineHeight: 1.5 }}>
-          Your Secure Escrow has been created. Click below to complete payment via <strong style={{ color: D.text }}>{selected.label}</strong>.
-        </p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <a
-            href={payLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => setWaiting(true)}
-            style={{ ...btn(D.accent, "#000"), textDecoration: "none" }}
-          >
-            <Lock size={14} /> Pay {fmt(total)} Now
-          </a>
-          <button onClick={() => setWaiting(true)} style={{ ...btn("transparent", D.textMuted, { border: `1px solid ${D.border}` }) }}>
-            I've completed payment
-          </button>
-        </div>
-      </ActionCard>
-    );
   }
 
   return (
@@ -326,28 +287,23 @@ function FundPanel({ deal, onFunded }) {
                 <p style={{ fontSize: 13, fontWeight: 600, color: D.text, margin: "0 0 1px" }}>{m.label}</p>
                 <p style={{ fontSize: 11, color: D.textMuted, margin: 0 }}>{m.desc}</p>
               </div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: active ? D.blue : D.textMuted, flexShrink: 0 }}>
-                {m.fee === 0 ? "No fee" : `+${m.fee}%`}
-              </span>
             </label>
           );
         })}
       </div>
 
-      {/* Payment summary */}
+      {/* Payment summary — deal amount + 2% TrustTrade fee (paid by the client). */}
       <div style={{ background: D.bg, border: `1px solid ${D.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-          <span style={{ fontSize: 12, color: D.textMuted }}>Escrow amount</span>
+          <span style={{ fontSize: 12, color: D.textMuted }}>Deal amount</span>
           <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmt(deal.amount)}</span>
         </div>
-        {fee > 0 && (
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-            <span style={{ fontSize: 12, color: D.textMuted }}>Processing fee ({selected.fee}%)</span>
-            <span style={{ fontSize: 12, color: D.warning, fontFamily: "ui-monospace, monospace" }}>{fmt(fee)}</span>
-          </div>
-        )}
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+          <span style={{ fontSize: 12, color: D.textMuted }}>TrustTrade fee (2% — you pay)</span>
+          <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmt(platformFee)}</span>
+        </div>
         <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${D.border}`, paddingTop: 8, marginTop: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: D.text }}>Total</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: D.text }}>Total to pay</span>
           <span style={{ fontSize: 15, fontWeight: 700, color: D.accent, fontFamily: "ui-monospace, monospace" }}>{fmt(total)}</span>
         </div>
       </div>
@@ -363,7 +319,7 @@ function FundPanel({ deal, onFunded }) {
         disabled={loading}
         style={{ ...btn(D.blue), width: "100%", opacity: loading ? 0.6 : 1, cursor: loading ? "not-allowed" : "pointer" }}
       >
-        {loading ? <><Spinner /> Creating escrow…</> : <><Lock size={14} /> Fund {fmt(total)}</>}
+        {loading ? <><Spinner /> Creating secure escrow…</> : <><Lock size={14} /> Continue to payment · {fmt(total)}</>}
       </button>
     </ActionCard>
   );
@@ -825,7 +781,7 @@ export function SmartDealDetail() {
 
       {/* Client: fund escrow */}
       {isClient && deal.status === "ACCEPTED" && (
-        <FundPanel deal={deal} onFunded={load} />
+        <FundPanel deal={deal} />
       )}
 
       {/* Client: awaiting payment confirmation */}

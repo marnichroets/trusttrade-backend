@@ -281,17 +281,29 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
     seller_token_id = result.get("seller_token_id")
     buyer_token_id = result.get("buyer_token_id")
 
-    # Obtain payment link from TradeSafe
+    # Obtain the hosted TradeSafe payment URL — same as a normal transaction. Send the
+    # client back to the deal page after paying so the FUNDS_DEPOSITED webhook can flip
+    # the deal to FUNDED. The deal is NEVER marked funded here.
+    frontend_url = (settings.FRONTEND_URL or "").rstrip("/")
+    deal_url = f"{frontend_url}/smart-deals/{deal_id}"
+    redirect_urls = {"success": deal_url, "failure": deal_url, "cancel": deal_url}
+
     payment_link = None
     payment_method_used = body.payment_method.upper()
     if tradesafe_id:
         try:
-            pay_result = await get_payment_link(tradesafe_id)
+            pay_result = await get_payment_link(tradesafe_id, redirect_urls)
             if pay_result:
                 payment_link = pay_result.get("payment_link")
                 payment_method_used = pay_result.get("method", payment_method_used)
         except Exception as exc:
             logger.error(f"[SMART_DEAL] get_payment_link failed for {deal_id}: {exc}")
+
+    if not payment_link:
+        logger.warning(
+            f"[SMART_DEAL] {deal_id}: TradeSafe returned no hosted payment URL "
+            f"(tradesafe_id={tradesafe_id}) — client cannot pay, NOT marking funded"
+        )
 
     now = utcnow()
     await db.transactions.update_one(

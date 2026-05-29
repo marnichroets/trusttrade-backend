@@ -292,18 +292,47 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
     payment_method_used = body.payment_method.upper()
     if tradesafe_id:
         try:
-            pay_result = await get_payment_link(tradesafe_id, redirect_urls)
+            pay_result = await get_payment_link(tradesafe_id, redirect_urls, method=body.payment_method)
             if pay_result:
                 payment_link = pay_result.get("payment_link")
                 payment_method_used = pay_result.get("method", payment_method_used)
         except Exception as exc:
             logger.error(f"[SMART_DEAL] get_payment_link failed for {deal_id}: {exc}")
 
+    # No hosted link (EFT) → build bank-transfer details + reference for a manual payment.
+    # Amount = the deal total already computed at creation (client pays amount + 2% when
+    # CLIENT bears the fee; amount only when the freelancer bears it). Never recalculated.
+    eft_details = None
     if not payment_link:
-        logger.warning(
-            f"[SMART_DEAL] {deal_id}: TradeSafe returned no hosted payment URL "
-            f"(tradesafe_id={tradesafe_id}) — client cannot pay, NOT marking funded"
+        from tradesafe_service import build_eft_payment_details
+        eft_amount = deal.get("total") or deal.get("amount") or 0
+        share_code = deal.get("share_code", deal_id)
+        eft_details = await build_eft_payment_details(
+            reference=share_code, amount=eft_amount, tradesafe_id=tradesafe_id
         )
+        logger.warning(
+            f"[SMART_DEAL] {deal_id}: no hosted payment URL — showing EFT bank details "
+            f"(source={eft_details['source']}). Deal stays PAYMENT_PENDING until FUNDS_DEPOSITED."
+        )
+        # Email the client their EFT details (deduped per deal).
+        try:
+            import email_service
+            from webhook_handler import send_email_with_tracking
+            await send_email_with_tracking(
+                db, deal_id, "eft_payment_details_buyer",
+                deal.get("buyer_email") or deal.get("client_email", ""),
+                email_service.send_eft_payment_details_email,
+                to_email=deal.get("buyer_email") or deal.get("client_email", ""),
+                to_name=deal.get("buyer_name") or deal.get("client_name", "Client"),
+                share_code=share_code,
+                item_description=deal.get("item_description") or deal.get("title", "Digital work"),
+                bank=eft_details["bank"], account_name=eft_details["account_name"],
+                account_number=eft_details["account_number"], branch_code=eft_details["branch_code"],
+                reference=eft_details["reference"], amount=eft_details["amount"],
+                instructions=eft_details["instructions"],
+            )
+        except Exception as exc:
+            logger.error(f"[SMART_DEAL] EFT details email failed for {deal_id}: {exc}")
 
     now = utcnow()
     await db.transactions.update_one(
@@ -320,6 +349,7 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
             "tradesafe_buyer_token_id": buyer_token_id,
             "payment_method": body.payment_method,
             "payment_link": payment_link,
+            "eft_details": eft_details,
             "payment_status": "Awaiting Payment",
             "payment_initiated_at": now,
             "updated_at": now,
@@ -327,14 +357,15 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
     )
     logger.info(
         f"[SMART_DEAL] {deal_id} payment initiated by {current_user.email},"
-        f" tradesafe_id={tradesafe_id}, payment_link={bool(payment_link)}"
+        f" tradesafe_id={tradesafe_id}, payment_link={bool(payment_link)}, eft={'yes' if eft_details else 'no'}"
     )
 
-    # Deal stays PAYMENT_PENDING until TradeSafe webhook confirms FUNDS_RECEIVED
+    # Deal stays PAYMENT_PENDING until TradeSafe webhook confirms FUNDS_DEPOSITED
     return {
         "deal_id": deal_id,
         "status": "PAYMENT_PENDING",
         "payment_link": payment_link,
+        "eft_details": eft_details,
         "payment_method": payment_method_used,
         "tradesafe_id": tradesafe_id,
     }
@@ -368,6 +399,7 @@ async def cancel_payment(deal_id: str, request: Request):
             "tradesafe_seller_token_id": None,
             "tradesafe_buyer_token_id": None,
             "payment_link": None,
+            "eft_details": None,
             "payment_method": None,
             "payment_status": "Awaiting Acceptance",
             "payment_initiated_at": None,

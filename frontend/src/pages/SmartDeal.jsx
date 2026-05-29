@@ -214,6 +214,7 @@ function FundPanel({ deal }) {
   const [method, setMethod] = useState("eft");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
+  const [eftDetails, setEftDetails] = useState(null);
 
   // The client always pays the 2% TrustTrade fee on top of the deal amount, matching
   // the values the backend stored at deal creation (deal.platform_fee / deal.total).
@@ -237,6 +238,11 @@ function FundPanel({ deal }) {
         window.location.href = res.payment_link;
         return;
       }
+      // EFT has no hosted page — show bank-transfer details + reference instead.
+      if (res.eft_details) {
+        setEftDetails(res.eft_details);
+        return;
+      }
       setErr(
         res.message ||
         "Could not open the secure payment page. Please try again or choose a different payment method."
@@ -246,6 +252,42 @@ function FundPanel({ deal }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (eftDetails) {
+    const rows = [
+      ["Bank", eftDetails.bank],
+      ["Account name", eftDetails.account_name],
+      ["Account number", eftDetails.account_number],
+      ["Branch code", eftDetails.branch_code],
+      ["Reference", eftDetails.reference],
+      ["Amount to pay", fmt(eftDetails.amount ?? total)],
+    ];
+    return (
+      <ActionCard accent={D.blue}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <Landmark size={15} color={D.accent} />
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Pay via EFT bank transfer</h3>
+        </div>
+        <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 16px", lineHeight: 1.5 }}>{eftDetails.instructions}</p>
+        <div style={{ background: D.bg, border: `1px solid ${D.border}`, borderRadius: 10, padding: "6px 14px", marginBottom: 14 }}>
+          {rows.map(([label, value]) => (
+            <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: `1px solid ${D.border}` }}>
+              <span style={{ fontSize: 12, color: D.textMuted }}>{label}</span>
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: D.text, fontFamily: "ui-monospace, monospace" }}>{value || "—"}</span>
+                {value && (
+                  <button type="button" onClick={() => { navigator.clipboard.writeText(String(value)); }} style={{ fontSize: 11, color: D.accent, background: "none", border: "none", cursor: "pointer", padding: 0 }}>Copy</button>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize: 12, color: D.warning, background: "#1A1200", border: `1px solid ${D.warning}44`, borderRadius: 8, padding: "10px 12px", margin: 0 }}>
+          Use the reference <strong>exactly as shown</strong>. This deal stays in <strong>Awaiting Payment</strong> until the funds are confirmed (1–2 business days).
+        </p>
+      </ActionCard>
+    );
   }
 
   return (

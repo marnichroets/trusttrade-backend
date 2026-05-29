@@ -1016,6 +1016,7 @@ function TransactionDetail() {
       localStorage.setItem(`tt_payment_initiated_${transactionId}`, String(Date.now()));
       setPaymentProcessing(true);
       if (response.data.payment_link) { const newWindow = window.open(response.data.payment_link, '_blank'); if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') window.location.href = response.data.payment_link; toast.success('Secure payment page opened.'); }
+      else if (response.data.eft_details) { setPaymentInfo(response.data); toast.info('EFT bank details ready — see below.'); }
       else { setPaymentInfo(response.data); toast.info('Payment deposit created.'); }
     } catch (error) { const errorMessage = error.response?.data?.detail || 'Unable to process payment. Please try again.'; toast.error(errorMessage); }
     finally { setLoadingPaymentLink(false); }
@@ -1764,6 +1765,32 @@ function TransactionDetail() {
 
             {/* Make payment */}
             {/* Bug 2: buyer just paid — show processing state with active polling + manual refresh */}
+            {paymentInfo?.eft_details && !fundsSecured && (
+              <div style={{ ...S.card, padding: '22px 24px', marginBottom: 16, border: '1px solid #bfdbfe' }} data-testid="eft-details-card">
+                <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>🏦 Pay via EFT bank transfer</p>
+                <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 16px' }}>{paymentInfo.eft_details.instructions}</p>
+                {[
+                  ['Bank', paymentInfo.eft_details.bank],
+                  ['Account name', paymentInfo.eft_details.account_name],
+                  ['Account number', paymentInfo.eft_details.account_number],
+                  ['Branch code', paymentInfo.eft_details.branch_code],
+                  ['Reference', paymentInfo.eft_details.reference],
+                  ['Amount to pay', `R ${Number(paymentInfo.eft_details.amount ?? totalSecurePayment).toFixed(2)}`],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <span style={{ fontSize: 12, color: '#64748b' }}>{label}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', fontFamily: 'ui-monospace, monospace' }}>{value || '—'}</span>
+                      {value && <button type="button" onClick={() => { navigator.clipboard.writeText(String(value)); toast.success('Copied'); }} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Copy</button>}
+                    </span>
+                  </div>
+                ))}
+                <p style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px', marginTop: 14 }}>
+                  Use the reference <strong>exactly as shown</strong>. Your transaction stays in <strong>Awaiting Payment</strong> until funds are confirmed (1–2 business days).
+                </p>
+              </div>
+            )}
+
             {paymentProcessing && (
               <div style={S.actionCard('#3b82f6', '#eff6ff')}>
                 <div style={{ display: 'flex', gap: 12 }}>

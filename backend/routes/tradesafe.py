@@ -555,8 +555,12 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
 
 
 @router.get("/payment-url/{transaction_id}")
-async def get_tradesafe_payment_url(request: Request, transaction_id: str):
-    """Get TradeSafe payment URL for a transaction."""
+async def get_tradesafe_payment_url(request: Request, transaction_id: str, payment_method: str = "eft"):
+    """Get TradeSafe payment URL (Card/Ozow) or EFT bank-transfer details for a transaction.
+
+    payment_method: eft | card | ozow. EFT has no hosted page, so we return bank
+    details + reference for a manual transfer instead of a redirect link.
+    """
     import traceback
     
     print("=== PAY FLOW START ===")
@@ -612,7 +616,7 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
     logger.info(f"=== GETTING PAYMENT URL for {transaction_id} ===")
     
     try:
-        payment_info = await get_payment_link(tradesafe_id, redirect_urls)
+        payment_info = await get_payment_link(tradesafe_id, redirect_urls, method=payment_method)
         print(f"TradeSafe raw payment_info response: {payment_info}")
     except Exception as e:
         print("=== PAY FLOW ERROR ===")
@@ -657,16 +661,47 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
     # TradeSafe EFT deposits don't generate a redirect link, buyer uses bank details
     payment_link = payment_info.get("payment_link")
     print(f"Parsed payment_link: {payment_link}")
-    
+
     # Calculate fee breakdown
     fee_breakdown = calculate_fees(
         transaction["item_price"],
         transaction.get("fee_paid_by", "split")
     )
-    
-    logger.info(f"=== PAYMENT URL: {payment_link} ===")
+
+    # No hosted link (EFT) → build bank-transfer details + reference for a manual payment.
+    # Amount = the already-calculated buyer total stored on the transaction (item + the
+    # buyer's share of the fee, per fee_allocation) — never recalculated here.
+    eft_details = None
+    if not payment_link:
+        from tradesafe_service import build_eft_payment_details
+        eft_amount = transaction.get("total") or transaction.get("item_price") or 0
+        share_code = transaction.get("share_code", transaction_id)
+        eft_details = await build_eft_payment_details(
+            reference=share_code, amount=eft_amount, tradesafe_id=tradesafe_id
+        )
+        # Email the buyer their EFT details (deduped per transaction).
+        try:
+            import email_service
+            from webhook_handler import send_email_with_tracking
+            await send_email_with_tracking(
+                db, transaction_id, "eft_payment_details_buyer",
+                transaction.get("buyer_email", ""),
+                email_service.send_eft_payment_details_email,
+                to_email=transaction.get("buyer_email", ""),
+                to_name=transaction.get("buyer_name", "Buyer"),
+                share_code=share_code,
+                item_description=transaction.get("item_description", ""),
+                bank=eft_details["bank"], account_name=eft_details["account_name"],
+                account_number=eft_details["account_number"], branch_code=eft_details["branch_code"],
+                reference=eft_details["reference"], amount=eft_details["amount"],
+                instructions=eft_details["instructions"],
+            )
+        except Exception as exc:
+            logger.error(f"[PAYMENT_EFT] EFT details email failed for {transaction_id}: {exc}")
+
+    logger.info(f"=== PAYMENT URL: {payment_link} | eft={'yes' if eft_details else 'no'} ===")
     print("=== PAY FLOW END (success) ===")
-    
+
     return {
         "transaction_id": transaction_id,
         "tradesafe_id": tradesafe_id,
@@ -674,6 +709,7 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str):
         "payment_methods": payment_info.get("payment_methods", ALLOWED_PAYMENT_METHODS),
         "state": payment_info.get("state"),
         "fee_breakdown": fee_breakdown,
+        "eft_details": eft_details,
         "deposit_id": payment_info.get("deposit_id"),
         "method": payment_info.get("method"),
         "message": payment_info.get("message")

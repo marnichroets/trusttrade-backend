@@ -80,6 +80,16 @@ class Settings:
     GOOGLE_CLIENT_SECRET: str = os.environ.get('GOOGLE_CLIENT_SECRET', '')
     GOOGLE_REDIRECT_URI: str = os.environ.get('GOOGLE_REDIRECT_URI', 'https://trusttradesa.co.za/api/auth/google/callback')
 
+    # EFT (manual bank transfer) fallback details.
+    # Shown when TradeSafe does not expose hosted EFT deposit bank details. Funds paid
+    # to this account land with TrustTrade and must be reconciled manually — the
+    # TradeSafe FUNDS_DEPOSITED webhook will NOT fire for these payments.
+    TRUSTTRADE_EFT_BANK: str = os.environ.get('TRUSTTRADE_EFT_BANK', 'FNB')
+    TRUSTTRADE_EFT_ACCOUNT_NAME: str = os.environ.get('TRUSTTRADE_EFT_ACCOUNT_NAME', 'TrustTrade')
+    TRUSTTRADE_EFT_ACCOUNT_NUMBER: str = os.environ.get('TRUSTTRADE_EFT_ACCOUNT_NUMBER', '')
+    TRUSTTRADE_EFT_BRANCH_CODE: str = os.environ.get('TRUSTTRADE_EFT_BRANCH_CODE', '250655')
+    TRUSTTRADE_EFT_ACCOUNT_TYPE: str = os.environ.get('TRUSTTRADE_EFT_ACCOUNT_TYPE', 'Cheque')
+
     # Admin
     ADMIN_ALERT_EMAIL: str = os.environ.get('ADMIN_ALERT_EMAIL', '')
     ADMIN_ALERT_PHONE: str = os.environ.get('ADMIN_ALERT_PHONE', '')  # SMS for urgent dispute alerts

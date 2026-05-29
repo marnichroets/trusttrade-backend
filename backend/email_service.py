@@ -1172,6 +1172,55 @@ async def send_payment_received_email(
         return False
 
 
+async def send_eft_payment_details_email(
+    *,
+    to_email: str,
+    to_name: str,
+    share_code: str,
+    item_description: str,
+    bank: str,
+    account_name: str,
+    account_number: str,
+    branch_code: str,
+    reference: str,
+    amount: float,
+    instructions: str,
+) -> bool:
+    """Email the buyer the EFT bank-transfer details + reference for a manual payment."""
+    logger.info(f"[TX_EMAIL] === EFT PAYMENT DETAILS EMAIL === to={to_email} ref={reference}")
+
+    def esc(v):
+        s = "" if v is None else str(v)
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    subject = f"TrustTrade: EFT payment details for {share_code}"
+    intro_text = (
+        f"Please pay <strong>R {float(amount or 0):,.2f}</strong> via EFT for "
+        f"<strong>{esc(item_description)}</strong> ({esc(share_code)}) using the bank details below. "
+        f"{esc(instructions)}<br><br>"
+        f"<strong>Use the reference exactly as shown</strong> so we can match your payment. "
+        f"Your transaction stays in <em>Awaiting Payment</em> until the funds are confirmed."
+    )
+    details = {
+        "Bank": esc(bank),
+        "Account Name": esc(account_name),
+        "Account Number": esc(account_number),
+        "Branch Code": esc(branch_code),
+        "Reference": esc(reference),
+        "Amount to Pay": f"R {float(amount or 0):,.2f}",
+    }
+    html = get_base_email_template(
+        heading="Complete your EFT payment",
+        greeting_name=to_name,
+        intro_text=intro_text,
+        details=details,
+        show_how_it_works=False,
+        status_badge="Awaiting Payment",
+        status_color="#f39c12",
+    )
+    return await send_email(to_email, to_name, subject, html)
+
+
 async def send_delivery_started_email(
     to_email: str,
     to_name: str,

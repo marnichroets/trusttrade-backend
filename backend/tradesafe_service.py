@@ -1062,14 +1062,17 @@ async def get_tradesafe_transaction(tradesafe_id: str) -> Optional[Dict[str, Any
     return None
 
 
-async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = None) -> Optional[Dict[str, Any]]:
+async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = None, method: str = None) -> Optional[Dict[str, Any]]:
     """
     Generate payment link for a TradeSafe transaction using transactionDeposit mutation.
     This creates a deposit request and returns the payment link.
-    
+
     Args:
         tradesafe_id: The TradeSafe transaction ID
         redirect_urls: Optional dict with success, failure, cancel URLs
+        method: If given (EFT/OZOW/CARD), only that deposit method is created. EFT has no
+            hosted link, so the caller builds bank-transfer details instead. If None, the
+            old behaviour is kept (try EFT→OZOW→CARD and return the first hosted link).
     """
     logger.info(f"[PAYMENT] get_payment_link called: tradesafe_id={tradesafe_id}, env={TRADESAFE_ENV}")
     
@@ -1154,8 +1157,13 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     }
     """
     
-    # Try EFT first (works in sandbox), then try interactive methods
-    methods_to_try = ["EFT", "OZOW", "CARD"]
+    # When the buyer picked a specific method, honour ONLY that one (so choosing EFT
+    # doesn't silently fall through to an Ozow hosted page). Otherwise keep the old
+    # try-in-order behaviour.
+    if method and method.upper() in ALLOWED_PAYMENT_METHODS:
+        methods_to_try = [method.upper()]
+    else:
+        methods_to_try = ["EFT", "OZOW", "CARD"]
     last_deposit = None
     
     for method in methods_to_try:
@@ -1216,6 +1224,100 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     
     logger.error(f"[PAYMENT] get_payment_link returning None — no deposit created for {tradesafe_id}")
     return None
+
+
+# Fields a TradeSafe Deposit might expose for manual EFT (bank account + reference).
+# We discover which exist via introspection before querying them, so an unknown field
+# never breaks the call.
+_EFT_BANK_FIELD_CANDIDATES = [
+    "reference", "paymentReference",
+    "bankName", "bank",
+    "accountName", "accountHolder",
+    "accountNumber", "bankAccountNumber",
+    "branchCode", "accountType",
+]
+
+
+async def get_tradesafe_eft_details(tradesafe_id: str) -> Optional[Dict[str, Any]]:
+    """Best-effort fetch of EFT bank-transfer details from TradeSafe for a transaction.
+
+    Returns a normalised dict (source="tradesafe") only if TradeSafe actually exposes a
+    usable account number + reference; otherwise returns None so the caller falls back
+    to TrustTrade's own configured account. Fully isolated — never raises.
+    """
+    try:
+        introspect = await execute_graphql('query { __type(name: "Deposit") { fields { name } } }')
+        if not introspect or "errors" in introspect:
+            return None
+        available = {f["name"] for f in ((introspect.get("__type") or {}).get("fields") or [])}
+        wanted = [f for f in _EFT_BANK_FIELD_CANDIDATES if f in available]
+        if not wanted:
+            logger.info(f"[PAYMENT_EFT] TradeSafe Deposit exposes no bank/reference fields for {tradesafe_id}")
+            return None
+
+        selection = " ".join(["id", "method"] + wanted)
+        query = f"query t($id: ID!) {{ transaction(id: $id) {{ deposits {{ {selection} }} }} }}"
+        result = await execute_graphql(query, {"id": tradesafe_id})
+        if not result or "errors" in result or "transaction" not in result:
+            return None
+
+        deposits = (result["transaction"] or {}).get("deposits") or []
+        eft = next((d for d in deposits if (d.get("method") or "").upper() == "EFT"), None)
+        if not eft and deposits:
+            eft = deposits[-1]
+        if not eft:
+            return None
+
+        account_number = eft.get("accountNumber") or eft.get("bankAccountNumber")
+        reference = eft.get("reference") or eft.get("paymentReference")
+        if not account_number or not reference:
+            # Incomplete — not safe to present as the pay-to account; fall back.
+            return None
+
+        return {
+            "source": "tradesafe",
+            "bank": eft.get("bankName") or eft.get("bank"),
+            "account_name": eft.get("accountName") or eft.get("accountHolder"),
+            "account_number": account_number,
+            "branch_code": eft.get("branchCode"),
+            "account_type": eft.get("accountType"),
+            "reference": reference,
+            "auto_confirms": True,  # money reaches TradeSafe → FUNDS_DEPOSITED webhook fires
+        }
+    except Exception as exc:
+        logger.error(f"[PAYMENT_EFT] get_tradesafe_eft_details failed for {tradesafe_id}: {exc}")
+        return None
+
+
+async def build_eft_payment_details(*, reference: str, amount: float, tradesafe_id: str = None) -> Dict[str, Any]:
+    """Return EFT bank-transfer instructions to show the buyer.
+
+    Prefers TradeSafe's own deposit account (keeps funds in escrow; the
+    FUNDS_DEPOSITED webhook will auto-confirm). Falls back to TrustTrade's configured
+    account with the share code as the reference (manual reconciliation — no webhook).
+    """
+    details = None
+    if tradesafe_id:
+        details = await get_tradesafe_eft_details(tradesafe_id)
+
+    if not details:
+        details = {
+            "source": "trusttrade_fallback",
+            "bank": settings.TRUSTTRADE_EFT_BANK,
+            "account_name": settings.TRUSTTRADE_EFT_ACCOUNT_NAME,
+            "account_number": settings.TRUSTTRADE_EFT_ACCOUNT_NUMBER,
+            "branch_code": settings.TRUSTTRADE_EFT_BRANCH_CODE,
+            "account_type": settings.TRUSTTRADE_EFT_ACCOUNT_TYPE,
+            "reference": reference,
+            "auto_confirms": False,  # paid to TrustTrade directly → reconcile manually
+        }
+
+    details["amount"] = round(float(amount or 0), 2)
+    details["instructions"] = (
+        "Use this reference number when making your EFT payment. "
+        "Funds will be confirmed within 1-2 business days."
+    )
+    return details
 
 
 async def start_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:

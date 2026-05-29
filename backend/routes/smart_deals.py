@@ -30,7 +30,9 @@ class CreateDealRequest(BaseModel):
     amount: float = Field(..., gt=0)
     currency: str = Field(default="ZAR")
     freelancer_email: str
-    days_to_deliver: int = Field(..., gt=0, le=365)
+    # Defaults to 1 if the client leaves it empty; range is enforced in create_deal
+    # so we can return a clear message instead of a raw 422 validation error.
+    days_to_deliver: int = Field(default=1)
     fee_paid_by: str = Field(default="CLIENT")
 
 
@@ -103,6 +105,10 @@ async def create_deal(body: CreateDealRequest, request: Request):
     # Validate minimum transaction amount (R500) — same floor as every other type.
     if body.amount < settings.MINIMUM_TRANSACTION_AMOUNT:
         raise HTTPException(status_code=400, detail=settings.MINIMUM_TRANSACTION_MESSAGE)
+
+    # Delivery window must be a sane 1–60 days (no negatives / zero / huge values).
+    if body.days_to_deliver < 1 or body.days_to_deliver > 60:
+        raise HTTPException(status_code=400, detail="Delivery days must be between 1 and 60")
 
     deal_id = generate_deal_id()
     now = utcnow()

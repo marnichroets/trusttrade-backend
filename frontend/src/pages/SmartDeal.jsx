@@ -12,6 +12,11 @@ const API = process.env.REACT_APP_API_URL || "https://trusttrade-backend-product
 const MIN_TRANSACTION_AMOUNT = 500;
 const MIN_TRANSACTION_MESSAGE = `Minimum transaction amount is R${MIN_TRANSACTION_AMOUNT} to cover processing fees.`;
 
+// Delivery window bounds — must match the backend check in routes/smart_deals.py.
+const MIN_DELIVERY_DAYS = 1;
+const MAX_DELIVERY_DAYS = 60;
+const DELIVERY_DAYS_MESSAGE = `Delivery days must be between ${MIN_DELIVERY_DAYS} and ${MAX_DELIVERY_DAYS}`;
+
 const D = {
   bg:           "#070D18",
   surface:      "#0D1526",
@@ -483,7 +488,13 @@ export function CreateSmartDeal() {
     if (!form.amount || isNaN(form.amount) || Number(form.amount) <= 0) e.amount = "Enter a valid amount";
     else if (Number(form.amount) < MIN_TRANSACTION_AMOUNT) e.amount = MIN_TRANSACTION_MESSAGE;
     if (!form.freelancer_email.includes("@")) e.freelancer_email = "Enter a valid email";
-    if (!form.days_to_deliver || Number(form.days_to_deliver) <= 0) e.days_to_deliver = "Required";
+    // Empty defaults to 1; otherwise must be a whole number from 1 to 60.
+    if (form.days_to_deliver !== "") {
+      const days = Number(form.days_to_deliver);
+      if (!Number.isInteger(days) || days < MIN_DELIVERY_DAYS || days > MAX_DELIVERY_DAYS) {
+        e.days_to_deliver = DELIVERY_DAYS_MESSAGE;
+      }
+    }
     return e;
   }
 
@@ -492,9 +503,10 @@ export function CreateSmartDeal() {
     if (Object.keys(e).length) { setErrors(e); return; }
     setLoading(true); setApiError(null);
     try {
+      const days_to_deliver = form.days_to_deliver === "" ? 1 : Number(form.days_to_deliver);
       const res = await apiFetch("/api/smart-deals/", {
         method: "POST",
-        body: JSON.stringify({ ...form, amount: Number(form.amount), days_to_deliver: Number(form.days_to_deliver) }),
+        body: JSON.stringify({ ...form, amount: Number(form.amount), days_to_deliver }),
       });
       navigate(`/smart-deals/${res.deal_id}`);
     } catch (err) {
@@ -552,8 +564,8 @@ export function CreateSmartDeal() {
           </div>
           <div>
             <label style={label}>Days to Deliver</label>
-            <input style={{ ...input, borderColor: borderErr("days_to_deliver") }} type="number" placeholder="7" value={form.days_to_deliver} onChange={set("days_to_deliver")} />
-            {fieldErr("days_to_deliver")}
+            <input style={{ ...input, borderColor: borderErr("days_to_deliver") }} type="number" min={MIN_DELIVERY_DAYS} max={MAX_DELIVERY_DAYS} step={1} placeholder="7" value={form.days_to_deliver} onChange={set("days_to_deliver")} />
+            {fieldErr("days_to_deliver") || <p style={{ fontSize: 11, color: D.textMuted, margin: "2px 0 8px" }}>1–{MAX_DELIVERY_DAYS} days (defaults to 1).</p>}
           </div>
         </div>
 

@@ -63,30 +63,72 @@ async def _bg(coro):
         logger.error(f"[WEBHOOK_BG] {exc}")
 
 
-async def _handle_smart_deal_funded(deal: dict, db) -> None:
-    """Mark a Smart Deal FUNDED, run PAYOUT_SYNC, and send the funded email."""
+async def _handle_smart_deal_funded(deal: dict, db, state: str = "FUNDS_DEPOSITED") -> None:
+    """Mark a Smart Deal FUNDED using the SAME fields and emails as a normal
+    transaction's FUNDS_DEPOSITED path.
+
+    - payment_status → "Funds Secured", tradesafe_state, release_status, auto_release_at.
+    - Buyer (client) gets the "payment secured" email; the seller (freelancer) email
+      fires only on FUNDS_DEPOSITED (not FUNDS_RECEIVED), exactly like normal txns.
+    - send_email_with_tracking dedups, so re-delivered webhooks never double-send.
+    """
     import asyncio
 
     deal_id = deal["deal_id"]
     now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    auto_release_at = (now + timedelta(hours=48)).isoformat()
+    already_funded = deal.get("status") == "FUNDED"
 
     await db.transactions.update_one(
         {"deal_id": deal_id},
-        {"$set": {"status": "FUNDED", "funded_at": now, "updated_at": now}},
+        {"$set": {
+            "status": "FUNDED",
+            "payment_status": "Funds Secured",
+            "tradesafe_state": state,
+            "release_status": "In Escrow",
+            "funds_received_at": deal.get("funds_received_at") or now_iso,
+            "auto_release_at": auto_release_at,
+            "funded_at": deal.get("funded_at") or now,
+            "updated_at": now,
+        }},
     )
-    logger.info(f"[WEBHOOK] Smart deal {deal_id} → FUNDED")
+    logger.info(f"[WEBHOOK] Smart deal {deal_id} → FUNDED (payment_status=Funds Secured, state={state})")
 
-    # PAYOUT_SYNC: sync freelancer banking details to their TradeSafe token
-    from routes.smart_deals import _sync_seller_banking
-    asyncio.create_task(_bg(_sync_seller_banking(deal, db)))
+    # PAYOUT_SYNC: sync freelancer banking to their TradeSafe token (once).
+    if not already_funded:
+        from routes.smart_deals import _sync_seller_banking
+        asyncio.create_task(_bg(_sync_seller_banking(deal, db)))
 
-    # Notify both parties
+    # Same emails as a normal transaction, with the same dedup keys.
     import email_service
-    client_name = deal.get("client_name") or deal["client_email"]
-    freelancer_name = deal.get("freelancer_name") or deal["freelancer_email"]
-    asyncio.create_task(_bg(
-        email_service.send_smart_deal_funded(deal, client_name, freelancer_name)
-    ))
+    from webhook_handler import send_email_with_tracking, EmailEvent
+
+    ref = deal.get("transaction_id") or deal_id
+    share_code = deal.get("share_code", deal_id)
+    item_description = deal.get("item_description") or deal.get("title", "Digital work")
+    amount = float(deal.get("item_price") or deal.get("amount") or 0)
+    buyer_email = deal.get("buyer_email") or deal.get("client_email", "")
+    buyer_name = deal.get("buyer_name") or deal.get("client_name") or buyer_email
+    seller_email = deal.get("seller_email") or deal.get("freelancer_email", "")
+    seller_name = deal.get("seller_name") or deal.get("freelancer_name") or seller_email
+
+    # Buyer/client — "payment secured, work can begin"
+    asyncio.create_task(_bg(send_email_with_tracking(
+        db, ref, EmailEvent.PAYMENT_SECURED_BUYER, buyer_email,
+        email_service.send_immediate_payment_secured_email,
+        to_email=buyer_email, to_name=buyer_name, share_code=share_code,
+        item_description=item_description, amount=amount, delivery_method="digital",
+    )))
+
+    # Seller/freelancer — only once funds have actually cleared (FUNDS_DEPOSITED).
+    if state == "FUNDS_DEPOSITED":
+        asyncio.create_task(_bg(send_email_with_tracking(
+            db, ref, EmailEvent.PAYMENT_SECURED_SELLER, seller_email,
+            email_service.send_payment_received_email,
+            to_email=seller_email, to_name=seller_name, share_code=share_code,
+            item_description=item_description, amount=amount, role="seller", delivery_method="digital",
+        )))
 
 
 async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook") -> dict:
@@ -560,22 +602,33 @@ async def tradesafe_webhook(request: Request):
                 )
                 return {"ok": True, "action": "smart_deal_release_already_processed", "deal_id": deal_id}
 
+            # Advance the Smart Deal lifecycle to COMPLETE (covers auto-release where
+            # the client never manually approves) so its status matches a settled txn.
+            now = datetime.now(timezone.utc)
+            await db.transactions.update_one(
+                {"_id": smart_deal["_id"]},
+                {"$set": {"status": "COMPLETE", "completed_at": smart_deal.get("completed_at") or now, "updated_at": now}},
+            )
+
             import asyncio
             asyncio.create_task(_bg(
                 handle_released_transaction(db, smart_deal, state=state, source="webhook:smart_deal")
             ))
-            logger.info(f"[WEBHOOK] Smart deal {deal_id} {state} - withdrawal task queued")
+            logger.info(f"[WEBHOOK] Smart deal {deal_id} {state} - status→COMPLETE, withdrawal task queued")
             return {"ok": True, "action": "smart_deal_withdrawal_queued", "deal_id": deal_id, "state": state}
 
         if state not in FUNDED_STATES:
             logger.info(f"[WEBHOOK] Smart deal {deal_id}: state={state!r} is not a funded state — no action")
             return {"ok": True, "action": "ignored", "reason": f"state {state!r} not actionable for smart deals"}
-        if smart_deal["status"] not in ("ACCEPTED", "PAYMENT_PENDING"):
-            logger.info(f"[WEBHOOK] Smart deal {deal_id} already in {smart_deal['status']!r} — skipping duplicate")
+        if smart_deal["status"] not in ("ACCEPTED", "PAYMENT_PENDING", "FUNDED"):
+            logger.info(f"[WEBHOOK] Smart deal {deal_id} in {smart_deal['status']!r} — not awaiting funding, skipping")
             return {"ok": True, "action": "already_processed"}
-        await _handle_smart_deal_funded(smart_deal, db)
-        logger.info(f"[WEBHOOK] Smart deal {deal_id} → FUNDED processing triggered")
-        return {"ok": True, "action": "smart_deal_funded", "deal_id": deal_id}
+        # Process both FUNDS_RECEIVED and FUNDS_DEPOSITED (like the regular path):
+        # fields advance on either, the seller email is gated to FUNDS_DEPOSITED, and
+        # send_email_with_tracking dedups so re-delivered webhooks never double-send.
+        await _handle_smart_deal_funded(smart_deal, db, state=state)
+        logger.info(f"[WEBHOOK] Smart deal {deal_id} → FUNDED processing triggered (state={state})")
+        return {"ok": True, "action": "smart_deal_funded", "deal_id": deal_id, "state": state}
 
     # ── Regular transaction path ─────────────────────────────────────────────
     txn = None

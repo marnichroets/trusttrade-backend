@@ -109,16 +109,51 @@ async def create_deal(body: CreateDealRequest, request: Request):
     client_name = current_user.name or current_user.email
     freelancer_name = freelancer.get("name") or freelancer["email"]
 
+    # Map the Smart Deal onto the same fee/payout model as a normal transaction so
+    # the admin list, finance, the webhook path, and payout all read identical fields.
+    #   CLIENT pays the 2% fee  → freelancer receives the full amount (BUYER allocation)
+    #   FREELANCER pays the fee → fee deducted from the freelancer payout (SELLER allocation)
+    fee_allocation = "SELLER" if (body.fee_paid_by or "CLIENT").upper() == "FREELANCER" else "BUYER"
+    platform_fee = max(round(body.amount * settings.PLATFORM_FEE_PERCENT / 100, 2), 5.0)
+    if fee_allocation == "SELLER":
+        net_amount = round(body.amount - platform_fee, 2)   # freelancer payout after fee
+        total = round(body.amount, 2)                       # client funds the amount only
+    else:
+        net_amount = round(body.amount, 2)                  # freelancer gets the full amount
+        total = round(body.amount + platform_fee, 2)        # client funds amount + fee
+
+    # "deal title — scope" so the admin transactions list shows a meaningful item.
+    item_description = f"{body.title} — {body.description}"
+
     doc = {
         "deal_id": deal_id,
         "deal_type": "DIGITAL_WORK",
         "transaction_id": deal_id,
+        "share_code": deal_id,
         "client_id": current_user.user_id,
         "client_email": current_user.email,
         "client_name": client_name,
         "freelancer_id": str(freelancer["user_id"]),
         "freelancer_email": freelancer["email"],
         "freelancer_name": freelancer_name,
+        # ── Normal-transaction fields (mirror routes/transactions.py) so Smart Deals
+        #    render and pay out exactly like a normal escrow transaction. ──
+        "buyer_user_id": current_user.user_id,
+        "buyer_email": current_user.email,
+        "buyer_name": client_name,
+        "seller_user_id": str(freelancer["user_id"]),
+        "seller_email": freelancer["email"],
+        "seller_name": freelancer_name,
+        "item_description": item_description,
+        "item_price": body.amount,
+        "delivery_method": "digital",
+        "fee_allocation": fee_allocation,
+        "platform_fee": platform_fee,
+        "trusttrade_fee": platform_fee,
+        "net_amount": net_amount,
+        "seller_receives": net_amount,
+        "total": total,
+        "payment_status": "Awaiting Acceptance",
         "tradesafe_token_id": None,
         "title": body.title,
         "description": body.description,
@@ -215,7 +250,7 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
     result = await create_tradesafe_transaction(
         internal_reference=deal_id,
         title=f"TrustTrade Smart Deal - {deal['title'][:50]}",
-        description=deal.get("description", "Digital work"),
+        description=deal.get("item_description") or deal.get("description", "Digital work"),
         amount=deal["amount"],
         buyer_name=client_name,
         buyer_email=deal["client_email"],
@@ -223,6 +258,11 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
         seller_email=deal["freelancer_email"],
         buyer_mobile=client_mobile,
         seller_mobile=freelancer_mobile,
+        # Digital work has no physical handover: deliver immediately + 1 inspection day,
+        # exactly like a normal "digital" delivery transaction. Carry the same fee model.
+        fee_allocation=deal.get("fee_allocation", "BUYER"),
+        days_to_deliver=0,
+        days_to_inspect=1,
     )
     if not result or "error" in result:
         raise HTTPException(
@@ -233,6 +273,7 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
     tradesafe_id = result.get("id")
     allocation_id = (result.get("allocations") or [{}])[0].get("id")
     seller_token_id = result.get("seller_token_id")
+    buyer_token_id = result.get("buyer_token_id")
 
     # Obtain payment link from TradeSafe
     payment_link = None
@@ -251,12 +292,17 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
         {"deal_id": deal_id},
         {"$set": {
             "status": "PAYMENT_PENDING",
+            # tradesafe_id is what the regular webhook path matches on — store it so
+            # Smart Deals resolve through the exact same lookup as normal transactions.
+            "tradesafe_id": tradesafe_id,
             "tradesafe_token_id": tradesafe_id,
             "tradesafe_transaction_id": tradesafe_id,
             "tradesafe_allocation_id": allocation_id,
             "tradesafe_seller_token_id": seller_token_id,
+            "tradesafe_buyer_token_id": buyer_token_id,
             "payment_method": body.payment_method,
             "payment_link": payment_link,
+            "payment_status": "Awaiting Payment",
             "payment_initiated_at": now,
             "updated_at": now,
         }},
@@ -297,12 +343,15 @@ async def cancel_payment(deal_id: str, request: Request):
         {"deal_id": deal_id},
         {"$set": {
             "status": "ACCEPTED",
+            "tradesafe_id": None,
             "tradesafe_token_id": None,
             "tradesafe_transaction_id": None,
             "tradesafe_allocation_id": None,
             "tradesafe_seller_token_id": None,
+            "tradesafe_buyer_token_id": None,
             "payment_link": None,
             "payment_method": None,
+            "payment_status": "Awaiting Acceptance",
             "payment_initiated_at": None,
             "updated_at": now,
         }},
@@ -433,6 +482,23 @@ async def approve_deal(deal_id: str, request: Request):
             source="smart_deal_approve",
         )
         logger.info(f"[SMART_DEAL] withdrawal result for {deal_id}: {withdrawal_result}")
+
+        # Same "funds released" email a normal transaction sends to its seller.
+        # send_email_with_tracking dedups with the webhook FUNDS_RELEASED path.
+        import email_service
+        from webhook_handler import send_email_with_tracking, EmailEvent
+        _src = latest_deal or deal
+        _seller_email = _src.get("seller_email") or _src.get("freelancer_email", "")
+        asyncio.create_task(_fire_email(send_email_with_tracking(
+            db, deal_id, EmailEvent.FUNDS_RELEASED_SELLER, _seller_email,
+            email_service.send_funds_released_email,
+            to_email=_seller_email,
+            to_name=_src.get("seller_name") or _src.get("freelancer_name") or _seller_email,
+            share_code=_src.get("share_code", deal_id),
+            item_description=_src.get("item_description") or _src.get("title", "Digital work"),
+            amount=float(_src.get("item_price") or _src.get("amount") or 0),
+            net_amount=float(net_amount or 0),
+        )))
     except Exception as exc:
         logger.error(f"[SMART_DEAL] Payout failed for {deal_id}: {exc}")
         await db.transactions.update_one(

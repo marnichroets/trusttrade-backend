@@ -1390,7 +1390,7 @@ def validate_minimum_transaction(amount: float) -> tuple:
         (is_valid, error_message)
     """
     if amount < MINIMUM_TRANSACTION_AMOUNT:
-        return False, f"Minimum transaction amount is R{MINIMUM_TRANSACTION_AMOUNT:.0f}"
+        return False, settings.MINIMUM_TRANSACTION_MESSAGE
     return True, ""
 
 

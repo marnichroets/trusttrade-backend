@@ -8,6 +8,10 @@ import {
 
 const API = process.env.REACT_APP_API_URL || "https://trusttrade-backend-production-3efa.up.railway.app";
 
+// Minimum escrow amount — must match the backend (settings.MINIMUM_TRANSACTION_AMOUNT).
+const MIN_TRANSACTION_AMOUNT = 500;
+const MIN_TRANSACTION_MESSAGE = `Minimum transaction amount is R${MIN_TRANSACTION_AMOUNT} to cover processing fees.`;
+
 const D = {
   bg:           "#070D18",
   surface:      "#0D1526",
@@ -477,6 +481,7 @@ export function CreateSmartDeal() {
     if (!form.title.trim()) e.title = "Required";
     if (!form.description.trim()) e.description = "Required";
     if (!form.amount || isNaN(form.amount) || Number(form.amount) <= 0) e.amount = "Enter a valid amount";
+    else if (Number(form.amount) < MIN_TRANSACTION_AMOUNT) e.amount = MIN_TRANSACTION_MESSAGE;
     if (!form.freelancer_email.includes("@")) e.freelancer_email = "Enter a valid email";
     if (!form.days_to_deliver || Number(form.days_to_deliver) <= 0) e.days_to_deliver = "Required";
     return e;
@@ -542,8 +547,8 @@ export function CreateSmartDeal() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 4 }}>
           <div>
             <label style={label}>Amount (ZAR)</label>
-            <input style={{ ...input, fontFamily: "ui-monospace, monospace", fontWeight: 600, borderColor: borderErr("amount") }} type="number" placeholder="5 000" value={form.amount} onChange={set("amount")} />
-            {fieldErr("amount")}
+            <input style={{ ...input, fontFamily: "ui-monospace, monospace", fontWeight: 600, borderColor: borderErr("amount") }} type="number" min={MIN_TRANSACTION_AMOUNT} placeholder="5 000" value={form.amount} onChange={set("amount")} />
+            {fieldErr("amount") || <p style={{ fontSize: 11, color: D.textMuted, margin: "2px 0 8px" }}>Minimum R{MIN_TRANSACTION_AMOUNT}.</p>}
           </div>
           <div>
             <label style={label}>Days to Deliver</label>

@@ -312,7 +312,7 @@ function NewTransaction() {
   const canProceedStep2 = formData.item_description && formData.item_category &&
     formData.item_condition && itemPrice >= minimumTransactionAmount && !amountTooHigh;
   const amountError = amountTooLow
-    ? `Minimum transaction amount is R${minimumTransactionAmount.toFixed(0)}.`
+    ? `Minimum transaction amount is R${minimumTransactionAmount.toFixed(0)} to cover processing fees.`
     : amountTooHigh
       ? `Maximum transaction amount is R${maximumTransactionAmount.toLocaleString('en-ZA')}.`
       : '';
@@ -333,7 +333,7 @@ function NewTransaction() {
       return;
     }
     if (itemPrice < minimumTransactionAmount) {
-      toast.error(`Minimum transaction amount is R${minimumTransactionAmount.toFixed(0)}.`);
+      toast.error(`Minimum transaction amount is R${minimumTransactionAmount.toFixed(0)} to cover processing fees.`);
       return;
     }
     if (maximumTransactionAmount > 0 && itemPrice > maximumTransactionAmount) {

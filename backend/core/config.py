@@ -108,6 +108,18 @@ class Settings:
     SHIPLOGIC_API_KEY: str = os.environ.get('SHIPLOGIC_API_KEY', '')
     SHIPLOGIC_API_URL: str = os.environ.get('SHIPLOGIC_API_URL', 'https://api.shiplogic.com')
 
+    @property
+    def MINIMUM_TRANSACTION_MESSAGE(self) -> str:
+        """Canonical user-facing error for amounts below the minimum.
+
+        Shared by every transaction type (normal, smart deals, courier) so the
+        wording stays identical on the backend API and the frontend forms.
+        """
+        return (
+            f"Minimum transaction amount is R{self.MINIMUM_TRANSACTION_AMOUNT:.0f} "
+            "to cover processing fees."
+        )
+
     # Upload Paths
     UPLOAD_BASE_PATH: str = '/app/uploads'
     PHOTOS_PATH: str = '/app/uploads/photos'

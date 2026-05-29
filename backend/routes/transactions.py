@@ -429,7 +429,7 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
     if transaction_data.item_price < settings.MINIMUM_TRANSACTION_AMOUNT:
         raise HTTPException(
             status_code=400,
-            detail=f"Minimum transaction amount is R{settings.MINIMUM_TRANSACTION_AMOUNT:.0f}"
+            detail=settings.MINIMUM_TRANSACTION_MESSAGE
         )
     
     # No maximum transaction limit on TrustTrade

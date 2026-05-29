@@ -171,9 +171,9 @@ async def get_fee_calculation(amount: float, fee_allocation: str = "SELLER_AGENT
     if amount < settings.MINIMUM_TRANSACTION_AMOUNT:
         raise HTTPException(
             status_code=400,
-            detail=f"Minimum transaction amount is R{settings.MINIMUM_TRANSACTION_AMOUNT:.0f}"
+            detail=settings.MINIMUM_TRANSACTION_MESSAGE
         )
-    
+
     # TrustTrade fee: 2% with R5 minimum
     calculated_tt_fee = round(amount * (PLATFORM_FEE_PERCENT / 100), 2)
     trusttrade_fee = max(calculated_tt_fee, MINIMUM_FEE_RANDS)
@@ -353,7 +353,7 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
         logger.warning(f"[ESCROW] failure exact reason: Amount below minimum - R{transaction['item_price']}")
         raise HTTPException(
             status_code=400,
-            detail=f"Minimum transaction amount is R{settings.MINIMUM_TRANSACTION_AMOUNT:.0f}"
+            detail=settings.MINIMUM_TRANSACTION_MESSAGE
         )
     
     # Get user profiles for mobile numbers

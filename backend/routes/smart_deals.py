@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from core.config import settings
 from core.database import get_database
 from core.security import get_user_from_token
 
@@ -98,6 +99,10 @@ async def create_deal(body: CreateDealRequest, request: Request):
         )
     if str(freelancer["user_id"]) == str(current_user.user_id):
         raise HTTPException(status_code=400, detail="You cannot create a deal with yourself")
+
+    # Validate minimum transaction amount (R500) — same floor as every other type.
+    if body.amount < settings.MINIMUM_TRANSACTION_AMOUNT:
+        raise HTTPException(status_code=400, detail=settings.MINIMUM_TRANSACTION_MESSAGE)
 
     deal_id = generate_deal_id()
     now = utcnow()

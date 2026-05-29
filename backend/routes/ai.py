@@ -22,6 +22,29 @@ router = APIRouter(prefix="/api/ai", tags=["AI"])
 
 MODEL = "claude-opus-4-7"
 
+# Dispute adjudication runs on a dedicated Sonnet model (per product spec) so the
+# decision logic is independent of the general-purpose MODEL used elsewhere.
+DISPUTE_MODEL = "claude-sonnet-4-20250514"
+
+# Confidence thresholds (percent) that select the resolution path.
+AUTO_RESOLVE_MIN_CONFIDENCE = 90   # strictly greater than → AI auto-resolves
+AI_RECOMMEND_MIN_CONFIDENCE = 70   # 70–90 → admin approves/overrides; below → manual review
+
+# When False, a >90% recommendation is still recorded and flagged for a final
+# admin click instead of closing the dispute unattended. Fund movement
+# (refund/release) is always a separate, human-controlled financial action and is
+# never triggered automatically by the AI.
+AI_AUTO_RESOLVE_ENABLED = os.getenv("AI_AUTO_RESOLVE_ENABLED", "true").lower() == "true"
+
+
+def _resolution_path(confidence: int) -> str:
+    """Map a 0-100 confidence score to one of the three resolution paths."""
+    if confidence > AUTO_RESOLVE_MIN_CONFIDENCE:
+        return "auto_resolve"
+    if confidence >= AI_RECOMMEND_MIN_CONFIDENCE:
+        return "ai_recommends"
+    return "manual_review"
+
 
 def _get_client() -> Optional[anthropic.AsyncAnthropic]:
     api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -112,38 +135,134 @@ Return ONLY a JSON object, no markdown:
         logger.error(f"[AI_FRAUD] Failed for {transaction_id}: {exc}")
 
 
+async def _courier_tracking_summary(transaction_doc: dict) -> str:
+    """Best-effort one-line courier tracking summary for the AI context."""
+    waybill = (
+        transaction_doc.get("waybill")
+        or transaction_doc.get("tracking_reference")
+        or transaction_doc.get("courier_waybill")
+    )
+    if not waybill:
+        return "No courier waybill on file (not a courier shipment, or not yet booked)."
+    try:
+        from services.courier_guy import track_shipment
+        tracking = await track_shipment(str(waybill))
+        return (
+            f"Waybill {waybill}: status={tracking.get('status')!r}, "
+            f"last update={tracking.get('timestamp')!r}, "
+            f"{len(tracking.get('events', []))} tracking event(s) recorded."
+        )
+    except Exception as exc:
+        return f"Waybill {waybill}: tracking lookup unavailable ({exc})."
+
+
+def _party_history(user_doc: Optional[dict], role: str) -> str:
+    u = user_doc or {}
+    return (
+        f"{role}: trust score {u.get('trust_score', 50)}/100, "
+        f"{u.get('total_trades', 0)} completed trade(s), "
+        f"{u.get('valid_disputes_count', 0)} valid dispute(s) previously upheld against them."
+    )
+
+
+async def _notify_parties_resolved(transaction_doc: dict, resolution_text: str, admin_notes: str = ""):
+    """Email both parties that the dispute has been resolved. Best-effort."""
+    try:
+        from email_service import send_dispute_resolved_email
+        share_code = transaction_doc.get("share_code", transaction_doc.get("transaction_id", ""))
+        for email_key, name_key in (("buyer_email", "buyer_name"), ("seller_email", "seller_name")):
+            to_email = transaction_doc.get(email_key)
+            if not to_email:
+                continue
+            await send_dispute_resolved_email(
+                to_email=to_email,
+                to_name=transaction_doc.get(name_key, "TrustTrade user"),
+                share_code=share_code,
+                resolution=resolution_text,
+                admin_notes=admin_notes,
+            )
+    except Exception as exc:
+        logger.error(f"[AI_DISPUTE] Failed to notify parties of resolution: {exc}")
+
+
 async def analyze_dispute(dispute_id: str, dispute_doc: dict, transaction_doc: dict):
     """
-    Generate initial AI resolution advice for a newly opened dispute and save it.
-    Designed to be fire-and-forget via asyncio.create_task().
+    Adjudicate a dispute with Claude: review all available evidence, produce a
+    recommended decision + confidence + reasoning, and route it down one of three
+    resolution paths (auto-resolve / AI-recommends / manual-review).
+
+    Designed to be fire-and-forget via asyncio.create_task(), and also callable
+    synchronously from the admin endpoint.
     """
     client = _get_client()
     if not client:
+        logger.warning(f"[AI_DISPUTE] {dispute_id}: no Anthropic client; skipping")
         return
 
+    db = get_database()
     try:
-        prompt = f"""You are a neutral dispute resolution advisor for TrustTrade, a South African escrow platform.
+        # Gather both parties' records for history/score context.
+        buyer_doc = None
+        seller_doc = None
+        if transaction_doc.get("buyer_email"):
+            buyer_doc = await db.users.find_one({"email": transaction_doc["buyer_email"]}, {"_id": 0})
+        if transaction_doc.get("seller_email"):
+            seller_doc = await db.users.find_one({"email": transaction_doc["seller_email"]}, {"_id": 0})
 
-Dispute details:
-- Type: {dispute_doc.get('dispute_type', 'General')}
-- Description: {dispute_doc.get('description', '')}
+        tracking_summary = await _courier_tracking_summary(transaction_doc)
 
-Related transaction:
+        evidence_photos = dispute_doc.get("evidence_photos") or []
+        photos_line = (
+            f"{len(evidence_photos)} photo(s) uploaded: {', '.join(evidence_photos)}"
+            if evidence_photos else "No photo evidence uploaded."
+        )
+
+        buyer_statement = dispute_doc.get("buyer_statement") or "(no buyer statement provided)"
+        seller_statement = dispute_doc.get("seller_statement") or "(no seller statement provided)"
+
+        raiser_email = dispute_doc.get("raised_by_email", "unknown")
+        raiser_role = (
+            "buyer" if transaction_doc.get("buyer_email") == raiser_email else
+            "seller" if transaction_doc.get("seller_email") == raiser_email else "a party"
+        )
+
+        prompt = f"""You are the dispute-resolution adjudicator for TrustTrade, a South African peer-to-peer escrow platform. Review ALL available evidence below and decide which party the held escrow funds should favour.
+
+TRANSACTION
 - Item: {transaction_doc.get('item_description', 'Unknown item')}
 - Amount: R{transaction_doc.get('item_price', 0):,.2f}
 - Delivery method: {transaction_doc.get('delivery_method', 'unknown')}
+- Current state: {transaction_doc.get('tradesafe_state') or transaction_doc.get('payment_status', 'unknown')}
 
-Provide balanced, practical advice. Return ONLY a JSON object, no markdown:
+DISPUTE
+- Type: {dispute_doc.get('dispute_type', 'Other')}
+- Raised by: the {raiser_role} ({raiser_email})
+- Reason given: {dispute_doc.get('description', '(none)')}
+
+PARTY STATEMENTS
+- Buyer's statement: {buyer_statement}
+- Seller's statement: {seller_statement}
+
+EVIDENCE
+- {photos_line}
+- Courier tracking: {tracking_summary}
+
+PARTY HISTORY
+- {_party_history(buyer_doc, 'Buyer')}
+- {_party_history(seller_doc, 'Seller')}
+
+Weigh courier 'delivered' status, photo evidence, the consistency of each statement against the facts, and each party's track record. Be conservative: only assign confidence above 90 when the evidence clearly points one way; assign below 70 when key evidence is missing or the parties' accounts conflict without corroboration.
+
+Return ONLY a JSON object, no markdown, no commentary:
 {{
-  "likely_outcome": "brief neutral prediction",
-  "recommended_steps": ["step 1", "step 2", "step 3"],
-  "evidence_needed": ["evidence type 1", "evidence type 2"],
-  "resolution_timeframe": "estimated timeframe (e.g. 3-5 business days)",
-  "summary": "one-paragraph neutral analysis of the situation"
+  "recommended_decision": "Favour Buyer" or "Favour Seller",
+  "confidence": <integer 0-100>,
+  "reasoning": "2-3 sentences explaining why, in plain English",
+  "missing_evidence": ["evidence that would have made this clearer", "..."]
 }}"""
 
         response = await client.messages.create(
-            model=MODEL,
+            model=DISPUTE_MODEL,
             max_tokens=768,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -151,20 +270,73 @@ Provide balanced, practical advice. Return ONLY a JSON object, no markdown:
         text = next((b.text for b in response.content if b.type == "text"), "{}")
         result = _extract_json(text)
 
-        db = get_database()
-        await db.disputes.update_one(
-            {"dispute_id": dispute_id},
-            {"$set": {
-                "ai_analysis": {
-                    **result,
-                    "analyzed_at": datetime.now(timezone.utc).isoformat(),
-                }
-            }},
+        # Normalise the model output defensively.
+        decision = result.get("recommended_decision", "")
+        if decision not in ("Favour Buyer", "Favour Seller"):
+            decision = "Favour Buyer" if "buyer" in str(decision).lower() else "Favour Seller"
+        try:
+            confidence = int(round(float(result.get("confidence", 0))))
+        except (TypeError, ValueError):
+            confidence = 0
+        confidence = max(0, min(100, confidence))
+        path = _resolution_path(confidence)
+
+        ai_resolution = {
+            "recommended_decision": decision,
+            "confidence": confidence,
+            "reasoning": result.get("reasoning", ""),
+            "missing_evidence": result.get("missing_evidence", []) or [],
+            "resolution_path": path,
+            "model": DISPUTE_MODEL,
+            "analyzed_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        await _apply_resolution_path(db, dispute_id, dispute_doc, transaction_doc, ai_resolution)
+        logger.info(
+            f"[AI_DISPUTE] {dispute_id}: {decision} @ {confidence}% → path={path}"
         )
-        logger.info(f"[AI_DISPUTE] {dispute_id}: analysis saved")
 
     except Exception as exc:
         logger.error(f"[AI_DISPUTE] Failed for {dispute_id}: {exc}")
+
+
+async def _apply_resolution_path(db, dispute_id, dispute_doc, transaction_doc, ai_resolution):
+    """Persist the AI resolution and move the dispute down the correct path."""
+    path = ai_resolution["resolution_path"]
+    decision = ai_resolution["recommended_decision"]
+    confidence = ai_resolution["confidence"]
+
+    update = {"ai_resolution": ai_resolution}
+
+    if path == "auto_resolve" and AI_AUTO_RESOLVE_ENABLED:
+        # >90% confidence: AI closes the dispute and both parties are notified.
+        # The actual refund/release remains a separate human-controlled action.
+        resolution_text = f"AI auto-resolved in favour of {decision.replace('Favour ', '').lower()} ({confidence}% confidence)."
+        update.update({
+            "status": "Resolved",
+            "review_status": "ai_auto_resolved",
+            "resolution": f"{resolution_text} {ai_resolution['reasoning']}".strip(),
+            "resolved_by": "ai_auto",
+            "resolved_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await db.disputes.update_one({"dispute_id": dispute_id}, {"$set": update})
+        await _notify_parties_resolved(
+            transaction_doc,
+            resolution_text,
+            admin_notes=ai_resolution["reasoning"],
+        )
+        return
+
+    if path == "auto_resolve":
+        # Auto-resolve disabled by config → treat as a strong recommendation.
+        update["review_status"] = "ai_recommended"
+    elif path == "ai_recommends":
+        update["review_status"] = "ai_recommended"
+    else:
+        update["review_status"] = "manual_review"
+
+    update["status"] = "Under Review"
+    await db.disputes.update_one({"dispute_id": dispute_id}, {"$set": update})
 
 
 # ============ HTTP ENDPOINTS ============
@@ -212,9 +384,27 @@ class DisputeAdviceRequest(BaseModel):
     dispute_id: str
 
 
+def _party_safe_resolution(ai_resolution: dict) -> dict:
+    """The subset of the AI resolution safe to show to a dispute party.
+
+    Parties must not see the recommended decision/confidence while a dispute is
+    still under review (it would bias their behaviour and any appeal). They only
+    see what extra evidence would help, plus whether it was auto-resolved.
+    """
+    return {
+        "resolution_path": ai_resolution.get("resolution_path"),
+        "missing_evidence": ai_resolution.get("missing_evidence", []),
+        "analyzed_at": ai_resolution.get("analyzed_at"),
+    }
+
+
 @router.post("/dispute-advice")
 async def dispute_advice(request: Request, body: DisputeAdviceRequest):
-    """Return AI resolution advice for a dispute (runs fresh if not yet cached)."""
+    """Return the AI dispute resolution.
+
+    Admins receive the full recommendation (decision, confidence, reasoning).
+    Parties receive only a safe subset (missing evidence) to avoid biasing review.
+    """
     db = get_database()
     user = await get_user_from_token(request, db)
     if not user:
@@ -238,14 +428,15 @@ async def dispute_advice(request: Request, body: DisputeAdviceRequest):
     if not user.is_admin and not is_party:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    if dispute.get("ai_analysis"):
-        return {"dispute_id": body.dispute_id, **dispute["ai_analysis"]}
+    # Run the adjudication if it hasn't happened yet (user/admin is waiting).
+    if not dispute.get("ai_resolution"):
+        await analyze_dispute(body.dispute_id, dispute, txn)
+        dispute = await db.disputes.find_one({"dispute_id": body.dispute_id}, {"_id": 0}) or dispute
 
-    await analyze_dispute(body.dispute_id, dispute, txn)
-
-    dispute = await db.disputes.find_one({"dispute_id": body.dispute_id}, {"_id": 0})
-    analysis = (dispute or {}).get("ai_analysis", {})
-    return {"dispute_id": body.dispute_id, **analysis}
+    ai_resolution = (dispute or {}).get("ai_resolution", {})
+    if user.is_admin:
+        return {"dispute_id": body.dispute_id, **ai_resolution}
+    return {"dispute_id": body.dispute_id, **_party_safe_resolution(ai_resolution)}
 
 
 class ImproveDescriptionRequest(BaseModel):

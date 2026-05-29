@@ -15,7 +15,7 @@ import asyncio
 from core.config import settings
 from core.database import get_database
 from core.security import get_user_from_token
-from models.dispute import Dispute, DisputeCreate, DisputeUpdate
+from models.dispute import Dispute, DisputeCreate, DisputeUpdate, DisputeAppeal
 from email_service import send_dispute_opened_email
 from routes.ai import analyze_dispute
 from sms_service import normalize_phone_number
@@ -262,5 +262,65 @@ async def update_dispute(request: Request, dispute_id: str, update_data: Dispute
         {"dispute_id": dispute_id},
         {"_id": 0}
     )
-    
+
     return Dispute(**updated_dispute)
+
+
+@router.post("/{dispute_id}/appeal", response_model=Dispute)
+async def appeal_dispute(request: Request, dispute_id: str, body: DisputeAppeal):
+    """A party appeals the dispute resolution. Each party may appeal once.
+
+    The appeal re-flags the dispute for an admin, who reviews it together with the
+    AI analysis already stored on the dispute (ai_resolution).
+    """
+    db = get_database()
+
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    dispute = await db.disputes.find_one({"dispute_id": dispute_id}, {"_id": 0})
+    if not dispute:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+
+    transaction = await db.transactions.find_one(
+        {"transaction_id": dispute.get("transaction_id", "")}, {"_id": 0}
+    )
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if not user.is_admin and not user_can_access_transaction(transaction, user):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    is_buyer = (
+        transaction.get("buyer_user_id") == user.user_id
+        or _norm(transaction.get("buyer_email")) == _norm(user.email)
+    )
+    role = "buyer" if is_buyer else "seller"
+    flag = "buyer_appealed" if is_buyer else "seller_appealed"
+
+    if dispute.get(flag):
+        raise HTTPException(
+            status_code=409,
+            detail="You have already appealed this dispute (one appeal per party)",
+        )
+
+    appeal_record = {
+        "by_user_id": user.user_id,
+        "by_email": user.email,
+        "role": role,
+        "reason": body.reason,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    await db.disputes.update_one(
+        {"dispute_id": dispute_id},
+        {
+            "$set": {flag: True, "status": "Appealed", "review_status": "appeal_pending"},
+            "$push": {"appeals": appeal_record},
+        },
+    )
+    logger.info(f"[DISPUTE_APPEAL] {dispute_id} appealed by {role} ({user.email})")
+
+    updated = await db.disputes.find_one({"dispute_id": dispute_id}, {"_id": 0})
+    return Dispute(**updated)

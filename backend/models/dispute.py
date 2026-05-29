@@ -31,10 +31,31 @@ class Dispute(BaseModel):
     review_status: Optional[str] = None
     resolution: Optional[str] = None
     resolved_at: Optional[str] = None
+    resolved_by: Optional[str] = None
     closed_at: Optional[str] = None
     admin_decision: Optional[str] = None
+    admin_notes: Optional[str] = None
     is_valid_dispute: bool = False
+    # AI adjudication result (recommended_decision, confidence, reasoning,
+    # missing_evidence, resolution_path, model, analyzed_at).
+    ai_resolution: Optional[dict] = None
+    # One appeal per party. Flags + an audit list of appeal records.
+    buyer_appealed: bool = False
+    seller_appealed: bool = False
+    appeals: List[dict] = []
     created_at: str
+
+
+class DisputeAppeal(BaseModel):
+    """A party's one-time appeal of a dispute resolution."""
+    reason: str
+
+
+class AIDisputeDecision(BaseModel):
+    """Admin action on an AI-recommended dispute."""
+    action: str  # "approve" (use AI decision) or "override" (use admin decision)
+    decision: Optional[str] = None  # required for override: "Favour Buyer" | "Favour Seller"
+    notes: str = ""
 
 
 class DisputeCreate(BaseModel):

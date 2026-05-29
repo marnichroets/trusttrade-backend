@@ -15,7 +15,7 @@ from core.database import get_database
 from core.security import get_user_from_token, require_admin
 from models.user import User
 from models.transaction import Transaction
-from models.dispute import Dispute, DisputeStatusUpdate
+from models.dispute import Dispute, DisputeStatusUpdate, AIDisputeDecision
 from models.common import (
     RiskAssessment, AdminRefundRequest, AdminReleaseRequest,
     AdminNotesRequest, AdminStatusOverride, AdminSendEmail,
@@ -518,7 +518,11 @@ async def list_all_disputes_admin(request: Request):
     projection = {
         "_id": 0, "dispute_id": 1, "transaction_id": 1, "raised_by_user_id": 1,
         "raised_by_name": 1, "raised_by_email": 1, "dispute_type": 1, "description": 1,
-        "status": 1, "created_at": 1, "resolution": 1, "resolved_at": 1
+        "status": 1, "created_at": 1, "resolution": 1, "resolved_at": 1,
+        # AI adjudication summary so the dashboard can show decision/confidence/path
+        # and surface appeals at a glance.
+        "ai_resolution": 1, "review_status": 1, "resolved_by": 1,
+        "buyer_appealed": 1, "seller_appealed": 1,
     }
     disputes = await db.disputes.find({}, projection).sort("created_at", -1).to_list(1000)
     return disputes
@@ -549,9 +553,12 @@ async def get_admin_dispute_detail(request: Request, dispute_id: str):
                     "user_id": buyer_doc.get("user_id"),
                     "name": buyer_doc.get("name"),
                     "email": buyer_doc.get("email"),
-                    "phone": buyer_doc.get("phone")
+                    "phone": buyer_doc.get("phone"),
+                    "trust_score": buyer_doc.get("trust_score", 50),
+                    "total_trades": buyer_doc.get("total_trades", 0),
+                    "valid_disputes_count": buyer_doc.get("valid_disputes_count", 0),
                 }
-        
+
         if transaction.get("seller_email"):
             seller_doc = await db.users.find_one({"email": transaction["seller_email"]}, {"_id": 0})
             if seller_doc:
@@ -559,7 +566,10 @@ async def get_admin_dispute_detail(request: Request, dispute_id: str):
                     "user_id": seller_doc.get("user_id"),
                     "name": seller_doc.get("name"),
                     "email": seller_doc.get("email"),
-                    "phone": seller_doc.get("phone")
+                    "phone": seller_doc.get("phone"),
+                    "trust_score": seller_doc.get("trust_score", 50),
+                    "total_trades": seller_doc.get("total_trades", 0),
+                    "valid_disputes_count": seller_doc.get("valid_disputes_count", 0),
                 }
     
     return {
@@ -622,6 +632,78 @@ async def admin_update_dispute(request: Request, dispute_id: str, status_data: D
         )
     
     return {"message": f"Dispute status updated to {status_data.status}", "dispute_id": dispute_id}
+
+
+@router.post("/disputes/{dispute_id}/ai-decision")
+async def admin_act_on_ai_decision(request: Request, dispute_id: str, body: AIDisputeDecision):
+    """Admin approves the AI's recommended decision, or overrides it with their own.
+
+    Either way the dispute is resolved and both parties are notified. The AI
+    recommendation stays on record (ai_resolution) for the audit trail.
+    """
+    db = get_database()
+    admin = await require_admin(request, db)
+
+    dispute = await db.disputes.find_one({"dispute_id": dispute_id}, {"_id": 0})
+    if not dispute:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+
+    ai_resolution = dispute.get("ai_resolution") or {}
+    if not ai_resolution:
+        raise HTTPException(status_code=400, detail="No AI recommendation exists for this dispute yet")
+
+    action = (body.action or "").lower()
+    if action == "approve":
+        final_decision = ai_resolution.get("recommended_decision")
+        if final_decision not in ("Favour Buyer", "Favour Seller"):
+            raise HTTPException(status_code=400, detail="AI recommendation has no valid decision to approve")
+    elif action == "override":
+        final_decision = body.decision
+        if final_decision not in ("Favour Buyer", "Favour Seller"):
+            raise HTTPException(status_code=400, detail="Override requires decision = 'Favour Buyer' or 'Favour Seller'")
+    else:
+        raise HTTPException(status_code=400, detail="action must be 'approve' or 'override'")
+
+    favoured = final_decision.replace("Favour ", "").lower()
+    resolution_text = (
+        f"Resolved by admin ({'approved AI recommendation' if action == 'approve' else 'overrode AI recommendation'}): "
+        f"in favour of {favoured}."
+    )
+
+    update = {
+        "status": "Resolved",
+        "review_status": f"admin_{action}d",
+        "resolution": f"{resolution_text} {body.notes}".strip(),
+        "admin_decision": final_decision,
+        "admin_notes": body.notes,
+        "resolved_by": f"admin:{admin.user_id}",
+        "resolved_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": admin.user_id,
+    }
+    await db.disputes.update_one({"dispute_id": dispute_id}, {"$set": update})
+
+    transaction = await db.transactions.find_one(
+        {"transaction_id": dispute.get("transaction_id", "")}, {"_id": 0}
+    )
+    if transaction:
+        share_code = transaction.get("share_code", dispute["transaction_id"])
+        for email_key, name_key in (("buyer_email", "buyer_name"), ("seller_email", "seller_name")):
+            if transaction.get(email_key):
+                await send_dispute_resolved_email(
+                    to_email=transaction[email_key],
+                    to_name=transaction.get(name_key, "TrustTrade user"),
+                    share_code=share_code,
+                    resolution=resolution_text,
+                    admin_notes=body.notes,
+                )
+
+    logger.info(f"[AI_DISPUTE] admin {admin.user_id} {action}d dispute {dispute_id} → {final_decision}")
+    return {
+        "message": f"Dispute resolved ({action}): {final_decision}",
+        "dispute_id": dispute_id,
+        "decision": final_decision,
+    }
 
 
 # ============ STATISTICS ============

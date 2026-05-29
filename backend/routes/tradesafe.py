@@ -403,9 +403,9 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
         if delivery_method in NO_PHYSICAL_DELIVERY:
             days_to_deliver, days_to_inspect = 0, 1
         else:
-            # Physical delivery (courier, postnet, or any unknown method): allow
-            # shipping time plus a 2-day inspection window.
-            days_to_deliver, days_to_inspect = 1, 2
+            # Physical delivery (courier, postnet, or any unknown method): sellers
+            # need ~3 business days to ship a parcel, plus a 2-day inspection window.
+            days_to_deliver, days_to_inspect = 3, 2
         result = await create_tradesafe_transaction(
             internal_reference=data.transaction_id,
             title=f"TrustTrade - {transaction['item_description'][:50]}",

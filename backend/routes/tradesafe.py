@@ -392,13 +392,20 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
         _txn_fa = (transaction.get("fee_allocation") or "BUYER").upper()
         if _txn_fa not in ("BUYER", "SELLER", "BUYER_SELLER"):
             _txn_fa = "BUYER"
-        delivery_method = transaction.get("delivery_method", "courier")
-        if delivery_method in ("digital", "instant", "immediate"):
-            days_to_deliver, days_to_inspect = 1, 1
-        elif delivery_method == "bank_deposit":
-            days_to_deliver, days_to_inspect = 1, 1
+        delivery_method = (transaction.get("delivery_method") or "courier").strip().lower()
+        # Methods with no physical handover (instant payment rails / digital goods)
+        # have nothing to ship, so daysToDeliver=0 (deliver immediately) plus a single
+        # inspection day → funds release the next business day instead of two.
+        NO_PHYSICAL_DELIVERY = {
+            "bank_deposit", "instant_eft", "card", "digital", "ozow",
+            "instant", "immediate",
+        }
+        if delivery_method in NO_PHYSICAL_DELIVERY:
+            days_to_deliver, days_to_inspect = 0, 1
         else:
-            days_to_deliver, days_to_inspect = 3, 2
+            # Physical delivery (courier, postnet, or any unknown method): allow
+            # shipping time plus a 2-day inspection window.
+            days_to_deliver, days_to_inspect = 1, 2
         result = await create_tradesafe_transaction(
             internal_reference=data.transaction_id,
             title=f"TrustTrade - {transaction['item_description'][:50]}",

@@ -962,6 +962,18 @@ async def create_tradesafe_transaction(
 
     result = await execute_graphql(mutation, variables)
 
+    # Defensive fallback: the schema permits daysToDeliver=0 (nullable Float, no
+    # minimum), but if a given TradeSafe environment rejects it at runtime we must
+    # never let transaction creation break. Retry exactly once with daysToDeliver=1.
+    if days_to_deliver == 0 and result and result.get('errors'):
+        rejection = (result['errors'][0] or {}).get('message', 'unknown error')
+        logger.warning(
+            f"[DAYS_TO_DELIVER_FALLBACK] TradeSafe rejected daysToDeliver=0 for "
+            f"ref={internal_reference!r} ({rejection!r}); retrying with daysToDeliver=1"
+        )
+        variables['input']['allocations']['create'][0]['daysToDeliver'] = 1
+        result = await execute_graphql(mutation, variables)
+
     logger.info("=== TRANSACTION CREATE RESPONSE ===")
     logger.info(f"Result: {result}")
 

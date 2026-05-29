@@ -14,6 +14,7 @@ import anthropic
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from core.config import settings
 from core.database import get_database
 from core.security import get_user_from_token
 
@@ -29,6 +30,31 @@ DISPUTE_MODEL = "claude-sonnet-4-20250514"
 # Confidence thresholds (percent) that select the resolution path.
 AUTO_RESOLVE_MIN_CONFIDENCE = 90   # strictly greater than → AI auto-resolves
 AI_RECOMMEND_MIN_CONFIDENCE = 70   # 70–90 → admin approves/overrides; below → manual review
+
+# A dispute at or above this confidence still gets a mandatory admin alert (email).
+COMPLEX_CASE_CONFIDENCE = 70       # below this → always notify admin
+URGENT_SMS_CONFIDENCE = 50         # below this → also SMS the admin
+HIGH_VALUE_THRESHOLD = 2000.0      # transactions above R2,000 always go to an admin
+
+# South African consumer / e-commerce law context the adjudicator must apply.
+# Keeps the decision grounded in CPA + ECTA and standard escrow-marketplace practice.
+SA_CONSUMER_LAW_CONTEXT = """Apply South African consumer and e-commerce law together with standard escrow-marketplace practice:
+
+CONSUMER PROTECTION ACT 68 of 2008 (CPA):
+- s55: the consumer is entitled to goods of good quality, in good working order, free of defects, and reasonably suitable for the purpose generally intended.
+- s56: implied warranty of quality — if goods fail to satisfy s55 within 6 months, the consumer may return them for a refund, replacement or repair, at the CONSUMER's election.
+- s20: the consumer's right to return goods that do not match their description or sample.
+- The supplier (seller) bears the onus of showing the goods conformed to what was agreed.
+
+ELECTRONIC COMMUNICATIONS AND TRANSACTIONS ACT 25 of 2002 (ECTA):
+- s44: an online consumer has a 7-day cooling-off period to cancel without reason after receiving goods (limited exceptions, e.g. perishables / personalised goods).
+- s46: the supplier must deliver within the agreed period (or 30 days); failing that the consumer may cancel and is owed a full refund.
+- The supplier must keep, and be able to produce, proof of delivery.
+
+STANDARD ESCROW / MARKETPLACE PRINCIPLES:
+- The SELLER carries the burden of proving the item was delivered (courier tracking, signed POD, photos). No proof of delivery → the buyer is protected.
+- The BUYER carries the burden of substantiating a 'not as described' / 'damaged' claim with specifics and evidence (photos, a precise description of the defect).
+- Escrow exists to protect the paying buyer. BE CONSERVATIVE: when the evidence is genuinely balanced, or a key fact is unproven, favour the BUYER."""
 
 # When False, a >90% recommendation is still recorded and flagged for a final
 # admin click instead of closing the dispute unattended. Fund movement
@@ -228,6 +254,8 @@ async def analyze_dispute(dispute_id: str, dispute_doc: dict, transaction_doc: d
 
         prompt = f"""You are the dispute-resolution adjudicator for TrustTrade, a South African peer-to-peer escrow platform. Review ALL available evidence below and decide which party the held escrow funds should favour.
 
+{SA_CONSUMER_LAW_CONTEXT}
+
 TRANSACTION
 - Item: {transaction_doc.get('item_description', 'Unknown item')}
 - Amount: R{transaction_doc.get('item_price', 0):,.2f}
@@ -251,19 +279,30 @@ PARTY HISTORY
 - {_party_history(buyer_doc, 'Buyer')}
 - {_party_history(seller_doc, 'Seller')}
 
-Weigh courier 'delivered' status, photo evidence, the consistency of each statement against the facts, and each party's track record. Be conservative: only assign confidence above 90 when the evidence clearly points one way; assign below 70 when key evidence is missing or the parties' accounts conflict without corroboration.
+INSTRUCTIONS:
+- Apply the law and escrow principles above. Be conservative — when in doubt, favour the BUYER.
+- Only assign confidence above 90 when the evidence clearly and unambiguously points one way. Assign below 70 when key evidence is missing, the accounts conflict without corroboration, or you are unsure.
+- In "evidence_considered", list EVERY individual piece of evidence you weighed (each statement, the courier tracking, each photo set, each party's history, the delivery method) and, for each, say which party it favours and why. Do not omit anything you relied on.
 
 Return ONLY a JSON object, no markdown, no commentary:
 {{
   "recommended_decision": "Favour Buyer" or "Favour Seller",
   "confidence": <integer 0-100>,
-  "reasoning": "2-3 sentences explaining why, in plain English",
-  "missing_evidence": ["evidence that would have made this clearer", "..."]
+  "reasoning": "2-3 sentences explaining why, in plain English, citing the law/principle that applies",
+  "evidence_considered": [
+    {{"item": "the piece of evidence", "favours": "buyer|seller|neither", "why": "what it shows and how it influenced the decision"}}
+  ],
+  "missing_evidence": ["evidence that would have made this clearer", "..."],
+  "seller_has_delivery_proof": <true if there is credible proof the item was delivered (e.g. courier shows delivered, signed POD, photos), else false>,
+  "dispute_is_about_delivery": <true if the core complaint is non-delivery / item not received, else false>,
+  "buyer_complaint_is_specific": <true if the buyer gave a specific, substantiated complaint, false if it is a bare 'not received'/'not happy' with no detail>,
+  "conflicting_evidence": <true if both parties present evidence that directly contradicts each other>,
+  "fraud_indicators": ["any sign of fraud or bad faith by either party", "..."]
 }}"""
 
         response = await client.messages.create(
             model=DISPUTE_MODEL,
-            max_tokens=768,
+            max_tokens=1200,
             messages=[{"role": "user", "content": prompt}],
         )
 
@@ -271,44 +310,195 @@ Return ONLY a JSON object, no markdown, no commentary:
         result = _extract_json(text)
 
         # Normalise the model output defensively.
-        decision = result.get("recommended_decision", "")
-        if decision not in ("Favour Buyer", "Favour Seller"):
-            decision = "Favour Buyer" if "buyer" in str(decision).lower() else "Favour Seller"
+        ai_decision = result.get("recommended_decision", "")
+        if ai_decision not in ("Favour Buyer", "Favour Seller"):
+            ai_decision = "Favour Buyer" if "buyer" in str(ai_decision).lower() else "Favour Seller"
         try:
             confidence = int(round(float(result.get("confidence", 0))))
         except (TypeError, ValueError):
             confidence = 0
         confidence = max(0, min(100, confidence))
+
+        # ---- Objective facts (independent of the model) used for hard rules. ----
+        tracking_delivered = "delivered" in tracking_summary.lower()
+        raiser_is_buyer = raiser_role == "buyer"
+        buyer_raised_evidence = bool(evidence_photos) and raiser_is_buyer
+        seller_has_proof = bool(result.get("seller_has_delivery_proof")) or tracking_delivered
+        about_delivery = bool(result.get("dispute_is_about_delivery"))
+        complaint_specific = bool(result.get("buyer_complaint_is_specific", True))
+        conflicting = bool(result.get("conflicting_evidence"))
+        fraud_indicators = [f for f in (result.get("fraud_indicators") or []) if str(f).strip()]
+
+        # ---- Deterministic hard rules (override the model, "regardless of confidence"). ----
+        decision = ai_decision
+        forced_rule = None
+        if about_delivery and not seller_has_proof:
+            # Standard escrow / ECTA s46: seller cannot prove delivery → buyer protected.
+            decision = "Favour Buyer"
+            forced_rule = "no_delivery_proof"
+        elif about_delivery and tracking_delivered and raiser_is_buyer \
+                and not complaint_specific and not buyer_raised_evidence:
+            # Bare 'not received' with no evidence, but tracking shows delivered → seller.
+            decision = "Favour Seller"
+            forced_rule = "tracking_delivered_unsubstantiated_claim"
+
         path = _resolution_path(confidence)
+
+        # ---- Complex-case detection: always notify an admin for these. ----
+        amount = float(transaction_doc.get("item_price", 0) or 0)
+        buyer_history = int((buyer_doc or {}).get("valid_disputes_count", 0) or 0)
+        seller_history = int((seller_doc or {}).get("valid_disputes_count", 0) or 0)
+
+        complex_reasons = []
+        if confidence < COMPLEX_CASE_CONFIDENCE:
+            complex_reasons.append(f"AI confidence below {COMPLEX_CASE_CONFIDENCE}% ({confidence}%)")
+        if conflicting:
+            complex_reasons.append("Both parties have conflicting evidence")
+        if amount > HIGH_VALUE_THRESHOLD:
+            complex_reasons.append(f"Transaction value above R{HIGH_VALUE_THRESHOLD:,.0f} (R{amount:,.2f})")
+        if buyer_history > 0 or seller_history > 0:
+            complex_reasons.append(
+                f"Previous dispute history (buyer: {buyer_history}, seller: {seller_history})"
+            )
+        if tracking_delivered and raiser_is_buyer and about_delivery:
+            complex_reasons.append("Courier tracking ('delivered') contradicts the buyer's claim")
+        if fraud_indicators:
+            complex_reasons.append("Fraud indicators detected: " + "; ".join(fraud_indicators[:5]))
+        if forced_rule and decision != ai_decision:
+            complex_reasons.append(
+                f"A deterministic rule ({forced_rule}) overrode the AI's recommendation ({ai_decision})"
+            )
 
         ai_resolution = {
             "recommended_decision": decision,
+            "ai_raw_decision": ai_decision,
             "confidence": confidence,
             "reasoning": result.get("reasoning", ""),
+            "evidence_considered": result.get("evidence_considered", []) or [],
             "missing_evidence": result.get("missing_evidence", []) or [],
+            "fraud_indicators": fraud_indicators,
+            "forced_rule": forced_rule,
+            "complex_case_reasons": complex_reasons,
             "resolution_path": path,
             "model": DISPUTE_MODEL,
             "analyzed_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        await _apply_resolution_path(db, dispute_id, dispute_doc, transaction_doc, ai_resolution)
+        is_complex = bool(complex_reasons)
+        await _apply_resolution_path(
+            db, dispute_id, dispute_doc, transaction_doc, ai_resolution, is_complex=is_complex
+        )
+
+        if is_complex:
+            await _notify_admin_complex_case(
+                dispute_doc, transaction_doc, ai_resolution,
+                buyer_doc=buyer_doc, seller_doc=seller_doc,
+                buyer_statement=buyer_statement, seller_statement=seller_statement,
+                raiser_role=raiser_role, raiser_email=raiser_email,
+            )
+
         logger.info(
-            f"[AI_DISPUTE] {dispute_id}: {decision} @ {confidence}% → path={path}"
+            f"[AI_DISPUTE] {dispute_id}: {decision} @ {confidence}% → path={path} "
+            f"forced={forced_rule} complex={is_complex} ({len(complex_reasons)} reason(s))"
         )
 
     except Exception as exc:
         logger.error(f"[AI_DISPUTE] Failed for {dispute_id}: {exc}")
 
 
-async def _apply_resolution_path(db, dispute_id, dispute_doc, transaction_doc, ai_resolution):
-    """Persist the AI resolution and move the dispute down the correct path."""
+async def _admin_dispute_link(dispute_id: str) -> str:
+    """Direct link to the admin dispute page for notifications."""
+    base = (settings.FRONTEND_URL or "").rstrip("/")
+    return f"{base}/admin/dispute/{dispute_id}"
+
+
+async def _notify_admin_complex_case(
+    dispute_doc, transaction_doc, ai_resolution, *,
+    buyer_doc, seller_doc, buyer_statement, seller_statement,
+    raiser_role, raiser_email,
+):
+    """Email (and, for urgent cases, SMS) the admin about a complex dispute.
+
+    Best-effort: failures are logged but never block dispute processing.
+    """
+    dispute_id = dispute_doc.get("dispute_id", "")
+    confidence = ai_resolution.get("confidence", 0)
+    decision = ai_resolution.get("recommended_decision", "")
+    share_code = transaction_doc.get("share_code", transaction_doc.get("transaction_id", ""))
+    admin_link = await _admin_dispute_link(dispute_id)
+
+    destination = settings.ADMIN_ALERT_EMAIL or settings.ADMIN_EMAIL
+    if destination:
+        try:
+            from email_service import send_admin_dispute_alert_email
+            await send_admin_dispute_alert_email(
+                destination=destination,
+                dispute_id=dispute_id,
+                share_code=share_code,
+                item_description=transaction_doc.get("item_description", "Unknown item"),
+                amount=float(transaction_doc.get("item_price", 0) or 0),
+                dispute_type=dispute_doc.get("dispute_type", "Other"),
+                raised_by_role=raiser_role,
+                raised_by_email=raiser_email,
+                buyer_name=transaction_doc.get("buyer_name", "Buyer"),
+                seller_name=transaction_doc.get("seller_name", "Seller"),
+                buyer_statement=buyer_statement,
+                seller_statement=seller_statement,
+                reason=dispute_doc.get("description", "(none)"),
+                ai_decision=decision,
+                ai_confidence=confidence,
+                ai_reasoning=ai_resolution.get("reasoning", ""),
+                missing_evidence=ai_resolution.get("missing_evidence", []),
+                suggested_resolution=decision,
+                flag_reasons=ai_resolution.get("complex_case_reasons", []),
+                admin_link=admin_link,
+            )
+        except Exception as exc:
+            logger.error(f"[AI_DISPUTE] Admin alert email failed for {dispute_id}: {exc}")
+    else:
+        logger.warning(f"[AI_DISPUTE] No admin alert email configured; skipping email for {dispute_id}")
+
+    # Urgent cases also get an SMS so the admin acts immediately.
+    if confidence < URGENT_SMS_CONFIDENCE and settings.ADMIN_ALERT_PHONE:
+        try:
+            from sms_service import send_admin_dispute_alert_sms
+            await send_admin_dispute_alert_sms(
+                to_phone=settings.ADMIN_ALERT_PHONE,
+                dispute_id=dispute_id,
+                confidence=confidence,
+                decision=decision,
+                share_code=share_code,
+                admin_link=admin_link,
+            )
+        except Exception as exc:
+            logger.error(f"[AI_DISPUTE] Admin alert SMS failed for {dispute_id}: {exc}")
+
+    # Record that the admin was notified, for the audit trail / dashboard.
+    try:
+        await get_database().disputes.update_one(
+            {"dispute_id": dispute_id},
+            {"$set": {
+                "ai_resolution.admin_notified": True,
+                "ai_resolution.admin_notified_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+    except Exception as exc:
+        logger.error(f"[AI_DISPUTE] Failed to flag admin_notified for {dispute_id}: {exc}")
+
+
+async def _apply_resolution_path(db, dispute_id, dispute_doc, transaction_doc, ai_resolution, is_complex=False):
+    """Persist the AI resolution and move the dispute down the correct path.
+
+    Complex cases are never auto-resolved — they are always routed to an admin,
+    even at high confidence, so a human makes the final call.
+    """
     path = ai_resolution["resolution_path"]
     decision = ai_resolution["recommended_decision"]
     confidence = ai_resolution["confidence"]
 
     update = {"ai_resolution": ai_resolution}
 
-    if path == "auto_resolve" and AI_AUTO_RESOLVE_ENABLED:
+    if path == "auto_resolve" and AI_AUTO_RESOLVE_ENABLED and not is_complex:
         # >90% confidence: AI closes the dispute and both parties are notified.
         # The actual refund/release remains a separate human-controlled action.
         resolution_text = f"AI auto-resolved in favour of {decision.replace('Favour ', '').lower()} ({confidence}% confidence)."

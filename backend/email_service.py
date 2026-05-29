@@ -1329,6 +1329,156 @@ async def send_dispute_resolved_email(
         return False
 
 
+async def send_admin_dispute_alert_email(
+    *,
+    destination: str,
+    dispute_id: str,
+    share_code: str,
+    item_description: str,
+    amount: float,
+    dispute_type: str,
+    raised_by_role: str,
+    raised_by_email: str,
+    buyer_name: str,
+    seller_name: str,
+    buyer_statement: str,
+    seller_statement: str,
+    reason: str,
+    ai_decision: str,
+    ai_confidence: int,
+    ai_reasoning: str,
+    missing_evidence: list,
+    suggested_resolution: str,
+    flag_reasons: list,
+    admin_link: str,
+) -> bool:
+    """Notify the admin that a dispute needs human attention (complex case).
+
+    Includes a full dispute summary, the AI's reasoning + confidence, what
+    evidence is missing, a direct link to the admin dispute page, and the
+    suggested resolution with reasoning.
+    """
+    def esc(v):
+        s = "" if v is None else str(v)
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def _row(label, value, bg):
+        return (
+            f'<tr>'
+            f'<td style="padding:10px 16px;background:{bg};font-size:11px;text-transform:uppercase;'
+            f'letter-spacing:0.6px;color:{TEXT_MUTED};width:38%;vertical-align:top;font-weight:600;'
+            f'border-bottom:1px solid {BORDER_CLR};">{label}</td>'
+            f'<td style="padding:10px 16px;background:{bg};font-size:14px;color:{TEXT_DARK};'
+            f'font-weight:500;vertical-align:top;border-bottom:1px solid {BORDER_CLR};">{value}</td>'
+            f'</tr>'
+        )
+
+    summary_rows = [
+        ("Dispute ID", dispute_id),
+        ("Reference", share_code),
+        ("Item", esc(item_description)),
+        ("Amount", f"R {amount:,.2f}"),
+        ("Type", esc(dispute_type)),
+        ("Raised by", f"{raised_by_role} ({esc(raised_by_email)})"),
+        ("Buyer", esc(buyer_name)),
+        ("Seller", esc(seller_name)),
+    ]
+    summary_html = "".join(
+        _row(lbl, val, "#F9FAFB" if i % 2 == 0 else "#FFFFFF")
+        for i, (lbl, val) in enumerate(summary_rows)
+    )
+
+    flags_html = "".join(
+        f'<li style="margin-bottom:6px;color:{TEXT_DARK};font-size:14px;">{esc(r)}</li>'
+        for r in (flag_reasons or [])
+    ) or f'<li style="color:{TEXT_MUTED};font-size:14px;">(none recorded)</li>'
+
+    missing_html = "".join(
+        f'<li style="margin-bottom:6px;color:{TEXT_DARK};font-size:14px;">{esc(m)}</li>'
+        for m in (missing_evidence or [])
+    ) or f'<li style="color:{TEXT_MUTED};font-size:14px;">None — evidence was sufficient.</li>'
+
+    conf_color = "#16A34A" if ai_confidence >= 90 else ("#D97706" if ai_confidence >= 70 else "#DC2626")
+
+    subject = f"⚠️ Dispute needs review: {share_code} ({ai_confidence}% AI confidence)"
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#F0F2F5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table role="presentation" style="width:100%;border-collapse:collapse;background:#F0F2F5;">
+<tr><td style="padding:32px 16px;">
+  <table role="presentation" style="max-width:600px;margin:0 auto;border-collapse:collapse;width:100%;">
+    <tr>
+      <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
+        <div style="font-family:'Space Grotesk',Arial,sans-serif;font-size:24px;font-weight:700;margin:0 auto 8px;display:inline-block;"><span style="color:#1a73e8;">Trust</span><span style="color:#E6EDF3;">Trade</span></div>
+        <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">DISPUTE ALERT — ACTION REQUIRED</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:white;padding:28px 32px 0;">
+        <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:{BRAND_NAVY};">A dispute needs your review</h1>
+        <p style="font-size:14px;color:{TEXT_MUTED};margin:0 0 20px;">The AI flagged this dispute as a complex case. It has not been auto-resolved.</p>
+      </td>
+    </tr>
+
+    <!-- Why flagged -->
+    <tr><td style="background:white;padding:0 32px 8px;">
+      <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:14px 18px;">
+        <p style="margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:#B91C1C;font-weight:700;">Why this was flagged</p>
+        <ul style="margin:0;padding-left:18px;">{flags_html}</ul>
+      </div>
+    </td></tr>
+
+    <!-- Dispute summary -->
+    <tr><td style="background:white;padding:20px 32px 0;">
+      <table style="width:100%;border-collapse:collapse;border:1px solid {BORDER_CLR};">
+        <tr><td colspan="2" style="padding:10px 16px;background:{BRAND_NAVY};font-size:10px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,0.65);font-weight:700;">DISPUTE SUMMARY</td></tr>
+        {summary_html}
+      </table>
+    </td></tr>
+
+    <!-- Reason + statements -->
+    <tr><td style="background:white;padding:18px 32px 0;">
+      <p style="margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:{TEXT_MUTED};font-weight:700;">Reason given</p>
+      <p style="margin:0 0 14px;font-size:14px;color:{TEXT_DARK};white-space:pre-wrap;">{esc(reason)}</p>
+      <p style="margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:{TEXT_MUTED};font-weight:700;">Buyer statement</p>
+      <p style="margin:0 0 12px;font-size:14px;color:{TEXT_DARK};white-space:pre-wrap;">{esc(buyer_statement)}</p>
+      <p style="margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:{TEXT_MUTED};font-weight:700;">Seller statement</p>
+      <p style="margin:0 0 4px;font-size:14px;color:{TEXT_DARK};white-space:pre-wrap;">{esc(seller_statement)}</p>
+    </td></tr>
+
+    <!-- AI analysis -->
+    <tr><td style="background:white;padding:18px 32px 0;">
+      <div style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:6px;padding:16px 18px;">
+        <p style="margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:#6D28D9;font-weight:700;">AI Analysis</p>
+        <p style="margin:0 0 8px;font-size:14px;color:{TEXT_DARK};">
+          <strong>Suggested resolution:</strong> {esc(suggested_resolution)}
+          &nbsp;<span style="background:{conf_color};color:white;font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;">{ai_confidence}% confident</span>
+        </p>
+        <p style="margin:0 0 12px;font-size:14px;color:{TEXT_DARK};line-height:1.55;">{esc(ai_reasoning)}</p>
+        <p style="margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:{TEXT_MUTED};font-weight:700;">Evidence missing</p>
+        <ul style="margin:0;padding-left:18px;">{missing_html}</ul>
+      </div>
+    </td></tr>
+
+    <!-- CTA -->
+    <tr><td style="background:white;padding:22px 32px 30px;text-align:center;">
+      <a href="{admin_link}" style="display:inline-block;background:{BRAND_NAVY};color:white;text-decoration:none;font-size:14px;font-weight:700;padding:13px 28px;border-radius:6px;">Open dispute in admin →</a>
+    </td></tr>
+
+    <tr>
+      <td style="background:{BRAND_NAVY};padding:20px 32px;text-align:center;">
+        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.35);">TrustTrade internal notification &mdash; do not forward</p>
+      </td>
+    </tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>"""
+    return await send_email(destination, "TrustTrade Admin", subject, html)
+
+
 async def send_refund_email(
     to_email: str,
     to_name: str,

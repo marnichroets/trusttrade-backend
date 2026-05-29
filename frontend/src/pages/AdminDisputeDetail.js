@@ -6,6 +6,7 @@ import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { AdminNavbar, Breadcrumbs } from '../components/AdminNavbar';
+import { AIRecommendationCard } from '../components/AIDisputeRecommendation';
 import api, { API_URL } from '../utils/api';
 import { toast } from 'sonner';
 import { 
@@ -232,7 +233,11 @@ function AdminDisputeDetail() {
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            
+
+            {/* AI Recommendation — runs automatically when a dispute is opened.
+                Approve uses the AI's decision; Override lets the admin choose. */}
+            <AIRecommendationCard dispute={dispute} onResolved={fetchData} />
+
             {/* Dispute Details */}
             <Card className="p-6" style={{ backgroundColor: COLORS.background }}>
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.primary }}>
@@ -390,7 +395,8 @@ function AdminDisputeDetail() {
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2" style={{ color: COLORS.primary }}>
                 <User className="w-5 h-5" /> Party Statements
               </h2>
-              <div className="space-y-4">
+              {/* Side-by-side: buyer (left) vs seller (right) */}
+              <div className="grid md:grid-cols-2 gap-4">
                 {/* Buyer Statement */}
                 <div className="p-4 rounded border" style={{ borderColor: COLORS.border }}>
                   <div className="flex items-center gap-2 mb-2">

@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { AdminNavbar, Breadcrumbs } from '../components/AdminNavbar';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { ConfidenceBadge, ResolutionPathBadge } from '../components/AIDisputeRecommendation';
 import api from '../utils/api';
 import { toast } from 'sonner';
-import { 
-  AlertCircle, Search, ChevronRight, Filter
+import {
+  AlertCircle, Search, ChevronRight, Filter, CheckCircle, Loader2
 } from 'lucide-react';
 
 const COLORS = {
@@ -40,10 +42,28 @@ function AdminDisputes() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [approvingId, setApprovingId] = useState(null);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  const handleQuickApprove = async (e, dispute) => {
+    e.stopPropagation();  // don't navigate into the row
+    setApprovingId(dispute.dispute_id);
+    try {
+      await api.post(`/admin/disputes/${dispute.dispute_id}/ai-decision`, {
+        action: 'approve',
+        notes: 'Approved AI recommendation from dispute dashboard',
+      });
+      toast.success(`Approved: ${dispute.ai_resolution?.recommended_decision}`);
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Approve failed');
+    } finally {
+      setApprovingId(null);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -160,6 +180,7 @@ function AdminDisputes() {
                   <th className="text-left p-4 font-medium" style={{ color: COLORS.subtext }}>Transaction</th>
                   <th className="text-left p-4 font-medium" style={{ color: COLORS.subtext }}>Type</th>
                   <th className="text-left p-4 font-medium" style={{ color: COLORS.subtext }}>Raised By</th>
+                  <th className="text-left p-4 font-medium" style={{ color: COLORS.subtext }}>AI Recommendation</th>
                   <th className="text-left p-4 font-medium" style={{ color: COLORS.subtext }}>Status</th>
                   <th className="text-left p-4 font-medium" style={{ color: COLORS.subtext }}>Created</th>
                   <th className="text-left p-4 font-medium" style={{ color: COLORS.subtext }}></th>
@@ -192,6 +213,36 @@ function AdminDisputes() {
                       {d.raised_by_email || d.raised_by || '-'}
                     </td>
                     <td className="p-4">
+                      {d.ai_resolution ? (
+                        <div className="flex flex-col gap-1.5 items-start">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <ResolutionPathBadge path={d.ai_resolution.resolution_path} />
+                            <ConfidenceBadge confidence={d.ai_resolution.confidence} />
+                          </div>
+                          <span className="text-xs" style={{ color: COLORS.subtext }}>
+                            {d.ai_resolution.recommended_decision}
+                          </span>
+                          {/* Quick approve for AI-recommended disputes not yet resolved */}
+                          {d.ai_resolution.resolution_path === 'ai_recommends' &&
+                            !d.status?.toLowerCase().includes('resolved') && (
+                            <Button
+                              size="sm"
+                              onClick={(e) => handleQuickApprove(e, d)}
+                              disabled={approvingId === d.dispute_id}
+                              className="h-7 text-white"
+                              style={{ backgroundColor: COLORS.green }}
+                            >
+                              {approvingId === d.dispute_id
+                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                : <><CheckCircle className="w-3 h-3 mr-1" /> Approve</>}
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs" style={{ color: COLORS.subtext }}>—</span>
+                      )}
+                    </td>
+                    <td className="p-4">
                       <Badge style={{ backgroundColor: getStatusColor(d.status), color: 'white' }}>
                         {d.status}
                       </Badge>
@@ -206,7 +257,7 @@ function AdminDisputes() {
                 ))}
                 {filteredDisputes.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center" style={{ color: COLORS.subtext }}>
+                    <td colSpan={8} className="p-8 text-center" style={{ color: COLORS.subtext }}>
                       No disputes found
                     </td>
                   </tr>

@@ -12,6 +12,7 @@ import NewTransaction from './pages/NewTransaction';
 import TransactionsList from './pages/TransactionsList';
 import TransactionDetail from './pages/TransactionDetail';
 import Disputes from './pages/Disputes';
+import UserDisputeDetail from './pages/UserDisputeDetail';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminTransactions from './pages/AdminTransactions';
 import AdminUsers from './pages/AdminUsers';
@@ -111,7 +112,8 @@ function AppRouter() {
       <Route path="/transactions" element={<ProtectedRoute><TransactionsList /></ProtectedRoute>} />
       <Route path="/transactions/:transactionId" element={<ProtectedRoute><TransactionDetail /></ProtectedRoute>} />
       <Route path="/disputes-dashboard" element={<ProtectedRoute><Disputes /></ProtectedRoute>} />
-      
+      <Route path="/dispute/:disputeId" element={<ProtectedRoute><UserDisputeDetail /></ProtectedRoute>} />
+
       {/* Admin Routes */}
       <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
       <Route path="/admin/monitoring" element={<ProtectedRoute><AdminMonitoring /></ProtectedRoute>} />

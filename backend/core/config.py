@@ -82,6 +82,7 @@ class Settings:
 
     # Admin
     ADMIN_ALERT_EMAIL: str = os.environ.get('ADMIN_ALERT_EMAIL', '')
+    ADMIN_ALERT_PHONE: str = os.environ.get('ADMIN_ALERT_PHONE', '')  # SMS for urgent dispute alerts
     ADMIN_EMAIL: str = os.environ.get('ADMIN_EMAIL', '')  # Primary admin email
     ADMIN_RESET_SECRET: str = os.environ.get('ADMIN_RESET_SECRET', '')
     ADMIN_RESET_SECRET: str = os.environ.get('ADMIN_RESET_SECRET', '')

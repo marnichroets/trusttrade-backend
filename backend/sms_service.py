@@ -286,6 +286,27 @@ async def send_dispute_sms(
     return await send_sms(to_phone, message)
 
 
+async def send_admin_dispute_alert_sms(
+    to_phone: str,
+    dispute_id: str,
+    confidence: int,
+    decision: str,
+    share_code: str,
+    admin_link: str,
+) -> Dict[str, Any]:
+    """Urgent SMS to the admin for low-confidence / high-risk disputes.
+
+    Sent only for the most urgent cases (e.g. AI confidence below 50%) so the
+    admin can step in immediately rather than waiting for the email.
+    """
+    short_id = dispute_id.replace("disp_", "")[:8]
+    message = (
+        f"TrustTrade URGENT: Dispute {short_id} ({share_code}) needs review now. "
+        f"AI {confidence}% confident, leaning '{decision}'. Review: {admin_link}"
+    )
+    return await send_sms(to_phone, message)
+
+
 def create_otp_record(phone: str) -> Dict[str, Any]:
     """
     Create a new OTP record for storage.

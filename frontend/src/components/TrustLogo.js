@@ -1,50 +1,35 @@
-import { useState } from 'react';
+// The PNG at /TrustTrade_Logo.png already contains BOTH the shield and the
+// "TrustTrade" wordmark, so this component renders just the image — no SVG, no
+// separate text span (which would duplicate the wordmark baked into the PNG).
+
+const HEIGHTS = {
+  xs:      24,
+  small:   28,
+  default: 36,
+  large:   48,
+  xlarge:  56,
+  hero:    64,
+};
 
 export function TrustLogo({ size = 'default', className = '', dark = false }) {
-  const [imgError, setImgError] = useState(false);
-
-  const s = {
-    xs:      { box: 22, fontSize: 14, gap: 6 },
-    small:   { box: 28, fontSize: 18, gap: 8 },
-    default: { box: 32, fontSize: 20, gap: 8 },
-    large:   { box: 38, fontSize: 24, gap: 10 },
-    xlarge:  { box: 44, fontSize: 28, gap: 10 },
-    hero:    { box: 52, fontSize: 34, gap: 12 },
-  }[size] || { box: 32, fontSize: 20, gap: 8 };
+  const height = HEIGHTS[size] || 36;
 
   return (
     <div
-      style={{ display: 'flex', alignItems: 'center', gap: s.gap }}
+      style={{ display: 'flex', alignItems: 'center', gap: 8 }}
       className={className}
       data-testid="trusttrade-logo"
     >
-      {!imgError ? (
-        <img
-          src="/logo.png"
-          alt="TrustTrade"
-          width={s.box}
-          height={s.box}
-          style={{ flexShrink: 0, objectFit: 'contain' }}
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        <svg width={s.box} height={s.box} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-          <path d="M12 2L3 6v6c0 5.5 3.8 10.7 9 12 5.2-1.3 9-6.5 9-12V6L12 2z" fill="#1a73e8"/>
-          <rect x="9.8" y="9.8" width="4.4" height="3.6" rx="0.8" fill="white"/>
-          <path d="M10.8 9.8V8.2a1.2 1.2 0 012.4 0v1.6" stroke="white" strokeWidth="1.3" strokeLinecap="round" fill="none"/>
-          <path d="M7 14l3 3 7-7" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      )}
-      <span style={{
-        fontFamily: "'Space Grotesk', sans-serif",
-        fontWeight: 700,
-        fontSize: s.fontSize,
-        letterSpacing: '-0.5px',
-        lineHeight: 1,
-        whiteSpace: 'nowrap',
-      }}>
-        <span style={{ color: '#1a73e8' }}>Trust</span><span style={{ color: '#E6EDF3' }}>Trade</span>
-      </span>
+      <img
+        src="/TrustTrade_Logo.png"
+        alt="TrustTrade"
+        style={{
+          height,
+          width: 'auto',
+          // On dark backgrounds (navbar/sidebar) lift the logo slightly.
+          ...(dark ? { filter: 'brightness(1.1)' } : {}),
+        }}
+      />
     </div>
   );
 }

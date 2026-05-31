@@ -432,14 +432,15 @@ async def process_webhook(
         if email_sent:
             notifications_sent.append("seller_email")
         
-        # SMS to seller
+        # SMS to seller — funds on the way (with reference + estimated arrival date)
         if transaction.get("seller_phone"):
             await send_sms_with_tracking(
                 db, transaction_id, "funds_released_seller_sms",
                 transaction["seller_phone"],
                 sms_service.send_funds_released_sms,
                 to_phone=transaction["seller_phone"],
-                message=f"TrustTrade: R{net_amount:.2f} has been released to your account. Ref: {share_code}"
+                amount=net_amount,
+                reference=share_code,
             )
             notifications_sent.append("seller_sms")
     

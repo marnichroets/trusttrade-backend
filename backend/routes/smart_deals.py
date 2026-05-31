@@ -533,22 +533,13 @@ async def approve_deal(deal_id: str, request: Request):
         )
         logger.info(f"[SMART_DEAL] withdrawal result for {deal_id}: {withdrawal_result}")
 
-        # Same "funds released" email a normal transaction sends to its seller.
-        # send_email_with_tracking dedups with the webhook FUNDS_RELEASED path.
-        import email_service
-        from webhook_handler import send_email_with_tracking, EmailEvent
-        _src = latest_deal or deal
-        _seller_email = _src.get("seller_email") or _src.get("freelancer_email", "")
-        asyncio.create_task(_fire_email(send_email_with_tracking(
-            db, deal_id, EmailEvent.FUNDS_RELEASED_SELLER, _seller_email,
-            email_service.send_funds_released_email,
-            to_email=_seller_email,
-            to_name=_src.get("seller_name") or _src.get("freelancer_name") or _seller_email,
-            share_code=_src.get("share_code", deal_id),
-            item_description=_src.get("item_description") or _src.get("title", "Digital work"),
-            amount=float(_src.get("item_price") or _src.get("amount") or 0),
-            net_amount=float(net_amount or 0),
-        )))
+        # Tell the freelancer their funds are on the way — same "funds on their way"
+        # email + SMS a normal transaction sends, deduped against the webhook
+        # FUNDS_RELEASED path. Ensure net_amount is present for the helper.
+        from routes.webhooks import notify_seller_funds_released
+        _src = {**(latest_deal or deal)}
+        _src.setdefault("net_amount", net_amount)
+        asyncio.create_task(_fire_email(notify_seller_funds_released(db, _src)))
     except Exception as exc:
         logger.error(f"[SMART_DEAL] Payout failed for {deal_id}: {exc}")
         await db.transactions.update_one(

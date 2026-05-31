@@ -268,12 +268,34 @@ async def send_delivery_sms(
     return await send_sms(to_phone, message)
 
 
+def _format_rand(amount: float) -> str:
+    """R500 for whole amounts, R500.50 when there are cents."""
+    a = float(amount or 0)
+    return f"R{int(a)}" if a == int(a) else f"R{a:.2f}"
+
+
 async def send_funds_released_sms(
     to_phone: str,
-    amount: float
+    amount: float,
+    reference: str = "",
+    arrival_date: str = "",
 ) -> Dict[str, Any]:
-    """Send SMS when funds are released to seller."""
-    message = f"TrustTrade: R{amount:.2f} released to wallet. Bank payout release scheduled — bank clearing may take up to 2 business days."
+    """Send SMS when funds are released to the seller — tells them money is on the way.
+
+    arrival_date is computed (estimated bank arrival) when not supplied, so every
+    release path includes an expected date even if the caller doesn't pass one.
+    """
+    if not arrival_date:
+        # Imported lazily to avoid a circular import (email_service ↔ sms_service).
+        from email_service import format_payout_arrival_date
+        arrival_date = format_payout_arrival_date()
+
+    message = (
+        f"TrustTrade: {_format_rand(amount)} released! Funds are on their way to "
+        f"your FNB account. Expected by {arrival_date}."
+    )
+    if reference:
+        message += f" Ref: {reference}"
     return await send_sms(to_phone, message)
 
 

@@ -9,6 +9,7 @@ import asyncio
 import logging
 from typing import Optional
 from pathlib import Path
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 import re
 from html import unescape
@@ -892,6 +893,39 @@ def get_delivery_confirmed_email(
     return subject, html_content
 
 
+# South African Standard Time — payouts are timed against the local banking day.
+SAST = timezone(timedelta(hours=2))
+
+
+def estimated_payout_arrival(released_at: Optional[datetime] = None) -> datetime:
+    """Estimate the date funds will reflect in the seller's bank account.
+
+    Rule: released before 10:00 SAST → next business day; released at/after 10:00
+    → the business day after that. Weekends (Sat/Sun) roll forward to Monday.
+    """
+    if released_at is None:
+        now = datetime.now(SAST)
+    else:
+        if released_at.tzinfo is None:
+            released_at = released_at.replace(tzinfo=timezone.utc)
+        now = released_at.astimezone(SAST)
+
+    days_ahead = 1 if now.hour < 10 else 2
+    arrival = now + timedelta(days=days_ahead)
+    while arrival.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+        arrival += timedelta(days=1)
+    return arrival
+
+
+def format_payout_arrival_date(released_at: Optional[datetime] = None) -> str:
+    """Human-friendly arrival date, e.g. 'Tuesday, 3 June 2025'.
+
+    Built without strftime('%-d') so it works identically on Windows and Linux.
+    """
+    dt = estimated_payout_arrival(released_at)
+    return f"{dt.strftime('%A')}, {dt.day} {dt.strftime('%B %Y')}"
+
+
 def get_funds_released_email(
     recipient_name: str,
     share_code: str,
@@ -900,12 +934,17 @@ def get_funds_released_email(
     net_amount: float
 ) -> tuple[str, str]:
     """Generate funds released email content"""
-    
-    subject = f"TrustTrade: Funds Released to Wallet - {share_code}"
+
+    subject = "Your funds are on their way! 🎉"
 
     fee_amount = amount - net_amount
+    arrival_date = format_payout_arrival_date()
 
-    intro_text = f"""<strong style="color: #10b981;">Your funds have been released to wallet!</strong>
+    intro_text = f"""<strong style="color: #10b981;">Your payment has been released from escrow! 🎉</strong>
+
+    <p style="margin: 14px 0;">Your payment has been released from escrow and is being processed to your
+    <strong>FNB account</strong>. Bank transfers typically take 1–2 business days to reflect.
+    You can expect the funds by <strong>{arrival_date}</strong>.</p>
 
     <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 16px 0;">
         <strong>Payout Details:</strong><br><br>
@@ -916,27 +955,29 @@ def get_funds_released_email(
         </table>
     </div>
 
-    <p><strong>Bank payout release scheduled.</strong> Bank clearing may take up to 2 business days to your registered bank account.</p>
+    <p>Estimated arrival in your account: <strong>{arrival_date}</strong> (up to 2 business days).</p>
     """
 
     details = {
-        "Reference": share_code,
+        "Transaction / Deal ID": share_code,
+        "You Receive": f"R {net_amount:,.2f}",
+        "Estimated Arrival": arrival_date,
         "Item": item_description,
-        "Status": "Funds released to wallet"
+        "Status": "Payout processing",
     }
 
     html_content = get_base_email_template(
-        heading="Funds Released to Wallet",
+        heading="Your funds are on their way!",
         greeting_name=recipient_name,
         intro_text=intro_text,
         details=details,
         cta_text="View Transaction",
         cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
         show_how_it_works=False,
-        status_badge="Funds released to wallet",
+        status_badge="Payout processing",
         status_color="#10b981"
     )
-    
+
     return subject, html_content
 
 

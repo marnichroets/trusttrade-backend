@@ -1157,6 +1157,7 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
                 await send_funds_released_sms(
                     to_phone=seller_phone,
                     amount=net_amount,
+                    reference=transaction.get("share_code", transaction_id),
                 )
             except Exception as e:
                 logger.error(f"Failed to send funds released SMS: {e}")
@@ -1397,6 +1398,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             await send_funds_released_sms(
                 to_phone=seller_phone,
                 amount=net_amount,
+                reference=transaction.get("share_code", transaction_id),
             )
         except Exception as e:
             logger.error(f"Failed to send funds released SMS: {e}")
@@ -1578,7 +1580,11 @@ async def release_instant_funds(request: Request, transaction_id: str):
         )
     if immediate_release and seller_phone:
         try:
-            await send_funds_released_sms(to_phone=seller_phone, amount=net_amount)
+            await send_funds_released_sms(
+                to_phone=seller_phone,
+                amount=net_amount,
+                reference=transaction.get("share_code", transaction_id),
+            )
         except Exception as e:
             logger.error(f"Failed to send instant-release SMS: {e}")
 

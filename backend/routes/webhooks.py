@@ -449,40 +449,62 @@ async def handle_released_transaction(db, txn: dict, state: str = "FUNDS_RELEASE
     result = await attempt_transaction_withdrawal(db, latest or txn, source=source)
     logger.info(f"[WITHDRAWAL] released-state withdrawal result txn={txn_id}: {result}")
 
-    # For IMMEDIATE payout tokens, TradeSafe pushes funds to the seller's bank
-    # automatically — attempt_transaction_withdrawal returns early with auto_settled
-    # and never reaches the normal notification path. Send the seller email/SMS here.
-    if result.get("payout_interval") == "IMMEDIATE" and result.get("skipped"):
-        import email_service
-        import sms_service
-        from webhook_handler import (
-            EmailEvent,
-            send_email_with_tracking,
-            send_sms_with_tracking,
-        )
-        doc = latest or txn
-        await send_email_with_tracking(
-            db, txn_id, EmailEvent.FUNDS_RELEASED_SELLER,
-            doc.get("seller_email", ""),
-            email_service.send_funds_released_email,
-            to_email=doc.get("seller_email", ""),
-            to_name=doc.get("seller_name", "Seller"),
-            share_code=doc.get("share_code", txn_id),
-            item_description=doc.get("item_description", ""),
-            amount=float(doc.get("item_price") or 0),
-            net_amount=float(doc.get("net_amount") or 0),
-        )
-        if doc.get("seller_phone"):
-            await send_sms_with_tracking(
-                db, txn_id, "funds_released_sms",
-                doc.get("seller_phone", ""),
-                sms_service.send_funds_released_sms,
-                to_phone=doc.get("seller_phone", ""),
-                amount=float(doc.get("net_amount") or 0),
-            )
-        logger.info(f"[WITHDRAWAL] IMMEDIATE auto_settled — seller notified txn={txn_id}")
+    # The seller MUST always be told their money is on the way the moment funds are
+    # released — for IMMEDIATE (auto_settled) AND WALLET (payout_processing) tokens.
+    # send_email_with_tracking dedups on FUNDS_RELEASED_SELLER, so this is safe to
+    # call on every released-state webhook.
+    await notify_seller_funds_released(db, latest or txn)
 
     return result
+
+
+async def notify_seller_funds_released(db, txn: dict) -> None:
+    """Email + SMS the seller that their payout is on its way (deduped, best-effort)."""
+    import email_service
+    import sms_service
+    from webhook_handler import (
+        EmailEvent,
+        send_email_with_tracking,
+        send_sms_with_tracking,
+    )
+
+    txn_id = txn.get("transaction_id") or txn.get("deal_id")
+    reference = txn.get("share_code") or txn_id
+    seller_email = txn.get("seller_email") or txn.get("freelancer_email") or ""
+    seller_name = txn.get("seller_name") or txn.get("freelancer_name") or "Seller"
+    seller_phone = txn.get("seller_phone") or txn.get("freelancer_phone")
+    # Smart Deals don't store the seller phone on the doc — fall back to the user record.
+    if not seller_phone and seller_email:
+        seller_user = await db.users.find_one({"email": seller_email}, {"phone": 1, "mobile": 1})
+        if seller_user:
+            seller_phone = seller_user.get("phone") or seller_user.get("mobile")
+    net_amount = float(txn.get("net_amount") or txn.get("seller_receives") or 0)
+    arrival_date = email_service.format_payout_arrival_date()
+
+    if seller_email:
+        await send_email_with_tracking(
+            db, txn_id, EmailEvent.FUNDS_RELEASED_SELLER,
+            seller_email,
+            email_service.send_funds_released_email,
+            to_email=seller_email,
+            to_name=seller_name,
+            share_code=reference,
+            item_description=txn.get("item_description") or txn.get("title", ""),
+            amount=float(txn.get("item_price") or txn.get("amount") or 0),
+            net_amount=net_amount,
+        )
+
+    if seller_phone:
+        await send_sms_with_tracking(
+            db, txn_id, "funds_released_sms",
+            seller_phone,
+            sms_service.send_funds_released_sms,
+            to_phone=seller_phone,
+            amount=net_amount,
+            reference=reference,
+            arrival_date=arrival_date,
+        )
+    logger.info(f"[WITHDRAWAL] seller notified funds-on-the-way txn={txn_id}")
 
 
 @router.get("/webhook-test")

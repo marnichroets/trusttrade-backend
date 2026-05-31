@@ -1316,6 +1316,15 @@ function TransactionDetail() {
   const isSeller = user?.user_id === transaction.seller_user_id || (user?.email && transaction.seller_email && user.email.toLowerCase() === transaction.seller_email.toLowerCase());
   console.log('Role Detection:', { userEmail: user?.email, userId: user?.user_id, buyerEmail: transaction.buyer_email, buyerUserId: transaction.buyer_user_id, sellerEmail: transaction.seller_email, sellerUserId: transaction.seller_user_id, isBuyer, isSeller });
 
+  // True when the seller can already receive payouts — don't nag them to "add banking
+  // details". Accept any reliable signal: the backend's validated payout flag, the
+  // completion flag, or a saved profile account (bank name + account number).
+  const sellerHasBankingDetails = Boolean(
+    user?.banking_account_valid ||
+    user?.banking_details_completed ||
+    (user?.banking_details?.bank_name && user?.banking_details?.account_number)
+  );
+
   const hasEscrow = !!transaction.tradesafe_id;
   const escrowState = transaction.tradesafe_state;
   const buyerConfirmed = transaction.buyer_confirmed;
@@ -1679,7 +1688,7 @@ function TransactionDetail() {
               </div>
             )}
 
-            {isSeller && !user?.banking_details_completed && (isFinalized || canStartDelivery || canManualStartDelivery || canAcceptDeliveryTS || canManualAcceptDelivery || canConfirmInstantRelease) && (
+            {isSeller && !sellerHasBankingDetails && (isFinalized || canStartDelivery || canManualStartDelivery || canAcceptDeliveryTS || canManualAcceptDelivery || canConfirmInstantRelease) && (
               <div style={S.actionCard('#f59e0b', '#fffbeb')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: '#fde68a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -2173,6 +2182,12 @@ function TransactionDetail() {
                           </span>
                         )}
                       </div>
+                      {transaction.days_to_deliver != null && transaction.days_to_deliver !== '' && (
+                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 13, color: '#64748b' }}>Days to deliver</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{transaction.days_to_deliver} {Number(transaction.days_to_deliver) === 1 ? 'day' : 'days'}</span>
+                        </div>
+                      )}
                       {transaction.known_issues && transaction.known_issues !== 'None' && (
                         <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
                           <p style={{ ...S.label, marginBottom: 4 }}>Known Issues</p>

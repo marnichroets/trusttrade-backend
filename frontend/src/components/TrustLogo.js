@@ -1,4 +1,4 @@
-// The PNG at /TrustTrade_Logo.png already contains BOTH the shield and the
+// The PNG at /logo-tt.png already contains BOTH the shield and the
 // "TrustTrade" wordmark, so this component renders just the image — no SVG, no
 // separate text span (which would duplicate the wordmark baked into the PNG).
 
@@ -21,7 +21,7 @@ export function TrustLogo({ size = 'default', className = '', dark = false }) {
       data-testid="trusttrade-logo"
     >
       <img
-        src="/TrustTrade_Logo.png"
+        src="/logo-tt.png"
         alt="TrustTrade"
         style={{
           height,

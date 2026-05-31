@@ -950,9 +950,15 @@ function TransactionDetail() {
     if (!window.confirm(`Confirm you are satisfied and want to release the funds to the seller? ${payoutSchedule.copy} This action cannot be undone.`)) return;
     setAcceptingDelivery(true);
     try {
+      // Single merged buyer action: confirm the transaction details first (if the
+      // buyer hasn't already — e.g. Smart Deals fund escrow without a separate
+      // confirm step), then release the funds in the same click.
+      if (!buyerConfirmed) {
+        await api.post(`${API}/transactions/${transactionId}/buyer-confirm`, { confirmed: true }, { withCredentials: true });
+      }
       await api.post(`${API}/tradesafe/release-instant/${transactionId}`, {}, { withCredentials: true });
       setDeliveryConfirmedLocally(true);
-      setTransaction(prev => prev ? { ...prev, delivery_confirmed: true, tradesafe_state: 'FUNDS_RELEASED', payment_status: 'Payment processing' } : prev);
+      setTransaction(prev => prev ? { ...prev, buyer_confirmed: true, delivery_confirmed: true, tradesafe_state: 'FUNDS_RELEASED', payment_status: 'Payment processing' } : prev);
       toast.success(payoutSchedule.copy);
       fetchData();
     }
@@ -1653,8 +1659,10 @@ function TransactionDetail() {
               <SellerExpectedPayoutCard transaction={transaction} platformConfig={platformConfig} />
             )}
 
-            {/* Buyer confirm */}
-            {canBuyerConfirm && (
+            {/* Buyer confirm — hidden when the merged "Confirm & Release Payment"
+                button is available (that single action confirms AND releases), so the
+                buyer never sees two separate confirm buttons. */}
+            {canBuyerConfirm && !canConfirmInstantRelease && (
               <div style={S.actionCard('#3b82f6', '#eff6ff')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

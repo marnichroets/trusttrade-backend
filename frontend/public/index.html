@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/assets/trusttrade-logo-mark.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0A0E14" />
 
@@ -14,7 +15,7 @@
     <!-- Open Graph (Facebook, WhatsApp) -->
     <meta property="og:title" content="TrustTrade — Secure Escrow for South Africa" />
     <meta property="og:description" content="Buy and sell safely online. Funds held in escrow until you confirm delivery. No more scams." />
-    <meta property="og:image" content="https://trusttradesa.co.za/trusttrade-logo.png" />
+    <meta property="og:image" content="https://trusttradesa.co.za/assets/trusttrade-logo.png" />
     <meta property="og:url" content="https://trusttradesa.co.za" />
     <meta property="og:type" content="website" />
 
@@ -22,7 +23,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="TrustTrade — Secure Escrow for South Africa" />
     <meta name="twitter:description" content="Buy and sell safely online. Funds held in escrow until you confirm delivery. No more scams." />
-    <meta name="twitter:image" content="https://trusttradesa.co.za/trusttrade-logo.png" />
+    <meta name="twitter:image" content="https://trusttradesa.co.za/assets/trusttrade-logo.png" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -54,43 +55,15 @@
         85%  { width: 92%; }
         100% { width: 100%; }
       }
-      #tt-shield {
-        width: 58px; height: 58px;
-        margin-bottom: 24px;
-      }
-      #tt-shield-outline {
-        stroke-dasharray: 220;
-        stroke-dashoffset: 220;
-        animation: tt-draw 1s cubic-bezier(0.4,0,0.2,1) forwards 0.15s;
-      }
-      #tt-shield-check {
-        stroke-dasharray: 40;
-        stroke-dashoffset: 40;
-        animation: tt-draw 0.4s ease forwards 1s;
-      }
-      @keyframes tt-draw { to { stroke-dashoffset: 0; } }
-      #tt-brand {
-        display: flex; gap: 1px;
-        font-family: 'Inter', sans-serif;
-        font-size: 21px; font-weight: 800;
-        color: #E8EDF5; letter-spacing: 0.18em;
+      #tt-loader-logo {
+        width: 220px;
+        height: 84px;
+        object-fit: contain;
         margin-bottom: 8px;
-      }
-      #tt-brand span {
         opacity: 0;
-        animation: tt-letter 0.08s ease forwards;
+        animation: tt-logo-in 0.45s ease forwards 0.25s;
       }
-      #tt-brand span:nth-child(1)  { animation-delay: 0.42s; }
-      #tt-brand span:nth-child(2)  { animation-delay: 0.50s; }
-      #tt-brand span:nth-child(3)  { animation-delay: 0.58s; }
-      #tt-brand span:nth-child(4)  { animation-delay: 0.66s; }
-      #tt-brand span:nth-child(5)  { animation-delay: 0.74s; }
-      #tt-brand span:nth-child(6)  { animation-delay: 0.82s; }
-      #tt-brand span:nth-child(7)  { animation-delay: 0.90s; }
-      #tt-brand span:nth-child(8)  { animation-delay: 0.98s; }
-      #tt-brand span:nth-child(9)  { animation-delay: 1.06s; }
-      #tt-brand span:nth-child(10) { animation-delay: 1.14s; }
-      @keyframes tt-letter { to { opacity: 1; } }
+      @keyframes tt-logo-in { to { opacity: 1; } }
       #tt-sub {
         font-family: 'Courier New', monospace;
         font-size: 9px; color: #00D1FF;
@@ -108,23 +81,7 @@
 
     <div id="tt-loader">
       <div id="tt-progress"></div>
-      <svg id="tt-shield" viewBox="0 0 58 58" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path
-          id="tt-shield-outline"
-          d="M29 4L7 13V28C7 40 16.5 51 29 55C41.5 51 51 40 51 28V13L29 4Z"
-          stroke="#00D1FF" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round"
-        />
-        <path
-          id="tt-shield-check"
-          d="M20 29L26 35L38 22"
-          stroke="#00D1FF" stroke-width="2"
-          stroke-linecap="round" stroke-linejoin="round"
-        />
-      </svg>
-      <div id="tt-brand">
-        <span>T</span><span>R</span><span>U</span><span>S</span><span>T</span><span>T</span><span>R</span><span>A</span><span>D</span><span>E</span>
-      </div>
+      <img id="tt-loader-logo" src="%PUBLIC_URL%/assets/trusttrade-logo.png" alt="TrustTrade" />
       <div id="tt-sub">SECURE VAULT</div>
     </div>
 

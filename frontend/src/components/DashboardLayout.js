@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Plus, FileText, AlertCircle, LogOut, Settings, User, Activity, Shield, Briefcase } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
-import TrustLogo from './TrustLogo';
+import TrustTradeLogo from './TrustTradeLogo';
 import api from '../utils/api';
 import { buildUserActivityFeed, getUnreadActivityCount, markActivitySeen } from '../utils/transactionActivity';
 import SupportChat from './SupportChat';
@@ -229,7 +229,7 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
         {/* Logo */}
         <div style={{ padding: '14px 14px 12px', borderBottom: `1px solid ${V.border}` }}>
           <NavLink to="/dashboard" style={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
-            <TrustLogo size="default" dark />
+            <TrustTradeLogo size="medium" showText dark />
           </NavLink>
         </div>
 
@@ -425,7 +425,7 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <TrustLogo size="xs" dark />
+            <TrustTradeLogo size="small" showText dark />
           </div>
           <div>
             {user?.picture ? (

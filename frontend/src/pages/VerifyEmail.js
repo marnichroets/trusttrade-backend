@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import { toast } from 'sonner';
 import { CheckCircle, XCircle, Loader2, Mail, RefreshCw } from 'lucide-react';
-import TrustLogo from '../components/TrustLogo';
+import TrustTradeLogo from '../components/TrustTradeLogo';
 
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
@@ -71,7 +71,7 @@ export default function VerifyEmail() {
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <Link to="/" className="inline-block mb-2">
-            <TrustLogo size="large" className="mx-auto" />
+            <TrustTradeLogo size="large" showText className="mx-auto" />
           </Link>
         </div>
 

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Eye, EyeOff, Loader2, Shield, AlertCircle, Lock, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../utils/api';
-import TrustLogo from '../components/TrustLogo';
+import TrustTradeLogo from '../components/TrustTradeLogo';
 
 function getGoogleAuthUrl() {
   if (process.env.REACT_APP_GOOGLE_AUTH_URL) return process.env.REACT_APP_GOOGLE_AUTH_URL;
@@ -154,7 +154,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-6">
           <Link to="/" className="inline-block mb-2">
-            <TrustLogo size="large" className="mx-auto" />
+            <TrustTradeLogo size="large" showText className="mx-auto" />
           </Link>
           <p className="text-sm text-slate-500">Secure Payments for South Africa</p>
         </div>

@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import api from '../utils/api';
 import { toast } from 'sonner';
+import TrustTradeLogo from '../components/TrustTradeLogo';
 import { 
   Users, FileText, AlertCircle, RefreshCw, DollarSign, 
   ShieldCheck, ChevronRight, TrendingUp, Clock
@@ -149,7 +150,7 @@ function AdminDashboard() {
         
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-4">
-            <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-16 object-contain" />
+            <TrustTradeLogo size="medium" showText />
             <div>
               <h1 className="text-3xl font-bold" style={{ color: COLORS.text }}>Admin Dashboard</h1>
               <p style={{ color: COLORS.subtext }} className="mt-1">Platform overview and management</p>

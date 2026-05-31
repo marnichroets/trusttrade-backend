@@ -7,7 +7,7 @@ import { Button } from '../components/ui/button';
 import { Eye, EyeOff, Loader2, CheckCircle, AlertCircle, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../utils/api';
-import TrustLogo from '../components/TrustLogo';
+import TrustTradeLogo from '../components/TrustTradeLogo';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -56,7 +56,7 @@ export default function ResetPassword() {
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <Link to="/" className="inline-block mb-2">
-            <TrustLogo size="large" className="mx-auto" />
+            <TrustTradeLogo size="large" showText className="mx-auto" />
           </Link>
           <p className="text-sm text-slate-500">Secure Escrow for South Africa</p>
         </div>

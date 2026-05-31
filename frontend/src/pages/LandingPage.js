@@ -30,7 +30,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import TrustLogo from '../components/TrustLogo';
+import TrustTradeLogo from '../components/TrustTradeLogo';
 
 const DARK_BG = '#020611';
 const INK = '#f8fafc';
@@ -278,7 +278,7 @@ function LandingPage() {
 
       <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#020611]/72 backdrop-blur-2xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <TrustLogo size="small" dark />
+          <TrustTradeLogo size="small" showText dark />
           <div className="flex items-center gap-3">
             <button
               onClick={handleGetStarted}
@@ -974,7 +974,7 @@ function Footer({ scrollToHowItWorks }) {
         <div className="mb-8 grid gap-8 sm:grid-cols-4">
           <div className="sm:col-span-2">
             <div className="mb-4">
-              <TrustLogo size="small" dark />
+              <TrustTradeLogo size="small" showText dark />
             </div>
             <p style={{ color: MUTED }} className="max-w-xs text-sm leading-relaxed">
               Secure payment protection for online transactions in South Africa. Buy and sell with total peace of mind.

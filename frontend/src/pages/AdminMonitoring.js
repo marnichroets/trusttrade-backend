@@ -9,6 +9,7 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import api from '../utils/api';
 import { toast } from 'sonner';
+import TrustTradeLogo from '../components/TrustTradeLogo';
 import { 
   Activity, AlertTriangle, CheckCircle, XCircle, Clock, 
   RefreshCw, Mail, Webhook, Server, TrendingUp, Users,
@@ -214,7 +215,7 @@ export default function AdminMonitoring() {
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
             <div className="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
-              <img src="/trusttrade-logo.png" alt="TrustTrade" className="h-14 object-contain" />
+              <TrustTradeLogo size="medium" showText />
             </div>
             <div>
               <h1 className="text-2xl font-bold text-slate-900">System Monitoring</h1>

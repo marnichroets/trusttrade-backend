@@ -7,6 +7,7 @@ import api, { API_URL } from '../utils/api';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { ShieldCheck, Package, User, ArrowRight, Copy, CheckCircle, Loader2, Clock } from 'lucide-react';
+import TrustTradeLogo from '../components/TrustTradeLogo';
 
 function ShareTransaction() {
   const [transaction, setTransaction] = useState(null);
@@ -123,11 +124,7 @@ function ShareTransaction() {
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <img 
-                src="/trusttrade-logo.png" 
-                alt="TrustTrade" 
-                className="h-12 object-contain"
-              />
+              <TrustTradeLogo size="small" showText />
             </div>
             {user ? (
               <div className="flex items-center gap-2">

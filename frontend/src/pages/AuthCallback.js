@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import TrustLogo from '../components/TrustLogo';
+import TrustTradeLogo from '../components/TrustTradeLogo';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
@@ -191,7 +191,7 @@ function AuthCallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-white">
       <div className="text-center">
-        <TrustLogo size="large" className="mx-auto mb-6" />
+        <TrustTradeLogo size="large" showText className="mx-auto mb-6" />
         <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
         <p className="text-slate-600">{status}</p>
         <p className="text-sm text-slate-400 mt-2">Signing you in...</p>

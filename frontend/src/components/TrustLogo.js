@@ -1,41 +1,27 @@
-// The PNG at /logo-tt.png already contains BOTH the shield and the
-// "TrustTrade" wordmark, so this component renders just the image — no SVG, no
-// separate text span (which would duplicate the wordmark baked into the PNG).
+import TrustTradeLogo from './TrustTradeLogo';
 
-const HEIGHTS = {
-  xs:      24,
-  small:   28,
-  default: 36,
-  large:   48,
-  xlarge:  56,
-  hero:    64,
+const SIZE_MAP = {
+  xs: 'small',
+  small: 'small',
+  default: 'medium',
+  large: 'large',
+  xlarge: 'large',
+  hero: 'large',
 };
 
-export function TrustLogo({ size = 'default', className = '', dark = false }) {
-  const height = HEIGHTS[size] || 36;
-
+export function TrustLogo({ size = 'default', className = '', dark = false, showText = true }) {
   return (
-    <div
-      style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+    <TrustTradeLogo
+      size={SIZE_MAP[size] || 'medium'}
+      showText={showText}
       className={className}
-      data-testid="trusttrade-logo"
-    >
-      <img
-        src="/logo-tt.png"
-        alt="TrustTrade"
-        style={{
-          height,
-          width: 'auto',
-          // On dark backgrounds (navbar/sidebar) lift the logo slightly.
-          ...(dark ? { filter: 'brightness(1.1)' } : {}),
-        }}
-      />
-    </div>
+      dark={dark}
+    />
   );
 }
 
 export function TrustLogoText({ size = 'default', className = '' }) {
-  return <TrustLogo size={size} className={className} dark />;
+  return <TrustLogo size={size} className={className} dark showText />;
 }
 
 export default TrustLogo;

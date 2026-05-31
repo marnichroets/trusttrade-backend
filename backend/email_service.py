@@ -122,6 +122,11 @@ async def send_email(
 
 # Logo URL for emails — served from backend static files
 EMAIL_LOGO_URL = "https://trusttrade-backend-production-3efa.up.railway.app/static/trusttrade-logo.png"
+EMAIL_LOGO_HTML = (
+    f'<img src="{EMAIL_LOGO_URL}" alt="TrustTrade" width="220" '
+    'style="display:block;width:220px;max-width:100%;height:auto;'
+    'margin:0 auto 10px;object-fit:contain;">'
+)
 
 # ============ BASE EMAIL TEMPLATE ============
 
@@ -216,7 +221,7 @@ def get_base_email_template(
     <!-- ── HEADER ── -->
     <tr>
       <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
-        <div style="font-family:'Space Grotesk',Arial,sans-serif;font-size:24px;font-weight:700;margin:0 auto 10px;display:inline-block;"><span style="color:#1a73e8;">Trust</span><span style="color:#E6EDF3;">Trade</span></div>
+        {EMAIL_LOGO_HTML}
         <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE PAYMENTS &middot; SOUTH AFRICA</p>
       </td>
     </tr>
@@ -293,7 +298,7 @@ async def send_verification_email(email: str, name: str, verification_url: str) 
   <table role="presentation" style="max-width:560px;margin:0 auto;border-collapse:collapse;width:100%;">
     <tr>
       <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
-        <div style="font-family:'Space Grotesk',Arial,sans-serif;font-size:24px;font-weight:700;margin:0 auto 8px;display:inline-block;"><span style="color:#1a73e8;">Trust</span><span style="color:#E6EDF3;">Trade</span></div>
+        {EMAIL_LOGO_HTML}
         <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE PAYMENTS &middot; SOUTH AFRICA</p>
       </td>
     </tr>
@@ -349,7 +354,7 @@ async def send_welcome_email(email: str, name: str, frontend_url: str) -> bool:
     <!-- Header -->
     <tr>
       <td style="background:{BRAND_NAVY};padding:28px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
-        <div style="font-family:'Space Grotesk',Arial,sans-serif;font-size:26px;font-weight:700;margin:0 auto 10px;display:inline-block;"><span style="color:#1a73e8;">Trust</span><span style="color:#E6EDF3;">Trade</span></div>
+        {EMAIL_LOGO_HTML}
         <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">SECURE PAYMENTS &middot; SOUTH AFRICA</p>
       </td>
     </tr>
@@ -522,7 +527,7 @@ async def send_admin_new_user_email(
   <table role="presentation" style="max-width:560px;margin:0 auto;border-collapse:collapse;width:100%;">
     <tr>
       <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
-        <div style="font-family:'Space Grotesk',Arial,sans-serif;font-size:24px;font-weight:700;margin:0 auto 8px;display:inline-block;"><span style="color:#1a73e8;">Trust</span><span style="color:#E6EDF3;">Trade</span></div>
+        {EMAIL_LOGO_HTML}
         <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">ADMIN NOTIFICATION</p>
       </td>
     </tr>
@@ -1504,7 +1509,7 @@ async def send_admin_dispute_alert_email(
   <table role="presentation" style="max-width:600px;margin:0 auto;border-collapse:collapse;width:100%;">
     <tr>
       <td style="background:{BRAND_NAVY};padding:24px 32px;text-align:center;border-bottom:3px solid {CYAN_LINE};">
-        <div style="font-family:'Space Grotesk',Arial,sans-serif;font-size:24px;font-weight:700;margin:0 auto 8px;display:inline-block;"><span style="color:#1a73e8;">Trust</span><span style="color:#E6EDF3;">Trade</span></div>
+        {EMAIL_LOGO_HTML}
         <p style="margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.65);font-weight:600;">DISPUTE ALERT — ACTION REQUIRED</p>
       </td>
     </tr>

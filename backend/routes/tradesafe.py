@@ -32,6 +32,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tradesafe", tags=["TradeSafe"])
 
 
+async def resolve_seller_bank_name(db, seller_email: str) -> str:
+    """Look up the seller's saved bank name for funds-released notifications.
+
+    Returns "" when unknown so callers fall back to a generic "your bank account".
+    """
+    if not seller_email:
+        return ""
+    user = await db.users.find_one(
+        {"email": seller_email}, {"banking_details": 1, "bank_name": 1}
+    )
+    if not user:
+        return ""
+    banking = user.get("banking_details") or {}
+    return banking.get("bank_name") or user.get("bank_name") or ""
+
+
 def calculate_seller_receives(item_price: float, fee_percent: float = None) -> float:
     """Calculate seller payout using Decimal precision with minimum fee."""
     if fee_percent is None:
@@ -1136,6 +1152,7 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         logger.info(f"[RELEASE] Amount: R{transaction['item_price']}, Net: R{net_amount}")
         logger.info("=" * 60)
 
+        seller_bank_name = await resolve_seller_bank_name(db, transaction.get("seller_email"))
         try:
             email_result = await send_funds_released_email(
                 to_email=transaction["seller_email"],
@@ -1143,7 +1160,8 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
                 share_code=transaction.get("share_code", transaction_id),
                 item_description=transaction["item_description"],
                 amount=transaction["item_price"],
-                net_amount=net_amount
+                net_amount=net_amount,
+                bank_name=seller_bank_name,
             )
             logger.info(f"[RELEASE] Funds released email result: {email_result}")
         except Exception as e:
@@ -1158,6 +1176,7 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
                     to_phone=seller_phone,
                     amount=net_amount,
                     reference=transaction.get("share_code", transaction_id),
+                    bank_name=seller_bank_name,
                 )
             except Exception as e:
                 logger.error(f"Failed to send funds released SMS: {e}")
@@ -1382,6 +1401,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
     # Send notifications
     seller_email = transaction.get("seller_email")
     seller_phone = transaction.get("seller_phone")
+    seller_bank_name = await resolve_seller_bank_name(db, seller_email)
 
     if immediate_release and seller_email:
         await send_funds_released_email(
@@ -1390,7 +1410,8 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             share_code=transaction.get("share_code", transaction_id),
             item_description=transaction["item_description"],
             amount=transaction["item_price"],
-            net_amount=net_amount
+            net_amount=net_amount,
+            bank_name=seller_bank_name,
         )
 
     if immediate_release and seller_phone:
@@ -1399,6 +1420,7 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
                 to_phone=seller_phone,
                 amount=net_amount,
                 reference=transaction.get("share_code", transaction_id),
+                bank_name=seller_bank_name,
             )
         except Exception as e:
             logger.error(f"Failed to send funds released SMS: {e}")
@@ -1569,6 +1591,7 @@ async def release_instant_funds(request: Request, transaction_id: str):
         )
 
     seller_phone = transaction.get("seller_phone")
+    seller_bank_name = await resolve_seller_bank_name(db, seller_email)
     if immediate_release and seller_email:
         await send_funds_released_email(
             to_email=seller_email,
@@ -1576,7 +1599,8 @@ async def release_instant_funds(request: Request, transaction_id: str):
             share_code=transaction.get("share_code", transaction_id),
             item_description=transaction["item_description"],
             amount=transaction["item_price"],
-            net_amount=net_amount
+            net_amount=net_amount,
+            bank_name=seller_bank_name,
         )
     if immediate_release and seller_phone:
         try:
@@ -1584,6 +1608,7 @@ async def release_instant_funds(request: Request, transaction_id: str):
                 to_phone=seller_phone,
                 amount=net_amount,
                 reference=transaction.get("share_code", transaction_id),
+                bank_name=seller_bank_name,
             )
         except Exception as e:
             logger.error(f"Failed to send instant-release SMS: {e}")

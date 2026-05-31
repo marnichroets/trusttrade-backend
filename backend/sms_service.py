@@ -279,20 +279,23 @@ async def send_funds_released_sms(
     amount: float,
     reference: str = "",
     arrival_date: str = "",
+    bank_name: str = "",
 ) -> Dict[str, Any]:
     """Send SMS when funds are released to the seller — tells them money is on the way.
 
     arrival_date is computed (estimated bank arrival) when not supplied, so every
     release path includes an expected date even if the caller doesn't pass one.
+    bank_name uses the seller's actual bank, falling back to a generic phrase.
     """
     if not arrival_date:
         # Imported lazily to avoid a circular import (email_service ↔ sms_service).
         from email_service import format_payout_arrival_date
         arrival_date = format_payout_arrival_date()
 
+    bank_phrase = f"your {bank_name} account" if bank_name else "your bank account"
     message = (
         f"TrustTrade: {_format_rand(amount)} released! Funds are on their way to "
-        f"your FNB account. Expected by {arrival_date}."
+        f"{bank_phrase}. Expected by {arrival_date}."
     )
     if reference:
         message += f" Ref: {reference}"

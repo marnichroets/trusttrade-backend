@@ -473,11 +473,19 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
     seller_email = txn.get("seller_email") or txn.get("freelancer_email") or ""
     seller_name = txn.get("seller_name") or txn.get("freelancer_name") or "Seller"
     seller_phone = txn.get("seller_phone") or txn.get("freelancer_phone")
-    # Smart Deals don't store the seller phone on the doc — fall back to the user record.
-    if not seller_phone and seller_email:
-        seller_user = await db.users.find_one({"email": seller_email}, {"phone": 1, "mobile": 1})
+    # Resolve the seller's real bank name (and phone, for Smart Deals which don't
+    # store it on the doc) from their user record.
+    bank_name = ""
+    if seller_email:
+        seller_user = await db.users.find_one(
+            {"email": seller_email},
+            {"phone": 1, "mobile": 1, "banking_details": 1, "bank_name": 1},
+        )
         if seller_user:
-            seller_phone = seller_user.get("phone") or seller_user.get("mobile")
+            if not seller_phone:
+                seller_phone = seller_user.get("phone") or seller_user.get("mobile")
+            banking = seller_user.get("banking_details") or {}
+            bank_name = banking.get("bank_name") or seller_user.get("bank_name") or ""
     net_amount = float(txn.get("net_amount") or txn.get("seller_receives") or 0)
     arrival_date = email_service.format_payout_arrival_date()
 
@@ -492,6 +500,7 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
             item_description=txn.get("item_description") or txn.get("title", ""),
             amount=float(txn.get("item_price") or txn.get("amount") or 0),
             net_amount=net_amount,
+            bank_name=bank_name,
         )
 
     if seller_phone:
@@ -503,6 +512,7 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
             amount=net_amount,
             reference=reference,
             arrival_date=arrival_date,
+            bank_name=bank_name,
         )
     logger.info(f"[WITHDRAWAL] seller notified funds-on-the-way txn={txn_id}")
 

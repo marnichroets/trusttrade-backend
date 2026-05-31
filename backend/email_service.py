@@ -931,7 +931,8 @@ def get_funds_released_email(
     share_code: str,
     item_description: str,
     amount: float,
-    net_amount: float
+    net_amount: float,
+    bank_name: Optional[str] = None
 ) -> tuple[str, str]:
     """Generate funds released email content"""
 
@@ -939,11 +940,13 @@ def get_funds_released_email(
 
     fee_amount = amount - net_amount
     arrival_date = format_payout_arrival_date()
+    # Use the seller's actual bank, falling back to a generic phrase when unknown.
+    bank_phrase = f"your {bank_name} account" if bank_name else "your bank account"
 
     intro_text = f"""<strong style="color: #10b981;">Your payment has been released from escrow! 🎉</strong>
 
-    <p style="margin: 14px 0;">Your payment has been released from escrow and is being processed to your
-    <strong>FNB account</strong>. Bank transfers typically take 1–2 business days to reflect.
+    <p style="margin: 14px 0;">Your payment has been released from escrow and is being processed to
+    <strong>{bank_phrase}</strong>. Bank transfers typically take 1–2 business days to reflect.
     You can expect the funds by <strong>{arrival_date}</strong>.</p>
 
     <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 16px 0;">
@@ -1333,7 +1336,8 @@ async def send_funds_released_email(
     share_code: str,
     item_description: str,
     amount: float,
-    net_amount: float
+    net_amount: float,
+    bank_name: Optional[str] = None
 ) -> bool:
     """Send funds released notification"""
     logger.info("=" * 60)
@@ -1342,11 +1346,11 @@ async def send_funds_released_email(
     logger.info(f"[TX_EMAIL] Recipient: {to_email}")
     logger.info(f"[TX_EMAIL] Name: {to_name}")
     logger.info(f"[TX_EMAIL] Share Code: {share_code}")
-    logger.info(f"[TX_EMAIL] Amount: R{amount}, Net: R{net_amount}")
+    logger.info(f"[TX_EMAIL] Amount: R{amount}, Net: R{net_amount}, Bank: {bank_name or 'unknown'}")
     logger.info("=" * 60)
-    
+
     try:
-        subject, html = get_funds_released_email(to_name, share_code, item_description, amount, net_amount)
+        subject, html = get_funds_released_email(to_name, share_code, item_description, amount, net_amount, bank_name)
         logger.info(f"[TX_EMAIL] Subject: {subject}")
         logger.info(f"[TX_EMAIL] Calling send_email()...")
         

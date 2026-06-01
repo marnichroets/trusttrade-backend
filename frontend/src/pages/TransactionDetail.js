@@ -1384,6 +1384,8 @@ function TransactionDetail() {
   // Courier Guy cost + handling are part of what the buyer pays and are included
   // in the escrow amount sent to the provider, so they must be in the payment total too.
   const _courierTotal = (transaction.courier_fee || 0) + (transaction.courier_handling_fee || 0);
+  const courierDeliveryFee = Number(transaction.courier_fee || 0);
+  const courierHandlingFee = Number(transaction.courier_handling_fee || 0);
   // TrustTrade's 2% platform fee is charged on the full escrow value (item + courier),
   // matching what TradeSafe actually deducts as the agent fee.
   const _ttFee = Math.max((transaction.item_price + _courierTotal) * 0.02, 5);
@@ -1399,6 +1401,7 @@ function TransactionDetail() {
     ? `I've created a secure TrustTrade protected payment for you. Click the link to view and confirm the transaction: ${shareLink}`
     : '';
   const whatsappShareHref = shareLink ? `https://wa.me/?text=${encodeURIComponent(shareMessage)}` : '';
+  const trustTradeFeeLabel = `TrustTrade Fee (2%)${['BUYER_AGENT','BUYER'].includes(_fa) ? ' - buyer pays' : ['SELLER_AGENT','SELLER'].includes(_fa) ? ' - seller pays' : ' - split 50/50'}`;
   const fundsSecured = hasEscrow && (
     ['FUNDS_RECEIVED', 'FUNDS_DEPOSITED', 'INITIATED', 'SENT', 'DELIVERED', 'FUNDS_RELEASED'].includes(escrowState) ||
     ['Paid', 'Funds Secured', 'Delivery in Progress', 'Released'].includes(transaction.payment_status)
@@ -1482,16 +1485,18 @@ function TransactionDetail() {
         .transaction-detail-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(260px,300px); gap: 20px; align-items: start; min-width: 0; }
         .transaction-detail-main, .transaction-detail-sidebar { min-width: 0; }
         .transaction-detail-sidebar { position: sticky; top: 80px; display: flex; flex-direction: column; gap: 14px; }
-        .transaction-mobile-summary, .transaction-mobile-share { display: none; }
+        .transaction-mobile-summary, .transaction-mobile-breakdown, .transaction-mobile-share { display: none; }
         .mobile-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
         .mobile-summary-cell { min-width: 0; border: 1px solid #f1f5f9; background: #f8fafc; border-radius: 9px; padding: 9px 10px; }
         .mobile-summary-value { display: block; margin-top: 3px; font-family: monospace; font-size: 13px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mobile-breakdown-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+        .mobile-breakdown-total { margin-top: 10px; padding: 12px; border-radius: 10px; background: #eff6ff; border: 1px solid #bfdbfe; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
         .mobile-share-code-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
         @media (max-width: 768px) {
           .transaction-detail-shell { max-width: 100%; padding: 0 0 112px; }
           .transaction-detail-grid { grid-template-columns: minmax(0,1fr); gap: 16px; }
           .transaction-detail-sidebar { position: static; width: 100%; }
-          .transaction-mobile-summary, .transaction-mobile-share { display: block; }
+          .transaction-mobile-summary, .transaction-mobile-breakdown, .transaction-mobile-share { display: block; }
           .transaction-desktop-summary-card, .transaction-desktop-share-card, .transaction-desktop-parties-card { display: none !important; }
           .td-tab { padding: 9px 10px; font-size: 12px; white-space: nowrap; }
         }
@@ -1548,6 +1553,39 @@ function TransactionDetail() {
                     {currentStatusLabel}
                   </span>
                 </div>
+              </div>
+            </div>
+
+            <div className="transaction-mobile-breakdown" style={{ ...S.card, padding: '14px 16px', border: '1px solid #dbeafe' }}>
+              <p style={{ ...S.label, marginBottom: 10 }}>Payment Breakdown</p>
+              <div>
+                {[
+                  { label: 'Item price', value: `R ${Number(transaction.item_price || 0).toFixed(2)}` },
+                  ...(courierDeliveryFee > 0 ? [{ label: 'Courier delivery fee', value: `R ${courierDeliveryFee.toFixed(2)}` }] : []),
+                  ...(courierHandlingFee > 0 ? [{ label: 'Courier handling fee', value: `R ${courierHandlingFee.toFixed(2)}` }] : []),
+                  { label: 'TrustTrade fee', value: `R ${_ttFee.toFixed(2)}` },
+                ].map((row) => (
+                  <div key={row.label} className="mobile-breakdown-row">
+                    <span style={{ color: '#64748b' }}>{row.label}</span>
+                    <span style={{ color: '#0f172a', fontWeight: 650, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{row.value}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mobile-breakdown-total">
+                <span style={{ fontSize: 14, fontWeight: 800, color: '#1e3a8a' }}>Buyer pays today</span>
+                <span style={{ fontSize: 18, fontWeight: 900, color: '#2563eb', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                  R {totalSecurePayment.toFixed(2)}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, paddingTop: 10, marginTop: 10, borderTop: '1px solid #f1f5f9', fontSize: 13 }}>
+                <span style={{ color: '#64748b' }}>Seller receives</span>
+                <span style={{ color: '#059669', fontWeight: 800, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>R {sellerReceivesAmount.toFixed(2)}</span>
+              </div>
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'flex-start', background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: 9, padding: '9px 10px' }}>
+                <Shield size={14} color="#059669" style={{ flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 12, color: '#047857', margin: 0, lineHeight: 1.45 }}>
+                  Your money is held safely in escrow until delivery is confirmed.
+                </p>
               </div>
             </div>
 
@@ -2529,7 +2567,9 @@ function TransactionDetail() {
               <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12, marginTop: 12 }}>
                 {[
                   { label: 'Item Value', value: `R ${transaction.item_price.toFixed(2)}` },
-                  { label: `TrustTrade Fee (2%)${['BUYER_AGENT','BUYER'].includes(_fa) ? ' — buyer pays' : ['SELLER_AGENT','SELLER'].includes(_fa) ? ' — seller pays' : ' — split 50/50'}`, value: `R ${_ttFee.toFixed(2)}`, color: '#64748b' },
+                  ...(courierDeliveryFee > 0 ? [{ label: 'Courier Delivery', value: `R ${courierDeliveryFee.toFixed(2)}`, color: '#64748b' }] : []),
+                  ...(courierHandlingFee > 0 ? [{ label: 'Courier Handling', value: `R ${courierHandlingFee.toFixed(2)}`, color: '#64748b' }] : []),
+                  { label: trustTradeFeeLabel, value: `R ${_ttFee.toFixed(2)}`, color: '#64748b' },
                   { label: 'Buyer Pays Total', value: `R ${totalSecurePayment.toFixed(2)}`, color: '#2563eb' },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>

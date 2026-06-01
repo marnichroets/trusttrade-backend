@@ -1777,7 +1777,17 @@ async def sync_tradesafe_status(request: Request, transaction_id: str):
     )
     
     logger.info(f"[SYNC] Updated {transaction_id}: payment_status={new_payment_status}, state={current_state}")
-    
+
+    # Fallback to the webhook path: if funds are now confirmed, make sure the
+    # Courier Guy shipment is booked (idempotent — no-ops if already booked).
+    if current_state in ("FUNDS_RECEIVED", "FUNDS_DEPOSITED"):
+        try:
+            import email_service
+            from services.courier_booking import book_courier_for_transaction
+            await book_courier_for_transaction(db, transaction, email_service=email_service)
+        except Exception as exc:
+            logger.error(f"[SYNC] courier auto-book failed (non-fatal) for {transaction_id}: {exc}")
+
     return {
         "success": True,
         "transaction_id": transaction_id,

@@ -998,7 +998,7 @@ function TransactionDetail() {
     try {
       await api.post(`${API}/tradesafe/create-transaction`, { transaction_id: transactionId, fee_allocation: transaction.fee_allocation || 'SELLER_AGENT' }, { withCredentials: true });
       toast.success('Protected payment created! Buyer can now make payment.'); fetchData();
-    } catch (error) { const errorMessage = error.response?.data?.detail || parseErrorMessage(error) || 'Failed to start the transaction. Please try again.'; toast.error(errorMessage); }
+    } catch (error) { const errorMessage = error.response?.data?.detail ? parseErrorMessage(error) : 'Failed to start the transaction. Please try again.'; toast.error(errorMessage); }
     finally { setCreatingEscrow(false); }
   };
 
@@ -1024,7 +1024,7 @@ function TransactionDetail() {
       if (response.data.payment_link) { const newWindow = window.open(response.data.payment_link, '_blank'); if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') window.location.href = response.data.payment_link; toast.success('Secure payment page opened.'); }
       else if (response.data.eft_details) { setPaymentInfo(response.data); toast.info('EFT bank details ready — see below.'); }
       else { setPaymentInfo(response.data); toast.info('Payment deposit created.'); }
-    } catch (error) { const errorMessage = error.response?.data?.detail || 'Unable to process payment. Please try again.'; toast.error(errorMessage); }
+    } catch (error) { const errorMessage = error.response?.data?.detail ? parseErrorMessage(error) : 'Unable to process payment. Please try again.'; toast.error(errorMessage); }
     finally { setLoadingPaymentLink(false); }
   };
 
@@ -2351,10 +2351,21 @@ function TransactionDetail() {
                   </button>
                 </div>
 
-                <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={S.label}>Waybill</span>
                   <code style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 600, color: '#3b82f6' }}>{transaction.courier_waybill}</code>
                 </div>
+
+                {transaction.courier_tracking_url && (
+                  <a
+                    href={transaction.courier_tracking_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#3b82f6', textDecoration: 'none', marginBottom: 14 }}
+                  >
+                    <Truck size={12} /> Track on Courier Guy &rarr;
+                  </a>
+                )}
 
                 {trackingData ? (
                   <>

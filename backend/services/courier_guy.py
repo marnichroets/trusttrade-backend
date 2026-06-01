@@ -52,12 +52,15 @@ async def get_quote(
         "declared_value": parcel.get("declared_value") or 0,
     }
 
+    logger.info(f"[COURIER] Quote request: pickup={pickup_address.get('city')} -> delivery={delivery_address.get('city')} parcel={parcel}")
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
             f"{settings.SHIPLOGIC_API_URL}/rates",
             json=payload,
             headers=_headers(),
         )
+        if not resp.is_success:
+            logger.error(f"[COURIER] Quote HTTP {resp.status_code}: {resp.text[:300]}")
         resp.raise_for_status()
         data = resp.json()
 
@@ -78,6 +81,7 @@ async def book_shipment(
     delivery: Dict[str, Any],
     parcel: Dict[str, Any],
     contact: Dict[str, Any],
+    collection_preference: str = None,
 ) -> Dict[str, Any]:
     """
     Book a shipment with ShipLogic and return the waybill details.
@@ -86,7 +90,14 @@ async def book_shipment(
         { "address": {...}, "contact": {"name": ..., "mobile_number": ...} }
 
     quote_id is the service level code returned by get_quote (e.g. "ECO", "ONX").
+
+    collection_preference:
+        "collection" — Courier Guy collects the parcel from the seller's address.
+        "dropoff"    — Seller drops the parcel at a Courier Guy point themselves, so
+                       no collection leg is scheduled. Anything else defaults to collection.
     """
+    is_dropoff = (collection_preference or "").lower() == "dropoff"
+
     parcel_payload = {
         "submitted_length_cm": parcel.get("submitted_length_cm", 10),
         "submitted_width_cm": parcel.get("submitted_width_cm", 10),
@@ -104,7 +115,15 @@ async def book_shipment(
         "parcels": [parcel_payload],
         "opt_in_rates": [{"service_level": {"code": quote_id}}] if quote_id else [],
         "opt_in_time_based_rates": [],
+        # Tell Courier Guy whether the sender wants a collection or is dropping the parcel
+        # off themselves. special_instructions_collection is a standard ShipLogic field.
+        "special_instructions_collection": (
+            "Customer drop-off at Courier Guy point — no collection required."
+            if is_dropoff
+            else "Collect parcel from sender's address."
+        ),
     }
+    logger.info(f"[COURIER] Booking — collection_preference={'dropoff' if is_dropoff else 'collection'}")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(

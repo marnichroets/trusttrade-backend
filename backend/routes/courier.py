@@ -60,6 +60,7 @@ class BookRequest(BaseModel):
     delivery_contact: Contact
     parcel: Parcel
     reference: Optional[str] = None
+    collection_preference: Optional[str] = None  # "collection" (Courier Guy collects) or "dropoff" (seller drops off)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -104,9 +105,9 @@ async def quote(request: Request, body: QuoteRequest):
 
     try:
         rates = await get_quote(
-            pickup_address=body.pickup_address.model_dump(),
-            delivery_address=body.delivery_address.model_dump(),
-            parcel=body.parcel.model_dump(),
+            pickup_address=body.pickup_address.model_dump(exclude_none=True),
+            delivery_address=body.delivery_address.model_dump(exclude_none=True),
+            parcel=body.parcel.model_dump(exclude_none=True),
         )
         return {"rates": rates}
     except Exception as exc:
@@ -124,15 +125,16 @@ async def book(request: Request, body: BookRequest):
         result = await book_shipment(
             quote_id=body.quote_id,
             pickup={
-                "address": body.pickup_address.model_dump(),
-                "contact": body.pickup_contact.model_dump(),
+                "address": body.pickup_address.model_dump(exclude_none=True),
+                "contact": body.pickup_contact.model_dump(exclude_none=True),
             },
             delivery={
-                "address": body.delivery_address.model_dump(),
-                "contact": body.delivery_contact.model_dump(),
+                "address": body.delivery_address.model_dump(exclude_none=True),
+                "contact": body.delivery_contact.model_dump(exclude_none=True),
             },
-            parcel=body.parcel.model_dump(),
+            parcel=body.parcel.model_dump(exclude_none=True),
             contact={"reference": body.reference or ""},
+            collection_preference=body.collection_preference,
         )
         return result
     except Exception as exc:

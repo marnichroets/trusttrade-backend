@@ -177,8 +177,8 @@ function NewTransaction() {
     item_accuracy: false,
   });
   const [improveLoading, setImproveLoading] = useState(false);
-  const [courierOn, setCourierOn] = useState(false);
   const [courierForm, setCourierForm] = useState({
+    collection_preference: 'collection', // 'collection' = Courier Guy collects | 'dropoff' = seller drops off
     pickup_street: '', pickup_area: '', pickup_city: '', pickup_code: '',
     delivery_street: '', delivery_area: '', delivery_city: '', delivery_code: '',
     weight: '2', length: '30', width: '20', height: '15',
@@ -264,7 +264,9 @@ function NewTransaction() {
     setSelectedQuote(null);
     try {
       const res = await api.post('/courier/quote', {
-        pickup_address: { street_address: courierForm.pickup_street, local_area: courierForm.pickup_area, city: courierForm.pickup_city, code: courierForm.pickup_code, country: 'ZA', type: 'residential' },
+        // For drop-off the seller brings the parcel to a Courier Guy point, so the exact
+        // street isn't required — fall back to a label while keeping area/city/code for rating.
+        pickup_address: { street_address: courierForm.pickup_street || (isDropoff ? 'Courier Guy drop-off point' : ''), local_area: courierForm.pickup_area, city: courierForm.pickup_city, code: courierForm.pickup_code, country: 'ZA', type: 'residential' },
         delivery_address: { street_address: courierForm.delivery_street, local_area: courierForm.delivery_area, city: courierForm.delivery_city, code: courierForm.delivery_code, country: 'ZA', type: 'residential' },
         parcel: { submitted_weight_kg: parseFloat(courierForm.weight) || 1, submitted_length_cm: parseFloat(courierForm.length) || 10, submitted_width_cm: parseFloat(courierForm.width) || 10, submitted_height_cm: parseFloat(courierForm.height) || 10 },
       });
@@ -297,9 +299,10 @@ function NewTransaction() {
   const sellerFeeContrib = feeAlloc === 'SELLER' ? platformFee : feeAlloc === 'BUYER_SELLER' ? platformFee / 2 : 0;
   const sellerPayout = itemPrice - sellerFeeContrib;
   const isCourierDelivery = formData.delivery_method === 'courier';
+  const isDropoff = courierForm.collection_preference === 'dropoff';
   const courierFee = isCourierDelivery && selectedQuote ? (selectedQuote?.price ?? selectedQuote?.rate ?? 0) : 0;
   const COURIER_HANDLING_FEE = 10;
-  const courierHandlingFee = isCourierDelivery && courierOn && selectedQuote ? COURIER_HANDLING_FEE : 0;
+  const courierHandlingFee = isCourierDelivery && selectedQuote ? COURIER_HANDLING_FEE : 0;
 
   const canProceedStep1 = role && (
     role === 'buyer'
@@ -356,11 +359,19 @@ function NewTransaction() {
         item_price: itemPrice,
         fee_allocation: formData.fee_allocation,
         delivery_method: formData.delivery_method,
-        ...(courierOn && selectedQuote ? {
+        ...(isCourierDelivery && selectedQuote ? {
           courier_quote_id: selectedQuote?.service_level?.code || selectedQuote?.id || selectedQuote?.code || '',
           courier_service_name: selectedQuote?.service_level?.name || selectedQuote?.name || '',
           courier_fee: courierFee,
           courier_handling_fee: courierHandlingFee,
+          courier_collection_preference: courierForm.collection_preference,
+          // Full pickup/delivery/parcel details so the backend can auto-book the
+          // shipment once the escrow is funded (no caller needs to re-enter them).
+          courier_details: {
+            pickup_address: { street_address: courierForm.pickup_street || (isDropoff ? 'Courier Guy drop-off point' : ''), local_area: courierForm.pickup_area, city: courierForm.pickup_city, code: courierForm.pickup_code, country: 'ZA', type: 'residential' },
+            delivery_address: { street_address: courierForm.delivery_street, local_area: courierForm.delivery_area, city: courierForm.delivery_city, code: courierForm.delivery_code, country: 'ZA', type: 'residential' },
+            parcel: { submitted_weight_kg: parseFloat(courierForm.weight) || 1, submitted_length_cm: parseFloat(courierForm.length) || 10, submitted_width_cm: parseFloat(courierForm.width) || 10, submitted_height_cm: parseFloat(courierForm.height) || 10 },
+          },
         } : {}),
         buyer_details_confirmed: confirmations.buyer_details,
         seller_details_confirmed: confirmations.seller_details,
@@ -823,34 +834,59 @@ function NewTransaction() {
                 </div>
               </div>
 
-              {/* Courier Guy Delivery */}
-              {COURIER_ENABLED && formData.delivery_method === 'courier' && (
+              {/* Courier Guy Delivery — shown automatically when Courier Guy is the chosen delivery method */}
+              {COURIER_ENABLED && isCourierDelivery && (
                 <div style={S.card}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: courierOn ? 20 : 0 }}>
-                    <div style={{
-                      width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-                      border: `2px solid ${courierOn ? '#3b82f6' : '#cbd5e1'}`,
-                      background: courierOn ? '#3b82f6' : '#fff',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'all 0.15s',
-                    }}>
-                      {courierOn && <Check size={12} color="#fff" />}
-                    </div>
-                    <input type="checkbox" checked={courierOn} onChange={e => { setCourierOn(e.target.checked); if (!e.target.checked) { setSelectedQuote(null); setCourierQuotes([]); } }} style={{ display: 'none' }} />
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, padding: '12px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10 }}>
+                    <Truck size={16} color="#3b82f6" style={{ flexShrink: 0, marginTop: 1 }} />
                     <div>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Add Courier Guy delivery?</span>
-                      <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>Book a shipment and include the delivery cost in this transaction</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1e3a8a', display: 'block', marginBottom: 2 }}>TrustTrade books the courier for you</span>
+                      <span style={{ fontSize: 12, color: '#1d4ed8', lineHeight: 1.5 }}>
+                        Enter the pickup and delivery addresses below and we'll arrange the Courier Guy shipment on your behalf —
+                        the delivery cost is added to this transaction and held in escrow. You don't need to book or pay the courier separately.
+                      </span>
                     </div>
-                  </label>
+                  </div>
 
-                  {courierOn && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                      {/* Collection preference */}
+                      <div>
+                        <label style={S.label}>How will the parcel reach Courier Guy?</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                          {[
+                            { value: 'collection', label: 'Collection', desc: 'Courier Guy collects from the seller’s address.' },
+                            { value: 'dropoff', label: 'Drop-off', desc: 'Seller drops it at a Courier Guy drop-off point.' },
+                          ].map(opt => {
+                            const active = courierForm.collection_preference === opt.value;
+                            return (
+                              <label key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${active ? '#3b82f6' : '#e2e8f0'}`, background: active ? '#eff6ff' : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
+                                <input type="radio" name="collection_preference" value={opt.value} checked={active} onChange={e => setCourierForm(p => ({ ...p, collection_preference: e.target.value }))} style={{ display: 'none' }} />
+                                <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, marginTop: 1, border: `2px solid ${active ? '#3b82f6' : '#cbd5e1'}`, background: active ? '#3b82f6' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+                                </div>
+                                <div>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', display: 'block' }}>{opt.label}</span>
+                                  <span style={{ fontSize: 11, color: '#64748b' }}>{opt.desc}</span>
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
 
                       {/* Pickup */}
                       <div>
-                        <label style={S.label}>Pickup Address (Seller)</label>
+                        <label style={S.label}>{isDropoff ? 'Seller’s Area (for pricing the drop-off)' : 'Pickup Address (Seller)'}</label>
+                        {isDropoff && (
+                          <p style={{ fontSize: 11, color: '#94a3b8', margin: '0 0 8px' }}>
+                            No street address needed — the seller takes the parcel to a Courier Guy point. We just need the area and postal code to price the route.
+                          </p>
+                        )}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          <input style={S.input} placeholder="Street address" value={courierForm.pickup_street} onChange={e => setCourierForm(p => ({ ...p, pickup_street: e.target.value }))} />
+                          {!isDropoff && (
+                            <input style={S.input} placeholder="Street address" value={courierForm.pickup_street} onChange={e => setCourierForm(p => ({ ...p, pickup_street: e.target.value }))} />
+                          )}
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
                             <input style={S.input} placeholder="Suburb / area" value={courierForm.pickup_area} onChange={e => setCourierForm(p => ({ ...p, pickup_area: e.target.value }))} />
                             <input style={S.input} placeholder="City" value={courierForm.pickup_city} onChange={e => setCourierForm(p => ({ ...p, pickup_city: e.target.value }))} />
@@ -894,12 +930,12 @@ function NewTransaction() {
                       <button
                         type="button"
                         onClick={handleGetQuote}
-                        disabled={courierLoading || !courierForm.pickup_street || !courierForm.pickup_city || !courierForm.pickup_code || !courierForm.delivery_street || !courierForm.delivery_city || !courierForm.delivery_code}
+                        disabled={courierLoading || (!isDropoff && !courierForm.pickup_street) || !courierForm.pickup_city || !courierForm.pickup_code || !courierForm.delivery_street || !courierForm.delivery_city || !courierForm.delivery_code}
                         style={{
                           alignSelf: 'flex-start', padding: '9px 18px', borderRadius: 8, border: 'none',
                           background: '#3b82f6', color: '#fff', fontSize: 13, fontWeight: 600,
                           cursor: courierLoading ? 'not-allowed' : 'pointer',
-                          opacity: (courierLoading || !courierForm.pickup_street || !courierForm.pickup_city || !courierForm.pickup_code || !courierForm.delivery_street || !courierForm.delivery_city || !courierForm.delivery_code) ? 0.5 : 1,
+                          opacity: (courierLoading || (!isDropoff && !courierForm.pickup_street) || !courierForm.pickup_city || !courierForm.pickup_code || !courierForm.delivery_street || !courierForm.delivery_city || !courierForm.delivery_code) ? 0.5 : 1,
                           display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'inherit',
                         }}
                       >
@@ -956,7 +992,6 @@ function NewTransaction() {
                         </div>
                       )}
                     </div>
-                  )}
                 </div>
               )}
 

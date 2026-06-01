@@ -1302,6 +1302,87 @@ async def send_delivery_started_email(
         return False
 
 
+def get_courier_booked_email(
+    recipient_name: str,
+    share_code: str,
+    item_description: str,
+    waybill: str,
+    tracking_url: str,
+    service_name: str,
+    role: str,
+    collection_preference: str,
+) -> tuple[str, str]:
+    """Generate the 'Courier Guy shipment booked' email for buyer or seller."""
+
+    subject = f"{share_code} — Courier Guy booked · Waybill {waybill}"
+
+    is_dropoff = (collection_preference or "").lower() == "dropoff"
+    if role.lower() == "seller":
+        if is_dropoff:
+            intro_text = (
+                "Payment is secured in escrow and we've booked your Courier Guy shipment. "
+                "Please drop the parcel at your nearest Courier Guy point and quote the waybill number below."
+            )
+        else:
+            intro_text = (
+                "Payment is secured in escrow and we've booked your Courier Guy shipment. "
+                "Courier Guy will collect the parcel from your address — please have it packaged and ready."
+            )
+    else:
+        intro_text = (
+            "Good news! Payment is secured and the Courier Guy shipment has been booked. "
+            "Use the waybill number below to track your parcel all the way to your door."
+        )
+
+    details = {
+        "Reference": share_code,
+        "Item": item_description,
+        "Waybill": waybill,
+        "Courier": service_name or "Courier Guy",
+        "Method": "Seller drop-off" if is_dropoff else "Courier Guy collection",
+    }
+
+    html_content = get_base_email_template(
+        heading="Courier Guy Shipment Booked",
+        greeting_name=recipient_name,
+        intro_text=intro_text,
+        details=details,
+        cta_text="Track Your Shipment",
+        cta_link=tracking_url or f"https://www.trusttradesa.co.za/t/{share_code}",
+        show_how_it_works=False,
+        status_badge="Shipment Booked",
+        status_color="#3b82f6",
+    )
+
+    return subject, html_content
+
+
+async def send_courier_booked_email(
+    to_email: str,
+    to_name: str,
+    share_code: str,
+    item_description: str,
+    waybill: str,
+    tracking_url: str,
+    service_name: str,
+    role: str,
+    collection_preference: str = None,
+) -> bool:
+    """Notify a buyer or seller that the Courier Guy shipment has been booked."""
+    logger.info(f"[TX_EMAIL] === COURIER BOOKED EMAIL === to={to_email} role={role} waybill={waybill}")
+    try:
+        subject, html = get_courier_booked_email(
+            to_name, share_code, item_description, waybill, tracking_url,
+            service_name, role, collection_preference,
+        )
+        result = await send_email(to_email, to_name, subject, html)
+        logger.info(f"[TX_EMAIL] Courier booked email RESULT: {'SUCCESS' if result else 'FAILED'} to={to_email}")
+        return result
+    except Exception as e:
+        logger.error(f"[TX_EMAIL] Courier booked email EXCEPTION: {e}")
+        return False
+
+
 async def send_delivery_confirmed_email(
     to_email: str,
     to_name: str,

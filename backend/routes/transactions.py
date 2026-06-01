@@ -563,6 +563,8 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "courier_service_name": transaction_data.courier_service_name,
         "courier_fee": transaction_data.courier_fee or 0.0,
         "courier_handling_fee": transaction_data.courier_handling_fee or 0.0,
+        "courier_collection_preference": transaction_data.courier_collection_preference,
+        "courier_details": transaction_data.courier_details,
         "total": round(total + (transaction_data.courier_fee or 0.0) + (transaction_data.courier_handling_fee or 0.0), 2),
         "seller_receives": money["seller_receives"],
         "fee_allocation": _raw_fa,

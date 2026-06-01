@@ -37,6 +37,17 @@ class Transaction(BaseModel):
     courier_service_name: Optional[str] = None
     courier_fee: Optional[float] = 0.0
     courier_handling_fee: Optional[float] = 0.0
+    courier_collection_preference: Optional[str] = None  # "collection" (Courier Guy collects) or "dropoff" (seller drops off)
+    courier_details: Optional[dict] = None  # {pickup_address, delivery_address, parcel} captured at creation for auto-booking
+    # Courier Guy (ShipLogic) booking results — populated automatically once the escrow is funded
+    courier_waybill: Optional[str] = None
+    courier_shipment_id: Optional[str] = None
+    courier_tracking_reference: Optional[str] = None
+    courier_tracking_url: Optional[str] = None
+    courier_status: Optional[str] = None
+    courier_booked_at: Optional[str] = None
+    courier_booking_error: Optional[str] = None
+    courier_booking_in_progress: Optional[bool] = None  # atomic claim guard for auto-booking
     total: Optional[float] = None
     seller_receives: Optional[float] = None  # Seller payout from escrow (= item_price under new fee model)
     fee_allocation: str = "SELLER_AGENT"  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
@@ -130,6 +141,8 @@ class TransactionCreate(BaseModel):
     courier_service_name: Optional[str] = None
     courier_fee: Optional[float] = None
     courier_handling_fee: Optional[float] = None
+    courier_collection_preference: Optional[str] = None  # "collection" or "dropoff"
+    courier_details: Optional[dict] = None  # {pickup_address, delivery_address, parcel} for auto-booking
 
 
 class TransactionUpdate(BaseModel):

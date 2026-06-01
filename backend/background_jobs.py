@@ -395,6 +395,63 @@ async def send_fallback_payment_notifications(db: AsyncIOMotorDatabase, txn: Dic
         logger.error(f"Failed to send fallback notifications for {transaction_id}: {e}")
 
 
+async def book_pending_courier_shipments(db: AsyncIOMotorDatabase) -> Dict[str, Any]:
+    """
+    Backstop courier booking for funded courier transactions with no waybill yet.
+
+    The PRIMARY trigger is the live TradeSafe webhook (routes/webhooks.py). The
+    payment-verification fallback (verify_pending_payments) only looks at txns still
+    in a pending/awaiting state, so once payment_status is already "Funds Secured" it
+    no longer matches there. This job closes that gap: it targets courier transactions
+    that are funded (in escrow) but still have no courier_waybill, and calls the
+    idempotent book_courier_for_transaction — which atomically claims the booking and
+    no-ops if a waybill already exists or another caller owns it.
+    """
+    logger.info("=== Running pending courier booking check ===")
+
+    summary = {"checked": 0, "booked": 0, "errors": 0}
+
+    try:
+        # delivery_method=courier AND funded/payment-secured AND no waybill yet,
+        # excluding deals that are already released or refunded (booking would be moot).
+        candidates = await db.transactions.find({
+            "delivery_method": "courier",
+            "courier_waybill": {"$in": [None, ""]},
+            "courier_booking_in_progress": {"$ne": True},
+            "$or": [
+                {"payment_status": "Funds Secured"},
+                {"tradesafe_state": {"$in": ["FUNDS_DEPOSITED", "FUNDS_RECEIVED"]}},
+            ],
+            "release_status": {"$nin": ["Released", "Refunded"]},
+        }, {"_id": 0}).to_list(100)
+
+        summary["checked"] = len(candidates)
+        if not candidates:
+            return summary
+
+        logger.info(f"Found {len(candidates)} funded courier transaction(s) without a waybill")
+
+        import email_service
+        from services.courier_booking import book_courier_for_transaction
+
+        for txn in candidates:
+            transaction_id = txn.get("transaction_id")
+            try:
+                result = await book_courier_for_transaction(db, txn, email_service=email_service)
+                if result and result.get("waybill"):
+                    summary["booked"] += 1
+                    logger.info(f"FALLBACK: courier booked for {transaction_id} — waybill={result.get('waybill')}")
+            except Exception as e:
+                summary["errors"] += 1
+                logger.error(f"FALLBACK: courier booking failed for {transaction_id}: {e}")
+    except Exception as e:
+        summary["errors"] += 1
+        logger.error(f"Pending courier booking job failed: {e}")
+
+    logger.info(f"Pending courier booking check complete: {summary}")
+    return summary
+
+
 async def process_auto_releases(db: AsyncIOMotorDatabase, tradesafe_service) -> Dict[str, Any]:
     """
     Process automatic fund releases based on delivery method timers.
@@ -647,6 +704,12 @@ async def start_background_jobs(
                 await expire_inactive_pre_escrow_transactions(db)
             except Exception as e:
                 logger.error(f"Pre-escrow inactivity expiry job failed: {e}")
+
+            # Backstop: book courier for funded courier txns missing a waybill - every iteration
+            try:
+                await book_pending_courier_shipments(db)
+            except Exception as e:
+                logger.error(f"Pending courier booking job failed: {e}")
             
             # Auto-release - every 2nd iteration (6 minutes)
             if iteration % 2 == 0:

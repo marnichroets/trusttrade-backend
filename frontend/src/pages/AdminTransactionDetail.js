@@ -135,6 +135,10 @@ function AdminTransactionDetail() {
         case 'force_cancel':
           endpoint = `/tradesafe/cancel/${transactionId}`;
           break;
+        case 'book_courier':
+          endpoint = `/admin/transactions/${transactionId}/book-courier`;
+          data = {};
+          break;
         default:
           toast.error('Unknown action');
           return;
@@ -758,6 +762,58 @@ function AdminTransactionDetail() {
                 </Button>
               </div>
             </Card>
+
+            {/* Courier Booking — only for courier deliveries */}
+            {transaction.delivery_method === 'courier' && (
+              <Card className="p-6" style={{ backgroundColor: COLORS.background }} data-testid="courier-panel">
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: COLORS.primary }}>
+                  <Truck className="w-4 h-4" /> Courier
+                </h3>
+                <div className="space-y-3 text-sm">
+                  {transaction.courier_waybill ? (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span style={{ color: COLORS.subtext }}>Waybill</span>
+                        <span className="font-mono" style={{ color: COLORS.text }}>{transaction.courier_waybill}</span>
+                      </div>
+                      {transaction.courier_tracking_url && (
+                        <a
+                          href={transaction.courier_tracking_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm underline"
+                          style={{ color: COLORS.info }}
+                        >
+                          Track shipment
+                        </a>
+                      )}
+                      <Badge style={{ backgroundColor: COLORS.green, color: 'white' }} className="inline-flex items-center gap-1">
+                        <CheckCircle className="w-3 h-3" /> Booked
+                      </Badge>
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ color: COLORS.subtext }}>No shipment booked yet.</p>
+                      {transaction.courier_booking_error && (
+                        <p className="text-xs p-2 rounded" style={{ backgroundColor: COLORS.section, color: COLORS.error }}>
+                          Last error: {transaction.courier_booking_error}
+                        </p>
+                      )}
+                      <Button
+                        onClick={() => openConfirmModal('book_courier', 'Book Courier', `Book the Courier Guy shipment for ${transaction.share_code}? This requests a waybill and emails both parties the tracking link.`)}
+                        disabled={actionLoading}
+                        className="w-full text-white justify-center"
+                        style={{ backgroundColor: '#7c3aed' }}
+                        data-testid="book-courier-btn"
+                      >
+                        <Truck className="w-4 h-4 mr-2" />
+                        Book Courier
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </Card>
+            )}
 
             {/* Quick Info */}
             <Card className="p-6" style={{ backgroundColor: COLORS.background }}>

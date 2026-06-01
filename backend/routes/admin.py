@@ -378,6 +378,57 @@ async def admin_release_funds(request: Request, transaction_id: str, release_dat
     }
 
 
+@router.post("/transactions/{transaction_id}/book-courier")
+async def admin_book_courier(request: Request, transaction_id: str):
+    """Admin: Manually trigger the Courier Guy booking for a funded courier transaction.
+
+    Use this to recover transactions that were funded before auto-booking existed, or
+    where booking failed/was missed. Idempotent — no-ops if a waybill already exists.
+    """
+    db = get_database()
+    user = await require_admin(request, db)
+
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if (transaction.get("delivery_method") or "").lower() != "courier":
+        raise HTTPException(status_code=400, detail="Transaction is not a courier delivery")
+
+    if transaction.get("courier_waybill"):
+        return {
+            "message": "Courier already booked",
+            "transaction_id": transaction_id,
+            "waybill": transaction.get("courier_waybill"),
+            "tracking_url": transaction.get("courier_tracking_url"),
+            "already_booked": True,
+        }
+
+    import email_service
+    from services.courier_booking import book_courier_for_transaction
+
+    await book_courier_for_transaction(db, transaction, email_service=email_service)
+
+    # Re-read so we surface either the new waybill or the recorded booking error.
+    fresh = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0}) or {}
+    waybill = fresh.get("courier_waybill")
+    if waybill:
+        logger.info(f"[ADMIN_BOOK_COURIER] {transaction_id} booked by {user.email} — waybill={waybill}")
+        return {
+            "message": "Courier booked successfully",
+            "transaction_id": transaction_id,
+            "waybill": waybill,
+            "tracking_url": fresh.get("courier_tracking_url"),
+        }
+
+    error = fresh.get("courier_booking_error") or (
+        "Courier booking did not return a waybill — check the pickup/delivery/parcel "
+        "details and quote on the transaction"
+    )
+    logger.error(f"[ADMIN_BOOK_COURIER] {transaction_id} failed: {error}")
+    raise HTTPException(status_code=400, detail=error)
+
+
 @router.post("/transactions/{transaction_id}/notes")
 async def admin_add_notes(request: Request, transaction_id: str, notes_data: AdminNotesRequest):
     """Admin: Add notes to a transaction"""

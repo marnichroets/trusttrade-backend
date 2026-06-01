@@ -1504,6 +1504,50 @@ async def accept_delivery(allocation_id: str, seller_token_id: Optional[str] = N
     return None
 
 
+async def refund_allocation(allocation_id: str) -> Dict[str, Any]:
+    """
+    Refund an allocation back to the buyer (dispute resolved in the buyer's favour,
+    or admin refund). This is the escrow-correct way to return funds: TradeSafe moves
+    the held value back to the buyer's token (per the token's refund interval, WALLET),
+    from where it can be withdrawn to the buyer's bank.
+
+    Returns {"success": bool, "state"|"error": ...}. NEVER raises — callers decide
+    how to surface failures. Single mutation only (no blind cascade) so a refund can
+    never be double-executed.
+
+    NOTE: the mutation name `allocationRefund` comes from the codebase's existing
+    refund TODO; verify it against TradeSafe's schema in the sandbox. If it's wrong,
+    the surfaced error ("Cannot query field …") names the correct one to swap in.
+    """
+    logger.info(f"[REFUND] Calling allocationRefund — allocation_id={allocation_id!r}")
+
+    mutation = """
+    mutation allocationRefund($id: ID!) {
+        allocationRefund(id: $id) {
+            id
+            state
+        }
+    }
+    """
+
+    result = await execute_graphql(mutation, {"id": allocation_id})
+    logger.info(f"[REFUND] Raw TradeSafe response: {result}")
+
+    if result and "errors" in result:
+        err = result["errors"][0].get("message", "unknown") if result["errors"] else "unknown"
+        debug = (result["errors"][0].get("extensions") or {}).get("debugMessage", "") if result["errors"] else ""
+        logger.error(f"[REFUND] TradeSafe error for allocation {allocation_id!r}: {err} | debug: {debug}")
+        return {"success": False, "error": f"{err}{(' — ' + debug) if debug else ''}"}
+
+    if result and "allocationRefund" in result:
+        refund_result = result["allocationRefund"] or {}
+        logger.info(f"[REFUND] Success allocation={allocation_id!r} state={refund_result.get('state')!r}")
+        return {"success": True, "state": refund_result.get("state"), "allocation_id": allocation_id}
+
+    logger.error(f"[REFUND] Unexpected response allocation={allocation_id!r}: {result}")
+    return {"success": False, "error": "Unexpected response from TradeSafe allocationRefund"}
+
+
 async def get_transaction_by_reference(reference: str) -> Optional[Dict[str, Any]]:
     """
     Find a TradeSafe transaction by internal reference.

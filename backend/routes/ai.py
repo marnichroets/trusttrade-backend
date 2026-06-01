@@ -21,11 +21,12 @@ from core.security import get_user_from_token
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/ai", tags=["AI"])
 
-MODEL = "claude-opus-4-7"
+MODEL = "claude-opus-4-8"
 
-# Dispute adjudication runs on a dedicated Sonnet model (per product spec) so the
-# decision logic is independent of the general-purpose MODEL used elsewhere.
-DISPUTE_MODEL = "claude-sonnet-4-20250514"
+# Dispute adjudication runs on the most capable model — these are financial
+# decisions, so correctness outweighs cost. Kept as a separate constant so it can
+# be tuned independently of the general-purpose MODEL used elsewhere.
+DISPUTE_MODEL = "claude-opus-4-8"
 
 # Confidence thresholds (percent) that select the resolution path.
 AUTO_RESOLVE_MIN_CONFIDENCE = 90   # strictly greater than → AI auto-resolves
@@ -55,6 +56,38 @@ STANDARD ESCROW / MARKETPLACE PRINCIPLES:
 - The SELLER carries the burden of proving the item was delivered (courier tracking, signed POD, photos). No proof of delivery → the buyer is protected.
 - The BUYER carries the burden of substantiating a 'not as described' / 'damaged' claim with specifics and evidence (photos, a precise description of the defect).
 - Escrow exists to protect the paying buyer. BE CONSERVATIVE: when the evidence is genuinely balanced, or a key fact is unproven, favour the BUYER."""
+
+# Static adjudicator framing + law + output schema. Kept byte-identical across every
+# dispute call (the per-dispute facts go in the user message) so it can be sent as a
+# cached system prefix. Plain-string concatenation keeps the JSON braces literal.
+DISPUTE_SYSTEM_PROMPT = (
+    "You are the dispute-resolution adjudicator for TrustTrade, a South African "
+    "peer-to-peer escrow platform. Review ALL the evidence in the user message and "
+    "decide which party the held escrow funds should favour.\n\n"
+    + SA_CONSUMER_LAW_CONTEXT
+    + "\n\nINSTRUCTIONS:\n"
+    "- Apply the law and escrow principles above. Be conservative — when in doubt, favour the BUYER.\n"
+    "- Only assign confidence above 90 when the evidence clearly and unambiguously points one way. "
+    "Assign below 70 when key evidence is missing, the accounts conflict without corroboration, or you are unsure.\n"
+    "- In \"evidence_considered\", list EVERY individual piece of evidence you weighed (each statement, the "
+    "courier tracking, each photo set, each party's history, the delivery method) and, for each, say which "
+    "party it favours and why. Do not omit anything you relied on.\n\n"
+    "Return ONLY a JSON object, no markdown, no commentary:\n"
+    "{\n"
+    '  "recommended_decision": "Favour Buyer" or "Favour Seller",\n'
+    '  "confidence": <integer 0-100>,\n'
+    '  "reasoning": "2-3 sentences explaining why, in plain English, citing the law/principle that applies",\n'
+    '  "evidence_considered": [\n'
+    '    {"item": "the piece of evidence", "favours": "buyer|seller|neither", "why": "what it shows and how it influenced the decision"}\n'
+    "  ],\n"
+    '  "missing_evidence": ["evidence that would have made this clearer", "..."],\n'
+    '  "seller_has_delivery_proof": <true if there is credible proof the item was delivered (e.g. courier shows delivered, signed POD, photos), else false>,\n'
+    '  "dispute_is_about_delivery": <true if the core complaint is non-delivery / item not received, else false>,\n'
+    '  "buyer_complaint_is_specific": <true if the buyer gave a specific, substantiated complaint, false if it is a bare \'not received\'/\'not happy\' with no detail>,\n'
+    '  "conflicting_evidence": <true if both parties present evidence that directly contradicts each other>,\n'
+    '  "fraud_indicators": ["any sign of fraud or bad faith by either party", "..."]\n'
+    "}"
+)
 
 # When False, a >90% recommendation is still recorded and flagged for a final
 # admin click instead of closing the dispute unattended. Fund movement
@@ -90,7 +123,16 @@ def _extract_json(text: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        return {}
+        pass
+    # Fallback: pull the first balanced {...} object out of any surrounding prose
+    # (newer models may prepend a sentence of reasoning before the JSON).
+    brace = re.search(r"\{[\s\S]*\}", text)
+    if brace:
+        try:
+            return json.loads(brace.group(0))
+        except json.JSONDecodeError:
+            return {}
+    return {}
 
 
 # ============ BACKGROUND TASK FUNCTIONS ============
@@ -252,11 +294,10 @@ async def analyze_dispute(dispute_id: str, dispute_doc: dict, transaction_doc: d
             "seller" if transaction_doc.get("seller_email") == raiser_email else "a party"
         )
 
-        prompt = f"""You are the dispute-resolution adjudicator for TrustTrade, a South African peer-to-peer escrow platform. Review ALL available evidence below and decide which party the held escrow funds should favour.
-
-{SA_CONSUMER_LAW_CONTEXT}
-
-TRANSACTION
+        # Only the per-dispute facts vary — they go in the user message. The static
+        # adjudicator framing + law + output schema live in DISPUTE_SYSTEM_PROMPT,
+        # sent as a cached system prefix below.
+        case = f"""TRANSACTION
 - Item: {transaction_doc.get('item_description', 'Unknown item')}
 - Amount: R{transaction_doc.get('item_price', 0):,.2f}
 - Delivery method: {transaction_doc.get('delivery_method', 'unknown')}
@@ -277,34 +318,30 @@ EVIDENCE
 
 PARTY HISTORY
 - {_party_history(buyer_doc, 'Buyer')}
-- {_party_history(seller_doc, 'Seller')}
+- {_party_history(seller_doc, 'Seller')}"""
 
-INSTRUCTIONS:
-- Apply the law and escrow principles above. Be conservative — when in doubt, favour the BUYER.
-- Only assign confidence above 90 when the evidence clearly and unambiguously points one way. Assign below 70 when key evidence is missing, the accounts conflict without corroboration, or you are unsure.
-- In "evidence_considered", list EVERY individual piece of evidence you weighed (each statement, the courier tracking, each photo set, each party's history, the delivery method) and, for each, say which party it favours and why. Do not omit anything you relied on.
-
-Return ONLY a JSON object, no markdown, no commentary:
-{{
-  "recommended_decision": "Favour Buyer" or "Favour Seller",
-  "confidence": <integer 0-100>,
-  "reasoning": "2-3 sentences explaining why, in plain English, citing the law/principle that applies",
-  "evidence_considered": [
-    {{"item": "the piece of evidence", "favours": "buyer|seller|neither", "why": "what it shows and how it influenced the decision"}}
-  ],
-  "missing_evidence": ["evidence that would have made this clearer", "..."],
-  "seller_has_delivery_proof": <true if there is credible proof the item was delivered (e.g. courier shows delivered, signed POD, photos), else false>,
-  "dispute_is_about_delivery": <true if the core complaint is non-delivery / item not received, else false>,
-  "buyer_complaint_is_specific": <true if the buyer gave a specific, substantiated complaint, false if it is a bare 'not received'/'not happy' with no detail>,
-  "conflicting_evidence": <true if both parties present evidence that directly contradicts each other>,
-  "fraud_indicators": ["any sign of fraud or bad faith by either party", "..."]
-}}"""
-
+        # Cache the static system prefix (framing + SA law + schema). It's byte-identical
+        # across disputes, so repeated adjudications within the cache TTL read it at ~0.1x.
+        # (Note: the prefix must exceed the model's minimum cacheable size to actually cache.)
         response = await client.messages.create(
             model=DISPUTE_MODEL,
             max_tokens=1200,
-            messages=[{"role": "user", "content": prompt}],
+            system=[{
+                "type": "text",
+                "text": DISPUTE_SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            messages=[{"role": "user", "content": case}],
         )
+
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            logger.info(
+                f"[AI_DISPUTE] {dispute_id} usage — input={getattr(usage, 'input_tokens', '?')} "
+                f"cache_read={getattr(usage, 'cache_read_input_tokens', 0)} "
+                f"cache_write={getattr(usage, 'cache_creation_input_tokens', 0)} "
+                f"output={getattr(usage, 'output_tokens', '?')}"
+            )
 
         text = next((b.text for b in response.content if b.type == "text"), "{}")
         result = _extract_json(text)

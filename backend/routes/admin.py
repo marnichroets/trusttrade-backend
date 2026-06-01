@@ -287,30 +287,31 @@ async def admin_refund_transaction(request: Request, transaction_id: str, refund
     transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    
-    if transaction.get("payment_status") not in ["Paid", "Ready for Payment"]:
-        raise HTTPException(status_code=400, detail="Transaction cannot be refunded in current state")
-    
-    await db.transactions.update_one(
-        {"transaction_id": transaction_id},
-        {"$set": {
-            "payment_status": "Refunded",
-            "release_status": "Refunded",
-            "refund_reason": refund_data.reason,
-            "refunded_at": datetime.now(timezone.utc).isoformat(),
-            "refunded_by": user.user_id
-        }}
+
+    if transaction.get("release_status") == "Released":
+        raise HTTPException(status_code=400, detail="Funds already released to seller — cannot refund")
+
+    # Actually move the money: allocationRefund → buyer token → bank, idempotently.
+    # (Previously this only flipped local status and emailed, leaving funds in escrow.)
+    from services.dispute_payouts import refund_transaction
+    result = await refund_transaction(
+        db, transaction,
+        reason=refund_data.reason or "Refund issued by admin",
+        source=f"admin:{user.user_id}",
     )
-    
-    await send_refund_email(
-        to_email=transaction["buyer_email"],
-        to_name=transaction["buyer_name"],
-        share_code=transaction.get("share_code", transaction_id),
-        amount=transaction["total"],
-        reason=refund_data.reason
-    )
-    
-    return {"message": "Transaction refunded successfully", "transaction_id": transaction_id}
+
+    if not result.get("success") and not result.get("skipped"):
+        raise HTTPException(
+            status_code=502,
+            detail=f"Refund failed on TradeSafe: {result.get('error', 'unknown error')}. "
+                   f"Funds remain in escrow; check server logs.",
+        )
+
+    return {
+        "message": "Transaction refunded successfully",
+        "transaction_id": transaction_id,
+        "result": result,
+    }
 
 
 @router.post("/transactions/{transaction_id}/release")
@@ -780,11 +781,38 @@ async def admin_act_on_ai_decision(request: Request, dispute_id: str, body: AIDi
                     admin_notes=body.notes,
                 )
 
-    logger.info(f"[AI_DISPUTE] admin {admin.user_id} {action}d dispute {dispute_id} → {final_decision}")
+    # Execute the financial outcome of the decision. Favour Seller → release the held
+    # escrow; Favour Buyer → refund it. Both helpers are idempotent and escrow-safe
+    # (a failed release stops + alerts an admin rather than moving money the wrong way).
+    payout_result = None
+    if transaction:
+        from services.dispute_payouts import release_funds_to_seller, refund_transaction
+        try:
+            if final_decision == "Favour Seller":
+                payout_result = await release_funds_to_seller(db, transaction, source=f"dispute:{dispute_id}")
+            elif final_decision == "Favour Buyer":
+                payout_result = await refund_transaction(
+                    db, transaction,
+                    reason=f"Dispute {dispute_id} resolved in the buyer's favour",
+                    source=f"dispute:{dispute_id}",
+                )
+            await db.disputes.update_one(
+                {"dispute_id": dispute_id},
+                {"$set": {"payout_result": payout_result, "payout_executed_at": datetime.now(timezone.utc).isoformat()}},
+            )
+        except Exception as exc:
+            logger.error(f"[AI_DISPUTE] payout execution failed for {dispute_id}: {exc}")
+            payout_result = {"success": False, "error": str(exc)}
+
+    logger.info(
+        f"[AI_DISPUTE] admin {admin.user_id} {action}d dispute {dispute_id} → {final_decision} "
+        f"payout={payout_result}"
+    )
     return {
         "message": f"Dispute resolved ({action}): {final_decision}",
         "dispute_id": dispute_id,
         "decision": final_decision,
+        "payout_result": payout_result,
     }
 
 

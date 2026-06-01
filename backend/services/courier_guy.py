@@ -111,6 +111,11 @@ async def get_quote(
         submitted_length_cm, submitted_width_cm, submitted_height_cm,
         submitted_weight_kg, declared_value (optional)
     """
+    # Entry marker — confirms get_quote is actually invoked on the live build and
+    # that the running deployment includes this code (paired with the rates-response
+    # dump below that prints the provider_id we need for SHIPLOGIC_PROVIDER_ID).
+    logger.warning("[COURIER][DEBUG] get_quote ENTERED — building /rates request")
+
     payload = {
         "collection_address": pickup_address,
         "delivery_address": delivery_address,
@@ -171,7 +176,7 @@ async def get_quote(
         resp.raise_for_status()
         data = _shiplogic_json(resp, "quote", quote_context)
 
-    # ── TEMP DEBUG (remove after capturing provider_id) ───────────────────────
+    # ── ShipLogic rates diagnostics (remove after capturing provider_id) ──────
     # Logs the full raw /rates response and the provider_id of the first rate so
     # we can read the correct SHIPLOGIC_PROVIDER_ID value from the Railway logs.
     try:

@@ -753,16 +753,26 @@ function AdminTransactionDetail() {
                   Force: Mark Delivered
                 </Button>
 
-                <Button
-                  onClick={() => openConfirmModal('force_release_escrow', 'Force: Release Escrow', `Force-release escrow for transaction ${transaction.share_code}? Funds will be sent to the seller immediately.`)}
-                  disabled={actionLoading}
-                  className="w-full text-white justify-center"
-                  style={{ backgroundColor: COLORS.green }}
-                  data-testid="force-release-escrow-btn"
-                >
-                  <DollarSign className="w-4 h-4 mr-2" />
-                  Force: Release Escrow
-                </Button>
+                {/* Force-release escrow is hidden for courier deliveries — those
+                    auto-release when the buyer confirms receipt or the timer expires,
+                    and forcing it via allocationAcceptDelivery is rejected by TradeSafe. */}
+                {transaction.delivery_method === 'courier' ? (
+                  <p className="text-xs p-3 rounded" style={{ backgroundColor: COLORS.section, color: COLORS.subtext }}>
+                    Courier transactions auto-release when the buyer confirms receipt or the
+                    delivery timer expires. Force release isn't available for courier deliveries.
+                  </p>
+                ) : (
+                  <Button
+                    onClick={() => openConfirmModal('force_release_escrow', 'Force: Release Escrow', `Force-release escrow for transaction ${transaction.share_code}? Funds will be sent to the seller immediately.`)}
+                    disabled={actionLoading}
+                    className="w-full text-white justify-center"
+                    style={{ backgroundColor: COLORS.green }}
+                    data-testid="force-release-escrow-btn"
+                  >
+                    <DollarSign className="w-4 h-4 mr-2" />
+                    Force: Release Escrow
+                  </Button>
+                )}
 
                 <Button
                   onClick={() => openConfirmModal('force_cancel', 'Force: Cancel Transaction', `Force-cancel transaction ${transaction.share_code}? This archives the transaction from any state and cannot be undone.`)}

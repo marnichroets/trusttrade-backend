@@ -117,6 +117,7 @@ class Settings:
     COURIER_ENABLED: bool = os.environ.get('COURIER_ENABLED', 'True').lower() not in ('false', '0', 'no')
     SHIPLOGIC_API_KEY: str = os.environ.get('SHIPLOGIC_API_KEY', '')
     SHIPLOGIC_API_URL: str = os.environ.get('SHIPLOGIC_API_URL', 'https://api.shiplogic.com')
+    SHIPLOGIC_PROVIDER_ID: str = os.environ.get('SHIPLOGIC_PROVIDER_ID', '')
     # Public Courier Guy tracking page; "{waybill}" is substituted with the waybill number.
     COURIER_TRACKING_URL_TEMPLATE: str = os.environ.get(
         'COURIER_TRACKING_URL_TEMPLATE', 'https://www.thecourierguy.co.za/track-trace?ref={waybill}'

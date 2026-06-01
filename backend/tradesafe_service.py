@@ -1436,6 +1436,10 @@ async def accept_delivery(allocation_id: str, seller_token_id: Optional[str] = N
     If allocationStartDelivery returns an error the allocation may already be
     in the right state (e.g. seller dispatched earlier), so we still attempt
     allocationAcceptDelivery regardless.
+
+    If allocationAcceptDelivery is rejected (TradeSafe blocks it in some allocation
+    states), we fall back to allocationCompleteDelivery — the documented post-payment
+    release mutation — so a valid release never dead-ends on the wrong mutation.
     """
     logger.info(f"[ACCEPT_DELIVERY] Back-to-back sequence start — allocation={allocation_id!r}")
 
@@ -1463,18 +1467,40 @@ async def accept_delivery(allocation_id: str, seller_token_id: Optional[str] = N
     result = await execute_graphql(mutation, {"id": allocation_id})
     logger.info(f"[ACCEPT_DELIVERY] allocationAcceptDelivery raw response: {result}")
 
-    if result and "errors" in result:
-        err = result["errors"][0].get("message", "unknown") if result["errors"] else "unknown"
-        debug = (result["errors"][0].get("extensions") or {}).get("debugMessage", "") if result["errors"] else ""
-        logger.error(f"[ACCEPT_DELIVERY] TradeSafe error for {allocation_id!r}: {err} | debug: {debug}")
-        return None
-
-    if result and "allocationAcceptDelivery" in result:
+    if result and "allocationAcceptDelivery" in result and "errors" not in result:
         delivery_result = result["allocationAcceptDelivery"]
         logger.info(f"[ACCEPT_DELIVERY] Success: allocation={allocation_id!r} state={delivery_result.get('state')!r}")
         return delivery_result
 
-    logger.error(f"[ACCEPT_DELIVERY] Unexpected response for allocation {allocation_id!r}: {result}")
+    # allocationAcceptDelivery failed. TradeSafe rejects it in several allocation
+    # states (e.g. "You cannot accept this allocation"). The documented post-payment
+    # release path is allocationCompleteDelivery — fall back to it so the release
+    # (and the admin force-release) still completes instead of dead-ending.
+    if result and "errors" in result:
+        err = result["errors"][0].get("message", "unknown") if result["errors"] else "unknown"
+        debug = (result["errors"][0].get("extensions") or {}).get("debugMessage", "") if result["errors"] else ""
+        logger.error(
+            f"[ACCEPT_DELIVERY] allocationAcceptDelivery error for {allocation_id!r}: {err} | debug: {debug} "
+            f"— falling back to allocationCompleteDelivery"
+        )
+    else:
+        logger.error(
+            f"[ACCEPT_DELIVERY] Unexpected allocationAcceptDelivery response for {allocation_id!r}: {result} "
+            f"— falling back to allocationCompleteDelivery"
+        )
+
+    complete_result = await complete_delivery(allocation_id)
+    if complete_result:
+        logger.info(
+            f"[ACCEPT_DELIVERY] Fallback allocationCompleteDelivery succeeded: "
+            f"allocation={allocation_id!r} state={complete_result.get('state')!r}"
+        )
+        return complete_result
+
+    logger.error(
+        f"[ACCEPT_DELIVERY] Both allocationAcceptDelivery and allocationCompleteDelivery "
+        f"failed for allocation {allocation_id!r}"
+    )
     return None
 
 

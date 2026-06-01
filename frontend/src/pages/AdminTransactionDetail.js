@@ -147,10 +147,12 @@ function AdminTransactionDetail() {
       await api.post(endpoint, data);
       toast.success(`Action completed: ${action.replace('_', ' ')}`);
       setAdminNote('');
-      fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Action failed');
     } finally {
+      // Always refetch — even after a failure — so the panel (e.g. the courier
+      // "Last error") reflects the latest attempt instead of a stale value.
+      fetchData();
       setActionLoading(false);
     }
   };
@@ -794,6 +796,14 @@ function AdminTransactionDetail() {
                   ) : (
                     <>
                       <p style={{ color: COLORS.subtext }}>No shipment booked yet.</p>
+                      <div className="flex justify-between items-center">
+                        <span style={{ color: COLORS.subtext }}>Service level code</span>
+                        <span className="font-mono" style={{ color: COLORS.text }}>{transaction.courier_quote_id || '—'}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span style={{ color: COLORS.subtext }}>Service level id</span>
+                        <span className="font-mono" style={{ color: COLORS.text }}>{transaction.courier_service_level_id ?? '—'}</span>
+                      </div>
                       {transaction.courier_booking_error && (
                         <p className="text-xs p-2 rounded" style={{ backgroundColor: COLORS.section, color: COLORS.error }}>
                           Last error: {transaction.courier_booking_error}

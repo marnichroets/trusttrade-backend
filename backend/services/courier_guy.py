@@ -214,19 +214,45 @@ async def book_shipment(
     # New transactions persist courier_service_level_id; for older ones we resolve the
     # id by re-quoting the same pickup/delivery/parcel and matching the stored code.
     if service_level_id is None and quote_id:
+        rates = []
         try:
             rates = await get_quote(pickup["address"], delivery["address"], parcel)
-            for r in rates:
-                sl = r.get("service_level") or {}
-                if str(sl.get("code")) == str(quote_id) and sl.get("id") is not None:
-                    service_level_id = sl.get("id")
-                    break
-            logger.info(
-                f"[COURIER] Resolved service_level_id={service_level_id!r} "
-                f"from code={quote_id!r} via re-quote"
-            )
         except Exception as exc:
-            logger.error(f"[COURIER] Could not resolve service_level_id from code={quote_id!r}: {exc}")
+            logger.error(f"[COURIER] re-quote for service_level_id failed (code={quote_id!r}): {exc}")
+
+        # Log exactly what's available vs what we stored — this is the key diagnostic
+        # when the stored code can't be matched to a current rate.
+        available = [
+            ((r.get("service_level") or {}).get("code"), (r.get("service_level") or {}).get("id"))
+            for r in rates
+        ]
+        logger.warning(
+            f"[COURIER] re-quote fallback — stored code={quote_id!r} "
+            f"available_service_levels={available}"
+        )
+
+        want = str(quote_id).strip().lower()
+        for code, sid in available:
+            if sid is not None and str(code).strip().lower() == want:
+                service_level_id = sid
+                break
+
+        # If the stored code is gone from the current rates but only one option exists,
+        # use it rather than failing outright.
+        if service_level_id is None and len(available) == 1 and available[0][1] is not None:
+            service_level_id = available[0][1]
+            logger.warning(
+                f"[COURIER] stored code {quote_id!r} not in current rates; "
+                f"using sole available rate id={service_level_id}"
+            )
+
+        if service_level_id is None:
+            raise RuntimeError(
+                f"Could not resolve a ShipLogic service_level id for stored code "
+                f"{quote_id!r}. Available now: {available or 'none (re-quote returned no rates)'}. "
+                f"Re-select a delivery option or set courier_service_level_id on the transaction."
+            )
+        logger.info(f"[COURIER] Resolved service_level_id={service_level_id!r} from code={quote_id!r}")
 
     parcel_payload = {
         "submitted_length_cm": parcel.get("submitted_length_cm", 10),

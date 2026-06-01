@@ -12,6 +12,19 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Known ShipLogic (Courier Guy) service_level code → id mapping for this account.
+# Used as a fallback when a re-quote returns no rates — e.g. ShipLogic 500
+# "cannot get rates" because the originally selected service (often same-day LSF)
+# is no longer available for the route — so a previously-quoted shipment can still
+# be booked. ShipLogic books against the numeric id, not the code.
+SERVICE_LEVEL_CODE_TO_ID = {
+    "LSF": 212572,
+    "LOF": 212573,
+    "ECO": 212570,
+    "LSE": 212574,
+    "LSX": 212575,
+}
+
 
 def _headers() -> Dict[str, str]:
     if not settings.SHIPLOGIC_API_KEY:
@@ -237,8 +250,19 @@ async def book_shipment(
                 service_level_id = sid
                 break
 
-        # If the stored code is gone from the current rates but only one option exists,
-        # use it rather than failing outright.
+        # Known code→id mapping fallback. Covers the case where the re-quote returns no
+        # rates (ShipLogic 500 "cannot get rates") because the originally selected
+        # service is no longer available for the route — we can still book by id.
+        if service_level_id is None:
+            mapped = SERVICE_LEVEL_CODE_TO_ID.get(str(quote_id).strip().upper())
+            if mapped is not None:
+                service_level_id = mapped
+                logger.warning(
+                    f"[COURIER] code {quote_id!r} not resolvable from current rates; "
+                    f"using known mapping id={service_level_id}"
+                )
+
+        # If still unresolved but only one live option exists, use it rather than failing.
         if service_level_id is None and len(available) == 1 and available[0][1] is not None:
             service_level_id = available[0][1]
             logger.warning(

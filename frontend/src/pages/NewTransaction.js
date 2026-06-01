@@ -300,7 +300,9 @@ function NewTransaction() {
   const sellerPayout = itemPrice - sellerFeeContrib;
   const isCourierDelivery = formData.delivery_method === 'courier';
   const isDropoff = courierForm.collection_preference === 'dropoff';
-  const courierFee = isCourierDelivery && selectedQuote ? (selectedQuote?.price ?? selectedQuote?.rate ?? 0) : 0;
+  // Coerce to a number — ShipLogic can return the rate as a string, which would
+  // otherwise string-concatenate into the totals instead of adding numerically.
+  const courierFee = isCourierDelivery && selectedQuote ? (Number(selectedQuote?.price ?? selectedQuote?.rate ?? 0) || 0) : 0;
   const COURIER_HANDLING_FEE = 10;
   const courierHandlingFee = isCourierDelivery && selectedQuote ? COURIER_HANDLING_FEE : 0;
 
@@ -1129,6 +1131,10 @@ function NewTransaction() {
                     { label: 'Item', value: formData.item_description, truncate: true },
                     { label: 'Item Value', value: `R ${itemPrice.toFixed(2)}`, mono: true },
                     { label: 'TrustTrade Fee (2%)', value: `R ${platformFee.toFixed(2)}`, mono: true },
+                    ...(courierFee > 0 ? [
+                      { label: 'Courier Delivery', value: `R ${courierFee.toFixed(2)}`, mono: true },
+                      { label: 'Courier handling fee', value: `R ${courierHandlingFee.toFixed(2)}`, mono: true },
+                    ] : []),
                     { label: 'Buyer Pays Total', value: `R ${(itemPrice + buyerFeeContrib + courierFee + courierHandlingFee).toFixed(2)}`, mono: true, accent: '#2563eb' },
                     { label: 'Seller Receives', value: `R ${sellerPayout.toFixed(2)}`, mono: true, accent: '#10b981' },
                     { label: 'Photos', value: `${photos.length} uploaded` },

@@ -1310,6 +1310,106 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
     return Transaction(**updated_transaction)
 
 
+# ── One-tap confirm-receipt links (buyer taps from SMS, no login) ─────────────
+# The unguessable confirm_receipt_token is the auth; these endpoints are public.
+
+@router.get("/transactions/confirm/{token}")
+async def get_transaction_by_confirm_token(token: str):
+    """Public: minimal info for the buyer's one-tap confirm landing page."""
+    db = get_database()
+    txn = await db.transactions.find_one({"confirm_receipt_token": token}, {"_id": 0})
+    if not txn:
+        raise HTTPException(status_code=404, detail="This link is invalid or has expired.")
+    released = txn.get("release_status") == "Released" or txn.get("payment_status") in ("Released", "Completed")
+    return {
+        "transaction_id": txn.get("transaction_id"),
+        "share_code": txn.get("share_code"),
+        "item_description": txn.get("item_description"),
+        "seller_name": txn.get("seller_name"),
+        "buyer_name": txn.get("buyer_name"),
+        "amount": txn.get("item_price"),
+        "total": txn.get("total"),
+        "auto_release_at": txn.get("auto_release_at"),
+        "delivery_method": txn.get("delivery_method"),
+        "released": released,
+        "problem_reported": bool(txn.get("buyer_reported_problem")),
+    }
+
+
+@router.post("/transactions/confirm/{token}")
+async def confirm_receipt_by_token(token: str):
+    """Public: buyer confirms receipt via the SMS link → release funds (idempotent)."""
+    db = get_database()
+    txn = await db.transactions.find_one({"confirm_receipt_token": token}, {"_id": 0})
+    if not txn:
+        raise HTTPException(status_code=404, detail="This link is invalid or has expired.")
+    transaction_id = txn.get("transaction_id")
+
+    if txn.get("release_status") == "Released":
+        return {"success": True, "already": True, "message": "Payment already released. Thank you!"}
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    timeline = txn.get("timeline", [])
+    timeline.append({
+        "status": "Buyer confirmed receipt (one-tap link)",
+        "timestamp": now_iso,
+        "by": txn.get("buyer_name", "Buyer"),
+    })
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {"delivery_confirmed": True, "buyer_confirmed_receipt_at": now_iso, "timeline": timeline}},
+    )
+
+    from services.dispute_payouts import release_funds_to_seller
+    result = await release_funds_to_seller(db, txn, source="buyer_confirm_link")
+    if not result.get("success") and not result.get("skipped"):
+        raise HTTPException(
+            status_code=502,
+            detail="We couldn't release the payment right now. Our team has been notified.",
+        )
+    return {"success": True, "message": "Thank you! Your payment has been released to the seller."}
+
+
+@router.post("/transactions/confirm/{token}/report")
+async def report_problem_by_token(token: str):
+    """Public: buyer reports a problem from the SMS link → pause auto-release + alert admin."""
+    db = get_database()
+    txn = await db.transactions.find_one({"confirm_receipt_token": token}, {"_id": 0})
+    if not txn:
+        raise HTTPException(status_code=404, detail="This link is invalid or has expired.")
+    transaction_id = txn.get("transaction_id")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    timeline = txn.get("timeline", [])
+    timeline.append({
+        "status": "Buyer reported a problem (one-tap link)",
+        "timestamp": now_iso,
+        "by": txn.get("buyer_name", "Buyer"),
+    })
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "buyer_reported_problem": True,
+            "buyer_reported_problem_at": now_iso,
+            "auto_release_hold": True,  # the auto-release job must skip held transactions
+            "timeline": timeline,
+        }},
+    )
+    try:
+        from services.dispute_payouts import _alert
+        await _alert(
+            db, txn,
+            f"Buyer reported a problem on {txn.get('share_code', transaction_id)} via the SMS link — "
+            f"auto-release paused, awaiting dispute.",
+            {"phase": "buyer_report"},
+        )
+    except Exception:
+        pass
+    return {
+        "success": True,
+        "message": "Thanks for letting us know. Your payment is on hold and our team will help you sort this out.",
+    }
+
+
 @router.post("/transactions/{transaction_id}/confirm-payment")
 async def confirm_payment(request: Request, transaction_id: str, payment: PaymentConfirmation):
     """Mark transaction as paid (admin only)"""

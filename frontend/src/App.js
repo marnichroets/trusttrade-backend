@@ -24,6 +24,7 @@ import AdminMonitoring from './pages/AdminMonitoring';
 import AdminTokenRecovery from './pages/AdminTokenRecovery';
 import AdminFinanceDashboard from './pages/AdminFinanceDashboard';
 import ShareTransaction from './pages/ShareTransaction';
+import ConfirmReceipt from './pages/ConfirmReceipt';
 import UserProfile from './pages/UserProfile';
 import LiveActivity from './pages/LiveActivity';
 import IdentityVerification from './pages/IdentityVerification';
@@ -102,6 +103,7 @@ function AppRouter() {
       <Route path="/disputes" element={<DisputesPage />} />
       <Route path="/refund" element={<RefundPage />} />
       <Route path="/t/:shareCode" element={<ShareTransaction />} />
+      <Route path="/confirm/:token" element={<ConfirmReceipt />} />
       <Route path="/payment-success" element={<PaymentSuccess />} />
       <Route path="/payment-cancelled" element={<PaymentCancelled />} />
       <Route path="/transaction/success" element={<PaymentSuccess />} />

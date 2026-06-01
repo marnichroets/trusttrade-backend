@@ -5,6 +5,7 @@ import EmailVerificationPrompt from '../components/EmailVerificationPrompt';
 import Timeline from '../components/Timeline';
 import TransactionActivityFeed from '../components/TransactionActivityFeed';
 import { TransactionTimeline } from '../components/TransactionTimeline';
+import AutoReleaseCountdown from '../components/AutoReleaseCountdown';
 import StepProgressTracker from '../components/StepProgressTracker';
 import { getFlowCopy, getTransactionFlowType, mapEscrowUiStateToTimelineState, resolveEscrowUiState } from '../components/transactionState';
 import { Textarea } from '../components/ui/textarea';
@@ -1792,6 +1793,10 @@ function TransactionDetail() {
                 </div>
               </div>
             )}
+
+            {/* Pre-release inspection countdown — shows the buyer (and seller) exactly
+                when payment auto-releases, in plain English, after dispatch. */}
+            <AutoReleaseCountdown transaction={transaction} isBuyer={isBuyer} isSeller={isSeller} />
 
             {isFinalized && (
               <>

@@ -268,6 +268,39 @@ async def send_delivery_sms(
     return await send_sms(to_phone, message)
 
 
+async def send_order_dispatched_sms(
+    to_phone: str,
+    buyer_name: str,
+    seller_name: str,
+    window_text: str,
+    release_date: str,
+    confirm_link: str,
+) -> Dict[str, Any]:
+    """Buyer SMS the moment the seller dispatches — plain, friendly, no jargon."""
+    first_name = (buyer_name or "there").split(" ")[0]
+    message = (
+        f"Hi {first_name}, your order from {seller_name} is on its way. "
+        f"You have {window_text} to report any problems. If everything is fine, "
+        f"just ignore this - your payment releases automatically on {release_date}. "
+        f"Problems? Tap: {confirm_link}"
+    )
+    return await send_sms(to_phone, message)
+
+
+async def send_release_reminder_sms(
+    to_phone: str,
+    when_text: str,
+    confirm_link: str,
+) -> Dict[str, Any]:
+    """Reminder before auto-release. when_text e.g. 'tomorrow' or 'in 2 hours'."""
+    message = (
+        f"Reminder: Your TrustTrade payment releases {when_text}. "
+        f"Received your order? No action needed. "
+        f"Problem? Tap here before then: {confirm_link}"
+    )
+    return await send_sms(to_phone, message)
+
+
 def _format_rand(amount: float) -> str:
     """R500 for whole amounts, R500.50 when there are cents."""
     a = float(amount or 0)

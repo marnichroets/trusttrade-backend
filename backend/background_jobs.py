@@ -452,6 +452,144 @@ async def book_pending_courier_shipments(db: AsyncIOMotorDatabase) -> Dict[str, 
     return summary
 
 
+def _parse_iso_utc(value) -> Optional[datetime]:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+async def send_release_reminders(db: AsyncIOMotorDatabase) -> Dict[str, Any]:
+    """SMS reminders 24h and 2h before auto-release for dispatched, unconfirmed transactions."""
+    import sms_service
+    from services.auto_release import confirm_link
+    from core.config import settings
+
+    logger.info("=== Running auto-release reminders ===")
+    summary = {"checked": 0, "sent_24h": 0, "sent_2h": 0, "errors": 0}
+    now = datetime.now(timezone.utc)
+
+    try:
+        candidates = await db.transactions.find({
+            "transaction_state": "DELIVERY_IN_PROGRESS",
+            "auto_release_at": {"$exists": True, "$ne": None},
+            "release_status": {"$nin": ["Released", "Refunded"]},
+            "has_dispute": {"$ne": True},
+            "auto_release_hold": {"$ne": True},
+            "buyer_reported_problem": {"$ne": True},
+        }, {"_id": 0}).to_list(200)
+        summary["checked"] = len(candidates)
+
+        for txn in candidates:
+            tid = txn.get("transaction_id")
+            try:
+                release_at = _parse_iso_utc(txn.get("auto_release_at"))
+                if not release_at:
+                    continue
+                hours_left = (release_at - now).total_seconds() / 3600.0
+                phone = txn.get("buyer_phone")
+                token = txn.get("confirm_receipt_token")
+                link = confirm_link(settings.FRONTEND_URL, token) if token else settings.FRONTEND_URL
+
+                # Final reminder — within 2 hours of release.
+                if 0 < hours_left <= 2 and not txn.get("release_reminder_2h_sent"):
+                    claim = await db.transactions.update_one(
+                        {"transaction_id": tid, "release_reminder_2h_sent": {"$ne": True}},
+                        {"$set": {"release_reminder_2h_sent": True}},
+                    )
+                    if claim.modified_count == 1:
+                        if phone:
+                            await sms_service.send_release_reminder_sms(phone, "in about 2 hours", link)
+                        summary["sent_2h"] += 1
+                # 24-hour reminder.
+                elif 2 < hours_left <= 24 and not txn.get("release_reminder_24h_sent"):
+                    claim = await db.transactions.update_one(
+                        {"transaction_id": tid, "release_reminder_24h_sent": {"$ne": True}},
+                        {"$set": {"release_reminder_24h_sent": True}},
+                    )
+                    if claim.modified_count == 1:
+                        if phone:
+                            await sms_service.send_release_reminder_sms(phone, "tomorrow", link)
+                        summary["sent_24h"] += 1
+            except Exception as e:
+                summary["errors"] += 1
+                logger.error(f"Release reminder failed for {tid}: {e}")
+    except Exception as e:
+        summary["errors"] += 1
+        logger.error(f"Release reminder job failed: {e}")
+
+    logger.info(f"Auto-release reminders complete: {summary}")
+    return summary
+
+
+async def process_dispatch_auto_releases(db: AsyncIOMotorDatabase, tradesafe_service) -> Dict[str, Any]:
+    """
+    Auto-release to the seller when the inspection window expires and the buyer took no
+    action — the core 'if you do nothing, payment releases' guarantee. Skips disputed,
+    held, or buyer-flagged transactions. Uses the escrow-safe release helper.
+    """
+    logger.info("=== Running dispatch auto-release check ===")
+    summary = {"checked": 0, "released": 0, "errors": 0}
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    try:
+        from services.dispute_payouts import release_funds_to_seller
+
+        eligible = await db.transactions.find({
+            "transaction_state": "DELIVERY_IN_PROGRESS",
+            "auto_release_at": {"$lte": now_iso},
+            "release_status": {"$nin": ["Released", "Refunded"]},
+            "has_dispute": {"$ne": True},
+            "auto_release_hold": {"$ne": True},
+            "buyer_reported_problem": {"$ne": True},
+            "auto_released": {"$ne": True},
+        }, {"_id": 0}).to_list(100)
+        summary["checked"] = len(eligible)
+
+        for txn in eligible:
+            tid = txn.get("transaction_id")
+            try:
+                # Atomically claim so two workers can't both release.
+                claim = await db.transactions.update_one(
+                    {"transaction_id": tid, "auto_released": {"$ne": True},
+                     "release_status": {"$nin": ["Released", "Refunded"]}},
+                    {"$set": {"auto_released": True, "auto_released_at": now_iso}},
+                )
+                if claim.modified_count != 1:
+                    continue
+
+                timeline = txn.get("timeline", [])
+                timeline.append({
+                    "status": "Funds auto-released (inspection window passed)",
+                    "timestamp": now_iso,
+                    "by": "System",
+                    "details": "Buyer took no action before the auto-release date.",
+                })
+                await db.transactions.update_one({"transaction_id": tid}, {"$set": {"timeline": timeline}})
+
+                result = await release_funds_to_seller(db, txn, source="auto_release_timeout")
+                if result.get("success"):
+                    summary["released"] += 1
+                    logger.info(f"[AUTO_RELEASE] {tid} auto-released to seller")
+                else:
+                    summary["errors"] += 1
+                    logger.error(f"[AUTO_RELEASE] {tid} release failed: {result}")
+            except Exception as e:
+                summary["errors"] += 1
+                logger.error(f"[AUTO_RELEASE] error for {tid}: {e}")
+    except Exception as e:
+        summary["errors"] += 1
+        logger.error(f"Dispatch auto-release job failed: {e}")
+
+    logger.info(f"Dispatch auto-release complete: {summary}")
+    return summary
+
+
 async def process_auto_releases(db: AsyncIOMotorDatabase, tradesafe_service) -> Dict[str, Any]:
     """
     Process automatic fund releases based on delivery method timers.
@@ -710,6 +848,18 @@ async def start_background_jobs(
                 await book_pending_courier_shipments(db)
             except Exception as e:
                 logger.error(f"Pending courier booking job failed: {e}")
+
+            # Auto-release reminders (24h + 2h before) - every iteration
+            try:
+                await send_release_reminders(db)
+            except Exception as e:
+                logger.error(f"Release reminder job failed: {e}")
+
+            # Auto-release on inspection-window expiry - every iteration
+            try:
+                await process_dispatch_auto_releases(db, tradesafe_service)
+            except Exception as e:
+                logger.error(f"Dispatch auto-release job failed: {e}")
             
             # Auto-release - every 2nd iteration (6 minutes)
             if iteration % 2 == 0:

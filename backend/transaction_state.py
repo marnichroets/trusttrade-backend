@@ -69,14 +69,17 @@ VALID_TRANSITIONS: Dict[TransactionState, Set[TransactionState]] = {
 }
 
 
-# Auto-release times based on delivery method (in hours)
+# Auto-release times based on delivery method (in hours), for the VERIFIED-seller
+# (fast) track. New sellers get a 5-day floor — see services/auto_release.py, which is
+# the source of truth for the two-track window. Kept in sync here for any legacy caller.
 AUTO_RELEASE_HOURS: Dict[str, int] = {
+    "digital": 12,
     "meet_in_person": 24,
+    "in_person": 24,
     "collection": 24,
-    "courier": 72,  # 3 days
-    "postnet": 120,  # 5 days
-    "digital": 24,
-    "other": 72
+    "courier": 120,   # 5 days
+    "postnet": 120,   # 5 days
+    "other": 120,
 }
 
 

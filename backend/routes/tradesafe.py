@@ -834,20 +834,55 @@ async def start_tradesafe_delivery(request: Request, transaction_id: str):
         "details": "Seller marked item as dispatched"
     })
     
+    # ── Two-track auto-release window, counted from dispatch ──────────────────
+    from core.config import settings
+    from services.auto_release import (
+        compute_auto_release, human_window, format_release_date,
+        confirm_link, new_confirm_token,
+    )
+    from sms_service import send_order_dispatched_sms
+
+    now = datetime.now(timezone.utc)
+    seller_email = (transaction.get("seller_email") or "").lower()
+    seller_track_doc = await db.users.find_one(
+        {"email": seller_email},
+        {"_id": 0, "total_trades": 1, "successful_trades": 1, "valid_disputes_count": 1},
+    ) if seller_email else None
+
+    release = compute_auto_release(transaction.get("delivery_method"), seller_track_doc, from_time=now)
+    token = transaction.get("confirm_receipt_token") or new_confirm_token()
+    link = confirm_link(settings.FRONTEND_URL, token)
+    window_text = human_window(release["window_hours"])
+    release_date = format_release_date(release["auto_release_at"])
+
+    logger.info(
+        f"[AUTO_RELEASE] {transaction_id} dispatched — method={release['delivery_method']!r} "
+        f"seller_track={release['seller_track']} window_hours={release['window_hours']} "
+        f"auto_release_at={release['auto_release_at_iso']}"
+    )
+
     await db.transactions.update_one(
         {"transaction_id": transaction_id},
         {"$set": {
             "tradesafe_state": "INITIATED",
             "payment_status": "Delivery in Progress",
-            "delivery_started_at": datetime.now(timezone.utc).isoformat(),
-            "timeline": timeline
+            "transaction_state": "DELIVERY_IN_PROGRESS",
+            "delivery_started_at": now.isoformat(),
+            "dispatched_at": now.isoformat(),
+            "auto_release_at": release["auto_release_at_iso"],
+            "auto_release_window_hours": release["window_hours"],
+            "auto_release_seller_track": release["seller_track"],
+            "confirm_receipt_token": token,
+            "release_reminder_24h_sent": False,
+            "release_reminder_2h_sent": False,
+            "timeline": timeline,
         }}
     )
-    
+
     # Send notifications
     buyer_email = transaction.get("buyer_email")
     buyer_phone = transaction.get("buyer_phone")
-    
+
     if buyer_email:
         await send_delivery_started_email(
             to_email=buyer_email,
@@ -856,20 +891,26 @@ async def start_tradesafe_delivery(request: Request, transaction_id: str):
             item_description=transaction["item_description"],
             seller_name=transaction.get("seller_name", "Seller")
         )
-    
+
     if buyer_phone:
         try:
-            await send_delivery_sms(
+            await send_order_dispatched_sms(
                 to_phone=buyer_phone,
-                message=f"TrustTrade: Your item '{transaction['item_description'][:30]}...' has been dispatched. Please confirm receipt once delivered. Ref: {transaction.get('share_code', transaction_id)}"
+                buyer_name=transaction.get("buyer_name", "there"),
+                seller_name=transaction.get("seller_name", "the seller"),
+                window_text=window_text,
+                release_date=release_date,
+                confirm_link=link,
             )
         except Exception as e:
-            logger.error(f"Failed to send delivery SMS: {e}")
-    
+            logger.error(f"Failed to send dispatch SMS: {e}")
+
     return {
         "status": "delivery_started",
         "message": "Delivery marked as started. Buyer has been notified.",
-        "state": "INITIATED"
+        "state": "INITIATED",
+        "auto_release_at": release["auto_release_at_iso"],
+        "auto_release_window_hours": release["window_hours"],
     }
 
 

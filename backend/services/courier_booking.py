@@ -185,11 +185,22 @@ async def book_courier_for_transaction(
         return result
 
     except Exception as exc:
-        logger.error(f"[COURIER_BOOK] {transaction_id} booking failed (non-fatal): {exc}", exc_info=True)
+        # Surface the ACTUAL provider response when it's an HTTP error, so the stored
+        # courier_booking_error (shown in the admin panel) names the exact field
+        # ShipLogic rejected — not the opaque "Client error 400 Bad Request" message.
+        error_detail = str(exc)
+        try:
+            import httpx
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+                body = " ".join((exc.response.text or "").split())[:400]
+                error_detail = f"HTTP {exc.response.status_code} from ShipLogic: {body}"
+        except Exception:
+            pass
+        logger.error(f"[COURIER_BOOK] {transaction_id} booking failed (non-fatal): {error_detail}", exc_info=True)
         try:
             await db.transactions.update_one(
                 {"transaction_id": transaction_id},
-                {"$set": {"courier_booking_error": str(exc)[:300], "courier_booking_in_progress": False}},
+                {"$set": {"courier_booking_error": error_detail[:500], "courier_booking_in_progress": False}},
             )
         except Exception:
             pass

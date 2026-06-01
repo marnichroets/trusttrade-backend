@@ -230,7 +230,18 @@ async def book_shipment(
             else "Collect parcel from sender's address."
         ),
     }
-    logger.info(f"[COURIER] Booking — collection_preference={'dropoff' if is_dropoff else 'collection'}")
+
+    # ShipLogic selects the carrier from provider_id. The /rates call already sends it;
+    # the /shipments call must send the SAME provider_id or accounts with more than one
+    # provider reject the booking with a 400. Omitted only when unconfigured.
+    provider_id = _provider_id()
+    if provider_id is not None:
+        payload["provider_id"] = provider_id
+
+    logger.info(
+        f"[COURIER] Booking — collection_preference={'dropoff' if is_dropoff else 'collection'} "
+        f"provider_id_set={provider_id is not None}"
+    )
 
     booking_context = {
         "base_url": settings.SHIPLOGIC_API_URL,
@@ -240,6 +251,7 @@ async def book_shipment(
         "pickup_code": pickup.get("address", {}).get("code"),
         "delivery_city": delivery.get("address", {}).get("city"),
         "delivery_code": delivery.get("address", {}).get("code"),
+        "provider_id_set": provider_id is not None,
     }
 
     async with httpx.AsyncClient(timeout=30.0) as client:

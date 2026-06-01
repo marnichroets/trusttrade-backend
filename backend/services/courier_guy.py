@@ -171,6 +171,26 @@ async def get_quote(
         resp.raise_for_status()
         data = _shiplogic_json(resp, "quote", quote_context)
 
+    # ── TEMP DEBUG (remove after capturing provider_id) ───────────────────────
+    # Logs the full raw /rates response and the provider_id of the first rate so
+    # we can read the correct SHIPLOGIC_PROVIDER_ID value from the Railway logs.
+    try:
+        import json as _json
+        _raw_list = data.get("rates", data if isinstance(data, list) else [])
+        logger.warning("[COURIER][DEBUG] Full /rates response: %s", _json.dumps(data, default=str)[:4000])
+        if _raw_list:
+            _first = _raw_list[0]
+            logger.warning("[COURIER][DEBUG] First rate object: %s", _json.dumps(_first, default=str)[:2000])
+            logger.warning(
+                "[COURIER][DEBUG] provider_id candidates — provider_id=%r service_level.provider_id=%r provider=%r",
+                _first.get("provider_id"),
+                (_first.get("service_level") or {}).get("provider_id"),
+                _first.get("provider"),
+            )
+    except Exception as _dbg_exc:
+        logger.warning("[COURIER][DEBUG] could not dump rates response: %s", _dbg_exc)
+    # ── END TEMP DEBUG ────────────────────────────────────────────────────────
+
     raw = data.get("rates", data if isinstance(data, list) else [])
     # Normalise: expose top-level `rate` (VAT-inclusive) as `price` so callers
     # have a single unambiguous field regardless of ShipLogic response shape.

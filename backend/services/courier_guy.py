@@ -111,11 +111,6 @@ async def get_quote(
         submitted_length_cm, submitted_width_cm, submitted_height_cm,
         submitted_weight_kg, declared_value (optional)
     """
-    # Entry marker — confirms get_quote is actually invoked on the live build and
-    # that the running deployment includes this code (paired with the rates-response
-    # dump below that prints the provider_id we need for SHIPLOGIC_PROVIDER_ID).
-    logger.warning("[COURIER][DEBUG] get_quote ENTERED — building /rates request")
-
     payload = {
         "collection_address": pickup_address,
         "delivery_address": delivery_address,
@@ -176,26 +171,6 @@ async def get_quote(
         resp.raise_for_status()
         data = _shiplogic_json(resp, "quote", quote_context)
 
-    # ── ShipLogic rates diagnostics (remove after capturing provider_id) ──────
-    # Logs the full raw /rates response and the provider_id of the first rate so
-    # we can read the correct SHIPLOGIC_PROVIDER_ID value from the Railway logs.
-    try:
-        import json as _json
-        _raw_list = data.get("rates", data if isinstance(data, list) else [])
-        logger.warning("[COURIER][DEBUG] Full /rates response: %s", _json.dumps(data, default=str)[:4000])
-        if _raw_list:
-            _first = _raw_list[0]
-            logger.warning("[COURIER][DEBUG] First rate object: %s", _json.dumps(_first, default=str)[:2000])
-            logger.warning(
-                "[COURIER][DEBUG] provider_id candidates — provider_id=%r service_level.provider_id=%r provider=%r",
-                _first.get("provider_id"),
-                (_first.get("service_level") or {}).get("provider_id"),
-                _first.get("provider"),
-            )
-    except Exception as _dbg_exc:
-        logger.warning("[COURIER][DEBUG] could not dump rates response: %s", _dbg_exc)
-    # ── END TEMP DEBUG ────────────────────────────────────────────────────────
-
     raw = data.get("rates", data if isinstance(data, list) else [])
     # Normalise: expose top-level `rate` (VAT-inclusive) as `price` so callers
     # have a single unambiguous field regardless of ShipLogic response shape.
@@ -214,6 +189,7 @@ async def book_shipment(
     parcel: Dict[str, Any],
     contact: Dict[str, Any],
     collection_preference: str = None,
+    service_level_id: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Book a shipment with ShipLogic and return the waybill details.
@@ -222,6 +198,10 @@ async def book_shipment(
         { "address": {...}, "contact": {"name": ..., "mobile_number": ...} }
 
     quote_id is the service level code returned by get_quote (e.g. "ECO", "ONX").
+    service_level_id is the numeric ShipLogic service_level id (e.g. 212572) from the
+    selected rate. ShipLogic books against this id; the code alone is not sufficient.
+    When it isn't supplied (older transactions created before we persisted it) we
+    resolve it by re-quoting and matching the stored service-level code.
 
     collection_preference:
         "collection" — Courier Guy collects the parcel from the seller's address.
@@ -229,6 +209,24 @@ async def book_shipment(
                        no collection leg is scheduled. Anything else defaults to collection.
     """
     is_dropoff = (collection_preference or "").lower() == "dropoff"
+
+    # ShipLogic books against the service_level id (an int like 212572), not the code.
+    # New transactions persist courier_service_level_id; for older ones we resolve the
+    # id by re-quoting the same pickup/delivery/parcel and matching the stored code.
+    if service_level_id is None and quote_id:
+        try:
+            rates = await get_quote(pickup["address"], delivery["address"], parcel)
+            for r in rates:
+                sl = r.get("service_level") or {}
+                if str(sl.get("code")) == str(quote_id) and sl.get("id") is not None:
+                    service_level_id = sl.get("id")
+                    break
+            logger.info(
+                f"[COURIER] Resolved service_level_id={service_level_id!r} "
+                f"from code={quote_id!r} via re-quote"
+            )
+        except Exception as exc:
+            logger.error(f"[COURIER] Could not resolve service_level_id from code={quote_id!r}: {exc}")
 
     parcel_payload = {
         "submitted_length_cm": parcel.get("submitted_length_cm", 10),
@@ -239,13 +237,22 @@ async def book_shipment(
         "reference1": contact.get("reference", ""),
     }
 
+    # Build the service_level selector ShipLogic books against. Prefer the numeric id
+    # (required); include the code too, mirroring the rate object from /rates.
+    service_level: Dict[str, Any] = {}
+    if service_level_id is not None:
+        service_level["id"] = service_level_id
+    if quote_id:
+        service_level["code"] = quote_id
+    opt_in_rates = [{"service_level": service_level}] if service_level else []
+
     payload = {
         "collection_address": pickup["address"],
         "delivery_address": delivery["address"],
         "collection_contact": pickup.get("contact", {}),
         "delivery_contact": delivery.get("contact", {}),
         "parcels": [parcel_payload],
-        "opt_in_rates": [{"service_level": {"code": quote_id}}] if quote_id else [],
+        "opt_in_rates": opt_in_rates,
         "opt_in_time_based_rates": [],
         # Tell Courier Guy whether the sender wants a collection or is dropping the parcel
         # off themselves. special_instructions_collection is a standard ShipLogic field.
@@ -265,12 +272,14 @@ async def book_shipment(
 
     logger.info(
         f"[COURIER] Booking — collection_preference={'dropoff' if is_dropoff else 'collection'} "
+        f"service_level_id={service_level_id!r} service_level_code={quote_id!r} "
         f"provider_id_set={provider_id is not None}"
     )
 
     booking_context = {
         "base_url": settings.SHIPLOGIC_API_URL,
         "quote_id": quote_id,
+        "service_level_id": service_level_id,
         "collection_preference": "dropoff" if is_dropoff else "collection",
         "pickup_city": pickup.get("address", {}).get("city"),
         "pickup_code": pickup.get("address", {}).get("code"),

@@ -613,6 +613,7 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "buyer_fee": buyer_fee,
         "seller_fee": seller_fee,
         "courier_quote_id": transaction_data.courier_quote_id,
+        "courier_service_level_id": transaction_data.courier_service_level_id,
         "courier_service_name": transaction_data.courier_service_name,
         "courier_fee": money["courier_fee"],
         "courier_handling_fee": money["courier_handling_fee"],

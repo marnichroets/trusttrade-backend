@@ -387,6 +387,8 @@ function NewTransaction() {
         delivery_method: formData.delivery_method,
         ...(isCourierDelivery && selectedQuote ? {
           courier_quote_id: selectedQuote?.service_level?.code || selectedQuote?.id || selectedQuote?.code || '',
+          // ShipLogic requires the service_level id (not just the code) when booking.
+          courier_service_level_id: selectedQuote?.service_level?.id ?? null,
           courier_service_name: selectedQuote?.service_level?.name || selectedQuote?.name || '',
           courier_fee: courierFee,
           courier_handling_fee: 0,

@@ -36,6 +36,7 @@ class Transaction(BaseModel):
     buyer_fee: Optional[float] = 0.0
     seller_fee: Optional[float] = 0.0
     courier_quote_id: Optional[str] = None
+    courier_service_level_id: Optional[int] = None  # ShipLogic service_level id from the selected rate; required for booking
     courier_service_name: Optional[str] = None
     courier_fee: Optional[float] = 0.0
     courier_handling_fee: Optional[float] = 0.0  # Deprecated launch value; no handling fee is charged
@@ -140,6 +141,7 @@ class TransactionCreate(BaseModel):
     seller_details_confirmed: bool
     item_accuracy_confirmed: bool
     courier_quote_id: Optional[str] = None
+    courier_service_level_id: Optional[int] = None  # ShipLogic service_level id from the selected rate
     courier_service_name: Optional[str] = None
     courier_fee: Optional[float] = None
     courier_handling_fee: Optional[float] = None

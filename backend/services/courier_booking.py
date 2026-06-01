@@ -105,7 +105,11 @@ async def book_courier_for_transaction(
             transaction.get("buyer_name"), transaction.get("buyer_phone"), transaction.get("buyer_email")
         )
 
-        logger.info(f"[COURIER_BOOK] {transaction_id} booking shipment — quote={quote_id!r} ref={share_code}")
+        service_level_id = transaction.get("courier_service_level_id")
+        logger.info(
+            f"[COURIER_BOOK] {transaction_id} booking shipment — quote={quote_id!r} "
+            f"service_level_id={service_level_id!r} ref={share_code}"
+        )
         result = await book_shipment(
             quote_id=quote_id,
             pickup={"address": pickup_address, "contact": pickup_contact},
@@ -113,6 +117,7 @@ async def book_courier_for_transaction(
             parcel=parcel,
             contact={"reference": share_code},
             collection_preference=transaction.get("courier_collection_preference"),
+            service_level_id=service_level_id,
         )
 
         waybill = (result or {}).get("waybill") or ""

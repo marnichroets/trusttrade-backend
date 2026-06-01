@@ -26,6 +26,24 @@ const PHONE_VERIFICATION_PROMPT = 'Verify your phone number to continue.';
 const BANKING_DETAILS_PROMPT = 'Add banking details to receive payouts.';
 const COURIER_ENABLED = process.env.REACT_APP_COURIER_ENABLED !== 'false';
 
+function roundMoney(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function splitTrustTradeFee(totalFee, feeAllocation) {
+  const fee = roundMoney(totalFee);
+  const alloc = (feeAllocation || 'BUYER').toUpperCase();
+
+  if (['SELLER', 'SELLER_AGENT'].includes(alloc)) {
+    return { buyerFee: 0, sellerFee: fee };
+  }
+  if (['BUYER_SELLER', 'SPLIT', 'SPLIT_AGENT', 'BUYER_SELLER_AGENT'].includes(alloc)) {
+    const buyerFee = roundMoney(fee / 2);
+    return { buyerFee, sellerFee: roundMoney(fee - buyerFee) };
+  }
+  return { buyerFee: fee, sellerFee: 0 };
+}
+
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;
   if (!detail) return 'An error occurred';
@@ -1381,18 +1399,14 @@ function TransactionDetail() {
     transaction.payment_status === 'Payout Processing';
   const shareLink = transaction.share_code ? `${window.location.origin}/t/${transaction.share_code}` : null;
   const _fa = (transaction.fee_allocation || 'BUYER').toUpperCase();
-  // Courier Guy cost + handling are part of what the buyer pays and are included
-  // in the escrow amount sent to the provider, so they must be in the payment total too.
-  const _courierTotal = (transaction.courier_fee || 0) + (transaction.courier_handling_fee || 0);
+  // Launch fee rule: courier delivery is a pass-through buyer cost, and the
+  // TrustTrade fee is calculated on item value only.
   const courierDeliveryFee = Number(transaction.courier_fee || 0);
-  const courierHandlingFee = Number(transaction.courier_handling_fee || 0);
-  // TrustTrade's 2% platform fee is charged on the full escrow value (item + courier),
-  // matching what TradeSafe actually deducts as the agent fee.
-  const _ttFee = Math.max((transaction.item_price + _courierTotal) * 0.02, 5);
-  const _buyerFee = ['BUYER_AGENT', 'BUYER'].includes(_fa) ? _ttFee : ['BUYER_SELLER', 'SPLIT_AGENT', 'BUYER_SELLER_AGENT', 'SPLIT'].includes(_fa) ? _ttFee / 2 : 0;
-  const _sellerFee = ['SELLER_AGENT', 'SELLER'].includes(_fa) ? _ttFee : ['BUYER_SELLER', 'SPLIT_AGENT', 'BUYER_SELLER_AGENT', 'SPLIT'].includes(_fa) ? _ttFee / 2 : 0;
-  const totalSecurePayment = transaction.item_price + _buyerFee + _courierTotal;
-  const sellerReceivesAmount = Number(transaction.seller_receives ?? transaction.item_price ?? 0);
+  const _courierTotal = courierDeliveryFee;
+  const _ttFee = roundMoney(Math.max(Number(transaction.item_price || 0) * 0.02, 5));
+  const { buyerFee: _buyerFee, sellerFee: _sellerFee } = splitTrustTradeFee(_ttFee, _fa);
+  const totalSecurePayment = roundMoney(Number(transaction.item_price || 0) + _courierTotal + _buyerFee);
+  const sellerReceivesAmount = roundMoney(Number(transaction.item_price || 0) - _sellerFee);
   const escrowBadge = getEscrowStateBadge(escrowState);
   const currentStatusLabel = uiState.label || escrowBadge.label || transaction.payment_status || 'Status pending';
   const currentStatusBg = uiState.bg || escrowBadge.bg || '#f1f5f9';
@@ -1401,7 +1415,6 @@ function TransactionDetail() {
     ? `I've created a secure TrustTrade protected payment for you. Click the link to view and confirm the transaction: ${shareLink}`
     : '';
   const whatsappShareHref = shareLink ? `https://wa.me/?text=${encodeURIComponent(shareMessage)}` : '';
-  const trustTradeFeeLabel = `TrustTrade Fee (2%)${['BUYER_AGENT','BUYER'].includes(_fa) ? ' - buyer pays' : ['SELLER_AGENT','SELLER'].includes(_fa) ? ' - seller pays' : ' - split 50/50'}`;
   const fundsSecured = hasEscrow && (
     ['FUNDS_RECEIVED', 'FUNDS_DEPOSITED', 'INITIATED', 'SENT', 'DELIVERED', 'FUNDS_RELEASED'].includes(escrowState) ||
     ['Paid', 'Funds Secured', 'Delivery in Progress', 'Released'].includes(transaction.payment_status)
@@ -1562,8 +1575,8 @@ function TransactionDetail() {
                 {[
                   { label: 'Item price', value: `R ${Number(transaction.item_price || 0).toFixed(2)}` },
                   ...(courierDeliveryFee > 0 ? [{ label: 'Courier delivery fee', value: `R ${courierDeliveryFee.toFixed(2)}` }] : []),
-                  ...(courierHandlingFee > 0 ? [{ label: 'Courier handling fee', value: `R ${courierHandlingFee.toFixed(2)}` }] : []),
-                  { label: 'TrustTrade fee', value: `R ${_ttFee.toFixed(2)}` },
+                  { label: 'Buyer TrustTrade fee', value: `R ${_buyerFee.toFixed(2)}` },
+                  { label: 'Seller TrustTrade fee', value: `R ${_sellerFee.toFixed(2)}` },
                 ].map((row) => (
                   <div key={row.label} className="mobile-breakdown-row">
                     <span style={{ color: '#64748b' }}>{row.label}</span>
@@ -1868,7 +1881,7 @@ function TransactionDetail() {
                     <p style={{ fontSize: 13, color: '#ea580c', margin: '0 0 4px' }}>
                       {['SELLER_AGENT', 'SELLER'].includes(_fa) ? 'A 2% TrustTrade platform fee is deducted from your payout.' : ['BUYER_SELLER', 'SPLIT_AGENT', 'BUYER_SELLER_AGENT', 'SPLIT'].includes(_fa) ? 'The 2% TrustTrade platform fee is split — half from buyer, half deducted from your payout.' : 'A 2% TrustTrade platform fee is included in the buyer\'s payment. You receive the full item value.'} {BANKING_DETAILS_PROMPT}
                     </p>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#9a3412', margin: '0 0 14px' }}>You'll receive R {(transaction.seller_receives ?? transaction.item_price)?.toFixed(2)}</p>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#9a3412', margin: '0 0 14px' }}>You'll receive R {sellerReceivesAmount.toFixed(2)}</p>
                     {profileIncompleteError && (
                       <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
                         <p style={{ fontSize: 13, fontWeight: 600, color: '#b91c1c', margin: '0 0 4px' }}>Complete your profile first</p>
@@ -2036,7 +2049,7 @@ function TransactionDetail() {
                       )}
                       {_courierTotal > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                          <span style={{ color: '#64748b' }}>Courier &amp; Handling</span>
+                          <span style={{ color: '#64748b' }}>Courier Delivery</span>
                           <span style={{ fontWeight: 500, color: '#0f172a' }}>R {_courierTotal.toFixed(2)}</span>
                         </div>
                       )}
@@ -2096,7 +2109,7 @@ function TransactionDetail() {
 
             {/* Seller transaction complete success screen */}
             {isSeller && (isFinalized || deliveryConfirmedLocally) && (() => {
-              const sellerAmount = transaction.seller_receives ?? (transaction.item_price - _sellerFee);
+              const sellerAmount = sellerReceivesAmount;
               const fmtAmount = `R ${Number(sellerAmount).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
               return (
                 <div style={{ ...S.actionCard('#10b981', '#ecfdf5'), padding: '20px 20px' }}>
@@ -2568,8 +2581,8 @@ function TransactionDetail() {
                 {[
                   { label: 'Item Value', value: `R ${transaction.item_price.toFixed(2)}` },
                   ...(courierDeliveryFee > 0 ? [{ label: 'Courier Delivery', value: `R ${courierDeliveryFee.toFixed(2)}`, color: '#64748b' }] : []),
-                  ...(courierHandlingFee > 0 ? [{ label: 'Courier Handling', value: `R ${courierHandlingFee.toFixed(2)}`, color: '#64748b' }] : []),
-                  { label: trustTradeFeeLabel, value: `R ${_ttFee.toFixed(2)}`, color: '#64748b' },
+                  { label: 'Buyer TrustTrade Fee', value: `R ${_buyerFee.toFixed(2)}`, color: '#64748b' },
+                  { label: 'Seller TrustTrade Fee', value: `R ${_sellerFee.toFixed(2)}`, color: '#64748b' },
                   { label: 'Buyer Pays Total', value: `R ${totalSecurePayment.toFixed(2)}`, color: '#2563eb' },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>

@@ -61,31 +61,36 @@ def calculate_seller_receives(item_price: float, fee_percent: float = None) -> f
 
 
 def compute_net_amount(transaction: dict) -> float:
-    """Compute seller net_amount after release based on fee_allocation stored on the transaction."""
-    item_price = float(transaction.get("item_price") or 0)
-    courier_fee = float(transaction.get("courier_fee") or 0)
-    courier_handling = float(transaction.get("courier_handling_fee") or 0)
-    escrow_base = item_price + courier_fee + courier_handling
+    """Compute seller net_amount after release from item value and seller fee only."""
+    if transaction.get("seller_receives") is not None:
+        return round(float(transaction.get("seller_receives") or 0), 2)
+
+    cent = Decimal("0.01")
+    item_price = Decimal(str(transaction.get("item_price") or 0))
+    full_fee = max(
+        (item_price * (Decimal(str(settings.PLATFORM_FEE_PERCENT)) / Decimal("100"))).quantize(cent, rounding=ROUND_HALF_UP),
+        Decimal("5.00"),
+    )
 
     fa = (transaction.get("fee_allocation") or "BUYER").upper()
     if fa in ("BUYER_AGENT",):
         fa = "BUYER"
     elif fa in ("SELLER_AGENT",):
         fa = "SELLER"
+    elif fa in ("SPLIT", "SPLIT_AGENT", "BUYER_SELLER_AGENT"):
+        fa = "BUYER_SELLER"
 
     if fa == "SELLER":
         # Seller bears the full platform fee — deduct from their payout
-        seller_deduction = max(round(item_price * (settings.PLATFORM_FEE_PERCENT / 100), 2), 5.0)
-        net = escrow_base - seller_deduction
+        seller_deduction = full_fee
     elif fa == "BUYER_SELLER":
         # Seller bears half the platform fee
-        full_fee = max(round(item_price * (settings.PLATFORM_FEE_PERCENT / 100), 2), 5.0)
-        seller_deduction = round(full_fee / 2, 2)
-        net = escrow_base - seller_deduction
+        buyer_fee = (full_fee / Decimal("2")).quantize(cent, rounding=ROUND_HALF_UP)
+        seller_deduction = (full_fee - buyer_fee).quantize(cent, rounding=ROUND_HALF_UP)
     else:  # BUYER — seller receives full escrow_base
-        net = escrow_base
+        seller_deduction = Decimal("0.00")
 
-    return round(net, 2)
+    return float((item_price - seller_deduction).quantize(cent, rounding=ROUND_HALF_UP))
 
 
 def has_bank_details(user_doc: dict | None) -> bool:
@@ -403,8 +408,7 @@ async def create_tradesafe_escrow(request: Request, data: TradeSafeTransactionCr
     logger.info("[ESCROW] calling TradeSafe API...")
     try:
         courier_fee = float(transaction.get("courier_fee") or 0)
-        courier_handling_fee = float(transaction.get("courier_handling_fee") or 0)
-        escrow_amount = transaction["item_price"] + courier_fee + courier_handling_fee
+        escrow_amount = transaction["item_price"] + courier_fee
         _txn_fa = (transaction.get("fee_allocation") or "BUYER").upper()
         if _txn_fa not in ("BUYER", "SELLER", "BUYER_SELLER"):
             _txn_fa = "BUYER"

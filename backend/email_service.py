@@ -939,6 +939,8 @@ def get_funds_released_email(
     net_amount: float,
     bank_name: Optional[str] = None,
     fee_amount: Optional[float] = None,
+    buyer_total: Optional[float] = None,
+    courier_fee: Optional[float] = None,
 ) -> tuple[str, str]:
     """Generate funds released email content.
 
@@ -956,19 +958,40 @@ def get_funds_released_email(
     # amount for older callers that don't pass it in.
     fee_charged = seller_borne_fee if fee_amount is None else round(float(fee_amount), 2)
     seller_paid_fee = seller_borne_fee > 0.005
+    buyer_borne_fee = round(max(fee_charged - seller_borne_fee, 0), 2)
+    courier_delivery_fee = round(float(courier_fee or 0), 2)
+    buyer_total_amount = round(
+        float(buyer_total) if buyer_total is not None else amount + courier_delivery_fee + buyer_borne_fee,
+        2,
+    )
+    courier_row = (
+        f'<tr><td>Courier Delivery:</td>'
+        f'<td style="text-align: right;">R {courier_delivery_fee:,.2f}</td></tr>'
+        if courier_delivery_fee > 0.005 else ''
+    )
 
     arrival_date = format_payout_arrival_date()
     # Use the seller's actual bank, falling back to a generic phrase when unknown.
     bank_phrase = f"your {bank_name} account" if bank_name else "your bank account"
 
     if seller_paid_fee:
-        fee_row = (
-            f'<tr><td>TrustTrade Fee:</td>'
-            f'<td style="text-align: right;">- R {fee_charged:,.2f}</td></tr>'
-        )
+        if buyer_borne_fee > 0.005:
+            fee_row = (
+                f'<tr><td>Total TrustTrade Fee:</td>'
+                f'<td style="text-align: right;">R {fee_charged:,.2f}</td></tr>'
+                f'<tr><td>Buyer TrustTrade Fee:</td>'
+                f'<td style="text-align: right;">R {buyer_borne_fee:,.2f}</td></tr>'
+                f'<tr><td>Seller TrustTrade Fee:</td>'
+                f'<td style="text-align: right;">- R {seller_borne_fee:,.2f}</td></tr>'
+            )
+        else:
+            fee_row = (
+                f'<tr><td>Seller TrustTrade Fee:</td>'
+                f'<td style="text-align: right;">- R {seller_borne_fee:,.2f}</td></tr>'
+            )
     else:
         fee_row = (
-            f'<tr><td>TrustTrade Fee (paid by buyer):</td>'
+            f'<tr><td>Buyer TrustTrade Fee:</td>'
             f'<td style="text-align: right;">R {fee_charged:,.2f}</td></tr>'
         )
 
@@ -982,7 +1005,9 @@ def get_funds_released_email(
         <strong>Payout Details:</strong><br><br>
         <table style="width: 100%;">
             <tr><td>Item Amount:</td><td style="text-align: right;">R {amount:,.2f}</td></tr>
+            {courier_row}
             {fee_row}
+            <tr><td>Buyer Paid Total:</td><td style="text-align: right;">R {buyer_total_amount:,.2f}</td></tr>
             <tr style="font-weight: bold; font-size: 16px;"><td>You Receive:</td><td style="text-align: right; color: #10b981;">R {net_amount:,.2f}</td></tr>
         </table>
     </div>
@@ -1489,6 +1514,8 @@ async def send_funds_released_email(
     net_amount: float,
     bank_name: Optional[str] = None,
     fee_amount: Optional[float] = None,
+    buyer_total: Optional[float] = None,
+    courier_fee: Optional[float] = None,
 ) -> bool:
     """Send funds released notification to the seller."""
     logger.info("=" * 60)
@@ -1502,7 +1529,8 @@ async def send_funds_released_email(
 
     try:
         subject, html = get_funds_released_email(
-            to_name, share_code, item_description, amount, net_amount, bank_name, fee_amount
+            to_name, share_code, item_description, amount, net_amount, bank_name,
+            fee_amount, buyer_total, courier_fee
         )
         logger.info(f"[TX_EMAIL] Subject: {subject}")
         logger.info(f"[TX_EMAIL] Calling send_email()...")

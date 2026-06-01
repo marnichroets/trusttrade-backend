@@ -52,18 +52,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Transactions"])
 
 
-def calculate_money(item_price: float, fee_percent: float = 2.0, fee_allocation: str = "BUYER") -> dict:
+def calculate_money(
+    item_price: float,
+    fee_percent: float = 2.0,
+    fee_allocation: str = "BUYER",
+    courier_fee: float = 0.0,
+    courier_handling_fee: float = 0.0,
+) -> dict:
     """
-    Calculate all money values using Decimal for precision.
+    Calculate transaction money values using Decimal precision.
+
+    Launch fee rule: the TrustTrade fee is calculated on item value only.
+    Courier delivery is a pass-through buyer cost, and courier handling is not
+    charged.
 
     fee_allocation:
       BUYER        — buyer pays fee on top; seller receives full item_price
       SELLER       — fee deducted from seller payout; buyer pays item_price only
       BUYER_SELLER — fee split 50/50; buyer pays item_price + half fee; seller receives item_price - half fee
     """
+    cent = Decimal("0.01")
     price = Decimal(str(item_price))
+    courier = Decimal(str(courier_fee or 0))
+    courier_handling = Decimal("0.00")
+    fee_base = price
     fee_rate = Decimal(str(fee_percent)) / Decimal("100")
-    calculated_fee = (price * fee_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    calculated_fee = (fee_base * fee_rate).quantize(cent, rounding=ROUND_HALF_UP)
     minimum_fee = Decimal("5.00")
     platform_fee = max(calculated_fee, minimum_fee)
 
@@ -73,25 +87,32 @@ def calculate_money(item_price: float, fee_percent: float = 2.0, fee_allocation:
         fa = "BUYER"
     elif fa in ("SELLER_AGENT",):
         fa = "SELLER"
+    elif fa in ("SPLIT", "SPLIT_AGENT", "BUYER_SELLER_AGENT"):
+        fa = "BUYER_SELLER"
 
     if fa == "SELLER":
         buyer_fee = Decimal("0.00")
         seller_fee = platform_fee
     elif fa == "BUYER_SELLER":
-        half = (platform_fee / Decimal("2")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        buyer_fee = half
-        seller_fee = half
-    else:  # BUYER (default)
+        buyer_fee = (platform_fee / Decimal("2")).quantize(cent, rounding=ROUND_HALF_UP)
+        seller_fee = (platform_fee - buyer_fee).quantize(cent, rounding=ROUND_HALF_UP)
+    else:
+        fa = "BUYER"
         buyer_fee = platform_fee
         seller_fee = Decimal("0.00")
 
-    total = (price + buyer_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    seller_receives = (price - seller_fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    total = (price + courier + buyer_fee).quantize(cent, rounding=ROUND_HALF_UP)
+    seller_receives = (price - seller_fee).quantize(cent, rounding=ROUND_HALF_UP)
 
     return {
         "item_price": float(price),
+        "courier_fee": float(courier),
+        "courier_handling_fee": float(courier_handling),
+        "fee_base": float(fee_base.quantize(cent, rounding=ROUND_HALF_UP)),
         "platform_fee": float(platform_fee),
-        "trusttrade_fee": float(platform_fee),  # backwards-compat alias
+        "trusttrade_fee": float(platform_fee),
+        "buyer_fee": float(buyer_fee),
+        "seller_fee": float(seller_fee),
         "total": float(total),
         "seller_receives": float(seller_receives),
         "fee_allocation": fa,
@@ -465,14 +486,24 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         _raw_fa = "BUYER"
     elif _raw_fa in ("SELLER_AGENT",):
         _raw_fa = "SELLER"
+    elif _raw_fa in ("SPLIT", "SPLIT_AGENT", "BUYER_SELLER_AGENT"):
+        _raw_fa = "BUYER_SELLER"
     elif _raw_fa not in ("BUYER", "SELLER", "BUYER_SELLER"):
         _raw_fa = "BUYER"
 
     # Calculate fees using precise Decimal math
-    money = calculate_money(transaction_data.item_price, settings.PLATFORM_FEE_PERCENT, fee_allocation=_raw_fa)
+    money = calculate_money(
+        transaction_data.item_price,
+        settings.PLATFORM_FEE_PERCENT,
+        fee_allocation=_raw_fa,
+        courier_fee=transaction_data.courier_fee or 0.0,
+        courier_handling_fee=0.0,
+    )
     item_price = money["item_price"]
     platform_fee = money["platform_fee"]
     trusttrade_fee = money["trusttrade_fee"]  # same value, kept for backwards compat
+    buyer_fee = money["buyer_fee"]
+    seller_fee = money["seller_fee"]
     total = money["total"]
     
     transaction_id = f"txn_{uuid.uuid4().hex[:12]}"
@@ -577,15 +608,17 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
         "known_issues": transaction_data.known_issues or "None",
         "item_photos": [],
         "item_price": item_price,
-        "platform_fee": platform_fee,   # 2% collected from buyer separately, not in escrow
+        "platform_fee": platform_fee,
         "trusttrade_fee": trusttrade_fee,
+        "buyer_fee": buyer_fee,
+        "seller_fee": seller_fee,
         "courier_quote_id": transaction_data.courier_quote_id,
         "courier_service_name": transaction_data.courier_service_name,
-        "courier_fee": transaction_data.courier_fee or 0.0,
-        "courier_handling_fee": transaction_data.courier_handling_fee or 0.0,
+        "courier_fee": money["courier_fee"],
+        "courier_handling_fee": money["courier_handling_fee"],
         "courier_collection_preference": transaction_data.courier_collection_preference,
         "courier_details": transaction_data.courier_details,
-        "total": round(total + (transaction_data.courier_fee or 0.0) + (transaction_data.courier_handling_fee or 0.0), 2),
+        "total": total,
         "seller_receives": money["seller_receives"],
         "fee_allocation": _raw_fa,
         "delivery_method": delivery_method,
@@ -729,7 +762,8 @@ async def list_transactions(request: Request):
             "recipient_info": 1, "recipient_type": 1, "invite_type": 1,
             "delivery_method": 1, "has_dispute": 1,
             "buyer_confirmed": 1, "seller_confirmed": 1, "tradesafe_id": 1,
-            "trusttrade_fee": 1, "total": 1, "seller_receives": 1
+            "trusttrade_fee": 1, "platform_fee": 1, "buyer_fee": 1, "seller_fee": 1,
+            "courier_fee": 1, "courier_handling_fee": 1, "total": 1, "seller_receives": 1
         }
         raw_transactions = await db.transactions.find(query, projection).sort("created_at", -1).to_list(1000)
         
@@ -757,6 +791,16 @@ async def list_transactions(request: Request):
                     t["item_price"] = float(t["item_price"])
                 if t.get("trusttrade_fee") is not None:
                     t["trusttrade_fee"] = float(t["trusttrade_fee"])
+                if t.get("platform_fee") is not None:
+                    t["platform_fee"] = float(t["platform_fee"])
+                if t.get("buyer_fee") is not None:
+                    t["buyer_fee"] = float(t["buyer_fee"])
+                if t.get("seller_fee") is not None:
+                    t["seller_fee"] = float(t["seller_fee"])
+                if t.get("courier_fee") is not None:
+                    t["courier_fee"] = float(t["courier_fee"])
+                if t.get("courier_handling_fee") is not None:
+                    t["courier_handling_fee"] = float(t["courier_handling_fee"])
                 if t.get("total") is not None:
                     t["total"] = float(t["total"])
                 if t.get("seller_receives") is not None:
@@ -1206,9 +1250,18 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
             "by": user.name
         })
         
-        # Calculate net amount before updating DB so it can be persisted for withdrawal
-        money = calculate_money(transaction["item_price"], settings.PLATFORM_FEE_PERCENT)
-        net_amount = money["seller_receives"]
+        # Calculate net amount before updating DB so it can be persisted for withdrawal.
+        if transaction.get("seller_receives") is not None:
+            net_amount = float(transaction["seller_receives"])
+        else:
+            money = calculate_money(
+                transaction["item_price"],
+                settings.PLATFORM_FEE_PERCENT,
+                fee_allocation=transaction.get("fee_allocation") or "BUYER",
+                courier_fee=transaction.get("courier_fee") or 0.0,
+                courier_handling_fee=0.0,
+            )
+            net_amount = money["seller_receives"]
 
         await db.transactions.update_one(
             {"transaction_id": transaction_id},

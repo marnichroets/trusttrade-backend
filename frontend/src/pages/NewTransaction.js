@@ -24,6 +24,24 @@ function parseErrorMessage(error) {
 
 const COURIER_ENABLED = process.env.REACT_APP_COURIER_ENABLED !== 'false';
 
+function roundMoney(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function splitTrustTradeFee(totalFee, feeAllocation) {
+  const fee = roundMoney(totalFee);
+  const alloc = (feeAllocation || 'BUYER').toUpperCase();
+
+  if (['SELLER', 'SELLER_AGENT'].includes(alloc)) {
+    return { buyerFee: 0, sellerFee: fee };
+  }
+  if (['BUYER_SELLER', 'SPLIT', 'SPLIT_AGENT', 'BUYER_SELLER_AGENT'].includes(alloc)) {
+    const buyerFee = roundMoney(fee / 2);
+    return { buyerFee, sellerFee: roundMoney(fee - buyerFee) };
+  }
+  return { buyerFee: fee, sellerFee: 0 };
+}
+
 const ITEM_CATEGORIES = [
   { value: 'electronics', label: 'Electronics' },
   { value: 'vehicles', label: 'Vehicles' },
@@ -292,19 +310,25 @@ function NewTransaction() {
   const minimumTransactionAmount = getDefaultMinimumTransactionAmount(platformConfig);
   const maximumTransactionAmount = Number(platformConfig.maximum_transaction || 0);
   const payoutSchedule = useMemo(() => getPayoutScheduleMessage(new Date(), platformConfig), [platformConfig]);
-  const platformFee = Math.max(itemPrice * 0.02, 5);
-  const trusttradeFee = platformFee; // alias kept for any legacy references
   const feeAlloc = formData.fee_allocation || 'BUYER';
-  const buyerFeeContrib = feeAlloc === 'BUYER' ? platformFee : feeAlloc === 'BUYER_SELLER' ? platformFee / 2 : 0;
-  const sellerFeeContrib = feeAlloc === 'SELLER' ? platformFee : feeAlloc === 'BUYER_SELLER' ? platformFee / 2 : 0;
-  const sellerPayout = itemPrice - sellerFeeContrib;
   const isCourierDelivery = formData.delivery_method === 'courier';
   const isDropoff = courierForm.collection_preference === 'dropoff';
   // Coerce to a number — ShipLogic can return the rate as a string, which would
   // otherwise string-concatenate into the totals instead of adding numerically.
   const courierFee = isCourierDelivery && selectedQuote ? (Number(selectedQuote?.price ?? selectedQuote?.rate ?? 0) || 0) : 0;
-  const COURIER_HANDLING_FEE = 10;
-  const courierHandlingFee = isCourierDelivery && selectedQuote ? COURIER_HANDLING_FEE : 0;
+  const courierTotal = courierFee;
+  const platformFee = roundMoney(Math.max(itemPrice * 0.02, 5));
+  const trusttradeFee = platformFee; // alias kept for any legacy references
+  const { buyerFee: buyerFeeContrib, sellerFee: sellerFeeContrib } = splitTrustTradeFee(platformFee, feeAlloc);
+  const buyerPaysTotal = roundMoney(itemPrice + courierTotal + buyerFeeContrib);
+  const sellerPayout = roundMoney(itemPrice - sellerFeeContrib);
+  const feePreview = (allocation) => {
+    const { buyerFee, sellerFee } = splitTrustTradeFee(platformFee, allocation);
+    return {
+      buyerPays: roundMoney(itemPrice + courierTotal + buyerFee),
+      sellerReceives: roundMoney(itemPrice - sellerFee),
+    };
+  };
 
   const canProceedStep1 = role && (
     role === 'buyer'
@@ -365,7 +389,7 @@ function NewTransaction() {
           courier_quote_id: selectedQuote?.service_level?.code || selectedQuote?.id || selectedQuote?.code || '',
           courier_service_name: selectedQuote?.service_level?.name || selectedQuote?.name || '',
           courier_fee: courierFee,
-          courier_handling_fee: courierHandlingFee,
+          courier_handling_fee: 0,
           courier_collection_preference: courierForm.collection_preference,
           // Full pickup/delivery/parcel details so the backend can auto-book the
           // shipment once the escrow is funded (no caller needs to re-enter them).
@@ -806,17 +830,17 @@ function NewTransaction() {
                     {
                       value: 'BUYER',
                       label: 'Buyer pays',
-                      desc: itemPrice >= 100 ? `R${buyerFeeContrib > 0 ? (itemPrice + (Math.max(itemPrice * 0.02, 5))).toFixed(2) : itemPrice.toFixed(2)} total from buyer — seller receives full R${itemPrice.toFixed(2)}` : 'Fee added to buyer\'s payment — seller receives full item value.',
+                      desc: itemPrice >= 100 ? `Buyer pays R${feePreview('BUYER').buyerPays.toFixed(2)} - seller receives R${feePreview('BUYER').sellerReceives.toFixed(2)}` : 'Fee added to buyer payment - seller receives full item value.',
                     },
                     {
                       value: 'SELLER',
                       label: 'Seller pays',
-                      desc: itemPrice >= 100 ? `Buyer pays R${itemPrice.toFixed(2)} — seller receives R${(itemPrice - Math.max(itemPrice * 0.02, 5)).toFixed(2)} after fee` : 'Fee deducted from seller\'s payout.',
+                      desc: itemPrice >= 100 ? `Buyer pays R${feePreview('SELLER').buyerPays.toFixed(2)} - seller receives R${feePreview('SELLER').sellerReceives.toFixed(2)}` : 'Fee deducted from seller payout.',
                     },
                     {
                       value: 'BUYER_SELLER',
                       label: 'Split 50/50',
-                      desc: itemPrice >= 100 ? `Buyer pays R${(itemPrice + Math.max(itemPrice * 0.02, 5) / 2).toFixed(2)} — seller receives R${(itemPrice - Math.max(itemPrice * 0.02, 5) / 2).toFixed(2)}` : 'Half from buyer, half from seller.',
+                      desc: itemPrice >= 100 ? `Buyer pays R${feePreview('BUYER_SELLER').buyerPays.toFixed(2)} - seller receives R${feePreview('BUYER_SELLER').sellerReceives.toFixed(2)}` : 'Half from buyer, half from seller.',
                     },
                   ].map(opt => {
                     const active = feeAlloc === opt.value;
@@ -1011,32 +1035,32 @@ function NewTransaction() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: courierFee > 0 ? 8 : 12 }}>
                     <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
-                      TrustTrade Fee (2%){feeAlloc === 'BUYER' ? ' — paid by buyer' : feeAlloc === 'SELLER' ? ' — deducted from seller' : ' — split 50/50'}
+                      Buyer TrustTrade Fee
                     </span>
                     <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
-                      R {platformFee.toFixed(2)}
+                      R {buyerFeeContrib.toFixed(2)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: courierFee > 0 ? 8 : 12 }}>
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                      Seller TrustTrade Fee
+                    </span>
+                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
+                      R {sellerFeeContrib.toFixed(2)}
                     </span>
                   </div>
                   {courierFee > 0 && (
-                    <>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Courier Guy Delivery</span>
-                        <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
-                          + R {courierFee.toFixed(2)}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Courier handling fee <span style={{ fontSize: 10, opacity: 0.7 }}>(booking admin)</span></span>
-                        <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
-                          + R {COURIER_HANDLING_FEE.toFixed(2)}
-                        </span>
-                      </div>
-                    </>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Courier Delivery</span>
+                      <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
+                        + R {courierFee.toFixed(2)}
+                      </span>
+                    </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: 10 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Buyer Pays Total</span>
                     <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#60a5fa' }}>
-                      R {(itemPrice + buyerFeeContrib + courierFee + courierHandlingFee).toFixed(2)}
+                      R {buyerPaysTotal.toFixed(2)}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1130,12 +1154,12 @@ function NewTransaction() {
                   {[
                     { label: 'Item', value: formData.item_description, truncate: true },
                     { label: 'Item Value', value: `R ${itemPrice.toFixed(2)}`, mono: true },
-                    { label: 'TrustTrade Fee (2%)', value: `R ${platformFee.toFixed(2)}`, mono: true },
                     ...(courierFee > 0 ? [
                       { label: 'Courier Delivery', value: `R ${courierFee.toFixed(2)}`, mono: true },
-                      { label: 'Courier handling fee', value: `R ${courierHandlingFee.toFixed(2)}`, mono: true },
                     ] : []),
-                    { label: 'Buyer Pays Total', value: `R ${(itemPrice + buyerFeeContrib + courierFee + courierHandlingFee).toFixed(2)}`, mono: true, accent: '#2563eb' },
+                    { label: 'Buyer TrustTrade Fee', value: `R ${buyerFeeContrib.toFixed(2)}`, mono: true },
+                    { label: 'Seller TrustTrade Fee', value: `R ${sellerFeeContrib.toFixed(2)}`, mono: true },
+                    { label: 'Buyer Pays Total', value: `R ${buyerPaysTotal.toFixed(2)}`, mono: true, accent: '#2563eb' },
                     { label: 'Seller Receives', value: `R ${sellerPayout.toFixed(2)}`, mono: true, accent: '#10b981' },
                     { label: 'Photos', value: `${photos.length} uploaded` },
                     { label: 'Delivery', value: formData.delivery_method.replace('_', ' ') },
@@ -1236,4 +1260,3 @@ function NewTransaction() {
 }
 
 export default NewTransaction;
-

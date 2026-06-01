@@ -32,11 +32,13 @@ class Transaction(BaseModel):
     item_photos: List[str] = []
     item_price: float
     trusttrade_fee: Optional[float] = 0.0
-    platform_fee: Optional[float] = None  # 2% fee collected from buyer separately (not in escrow)
+    platform_fee: Optional[float] = None  # Total TrustTrade fee charged on the item value
+    buyer_fee: Optional[float] = 0.0
+    seller_fee: Optional[float] = 0.0
     courier_quote_id: Optional[str] = None
     courier_service_name: Optional[str] = None
     courier_fee: Optional[float] = 0.0
-    courier_handling_fee: Optional[float] = 0.0
+    courier_handling_fee: Optional[float] = 0.0  # Deprecated launch value; no handling fee is charged
     courier_collection_preference: Optional[str] = None  # "collection" (Courier Guy collects) or "dropoff" (seller drops off)
     courier_details: Optional[dict] = None  # {pickup_address, delivery_address, parcel} captured at creation for auto-booking
     # Courier Guy (ShipLogic) booking results — populated automatically once the escrow is funded
@@ -49,7 +51,7 @@ class Transaction(BaseModel):
     courier_booking_error: Optional[str] = None
     courier_booking_in_progress: Optional[bool] = None  # atomic claim guard for auto-booking
     total: Optional[float] = None
-    seller_receives: Optional[float] = None  # Seller payout from escrow (= item_price under new fee model)
+    seller_receives: Optional[float] = None  # Seller item payout after their TrustTrade fee share
     fee_allocation: str = "SELLER_AGENT"  # BUYER_AGENT, SELLER_AGENT, or SPLIT_AGENT
     delivery_method: str = "courier"  # "courier", "bank_deposit", "digital"
     auto_release_days: int = 3

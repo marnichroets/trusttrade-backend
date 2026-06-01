@@ -481,28 +481,12 @@ async def process_single_auto_release(
         }}
     )
     
-    # Send notifications (with deduplication)
-    await send_email_with_tracking(
-        db, transaction_id, EmailEvent.FUNDS_RELEASED_SELLER,
-        txn["seller_email"],
-        email_service.send_funds_released_email,
-        to_email=txn["seller_email"],
-        to_name=txn["seller_name"],
-        share_code=share_code,
-        item_description=txn["item_description"],
-        amount=item_price,
-        net_amount=net_amount
-    )
-    
-    if txn.get("seller_phone"):
-        await send_sms_with_tracking(
-            db, transaction_id, "auto_release_sms",
-            txn["seller_phone"],
-            sms_service.send_funds_released_sms,
-            to_phone=txn["seller_phone"],
-            message=f"TrustTrade: R{net_amount:.2f} auto-released to your account. Ref: {share_code}"
-        )
-    
+    # Notify BOTH parties via the single release-notification helper (correct
+    # fee + seller SMS + buyer "transaction complete" email; deduped).
+    from routes.webhooks import notify_seller_funds_released
+    txn["net_amount"] = net_amount
+    await notify_seller_funds_released(db, txn)
+
     logger.info(f"Auto-release complete for {transaction_id}")
 
 

@@ -347,14 +347,11 @@ async def admin_release_funds(request: Request, transaction_id: str, release_dat
         }}
     )
     
-    await send_funds_released_email(
-        to_email=transaction["seller_email"],
-        to_name=transaction["seller_name"],
-        share_code=transaction.get("share_code", transaction_id),
-        item_description=transaction["item_description"],
-        amount=item_price,
-        net_amount=net_amount
-    )
+    # Notify BOTH parties via the single release-notification helper (correct
+    # fee + seller SMS + buyer "transaction complete" email; deduped).
+    from routes.webhooks import notify_seller_funds_released
+    transaction["net_amount"] = net_amount
+    await notify_seller_funds_released(db, transaction)
 
     # Release escrow on TradeSafe and request payout processing to seller's bank
     allocation_id = transaction.get("tradesafe_allocation_id")

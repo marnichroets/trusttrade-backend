@@ -1143,43 +1143,21 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
         )
 
     if immediate_release:
-        # Send notifications
+        # Notify BOTH parties via the single release-notification helper:
+        # seller payout email (with the real TrustTrade fee) + SMS, buyer
+        # "transaction complete" email. Deduped per-transaction.
         logger.info("=" * 60)
         logger.info("[RELEASE] === SENDING FUNDS RELEASED NOTIFICATIONS ===")
-        logger.info(f"[RELEASE] Transaction: {transaction_id}")
-        logger.info(f"[RELEASE] Seller Email: {transaction['seller_email']}")
-        logger.info(f"[RELEASE] Seller Name: {transaction['seller_name']}")
-        logger.info(f"[RELEASE] Amount: R{transaction['item_price']}, Net: R{net_amount}")
+        logger.info(f"[RELEASE] Transaction: {transaction_id}, Amount: R{transaction['item_price']}, Net: R{net_amount}")
         logger.info("=" * 60)
-
-        seller_bank_name = await resolve_seller_bank_name(db, transaction.get("seller_email"))
         try:
-            email_result = await send_funds_released_email(
-                to_email=transaction["seller_email"],
-                to_name=transaction["seller_name"],
-                share_code=transaction.get("share_code", transaction_id),
-                item_description=transaction["item_description"],
-                amount=transaction["item_price"],
-                net_amount=net_amount,
-                bank_name=seller_bank_name,
-            )
-            logger.info(f"[RELEASE] Funds released email result: {email_result}")
+            from routes.webhooks import notify_seller_funds_released
+            transaction["net_amount"] = net_amount
+            await notify_seller_funds_released(db, transaction)
         except Exception as e:
-            logger.error(f"[RELEASE] Funds released email EXCEPTION: {str(e)}")
+            logger.error(f"[RELEASE] Funds released notification EXCEPTION: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
-
-        seller_phone = transaction.get("seller_phone")
-        if seller_phone:
-            try:
-                await send_funds_released_sms(
-                    to_phone=seller_phone,
-                    amount=net_amount,
-                    reference=transaction.get("share_code", transaction_id),
-                    bank_name=seller_bank_name,
-                )
-            except Exception as e:
-                logger.error(f"Failed to send funds released SMS: {e}")
     else:
         logger.info(
             f"[ACCEPT_DELIVERY] Funds-released notifications deferred txn={transaction_id} "
@@ -1398,32 +1376,15 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             f"FUNDS_RELEASED webhook will trigger withdrawal. txn={transaction_id}"
         )
 
-    # Send notifications
-    seller_email = transaction.get("seller_email")
-    seller_phone = transaction.get("seller_phone")
-    seller_bank_name = await resolve_seller_bank_name(db, seller_email)
-
-    if immediate_release and seller_email:
-        await send_funds_released_email(
-            to_email=seller_email,
-            to_name=transaction.get("seller_name"),
-            share_code=transaction.get("share_code", transaction_id),
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"],
-            net_amount=net_amount,
-            bank_name=seller_bank_name,
-        )
-
-    if immediate_release and seller_phone:
+    # Notify BOTH parties via the single release-notification helper (correct
+    # fee + seller SMS + buyer "transaction complete" email; deduped).
+    if immediate_release:
         try:
-            await send_funds_released_sms(
-                to_phone=seller_phone,
-                amount=net_amount,
-                reference=transaction.get("share_code", transaction_id),
-                bank_name=seller_bank_name,
-            )
+            from routes.webhooks import notify_seller_funds_released
+            transaction["net_amount"] = net_amount
+            await notify_seller_funds_released(db, transaction)
         except Exception as e:
-            logger.error(f"Failed to send funds released SMS: {e}")
+            logger.error(f"Failed to send funds released notifications: {e}")
 
     return {
         "status": "funds_released" if immediate_release else "delivery_confirmed",
@@ -1590,28 +1551,15 @@ async def release_instant_funds(request: Request, transaction_id: str):
             f"FUNDS_RELEASED webhook will trigger withdrawal. txn={transaction_id}"
         )
 
-    seller_phone = transaction.get("seller_phone")
-    seller_bank_name = await resolve_seller_bank_name(db, seller_email)
-    if immediate_release and seller_email:
-        await send_funds_released_email(
-            to_email=seller_email,
-            to_name=transaction.get("seller_name"),
-            share_code=transaction.get("share_code", transaction_id),
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"],
-            net_amount=net_amount,
-            bank_name=seller_bank_name,
-        )
-    if immediate_release and seller_phone:
+    # Notify BOTH parties via the single release-notification helper (correct
+    # fee + seller SMS + buyer "transaction complete" email; deduped).
+    if immediate_release:
         try:
-            await send_funds_released_sms(
-                to_phone=seller_phone,
-                amount=net_amount,
-                reference=transaction.get("share_code", transaction_id),
-                bank_name=seller_bank_name,
-            )
+            from routes.webhooks import notify_seller_funds_released
+            transaction["net_amount"] = net_amount
+            await notify_seller_funds_released(db, transaction)
         except Exception as e:
-            logger.error(f"Failed to send instant-release SMS: {e}")
+            logger.error(f"Failed to send instant-release notifications: {e}")
 
     return {
         "status": "funds_released" if immediate_release else "delivery_confirmed",

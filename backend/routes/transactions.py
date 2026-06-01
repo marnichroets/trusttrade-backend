@@ -1205,24 +1205,13 @@ async def confirm_delivery(request: Request, transaction_id: str, update_data: T
             }}
         )
         
-        # Send funds released email
-        await send_funds_released_email(
-            to_email=transaction["seller_email"],
-            to_name=transaction["seller_name"],
-            share_code=transaction.get("share_code", transaction_id),
-            item_description=transaction["item_description"],
-            amount=transaction["item_price"],
-            net_amount=net_amount
-        )
-        
-        # Send delivery confirmed email to buyer
-        await send_delivery_confirmed_email(
-            to_email=transaction["buyer_email"],
-            to_name=transaction["buyer_name"],
-            share_code=transaction.get("share_code", transaction_id),
-            item_description=transaction["item_description"],
-            role="buyer"
-        )
+        # Notify BOTH parties through the single release-notification helper:
+        # seller gets the payout email (with the real TrustTrade fee) + SMS, and
+        # the buyer gets the "payment released — transaction complete" email.
+        # Deduped per-transaction, so the later FUNDS_RELEASED webhook won't repeat.
+        from routes.webhooks import notify_seller_funds_released
+        transaction["net_amount"] = net_amount
+        await notify_seller_funds_released(db, transaction)
 
         # Release TradeSafe escrow and request payout processing (fire-and-forget).
         allocation_id = transaction.get("tradesafe_allocation_id")

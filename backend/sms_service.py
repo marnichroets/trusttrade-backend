@@ -294,11 +294,10 @@ async def send_funds_released_sms(
 
     bank_phrase = f"your {bank_name} account" if bank_name else "your bank account"
     message = (
-        f"TrustTrade: {_format_rand(amount)} released! Funds are on their way to "
-        f"{bank_phrase}. Expected by {arrival_date}."
+        f"TrustTrade: Your {_format_rand(amount)} payout is being processed to "
+        f"{bank_phrase}. Expected arrival {arrival_date}. "
+        f"Questions? support@trusttradesa.co.za"
     )
-    if reference:
-        message += f" Ref: {reference}"
     return await send_sms(to_phone, message)
 
 

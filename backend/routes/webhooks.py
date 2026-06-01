@@ -459,17 +459,26 @@ async def handle_released_transaction(db, txn: dict, state: str = "FUNDS_RELEASE
 
 
 async def notify_seller_funds_released(db, txn: dict) -> None:
-    """Email + SMS the seller that their payout is on its way (deduped, best-effort)."""
+    """Notify BOTH parties that funds have been released (deduped, best-effort).
+
+    Seller: 'Your payout is on its way' email + SMS.
+    Buyer:  'Payment released to the seller — transaction complete' email.
+    """
     import email_service
     import sms_service
     from webhook_handler import (
         EmailEvent,
         send_email_with_tracking,
         send_sms_with_tracking,
+        has_email_been_sent,
+        mark_email_sent,
     )
 
     txn_id = txn.get("transaction_id") or txn.get("deal_id")
     reference = txn.get("share_code") or txn_id
+    item_description = txn.get("item_description") or txn.get("title", "")
+    amount = float(txn.get("item_price") or txn.get("amount") or 0)
+
     seller_email = txn.get("seller_email") or txn.get("freelancer_email") or ""
     seller_name = txn.get("seller_name") or txn.get("freelancer_name") or "Seller"
     seller_phone = txn.get("seller_phone") or txn.get("freelancer_phone")
@@ -487,6 +496,9 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
             banking = seller_user.get("banking_details") or {}
             bank_name = banking.get("bank_name") or seller_user.get("bank_name") or ""
     net_amount = float(txn.get("net_amount") or txn.get("seller_receives") or 0)
+    # The actual TrustTrade fee charged on this deal (max(2%, R5)), regardless of
+    # who paid it — so the payout email never shows R0.00.
+    fee_amount = float(txn.get("trusttrade_fee") or txn.get("platform_fee") or 0)
     arrival_date = email_service.format_payout_arrival_date()
 
     if seller_email:
@@ -497,14 +509,18 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
             to_email=seller_email,
             to_name=seller_name,
             share_code=reference,
-            item_description=txn.get("item_description") or txn.get("title", ""),
-            amount=float(txn.get("item_price") or txn.get("amount") or 0),
+            item_description=item_description,
+            amount=amount,
             net_amount=net_amount,
             bank_name=bank_name,
+            fee_amount=fee_amount,
         )
 
-    if seller_phone:
-        await send_sms_with_tracking(
+    # SMS has no built-in dedup, and this helper may run on several release paths
+    # (manual confirm, immediate release, auto-release, AND the later webhook).
+    # Guard with the same per-transaction tracking set so the seller gets ONE SMS.
+    if seller_phone and not await has_email_been_sent(db, txn_id, "funds_released_sms"):
+        sent = await send_sms_with_tracking(
             db, txn_id, "funds_released_sms",
             seller_phone,
             sms_service.send_funds_released_sms,
@@ -514,7 +530,25 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
             arrival_date=arrival_date,
             bank_name=bank_name,
         )
-    logger.info(f"[WITHDRAWAL] seller notified funds-on-the-way txn={txn_id}")
+        if sent:
+            await mark_email_sent(db, txn_id, "funds_released_sms")
+
+    # Tell the buyer their payment has been released and the deal is complete.
+    buyer_email = txn.get("buyer_email") or txn.get("client_email") or ""
+    buyer_name = txn.get("buyer_name") or txn.get("client_name") or "there"
+    if buyer_email:
+        await send_email_with_tracking(
+            db, txn_id, EmailEvent.FUNDS_RELEASED_BUYER,
+            buyer_email,
+            email_service.send_funds_released_buyer_email,
+            to_email=buyer_email,
+            to_name=buyer_name,
+            share_code=reference,
+            item_description=item_description,
+            amount=amount,
+        )
+
+    logger.info(f"[WITHDRAWAL] buyer+seller notified funds-released txn={txn_id}")
 
 
 @router.get("/webhook-test")

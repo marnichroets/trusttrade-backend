@@ -923,7 +923,7 @@ def estimated_payout_arrival(released_at: Optional[datetime] = None) -> datetime
 
 
 def format_payout_arrival_date(released_at: Optional[datetime] = None) -> str:
-    """Human-friendly arrival date, e.g. 'Tuesday, 3 June 2025'.
+    """Human-friendly arrival date, e.g. 'Tuesday, 3 June 2026'.
 
     Built without strftime('%-d') so it works identically on Windows and Linux.
     """
@@ -937,16 +937,40 @@ def get_funds_released_email(
     item_description: str,
     amount: float,
     net_amount: float,
-    bank_name: Optional[str] = None
+    bank_name: Optional[str] = None,
+    fee_amount: Optional[float] = None,
 ) -> tuple[str, str]:
-    """Generate funds released email content"""
+    """Generate funds released email content.
+
+    fee_amount is the actual TrustTrade fee charged on the transaction
+    (trusttrade_fee/platform_fee). When omitted we fall back to amount-net.
+    The fee is always shown — whether the seller bore it (deducted from the
+    payout) or the buyer paid it on top (seller still receives the full amount).
+    """
 
     subject = "Your funds are on their way! 🎉"
 
-    fee_amount = amount - net_amount
+    # The amount actually withheld from the seller's payout.
+    seller_borne_fee = round(amount - net_amount, 2)
+    # The real platform fee charged on the deal; fall back to the seller-borne
+    # amount for older callers that don't pass it in.
+    fee_charged = seller_borne_fee if fee_amount is None else round(float(fee_amount), 2)
+    seller_paid_fee = seller_borne_fee > 0.005
+
     arrival_date = format_payout_arrival_date()
     # Use the seller's actual bank, falling back to a generic phrase when unknown.
     bank_phrase = f"your {bank_name} account" if bank_name else "your bank account"
+
+    if seller_paid_fee:
+        fee_row = (
+            f'<tr><td>TrustTrade Fee:</td>'
+            f'<td style="text-align: right;">- R {fee_charged:,.2f}</td></tr>'
+        )
+    else:
+        fee_row = (
+            f'<tr><td>TrustTrade Fee (paid by buyer):</td>'
+            f'<td style="text-align: right;">R {fee_charged:,.2f}</td></tr>'
+        )
 
     intro_text = f"""<strong style="color: #10b981;">Your payment has been released from escrow! 🎉</strong>
 
@@ -958,7 +982,7 @@ def get_funds_released_email(
         <strong>Payout Details:</strong><br><br>
         <table style="width: 100%;">
             <tr><td>Item Amount:</td><td style="text-align: right;">R {amount:,.2f}</td></tr>
-            <tr><td>TrustTrade Fee (2%, min R5):</td><td style="text-align: right;">- R {fee_amount:,.2f}</td></tr>
+            {fee_row}
             <tr style="font-weight: bold; font-size: 16px;"><td>You Receive:</td><td style="text-align: right; color: #10b981;">R {net_amount:,.2f}</td></tr>
         </table>
     </div>
@@ -984,6 +1008,46 @@ def get_funds_released_email(
         show_how_it_works=False,
         status_badge="Payout processing",
         status_color="#10b981"
+    )
+
+    return subject, html_content
+
+
+def get_funds_released_buyer_email(
+    recipient_name: str,
+    share_code: str,
+    item_description: str,
+    amount: float,
+) -> tuple[str, str]:
+    """Generate the buyer's 'payment released — transaction complete' email."""
+
+    subject = "Your payment has been released to the seller — your transaction is complete"
+
+    intro_text = f"""<strong style="color: #10b981;">Your transaction is complete! 🎉</strong>
+
+    <p style="margin: 14px 0;">Your payment has been released from escrow to the seller. Thank you for
+    using TrustTrade to keep your money protected until you were satisfied.</p>
+
+    <p style="margin: 14px 0;">There's nothing more you need to do — this transaction is now closed.</p>
+    """
+
+    details = {
+        "Transaction / Deal ID": share_code,
+        "Item": item_description,
+        "Amount": f"R {amount:,.2f}",
+        "Status": "Complete",
+    }
+
+    html_content = get_base_email_template(
+        heading="Transaction complete",
+        greeting_name=recipient_name,
+        intro_text=intro_text,
+        details=details,
+        cta_text="View Transaction",
+        cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
+        show_how_it_works=False,
+        status_badge="Complete",
+        status_color="#10b981",
     )
 
     return subject, html_content
@@ -1423,25 +1487,55 @@ async def send_funds_released_email(
     item_description: str,
     amount: float,
     net_amount: float,
-    bank_name: Optional[str] = None
+    bank_name: Optional[str] = None,
+    fee_amount: Optional[float] = None,
 ) -> bool:
-    """Send funds released notification"""
+    """Send funds released notification to the seller."""
     logger.info("=" * 60)
-    logger.info("[TX_EMAIL] === FUNDS RELEASED EMAIL ===")
+    logger.info("[TX_EMAIL] === FUNDS RELEASED EMAIL (SELLER) ===")
     logger.info(f"[TX_EMAIL] Event: funds_released")
     logger.info(f"[TX_EMAIL] Recipient: {to_email}")
     logger.info(f"[TX_EMAIL] Name: {to_name}")
     logger.info(f"[TX_EMAIL] Share Code: {share_code}")
-    logger.info(f"[TX_EMAIL] Amount: R{amount}, Net: R{net_amount}, Bank: {bank_name or 'unknown'}")
+    logger.info(f"[TX_EMAIL] Amount: R{amount}, Net: R{net_amount}, Fee: R{fee_amount}, Bank: {bank_name or 'unknown'}")
     logger.info("=" * 60)
 
     try:
-        subject, html = get_funds_released_email(to_name, share_code, item_description, amount, net_amount, bank_name)
+        subject, html = get_funds_released_email(
+            to_name, share_code, item_description, amount, net_amount, bank_name, fee_amount
+        )
         logger.info(f"[TX_EMAIL] Subject: {subject}")
         logger.info(f"[TX_EMAIL] Calling send_email()...")
-        
+
         result = await send_email(to_email, to_name, subject, html)
-        
+
+        logger.info(f"[TX_EMAIL] RESULT: {'SUCCESS' if result else 'FAILED'}")
+        return result
+    except Exception as e:
+        logger.error(f"[TX_EMAIL] EXCEPTION: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
+
+async def send_funds_released_buyer_email(
+    to_email: str,
+    to_name: str,
+    share_code: str,
+    item_description: str,
+    amount: float,
+) -> bool:
+    """Send the buyer their 'payment released — transaction complete' notification."""
+    logger.info("=" * 60)
+    logger.info("[TX_EMAIL] === FUNDS RELEASED EMAIL (BUYER) ===")
+    logger.info(f"[TX_EMAIL] Event: funds_released_buyer")
+    logger.info(f"[TX_EMAIL] Recipient: {to_email}")
+    logger.info(f"[TX_EMAIL] Share Code: {share_code}")
+    logger.info("=" * 60)
+
+    try:
+        subject, html = get_funds_released_buyer_email(to_name, share_code, item_description, amount)
+        result = await send_email(to_email, to_name, subject, html)
         logger.info(f"[TX_EMAIL] RESULT: {'SUCCESS' if result else 'FAILED'}")
         return result
     except Exception as e:

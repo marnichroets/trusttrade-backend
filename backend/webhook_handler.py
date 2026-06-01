@@ -319,13 +319,11 @@ async def process_webhook(
         update_data["funds_received_at"] = now
         update_data["payment_verified"] = True
 
-        # Payment is confirmed → auto-book the Courier Guy shipment (idempotent,
-        # never raises). Emails both parties the waybill + tracking link.
-        try:
-            from services.courier_booking import book_courier_for_transaction
-            await book_courier_for_transaction(db, transaction, email_service=email_service)
-        except Exception as exc:
-            logger.error(f"[WEBHOOK] courier auto-book failed (non-fatal) for {transaction_id}: {exc}")
+        # NOTE: Courier auto-booking is NOT triggered here. This legacy handler is
+        # only reachable via the admin /retry-webhook endpoint. The live TradeSafe
+        # webhook (routes/webhooks.py) is the single source of truth for courier
+        # booking, with the fallback job (background_jobs.py) as a backstop — both
+        # call the idempotent book_courier_for_transaction on FUNDS_DEPOSITED.
 
         # Payment Secured email/SMS fire ONLY when TradeSafe confirms the funds
         # have cleared (FUNDS_DEPOSITED). FUNDS_RECEIVED is a precursor

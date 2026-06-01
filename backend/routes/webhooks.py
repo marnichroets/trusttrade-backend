@@ -499,6 +499,8 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
     # The actual TrustTrade fee charged on this deal (max(2%, R5)), regardless of
     # who paid it — so the payout email never shows R0.00.
     fee_amount = float(txn.get("trusttrade_fee") or txn.get("platform_fee") or 0)
+    buyer_total = float(txn.get("total") or amount)
+    courier_fee = float(txn.get("courier_fee") or 0)
     arrival_date = email_service.format_payout_arrival_date()
 
     if seller_email:
@@ -514,6 +516,8 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
             net_amount=net_amount,
             bank_name=bank_name,
             fee_amount=fee_amount,
+            buyer_total=buyer_total,
+            courier_fee=courier_fee,
         )
 
     # SMS has no built-in dedup, and this helper may run on several release paths
@@ -780,6 +784,18 @@ async def tradesafe_webhook(request: Request):
                     role="seller",
                     delivery_method=delivery_method,
                 )))
+
+                # Funds have cleared (FUNDS_DEPOSITED) → auto-book the Courier Guy
+                # shipment for courier deliveries. book_courier_for_transaction is
+                # idempotent (guards on an existing waybill) and never raises, so it's
+                # safe to fire on every FUNDS_DEPOSITED webhook. This is the PRIMARY
+                # booking trigger — the fallback job and manual force-sync only exist
+                # as backstops if this webhook is delayed or missed.
+                if delivery_method == "courier":
+                    from services.courier_booking import book_courier_for_transaction
+                    asyncio.create_task(_bg(
+                        book_courier_for_transaction(db, txn, email_service=email_service)
+                    ))
 
         elif state in RELEASED_STATES and txn.get("withdrawal_status") not in ("in_progress", "succeeded"):
             # Funds settled in seller token wallet — trigger bank payout now.

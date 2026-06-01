@@ -151,6 +151,18 @@ async def verify_single_transaction(
                 # FUNDS_RECEIVED is a precursor state and would email prematurely.
                 if ts_state == "FUNDS_DEPOSITED":
                     await send_fallback_payment_notifications(db, txn)
+
+                    # Backstop courier booking: if the primary webhook was delayed or
+                    # missed, make sure the Courier Guy shipment is booked here too.
+                    # book_courier_for_transaction is idempotent and only acts on
+                    # courier deliveries, so this can never double-book or misfire.
+                    try:
+                        import email_service
+                        from services.courier_booking import book_courier_for_transaction
+                        await book_courier_for_transaction(db, txn, email_service=email_service)
+                    except Exception as e:
+                        logger.error(f"FALLBACK: courier auto-book failed (non-fatal) for {transaction_id}: {e}")
+
                     return {"updated": True, "action": "state_updated_to_PAYMENT_SECURED_with_email"}
 
                 logger.info(

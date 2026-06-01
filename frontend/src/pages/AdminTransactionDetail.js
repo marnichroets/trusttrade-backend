@@ -30,6 +30,16 @@ const COLORS = {
   info: '#3498db'
 };
 
+// Known ShipLogic (Courier Guy) service levels for manual admin booking overrides.
+// Mirrors SERVICE_LEVEL_CODE_TO_ID in backend/services/courier_guy.py.
+const COURIER_SERVICE_LEVELS = [
+  { code: 'LSF', id: 212572 },
+  { code: 'LOF', id: 212573 },
+  { code: 'ECO', id: 212570 },
+  { code: 'LSE', id: 212574 },
+  { code: 'LSX', id: 212575 },
+];
+
 const getStatusColor = (status) => {
   const s = status?.toLowerCase() || '';
   if (s.includes('completed') || s.includes('released')) return COLORS.green;
@@ -53,7 +63,9 @@ function AdminTransactionDetail() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [adminNote, setAdminNote] = useState('');
-  
+  // Admin-selected service level for a manual courier booking ('' = use stored).
+  const [courierServiceLevelId, setCourierServiceLevelId] = useState('');
+
   // Confirmation modals
   const [confirmModal, setConfirmModal] = useState({ open: false, action: '', title: '', message: '' });
 
@@ -137,7 +149,7 @@ function AdminTransactionDetail() {
           break;
         case 'book_courier':
           endpoint = `/admin/transactions/${transactionId}/book-courier`;
-          data = {};
+          data = courierServiceLevelId ? { service_level_id: Number(courierServiceLevelId) } : {};
           break;
         default:
           toast.error('Unknown action');
@@ -809,8 +821,25 @@ function AdminTransactionDetail() {
                           Last error: {transaction.courier_booking_error}
                         </p>
                       )}
+                      <div>
+                        <label className="text-xs uppercase mb-1 font-medium block" style={{ color: COLORS.subtext }}>
+                          Service level to book
+                        </label>
+                        <select
+                          value={courierServiceLevelId}
+                          onChange={(e) => setCourierServiceLevelId(e.target.value)}
+                          className="w-full text-sm p-2 rounded border"
+                          style={{ borderColor: COLORS.border, color: COLORS.text, backgroundColor: COLORS.background }}
+                          data-testid="courier-service-level-select"
+                        >
+                          <option value="">Use stored ({transaction.courier_quote_id || 'none'})</option>
+                          {COURIER_SERVICE_LEVELS.map((sl) => (
+                            <option key={sl.id} value={sl.id}>{sl.code} ({sl.id})</option>
+                          ))}
+                        </select>
+                      </div>
                       <Button
-                        onClick={() => openConfirmModal('book_courier', 'Book Courier', `Book the Courier Guy shipment for ${transaction.share_code}? This requests a waybill and emails both parties the tracking link.`)}
+                        onClick={() => openConfirmModal('book_courier', 'Book Courier', `Book the Courier Guy shipment for ${transaction.share_code}${courierServiceLevelId ? ` using service level id ${courierServiceLevelId}` : ` using the stored service level (${transaction.courier_quote_id || 'none'})`}? This requests a waybill and emails both parties the tracking link.`)}
                         disabled={actionLoading}
                         className="w-full text-white justify-center"
                         style={{ backgroundColor: '#7c3aed' }}

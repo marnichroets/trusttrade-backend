@@ -43,6 +43,7 @@ async def book_courier_for_transaction(
     db,
     transaction: Dict[str, Any],
     email_service=None,
+    service_level_id_override: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Book the Courier Guy shipment for a funded courier transaction.
@@ -51,6 +52,10 @@ async def book_courier_for_transaction(
     delivery method isn't courier, if the booking details are missing, or if a
     waybill already exists. Returns the booking result dict, or None when skipped
     or on failure.
+
+    service_level_id_override: when set (e.g. an admin manually picking a different
+    service level for a stuck transaction), this id is used instead of the one stored
+    on the transaction — bypassing the stored code and the re-quote entirely.
     """
     transaction_id = transaction.get("transaction_id")
     try:
@@ -105,10 +110,14 @@ async def book_courier_for_transaction(
             transaction.get("buyer_name"), transaction.get("buyer_phone"), transaction.get("buyer_email")
         )
 
-        service_level_id = transaction.get("courier_service_level_id")
+        service_level_id = (
+            service_level_id_override
+            if service_level_id_override is not None
+            else transaction.get("courier_service_level_id")
+        )
         logger.info(
             f"[COURIER_BOOK] {transaction_id} booking shipment — quote={quote_id!r} "
-            f"service_level_id={service_level_id!r} ref={share_code}"
+            f"service_level_id={service_level_id!r} override={service_level_id_override!r} ref={share_code}"
         )
         result = await book_shipment(
             quote_id=quote_id,

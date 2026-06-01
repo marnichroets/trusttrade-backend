@@ -9,6 +9,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel
 
 from core.config import settings
 from core.database import get_database
@@ -378,12 +379,26 @@ async def admin_release_funds(request: Request, transaction_id: str, release_dat
     }
 
 
+class AdminBookCourierRequest(BaseModel):
+    # Optional manual override of the service level to book with. Accepts either the
+    # numeric ShipLogic service_level id, or a known code (LSF/LOF/ECO/LSE/LSX) which
+    # is mapped to its id. When omitted, the stored service level is used.
+    service_level_id: Optional[int] = None
+    service_level_code: Optional[str] = None
+
+
 @router.post("/transactions/{transaction_id}/book-courier")
-async def admin_book_courier(request: Request, transaction_id: str):
+async def admin_book_courier(
+    request: Request,
+    transaction_id: str,
+    body: Optional[AdminBookCourierRequest] = None,
+):
     """Admin: Manually trigger the Courier Guy booking for a funded courier transaction.
 
     Use this to recover transactions that were funded before auto-booking existed, or
     where booking failed/was missed. Idempotent — no-ops if a waybill already exists.
+    Optionally accepts a service_level_id/service_level_code to override the stored
+    service level (e.g. to try a different option when the original is unavailable).
     """
     db = get_database()
     user = await require_admin(request, db)
@@ -406,8 +421,27 @@ async def admin_book_courier(request: Request, transaction_id: str):
 
     import email_service
     from services.courier_booking import book_courier_for_transaction
+    from services.courier_guy import SERVICE_LEVEL_CODE_TO_ID
 
-    await book_courier_for_transaction(db, transaction, email_service=email_service)
+    # Resolve an optional admin-selected service level override.
+    override_id = None
+    if body:
+        if body.service_level_id is not None:
+            override_id = body.service_level_id
+        elif body.service_level_code:
+            override_id = SERVICE_LEVEL_CODE_TO_ID.get(body.service_level_code.strip().upper())
+            if override_id is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown service level code {body.service_level_code!r}. "
+                           f"Known: {', '.join(SERVICE_LEVEL_CODE_TO_ID)}",
+                )
+    if override_id is not None:
+        logger.info(f"[ADMIN_BOOK_COURIER] {transaction_id} using service_level_id override={override_id}")
+
+    await book_courier_for_transaction(
+        db, transaction, email_service=email_service, service_level_id_override=override_id
+    )
 
     # Re-read so we surface either the new waybill or the recorded booking error.
     fresh = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0}) or {}

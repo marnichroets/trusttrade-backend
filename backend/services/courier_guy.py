@@ -224,17 +224,31 @@ async def book_shipment(
     is_dropoff = (collection_preference or "").lower() == "dropoff"
 
     # ShipLogic books against the service_level id (an int like 212572), not the code.
-    # New transactions persist courier_service_level_id; for older ones we resolve the
-    # id by re-quoting the same pickup/delivery/parcel and matching the stored code.
+    # New transactions persist courier_service_level_id; for older ones we resolve it.
+    #
+    # IMPORTANT: try the known code→id map BEFORE re-quoting. Re-quoting the original
+    # route can 500 ("cannot get rates") when the originally selected service is no
+    # longer available — and we must not let that crash the booking. Checking the map
+    # first means a known code (LSF/LOF/ECO/LSE/LSX) never even needs the re-quote.
+    if service_level_id is None and quote_id:
+        mapped = SERVICE_LEVEL_CODE_TO_ID.get(str(quote_id).strip().upper())
+        if mapped is not None:
+            service_level_id = mapped
+            logger.info(
+                f"[COURIER] Resolved service_level_id={service_level_id} "
+                f"from known map for code={quote_id!r}"
+            )
+
+    # Only codes NOT in the known map require a live re-quote to discover their id.
     if service_level_id is None and quote_id:
         rates = []
         try:
             rates = await get_quote(pickup["address"], delivery["address"], parcel)
         except Exception as exc:
+            # Re-quote failed (e.g. ShipLogic 500) — swallow and fall through; the
+            # raise below gives a clear, actionable error if nothing else resolves.
             logger.error(f"[COURIER] re-quote for service_level_id failed (code={quote_id!r}): {exc}")
 
-        # Log exactly what's available vs what we stored — this is the key diagnostic
-        # when the stored code can't be matched to a current rate.
         available = [
             ((r.get("service_level") or {}).get("code"), (r.get("service_level") or {}).get("id"))
             for r in rates
@@ -250,19 +264,7 @@ async def book_shipment(
                 service_level_id = sid
                 break
 
-        # Known code→id mapping fallback. Covers the case where the re-quote returns no
-        # rates (ShipLogic 500 "cannot get rates") because the originally selected
-        # service is no longer available for the route — we can still book by id.
-        if service_level_id is None:
-            mapped = SERVICE_LEVEL_CODE_TO_ID.get(str(quote_id).strip().upper())
-            if mapped is not None:
-                service_level_id = mapped
-                logger.warning(
-                    f"[COURIER] code {quote_id!r} not resolvable from current rates; "
-                    f"using known mapping id={service_level_id}"
-                )
-
-        # If still unresolved but only one live option exists, use it rather than failing.
+        # If unresolved but only one live option exists, use it rather than failing.
         if service_level_id is None and len(available) == 1 and available[0][1] is not None:
             service_level_id = available[0][1]
             logger.warning(

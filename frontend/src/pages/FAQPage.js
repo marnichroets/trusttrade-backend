@@ -53,7 +53,7 @@ const buildFaqs = (payoutSchedule, minimumTransactionAmount) => [
     items: [
       {
         q: 'Is my money safe in escrow?',
-        a: 'Yes. TrustTrade uses professional escrow services to hold funds. Your money is never held directly by TrustTrade Ã¢â‚¬â€ it sits in a regulated escrow account and can only be released with your explicit confirmation or a dispute resolution decision.',
+        a: 'Yes. TrustTrade uses professional escrow services to hold funds. Your money is never held directly by TrustTrade — it sits in a regulated escrow account and can only be released with your explicit confirmation or a dispute resolution decision.',
       },
       {
         q: 'Why do I need to verify my identity?',
@@ -61,7 +61,7 @@ const buildFaqs = (payoutSchedule, minimumTransactionAmount) => [
       },
       {
         q: 'Why do I need to add a phone number?',
-        a: 'Your phone number is used for transaction alerts and two-factor security confirmations. It also helps verify your identity as required by FICA. You can add your phone number under Settings Ã¢â€ â€™ Verify Phone.',
+        a: 'Your phone number is used for transaction alerts and two-factor security confirmations. It also helps verify your identity as required by FICA. You can add your phone number under Settings → Verify Phone.',
       },
       {
         q: 'How is my personal data protected?',
@@ -78,11 +78,11 @@ const buildFaqs = (payoutSchedule, minimumTransactionAmount) => [
       },
       {
         q: 'What happens if the item is not as described?',
-        a: 'Raise a dispute before confirming delivery. Include evidence such as photos and a description of the discrepancy. TrustTrade\'s dispute team will review the evidence from both parties and make a determination within 5Ã¢â‚¬â€œ7 business days.',
+        a: 'Raise a dispute before confirming delivery. Include evidence such as photos and a description of the discrepancy. TrustTrade\'s dispute team will review the evidence from both parties and make a determination within 5–7 business days.',
       },
       {
         q: 'How long does dispute resolution take?',
-        a: 'Simple disputes are typically resolved within 3Ã¢â‚¬â€œ5 business days. Complex disputes requiring more evidence may take up to 10 business days. You\'ll be notified by email at each stage of the process.',
+        a: 'Simple disputes are typically resolved within 3–5 business days. Complex disputes requiring more evidence may take up to 10 business days. You\'ll be notified by email at each stage of the process.',
       },
     ],
   },

@@ -1381,10 +1381,15 @@ function TransactionDetail() {
     transaction.payment_status === 'Payout Processing';
   const shareLink = transaction.share_code ? `${window.location.origin}/t/${transaction.share_code}` : null;
   const _fa = (transaction.fee_allocation || 'BUYER').toUpperCase();
-  const _ttFee = transaction.trusttrade_fee ?? Math.max(transaction.item_price * 0.02, 5);
+  // Courier Guy cost + handling are part of what the buyer pays and are included
+  // in the escrow amount sent to the provider, so they must be in the payment total too.
+  const _courierTotal = (transaction.courier_fee || 0) + (transaction.courier_handling_fee || 0);
+  // TrustTrade's 2% platform fee is charged on the full escrow value (item + courier),
+  // matching what TradeSafe actually deducts as the agent fee.
+  const _ttFee = Math.max((transaction.item_price + _courierTotal) * 0.02, 5);
   const _buyerFee = ['BUYER_AGENT', 'BUYER'].includes(_fa) ? _ttFee : ['BUYER_SELLER', 'SPLIT_AGENT', 'BUYER_SELLER_AGENT', 'SPLIT'].includes(_fa) ? _ttFee / 2 : 0;
   const _sellerFee = ['SELLER_AGENT', 'SELLER'].includes(_fa) ? _ttFee : ['BUYER_SELLER', 'SPLIT_AGENT', 'BUYER_SELLER_AGENT', 'SPLIT'].includes(_fa) ? _ttFee / 2 : 0;
-  const totalSecurePayment = transaction.item_price + _buyerFee;
+  const totalSecurePayment = transaction.item_price + _buyerFee + _courierTotal;
   const fundsSecured = hasEscrow && (
     ['FUNDS_RECEIVED', 'FUNDS_DEPOSITED', 'INITIATED', 'SENT', 'DELIVERED', 'FUNDS_RELEASED'].includes(escrowState) ||
     ['Paid', 'Funds Secured', 'Delivery in Progress', 'Released'].includes(transaction.payment_status)
@@ -1892,6 +1897,12 @@ function TransactionDetail() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
                           <span style={{ color: '#64748b' }}>TrustTrade Platform Fee{['BUYER_SELLER','SPLIT_AGENT','BUYER_SELLER_AGENT','SPLIT'].includes(_fa) ? ' (2% split — your half)' : ' (2%)'}</span>
                           <span style={{ fontWeight: 500, color: '#0f172a' }}>R {_buyerFee?.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {_courierTotal > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                          <span style={{ color: '#64748b' }}>Courier &amp; Handling</span>
+                          <span style={{ fontWeight: 500, color: '#0f172a' }}>R {_courierTotal.toFixed(2)}</span>
                         </div>
                       )}
                       {selectedPaymentMethod && processingFee > 0 && (
@@ -2421,8 +2432,8 @@ function TransactionDetail() {
               <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12, marginTop: 12 }}>
                 {[
                   { label: 'Item Value', value: `R ${transaction.item_price.toFixed(2)}` },
-                  { label: `TrustTrade Fee (2%)${['BUYER_AGENT','BUYER'].includes(_fa) ? ' — buyer pays' : ['SELLER_AGENT','SELLER'].includes(_fa) ? ' — seller pays' : ' — split 50/50'}`, value: `R ${(transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)).toFixed(2)}`, color: '#64748b' },
-                  { label: 'Buyer Pays Total', value: `R ${(transaction.total ?? (transaction.item_price + (transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)))).toFixed(2)}`, color: '#2563eb' },
+                  { label: `TrustTrade Fee (2%)${['BUYER_AGENT','BUYER'].includes(_fa) ? ' — buyer pays' : ['SELLER_AGENT','SELLER'].includes(_fa) ? ' — seller pays' : ' — split 50/50'}`, value: `R ${_ttFee.toFixed(2)}`, color: '#64748b' },
+                  { label: 'Buyer Pays Total', value: `R ${totalSecurePayment.toFixed(2)}`, color: '#2563eb' },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
                     <span style={{ color: '#94a3b8' }}>{r.label}</span>

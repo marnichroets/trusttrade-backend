@@ -313,24 +313,36 @@ async def upload_photo(request: Request, file: UploadFile = File(...)):
     if file_size > 5 * 1024 * 1024:
         logger.warning(f"[UPLOAD] Rejected: file too large ({file_size} bytes)")
         raise HTTPException(status_code=400, detail="File size must be less than 5MB")
-    
-    # Generate unique filename
+
+    # Prefer durable Cloudinary storage. We store the returned HTTPS URL as the
+    # "filename" — item_photos then holds full URLs, which every UI renders directly
+    # (they all special-case values starting with "http"). Falls back to local disk
+    # when Cloudinary isn't configured.
+    from cloudinary_service import upload_image
+    file.file.seek(0)
+    cloud_url = await upload_image(file.file, folder="trusttrade/photos")
+    if cloud_url:
+        logger.info(f"[UPLOAD] Stored on Cloudinary: {cloud_url}")
+        return {"filename": cloud_url, "url": cloud_url, "storage": "cloudinary"}
+
+    # Fallback: local disk (legacy; ephemeral on Railway).
     unique_filename = f"{uuid.uuid4().hex}{file_ext}"
     file_path = Path(settings.PHOTOS_PATH) / unique_filename
-    
+
     # Ensure directory exists
     Path(settings.PHOTOS_PATH).mkdir(parents=True, exist_ok=True)
-    
+
     # Save file
     try:
+        file.file.seek(0)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         logger.info(f"[UPLOAD] Success: {unique_filename} saved to {file_path}")
     except Exception as e:
         logger.error(f"[UPLOAD] Failed to save file: {e}")
         raise HTTPException(status_code=500, detail="Failed to save file")
-    
-    return {"filename": unique_filename, "path": str(file_path)}
+
+    return {"filename": unique_filename, "path": str(file_path), "storage": "local"}
 
 
 @router.post("/upload/dispute-evidence")
@@ -368,16 +380,24 @@ async def upload_dispute_evidence(request: Request, file: UploadFile = File(...)
     file.file.seek(0)
     if file_size > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File size must be less than 5MB")
-    
-    # Generate unique filename
+
+    # Prefer durable Cloudinary storage (dispute evidence must survive redeploys).
+    from cloudinary_service import upload_image
+    file.file.seek(0)
+    cloud_url = await upload_image(file.file, folder="trusttrade/disputes")
+    if cloud_url:
+        return {"filename": cloud_url, "url": cloud_url, "storage": "cloudinary"}
+
+    # Fallback: local disk (legacy; ephemeral on Railway).
     unique_filename = f"{uuid.uuid4().hex}{file_ext}"
     file_path = Path(settings.DISPUTES_PATH) / unique_filename
-    
+
     # Save file
+    file.file.seek(0)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    
-    return {"filename": unique_filename, "path": str(file_path)}
+
+    return {"filename": unique_filename, "path": str(file_path), "storage": "local"}
 
 
 # ============ TRANSACTION CRUD ============

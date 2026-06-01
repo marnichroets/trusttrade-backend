@@ -217,3 +217,13 @@ try:
 except Exception as e:
     logger.warning(f"Could not mount static directory: {e}")
 
+# Serve locally-stored uploads at /uploads. New photos go to Cloudinary (durable),
+# but this keeps any pre-existing local files (and the non-Cloudinary fallback)
+# viewable. Note: the container filesystem is ephemeral on Railway.
+try:
+    uploads_dir = Path(settings.UPLOAD_BASE_PATH)
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+except Exception as e:
+    logger.warning(f"Could not mount uploads directory: {e}")
+

@@ -1083,7 +1083,7 @@ function NewTransaction() {
                   borderRadius: 10, padding: '10px 14px', marginBottom: 16, marginTop: 14,
                 }}>
                   <p style={{ fontSize: 12, color: '#92400e', margin: 0 }}>
-                    Upload <strong>1â€"5 clear photos</strong>. Include all angles and any defects.
+                    Upload <strong>1–5 clear photos</strong>. Include all angles and any defects.
                   </p>
                 </div>
 

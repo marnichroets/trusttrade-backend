@@ -141,6 +141,20 @@ class Settings:
     DISPUTES_PATH: str = '/app/uploads/disputes'
     PDFS_PATH: str = '/app/uploads/pdfs'
 
+    # Cloudinary — durable, CDN-served image storage for transaction photos and
+    # dispute evidence. Local /uploads stays as a fallback for legacy files.
+    CLOUDINARY_CLOUD_NAME: str = os.environ.get('CLOUDINARY_CLOUD_NAME', '')
+    CLOUDINARY_API_KEY: str = os.environ.get('CLOUDINARY_API_KEY', '')
+    CLOUDINARY_API_SECRET: str = os.environ.get('CLOUDINARY_API_SECRET', '')
+
+    @property
+    def cloudinary_enabled(self) -> bool:
+        return bool(
+            self.CLOUDINARY_CLOUD_NAME
+            and self.CLOUDINARY_API_KEY
+            and self.CLOUDINARY_API_SECRET
+        )
+
 
 # Singleton instance
 settings = Settings()

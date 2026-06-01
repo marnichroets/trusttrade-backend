@@ -1165,14 +1165,20 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
     else:
         methods_to_try = ["EFT", "OZOW", "CARD"]
     last_deposit = None
-    
+    # Track the real reason a deposit could not be created, so the caller can
+    # surface "{METHOD} was rejected by TradeSafe: ..." instead of the misleading
+    # "this transaction no longer exists" (the transaction clearly DOES exist —
+    # we just queried it successfully above).
+    last_error = None
+    last_failed_method = None
+
     for method in methods_to_try:
         variables = {
             "id": tradesafe_id,
             "method": method,
             "redirects": redirect_urls
         }
-        
+
         logger.info(f"[PAYMENT] trying method: {method} for {tradesafe_id}")
 
         try:
@@ -1180,11 +1186,15 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
             logger.info(f"[PAYMENT] {method} raw result: {result}")
         except Exception as e:
             logger.error(f"[PAYMENT] exception with {method}: {str(e)}", exc_info=True)
+            last_error = str(e)
+            last_failed_method = method
             continue
 
         if result and 'errors' in result:
             error_msg = result['errors'][0].get('message', 'Unknown error') if result['errors'] else 'Unknown error'
             logger.warning(f"[PAYMENT] method {method} failed: {error_msg}")
+            last_error = error_msg
+            last_failed_method = method
             continue
 
         if result and 'transactionDeposit' in result:
@@ -1221,7 +1231,23 @@ async def get_payment_link(tradesafe_id: str, redirect_urls: Dict[str, str] = No
             "method": "EFT",
             "message": "Please use bank details for EFT payment. See transaction for bank account details."
         }
-    
+
+    # The transaction exists (we fetched it above) but no deposit could be created.
+    # Surface the ACTUAL TradeSafe error + which method failed, so the buyer sees a
+    # truthful message and we can diagnose (e.g. Ozow not enabled on the account).
+    if last_error:
+        logger.error(
+            f"[PAYMENT] deposit creation failed for {tradesafe_id} "
+            f"method={last_failed_method}: {last_error}"
+        )
+        return {
+            "error": "deposit_failed",
+            "method": last_failed_method,
+            "message": last_error,
+            "tradesafe_id": tradesafe_id,
+            "state": tx_state,
+        }
+
     logger.error(f"[PAYMENT] get_payment_link returning None — no deposit created for {tradesafe_id}")
     return None
 

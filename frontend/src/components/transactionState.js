@@ -131,8 +131,8 @@ export function getFlowCopy(transaction = {}) {
       securedSeller: 'Payment is protected in escrow. No delivery dispatch action is required for this instant flow.',
       progressLabel: 'Release approved',
       progressDescription: 'Release is being processed according to the instant escrow flow.',
-      confirmationLabel: 'Release conditions met',
-      confirmationDescription: 'The transaction is ready for escrow release according to the instant flow.',
+      confirmationLabel: 'Transaction complete',
+      confirmationDescription: 'All done! The funds are being released to the seller — the payout is on its way.',
       confirmAction: 'View release status',
       sellerAction: 'View transaction',
     };
@@ -144,8 +144,8 @@ export function getFlowCopy(transaction = {}) {
     securedSeller: 'Payment is protected in escrow. Complete the agreed conditions and update the transaction.',
     progressLabel: 'Release conditions in progress',
     progressDescription: 'The agreed release conditions are being completed.',
-    confirmationLabel: 'Awaiting completion confirmation',
-    confirmationDescription: 'Completion confirmation is required before escrow release.',
+    confirmationLabel: 'Transaction complete',
+    confirmationDescription: 'All done! The funds are being released to the seller — the payout is on its way.',
     confirmAction: 'Confirm completion',
     sellerAction: 'Update completion',
   };

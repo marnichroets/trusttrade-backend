@@ -589,7 +589,10 @@ function SellerExpectedPayoutCard({ transaction, platformConfig }) {
       </div>
 
       <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, lineHeight: 1.4 }}>
-        Estimates based on standard processing. Actual timing may vary by 1–2 hours.
+        Why two dates? The <strong>release date</strong> is when funds leave escrow once the buyer
+        confirms (or auto-release fires). They're then paid out on the next scheduled bank run, and
+        the EFT clears into your account the following business day — that's the <strong>bank date</strong>.
+        Estimates based on standard processing; actual timing may vary.
       </p>
     </div>
   );
@@ -2203,24 +2206,6 @@ function TransactionDetail() {
                         </div>
                       )}
                     </div>
-
-                    <div style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px', border: '1px solid #f1f5f9' }}>
-                      <p style={{ ...S.label, marginBottom: 12 }}>Price Summary</p>
-                      {[
-                        { label: 'Item Value', value: `R ${transaction.item_price.toFixed(2)}`, mono: true },
-                        { label: `TrustTrade Fee (2%)${['BUYER_AGENT','BUYER'].includes(_fa) ? ' — buyer pays' : ['SELLER_AGENT','SELLER'].includes(_fa) ? ' — seller pays' : ' — split 50/50'}`, value: `R ${_ttFee.toFixed(2)}`, mono: true },
-                        { label: 'Seller Receives', value: `R ${(transaction.seller_receives ?? transaction.item_price).toFixed(2)}`, mono: true },
-                      ].map(r => (
-                        <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f1f5f9' }}>
-                          <span style={{ fontSize: 13, color: '#64748b' }}>{r.label}</span>
-                          <span style={{ fontSize: 13, fontWeight: 500, color: '#0f172a', fontFamily: 'monospace' }}>{r.value}</span>
-                        </div>
-                      ))}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>Buyer Pays Total</span>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: '#2563eb', fontFamily: 'monospace' }}>R {totalSecurePayment.toFixed(2)}</span>
-                      </div>
-                    </div>
                   </div>
                 )}
 
@@ -2436,7 +2421,7 @@ function TransactionDetail() {
               <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12, marginTop: 12 }}>
                 {[
                   { label: 'Item Value', value: `R ${transaction.item_price.toFixed(2)}` },
-                  { label: 'TrustTrade Fee (2%)', value: `R ${(transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)).toFixed(2)}`, color: '#64748b' },
+                  { label: `TrustTrade Fee (2%)${['BUYER_AGENT','BUYER'].includes(_fa) ? ' — buyer pays' : ['SELLER_AGENT','SELLER'].includes(_fa) ? ' — seller pays' : ' — split 50/50'}`, value: `R ${(transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)).toFixed(2)}`, color: '#64748b' },
                   { label: 'Buyer Pays Total', value: `R ${(transaction.total ?? (transaction.item_price + (transaction.platform_fee ?? Math.max(transaction.item_price * 0.02, 5)))).toFixed(2)}`, color: '#2563eb' },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>

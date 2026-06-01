@@ -643,7 +643,7 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str, payme
     if not payment_info:
         print("=== PAY FLOW ERROR: payment_info is None ===")
         raise HTTPException(
-            status_code=404, 
+            status_code=404,
             detail={
                 "error": "transaction_not_found_on_tradesafe",
                 "message": "This transaction no longer exists on TradeSafe. It may have expired or been deleted. Please create a new escrow.",
@@ -651,7 +651,25 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str, payme
                 "tradesafe_id": tradesafe_id
             }
         )
-    
+
+    # The escrow exists, but the chosen payment method could not be started (e.g.
+    # Ozow rejected by TradeSafe). Surface the REAL provider error instead of the
+    # misleading "transaction no longer exists" so the buyer can try another method
+    # and we can see the true cause in logs.
+    if payment_info.get("error") == "deposit_failed":
+        failed_method = (payment_info.get("method") or payment_method or "this method").upper()
+        print(f"=== PAY FLOW ERROR: {failed_method} deposit rejected: {payment_info.get('message')} ===")
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": "payment_method_unavailable",
+                "message": f"{failed_method} payment could not be started right now: {payment_info.get('message')}. Please try a different payment method (e.g. EFT or card).",
+                "method": failed_method,
+                "transaction_id": transaction_id,
+                "tradesafe_id": tradesafe_id,
+            }
+        )
+
     # Check if transaction is already paid
     if payment_info.get("already_paid"):
         print("=== PAY FLOW: Transaction already paid ===")

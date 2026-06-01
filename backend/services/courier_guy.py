@@ -237,14 +237,18 @@ async def book_shipment(
         "reference1": contact.get("reference", ""),
     }
 
-    # Build the service_level selector ShipLogic books against. Prefer the numeric id
-    # (required); include the code too, mirroring the rate object from /rates.
-    service_level: Dict[str, Any] = {}
+    # ShipLogic's opt_in_rates is an array of service_level ids (int64) — NOT objects.
+    # e.g. [212572]. Passing {"service_level": {...}} is rejected with
+    # "invalid type received for field opt_in_rates: expected ... int64 ... received object".
+    opt_in_rates = []
     if service_level_id is not None:
-        service_level["id"] = service_level_id
-    if quote_id:
-        service_level["code"] = quote_id
-    opt_in_rates = [{"service_level": service_level}] if service_level else []
+        try:
+            opt_in_rates = [int(service_level_id)]
+        except (TypeError, ValueError):
+            logger.error(
+                f"[COURIER] Invalid service_level_id={service_level_id!r} "
+                f"(code={quote_id!r}) — cannot build opt_in_rates"
+            )
 
     payload = {
         "collection_address": pickup["address"],

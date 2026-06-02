@@ -1795,6 +1795,15 @@ export function CreateMilestoneDeal() {
           <p style={{ fontSize: 11, color: D.textMuted, margin: "6px 0 0" }}>The total of all stages. Your client pays one stage at a time.</p>
         </div>
 
+        {/* Honest heads-up about per-stage processing fees */}
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", borderRadius: 10, background: "#FFFBEB", border: `1px solid ${D.warning}44`, marginBottom: 16 }}>
+          <AlertTriangle size={14} color={D.warning} style={{ flexShrink: 0, marginTop: 1 }} />
+          <p style={{ fontSize: 11, color: D.text, margin: 0, lineHeight: 1.5 }}>
+            Each stage is processed as a separate payment. A 2-stage deal has 2 bank processing fees.
+            To pay one processing fee only, pay the full amount in one transaction instead.
+          </p>
+        </div>
+
         {/* Fee payer */}
         <div style={{ marginBottom: 18 }}>
           <label style={{ ...label, marginBottom: 10 }}>Who pays the TrustTrade fee?</label>

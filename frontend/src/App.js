@@ -32,7 +32,7 @@ import PhoneVerification from './pages/PhoneVerification';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentCancelled from './pages/PaymentCancelled';
 import BankingSettings from './pages/BankingSettings';
-import { CreateSmartDeal, SmartDealDetail, SmartDealList } from './pages/SmartDeal';
+import { CreateSmartDeal, CreateMilestoneDeal, SmartDealDetail, SmartDealList } from './pages/SmartDeal';
 import Onboarding from './pages/Onboarding';
 import VerifyEmail from './pages/VerifyEmail';
 import FAQPage from './pages/FAQPage';
@@ -137,6 +137,7 @@ function AppRouter() {
       <Route path="/settings/banking" element={<ProtectedRoute><BankingSettings /></ProtectedRoute>} />
       <Route path="/smart-deals" element={<ProtectedRoute><DashboardLayout user={null}><SmartDealList /></DashboardLayout></ProtectedRoute>} />
       <Route path="/smart-deals/new" element={<ProtectedRoute><DashboardLayout user={null}><CreateSmartDeal /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/smart-deals/new-milestone" element={<ProtectedRoute><DashboardLayout user={null}><CreateMilestoneDeal /></DashboardLayout></ProtectedRoute>} />
       <Route path="/smart-deals/:dealId" element={<ProtectedRoute><DashboardLayout user={null}><SmartDealDetail /></DashboardLayout></ProtectedRoute>} />
       <Route path="/faq" element={<FAQPage />} />
       <Route path="*" element={<NotFoundPage />} />

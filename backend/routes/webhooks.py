@@ -131,6 +131,77 @@ async def _handle_smart_deal_funded(deal: dict, db, state: str = "FUNDS_DEPOSITE
         )))
 
 
+async def _handle_milestone_funded(child: dict, db, state: str = "FUNDS_DEPOSITED") -> None:
+    """Mark a milestone child FUNDED (same fields as a normal txn), mirror the status
+    onto the parent deal's milestones[], sync banking, and notify both parties.
+    Only fires the milestone emails on the funding transition (re-delivered webhooks
+    that find it already FUNDED are no-ops)."""
+    import asyncio
+
+    child_id = child["deal_id"]
+    parent_id = child.get("parent_deal_id")
+    milestone_id = child.get("milestone_id")
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    auto_release_at = (now + timedelta(hours=48)).isoformat()
+    already_funded = child.get("status") == "FUNDED"
+
+    await db.transactions.update_one(
+        {"deal_id": child_id},
+        {"$set": {
+            "status": "FUNDED",
+            "payment_status": "Funds Secured",
+            "tradesafe_state": state,
+            "release_status": "In Escrow",
+            "funds_received_at": child.get("funds_received_at") or now_iso,
+            "auto_release_at": auto_release_at,
+            "funded_at": child.get("funded_at") or now,
+            "updated_at": now,
+        }},
+    )
+
+    # Mirror onto the parent milestone + advance the parent to IN_PROGRESS.
+    if parent_id and milestone_id:
+        from routes.smart_deals import _set_milestone_fields
+        await _set_milestone_fields(db, parent_id, milestone_id, {"status": "FUNDED", "funded_at": now})
+        await db.transactions.update_one(
+            {"deal_id": parent_id, "status": {"$nin": ["COMPLETE", "DISPUTED"]}},
+            {"$set": {"status": "IN_PROGRESS", "updated_at": now}},
+        )
+
+    logger.info(f"[WEBHOOK] Milestone {child_id} → FUNDED (state={state})")
+
+    if already_funded:
+        return
+
+    # Sync seller banking to their TradeSafe token (once), then notify both parties.
+    from routes.smart_deals import _sync_seller_banking
+    asyncio.create_task(_bg(_sync_seller_banking(child, db)))
+
+    parent = await db.transactions.find_one({"deal_id": parent_id}) if parent_id else None
+    milestone = None
+    if parent:
+        milestone = next((m for m in parent.get("milestones", []) if m.get("milestone_id") == milestone_id), None)
+    if parent and milestone:
+        import email_service
+        asyncio.create_task(_bg(email_service.send_milestone_funded(
+            parent, milestone,
+            parent.get("client_name") or parent.get("client_email", ""),
+            parent.get("freelancer_name") or parent.get("freelancer_email", ""),
+        )))
+
+
+async def _handle_milestone_released(child: dict, db, state: str = "FUNDS_RELEASED") -> None:
+    """Run the proven released → withdrawal pipeline on the milestone child, then
+    advance the parent (mark milestone RELEASED, open the next, recompute status)."""
+    await handle_released_transaction(db, child, state=state, source="webhook:milestone")
+    parent_id = child.get("parent_deal_id")
+    milestone_id = child.get("milestone_id")
+    if parent_id and milestone_id:
+        from routes.smart_deals import advance_parent_milestone_released
+        await advance_parent_milestone_released(db, parent_id, milestone_id)
+
+
 async def attempt_transaction_withdrawal(db, txn: dict, source: str = "webhook") -> dict:
     """
     Idempotently withdraw released seller-token funds to the seller bank account.
@@ -641,6 +712,50 @@ async def tradesafe_webhook(request: Request):
             f"reference={reference!r} ip={client_ip!r} — ignoring"
         )
         return {"ok": True}
+
+    # ── Smart Deal MILESTONE item path ──────────────────────────────────────
+    # Each milestone is its own escrow with reference "{deal_id}-M{seq}" (still
+    # "SD-…"-prefixed) and its own tradesafe id. Resolve the child doc first so the
+    # generic single-deal / regular-txn paths below never touch it.
+    milestone_item = None
+    if reference.startswith("SD-") and "-M" in reference:
+        milestone_item = await db.transactions.find_one(
+            {"deal_id": reference, "deal_type": "DIGITAL_WORK_MILESTONE_ITEM"}
+        )
+    if milestone_item is None and tradesafe_id:
+        milestone_item = await db.transactions.find_one(
+            {"$or": [
+                {"tradesafe_id": tradesafe_id},
+                {"tradesafe_token_id": tradesafe_id},
+                {"tradesafe_transaction_id": tradesafe_id},
+            ], "deal_type": "DIGITAL_WORK_MILESTONE_ITEM"}
+        )
+
+    if milestone_item:
+        child_id = milestone_item["deal_id"]
+        FUNDED_STATES = {"FUNDS_RECEIVED", "FUNDS_DEPOSITED"}
+        RELEASED_STATES = {"FUNDS_RELEASED", "COMPLETE", "COMPLETED"}
+        logger.info(
+            f"[WEBHOOK] Milestone {child_id} found — current status={milestone_item['status']!r} "
+            f"incoming state={state!r}"
+        )
+        if state in RELEASED_STATES:
+            if milestone_item.get("withdrawal_status") in ("in_progress", "succeeded"):
+                await db.transactions.update_one(
+                    {"_id": milestone_item["_id"]}, {"$set": {"tradesafe_state": state}}
+                )
+                return {"ok": True, "action": "milestone_release_already_processed", "deal_id": child_id}
+            import asyncio
+            asyncio.create_task(_bg(_handle_milestone_released(milestone_item, db, state=state)))
+            return {"ok": True, "action": "milestone_withdrawal_queued", "deal_id": child_id, "state": state}
+
+        if state not in FUNDED_STATES:
+            return {"ok": True, "action": "ignored", "reason": f"state {state!r} not actionable for milestones"}
+        if milestone_item["status"] not in ("PAYMENT_PENDING", "FUNDED"):
+            logger.info(f"[WEBHOOK] Milestone {child_id} in {milestone_item['status']!r} — skipping")
+            return {"ok": True, "action": "already_processed"}
+        await _handle_milestone_funded(milestone_item, db, state=state)
+        return {"ok": True, "action": "milestone_funded", "deal_id": child_id, "state": state}
 
     # ── Smart Deal path ─────────────────────────────────────────────────────
     # References start with "SD-"; also try tradesafe_token_id / tradesafe_transaction_id.

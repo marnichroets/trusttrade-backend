@@ -4,6 +4,7 @@ import {
   ArrowLeft, CheckCircle, Clock, Briefcase, Shield,
   AlertTriangle, Zap, ArrowRight, Send,
   MessageSquare, Lock, CreditCard, Landmark, Bolt,
+  Plus, Trash2, Layers,
 } from "lucide-react";
 
 const API = process.env.REACT_APP_API_URL || "https://trusttrade-backend-production-3efa.up.railway.app";
@@ -44,6 +45,21 @@ const STATUS = {
   APPROVED:        { label: "Payout processing · up to 2 business days",    color: "#10B981", bg: "#041A0F", dot: "#10B981" },
   COMPLETE:        { label: "Completed",                               color: "#10B981", bg: "#041A0F", dot: "#10B981" },
   DISPUTED:        { label: "Disputed / protection hold",              color: "#EF4444", bg: "#1A0808", dot: "#EF4444" },
+  // Milestone-deal (parent) statuses:
+  PROPOSED:          { label: "Awaiting approval",        color: "#D97706", bg: "#1A1200", dot: "#F59E0B" },
+  STRUCTURE_APPROVED:{ label: "Approved — pay milestone", color: "#3B82F6", bg: "#071428", dot: "#3B82F6" },
+  IN_PROGRESS:       { label: "In progress",              color: "#3B82F6", bg: "#071428", dot: "#60A5FA" },
+};
+
+// Per-milestone status chips (milestone deals).
+const MS_STATUS = {
+  PROPOSED:        { label: "Not started yet",          color: "#8892A4", bg: "#0D1526", dot: "#4E6080" },
+  AWAITING_PAYMENT:{ label: "Ready to pay",             color: "#3B82F6", bg: "#071428", dot: "#3B82F6" },
+  PAYMENT_PENDING: { label: "Awaiting payment",         color: "#3B82F6", bg: "#071428", dot: "#60A5FA" },
+  FUNDED:          { label: "Paid — work in progress",  color: "#10B981", bg: "#041A0F", dot: "#10B981" },
+  DELIVERED:       { label: "Delivered — please review",color: "#8B5CF6", bg: "#100820", dot: "#8B5CF6" },
+  RELEASED:        { label: "Approved & paid",          color: "#10B981", bg: "#041A0F", dot: "#10B981" },
+  DISPUTED:        { label: "On hold — disputed",       color: "#EF4444", bg: "#1A0808", dot: "#EF4444" },
 };
 
 const PAYMENT_METHODS = [
@@ -689,7 +705,11 @@ export function SmartDealDetail() {
 
   // Auto-refresh every 5s while deal is in an active state
   useEffect(() => {
-    const ACTIVE = new Set(["PENDING", "ACCEPTED", "PAYMENT_PENDING", "FUNDED", "DELIVERED"]);
+    const ACTIVE = new Set([
+      "PENDING", "ACCEPTED", "PAYMENT_PENDING", "FUNDED", "DELIVERED",
+      // Milestone deals: keep polling while a milestone is being funded/worked.
+      "PROPOSED", "STRUCTURE_APPROVED", "IN_PROGRESS",
+    ]);
     if (!deal || !ACTIVE.has(deal.status)) return;
     const id = setInterval(() => {
       const scrollY = window.scrollY;
@@ -764,6 +784,19 @@ export function SmartDealDetail() {
   );
 
   if (!deal) return null;
+
+  // Milestone deals render a dedicated view (structure approval + per-milestone flow).
+  if (deal.deal_type === "DIGITAL_WORK_MILESTONE" || Array.isArray(deal.milestones)) {
+    return (
+      <MilestoneDealView
+        deal={deal}
+        currentUser={currentUser}
+        isClient={isClient}
+        isFreelancer={isFreelancer}
+        reload={load}
+      />
+    );
+  }
 
   const fmt = v => `R ${Number(v).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}`;
 
@@ -1065,9 +1098,14 @@ export function SmartDealList() {
           </div>
           <p style={{ fontSize: 13, color: D.textMuted, margin: 0 }}>Milestone-based payment contracts</p>
         </div>
-        <button onClick={() => navigate("/smart-deals/new")} style={{ ...btn(D.blue) }}>
-          + New Deal
-        </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <button onClick={() => navigate("/smart-deals/new-milestone")} style={{ ...btn(D.accent, "#000") }}>
+            <Layers size={14} /> New Milestone Deal
+          </button>
+          <button onClick={() => navigate("/smart-deals/new")} style={{ ...btn(D.blue) }}>
+            + New Deal
+          </button>
+        </div>
       </div>
 
       {/* Hero explanation */}
@@ -1145,6 +1183,11 @@ export function SmartDealList() {
                   <p style={{ fontSize: 12, color: D.textSoft, margin: 0 }}>
                     {d.client_email} → {d.freelancer_email}
                   </p>
+                  {d.deal_type === "DIGITAL_WORK_MILESTONE" && d.milestone_count != null && (
+                    <p style={{ fontSize: 11, color: D.accent, margin: "5px 0 0", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                      <Layers size={11} /> {d.milestones_released ?? 0} of {d.milestone_count} milestones released
+                    </p>
+                  )}
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
                   <p style={{ fontSize: 14, fontWeight: 700, color: D.accent, margin: "0 0 5px", fontFamily: "ui-monospace, monospace" }}>
@@ -1159,6 +1202,608 @@ export function SmartDealList() {
       )}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Milestone deals — shared helpers + components
+// ─────────────────────────────────────────────────────────────────────────────
+
+const fmtZAR = v => `R ${Number(v).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}`;
+
+// Per-milestone fee math — mirrors the backend (_milestone_money).
+function milestoneMoney(amount, feePaidBy) {
+  const amt = Number(amount) || 0;
+  const fee = Math.max(Math.round(amt * 0.02 * 100) / 100, 5);
+  const clientPays = (feePaidBy || "CLIENT").toUpperCase() !== "FREELANCER";
+  return {
+    fee,
+    net: clientPays ? amt : Math.round((amt - fee) * 100) / 100,
+    total: clientPays ? Math.round((amt + fee) * 100) / 100 : amt,
+    clientPays,
+  };
+}
+
+// ─── MilestoneFundPanel ───────────────────────────────────────────────────
+// Buyer pays a single milestone into escrow. Mirrors FundPanel, scoped to one milestone.
+
+function MilestoneFundPanel({ deal, milestone, reload }) {
+  const [method, setMethod] = useState("eft");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(null);
+  const [eftDetails, setEftDetails] = useState(null);
+
+  const money = milestoneMoney(milestone.amount, deal.fee_paid_by);
+  const platformFee = milestone.platform_fee != null ? Number(milestone.platform_fee) : money.fee;
+  const total = milestone.total != null ? Number(milestone.total) : money.total;
+
+  async function handleFund() {
+    setLoading(true); setErr(null);
+    try {
+      const res = await apiFetch(`/api/smart-deals/${deal.deal_id}/milestones/${milestone.milestone_id}/fund`, {
+        method: "POST",
+        body: JSON.stringify({ payment_method: method }),
+      });
+      if (res.payment_link) { window.location.href = res.payment_link; return; }
+      if (res.eft_details) { setEftDetails(res.eft_details); reload && reload(); return; }
+      setErr(res.message || "Could not open the secure payment page. Please try again or choose a different method.");
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (eftDetails) return <EftDetailsCard details={eftDetails} fallbackAmount={total} />;
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 12px", lineHeight: 1.5 }}>
+        Pay this milestone into escrow. <strong style={{ color: D.text }}>{deal.freelancer_name || "The freelancer"}</strong> only
+        gets paid when <strong style={{ color: D.text }}>you approve</strong> their delivery. Bank settlement may take up to 2 business days.
+      </p>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+        {PAYMENT_METHODS.map(m => {
+          const active = method === m.id;
+          return (
+            <label key={m.id} onClick={() => setMethod(m.id)} style={{
+              display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, cursor: "pointer",
+              border: `1.5px solid ${active ? D.blue : D.border}`, background: active ? "#071428" : D.surfaceHi, transition: "all 0.15s",
+            }}>
+              <div style={{
+                width: 16, height: 16, borderRadius: "50%", flexShrink: 0,
+                border: `2px solid ${active ? D.blue : D.borderLight}`, background: active ? D.blue : "transparent",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {active && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />}
+              </div>
+              <m.Icon size={15} color={active ? D.blue : D.textMuted} />
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: D.text, margin: "0 0 1px" }}>{m.label}</p>
+                <p style={{ fontSize: 11, color: D.textMuted, margin: 0 }}>{m.desc}</p>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+
+      <div style={{ background: D.bg, border: `1px solid ${D.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+          <span style={{ fontSize: 12, color: D.textMuted }}>Milestone amount</span>
+          <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(milestone.amount)}</span>
+        </div>
+        {money.clientPays && (
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+            <span style={{ fontSize: 12, color: D.textMuted }}>TrustTrade fee (2% — you pay)</span>
+            <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(platformFee)}</span>
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${D.border}`, paddingTop: 8, marginTop: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: D.text }}>Total to pay now</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: D.accent, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(total)}</span>
+        </div>
+      </div>
+
+      {err && (
+        <div style={{ padding: "10px 14px", borderRadius: 8, background: "#1A0808", border: `1px solid ${D.danger}44`, color: D.danger, fontSize: 13, marginBottom: 12 }}>
+          {err}
+        </div>
+      )}
+
+      <button onClick={handleFund} disabled={loading} style={{ ...btn(D.blue), width: "100%", opacity: loading ? 0.6 : 1, cursor: loading ? "not-allowed" : "pointer" }}>
+        {loading ? <><Spinner /> Creating secure escrow…</> : <><Lock size={14} /> Pay this milestone · {fmtZAR(total)}</>}
+      </button>
+    </div>
+  );
+}
+
+// ─── MilestoneCard ──────────────────────────────────────────────────────────
+
+function MilestoneCard({ deal, milestone, isClient, isFreelancer, reload }) {
+  const [busy, setBusy] = useState(null);
+  const [err, setErr] = useState(null);
+  const [showDispute, setShowDispute] = useState(false);
+  const [disputeReason, setDisputeReason] = useState("");
+
+  const s = MS_STATUS[milestone.status] || { label: milestone.status, color: D.textMuted, bg: D.surface, dot: D.textSoft };
+  const base = `/api/smart-deals/${deal.deal_id}/milestones/${milestone.milestone_id}`;
+
+  async function act(path, label, body, confirmMsg) {
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    setBusy(label); setErr(null);
+    try {
+      await apiFetch(`${base}${path}`, { method: "POST", ...(body ? { body: JSON.stringify(body) } : {}) });
+      await reload();
+    } catch (e) { setErr(e.message); } finally { setBusy(null); }
+  }
+
+  const accent =
+    milestone.status === "DISPUTED" ? D.danger :
+    milestone.status === "RELEASED" ? D.success :
+    milestone.status === "DELIVERED" ? D.purple :
+    milestone.status === "FUNDED" ? D.success :
+    milestone.status === "AWAITING_PAYMENT" ? D.blue : D.border;
+
+  return (
+    <div style={{
+      background: D.surface, border: `1px solid ${D.border}`, borderLeft: `3px solid ${accent}`,
+      borderRadius: 12, padding: "16px 18px", marginBottom: 12,
+    }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: D.textSoft, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 3px" }}>
+            Milestone {milestone.seq}
+          </p>
+          <p style={{ fontSize: 14, fontWeight: 600, color: D.text, margin: 0, lineHeight: 1.45, wordBreak: "break-word" }}>
+            {milestone.description}
+          </p>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: D.accent, margin: "0 0 5px", fontFamily: "ui-monospace, monospace" }}>
+            {fmtZAR(milestone.amount)}
+          </p>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600,
+            padding: "3px 10px", borderRadius: 20, background: s.bg, color: s.color, border: `1px solid ${s.dot}33`,
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: s.dot }} />
+            {s.label}
+          </span>
+        </div>
+      </div>
+
+      {err && (
+        <div style={{ padding: "9px 12px", borderRadius: 8, background: "#1A0808", border: `1px solid ${D.danger}44`, color: D.danger, fontSize: 12, margin: "8px 0" }}>
+          {err}
+        </div>
+      )}
+
+      {/* Buyer: pay this milestone */}
+      {isClient && milestone.status === "AWAITING_PAYMENT" && (
+        <MilestoneFundPanel deal={deal} milestone={milestone} reload={reload} />
+      )}
+
+      {/* Buyer: awaiting payment confirmation */}
+      {isClient && milestone.status === "PAYMENT_PENDING" && (
+        <div style={{ marginTop: 6 }}>
+          {milestone.eft_details && <EftDetailsCard details={milestone.eft_details} fallbackAmount={milestone.total ?? milestone.amount} />}
+          <p style={{ fontSize: 13, color: D.textMuted, margin: "6px 0 12px", lineHeight: 1.5 }}>
+            {milestone.eft_details
+              ? "Once you've made the EFT using the details above, payment is confirmed within 1–2 business days. This page updates automatically."
+              : "Waiting for your payment to clear. This page updates automatically once it's secured in escrow."}
+          </p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {milestone.payment_link && (
+              <a href={milestone.payment_link} target="_blank" rel="noopener noreferrer" style={{ ...btn(D.blue, "#fff"), textDecoration: "none" }}>
+                <Lock size={14} /> Resume payment
+              </a>
+            )}
+            <button onClick={() => act("/cancel-payment", "cancel", null)} disabled={busy === "cancel"}
+              style={{ ...btn("transparent", D.textMuted, { border: `1px solid ${D.border}`, opacity: busy === "cancel" ? 0.6 : 1 }) }}>
+              {busy === "cancel" ? <><Spinner /> Resetting…</> : "Change payment method"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Seller: mark delivered */}
+      {isFreelancer && milestone.status === "FUNDED" && (
+        <button onClick={() => act("/deliver", "deliver", null, "Mark this milestone as delivered? The client will be notified to review.")}
+          disabled={busy === "deliver"} style={{ ...btn(D.purple), marginTop: 6, opacity: busy === "deliver" ? 0.6 : 1 }}>
+          {busy === "deliver" ? <><Spinner /> Submitting…</> : <><CheckCircle size={14} /> Mark milestone delivered</>}
+        </button>
+      )}
+
+      {/* Buyer: approve / dispute */}
+      {isClient && milestone.status === "DELIVERED" && (
+        <div style={{ marginTop: 6 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button onClick={() => act("/approve", "approve", null, "Approve this milestone and release its payment? Bank settlement may take up to 2 business days.")}
+              disabled={busy === "approve"} style={{ ...btn(D.success), flex: 1, minWidth: 160, opacity: busy === "approve" ? 0.6 : 1 }}>
+              {busy === "approve" ? <><Spinner /> Releasing…</> : <><CheckCircle size={14} /> Approve & release payment</>}
+            </button>
+            <button onClick={() => setShowDispute(v => !v)} style={{ ...btn(D.danger), minWidth: 100 }}>
+              <AlertTriangle size={14} /> Dispute
+            </button>
+          </div>
+          {showDispute && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${D.success}33` }}>
+              <label style={{ ...label, marginBottom: 8 }}>What's wrong with this milestone?</label>
+              <textarea style={{ ...textarea, marginBottom: 10 }} placeholder="Be specific so we can help resolve it quickly."
+                value={disputeReason} onChange={e => setDisputeReason(e.target.value)} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => act("/dispute", "dispute", { reason: disputeReason })}
+                  disabled={busy === "dispute" || disputeReason.trim().length < 10}
+                  style={{ ...btn(D.danger), opacity: (busy === "dispute" || disputeReason.trim().length < 10) ? 0.5 : 1 }}>
+                  {busy === "dispute" ? "Submitting…" : "Submit dispute"}
+                </button>
+                <button onClick={() => setShowDispute(false)} style={{ ...btn("transparent", D.textMuted, { border: `1px solid ${D.border}` }) }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Status notes */}
+      {isFreelancer && milestone.status === "PAYMENT_PENDING" && (
+        <p style={{ fontSize: 12, color: D.blue, margin: "6px 0 0" }}>The client is paying this milestone. You'll be notified once funds are secured.</p>
+      )}
+      {isFreelancer && milestone.status === "DELIVERED" && (
+        <p style={{ fontSize: 12, color: D.success, margin: "6px 0 0" }}>Delivered — waiting for the client to review and approve.</p>
+      )}
+      {isClient && milestone.status === "FUNDED" && (
+        <p style={{ fontSize: 12, color: D.success, margin: "6px 0 0" }}>Paid into escrow. Waiting for {deal.freelancer_name || "the freelancer"} to deliver this milestone.</p>
+      )}
+      {milestone.status === "RELEASED" && (
+        <p style={{ fontSize: 12, color: D.success, margin: "6px 0 0", display: "flex", alignItems: "center", gap: 6 }}>
+          <CheckCircle size={13} /> Approved — payment released (settles within 2 business days).
+        </p>
+      )}
+      {milestone.status === "PROPOSED" && (
+        <p style={{ fontSize: 12, color: D.textSoft, margin: "6px 0 0" }}>Opens for payment once the previous milestone is approved.</p>
+      )}
+      {milestone.status === "DISPUTED" && milestone.dispute && (
+        <p style={{ fontSize: 12, color: "#ff9999", margin: "6px 0 0" }}>
+          On hold — disputed: {milestone.dispute.reason}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ─── MilestoneDealView ────────────────────────────────────────────────────
+
+function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }) {
+  const [approvingStructure, setApprovingStructure] = useState(false);
+  const [actionError, setActionError] = useState(null);
+
+  const milestones = [...(deal.milestones || [])].sort((a, b) => (a.seq || 0) - (b.seq || 0));
+  const released = milestones.filter(m => m.status === "RELEASED").length;
+  const sellerName = deal.freelancer_name || deal.freelancer_email || "The seller";
+
+  const DEAL_LABEL = {
+    PROPOSED: "Awaiting your approval",
+    STRUCTURE_APPROVED: "Approved — pay the first milestone",
+    IN_PROGRESS: `${released} of ${milestones.length} milestones paid out`,
+    COMPLETE: "All milestones complete",
+    DISPUTED: "A milestone is disputed",
+  };
+  const dealColor = deal.status === "DISPUTED" ? D.danger : deal.status === "COMPLETE" ? D.success : D.blue;
+
+  async function approveStructure() {
+    if (!window.confirm("Approve these milestones? You'll pay them one at a time, starting with the first.")) return;
+    setApprovingStructure(true); setActionError(null);
+    try { await apiFetch(`/api/smart-deals/${deal.deal_id}/approve-structure`, { method: "POST" }); await reload(); }
+    catch (e) { setActionError(e.message); } finally { setApprovingStructure(false); }
+  }
+
+  return (
+    <div style={{ maxWidth: 680, margin: "0 auto", paddingBottom: 40 }}>
+      <Link to="/smart-deals" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: D.textMuted, textDecoration: "none", marginBottom: 20 }}>
+        <ArrowLeft size={14} /> All deals
+      </Link>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <Layers size={16} color={D.accent} />
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0, wordBreak: "break-word" }}>{deal.title}</h1>
+          </div>
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600,
+            padding: "3px 10px", borderRadius: 20, background: `${dealColor}1A`, color: dealColor, border: `1px solid ${dealColor}33`,
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: dealColor }} />
+            {DEAL_LABEL[deal.status] || deal.status}
+          </span>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: D.accent, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(deal.amount)}</div>
+          <div style={{ fontSize: 11, color: D.textSoft, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            {milestones.length} milestones
+          </div>
+        </div>
+      </div>
+
+      {actionError && (
+        <div style={{ padding: "12px 16px", borderRadius: 10, background: "#1A0808", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13, marginBottom: 14 }}>
+          {actionError}
+        </div>
+      )}
+
+      {/* Buyer: review & approve the structure (plain-English invite copy) */}
+      {isClient && deal.status === "PROPOSED" && (
+        <ActionCard accent={D.accent}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <Shield size={16} color={D.accent} />
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Review &amp; approve to get started</h3>
+          </div>
+          <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 14px", lineHeight: 1.6 }}>
+            <strong style={{ color: D.text }}>{sellerName}</strong> has sent you a Smart Deal. Review the milestones below and
+            approve the structure to get started. You'll pay each milestone one at a time — your money is held safely until
+            you confirm the work is done.
+          </p>
+          <button onClick={approveStructure} disabled={approvingStructure} style={{ ...btn(D.accent, "#000"), opacity: approvingStructure ? 0.6 : 1 }}>
+            {approvingStructure ? <><Spinner /> Approving…</> : <><CheckCircle size={14} /> Approve milestones</>}
+          </button>
+        </ActionCard>
+      )}
+
+      {/* Seller: waiting for buyer approval */}
+      {isFreelancer && deal.status === "PROPOSED" && (
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#1A1200", border: `1px solid ${D.warning}44`, borderLeft: `3px solid ${D.warning}`, marginBottom: 14 }}>
+          <Clock size={15} color={D.warning} style={{ flexShrink: 0, marginTop: 1 }} />
+          <p style={{ fontSize: 13, color: D.warning, margin: 0 }}>
+            Waiting for {deal.client_name || "your client"} to review and approve the milestones. They'll pay the first one to start.
+          </p>
+        </div>
+      )}
+
+      {/* Completed banner */}
+      {deal.status === "COMPLETE" && (
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#041A0F", border: `1px solid ${D.success}44`, borderLeft: `3px solid ${D.success}`, marginBottom: 14 }}>
+          <CheckCircle size={15} color={D.success} style={{ flexShrink: 0, marginTop: 1 }} />
+          <p style={{ fontSize: 13, color: D.success, margin: 0, fontWeight: 500 }}>All milestones approved and paid out. This Smart Deal is complete.</p>
+        </div>
+      )}
+
+      {/* Progress summary */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: D.surfaceHi, borderRadius: 12, marginBottom: 14, border: `1px solid ${D.border}` }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: D.text }}>Progress</span>
+            <span style={{ fontSize: 12, color: D.textMuted }}>{released} of {milestones.length} released</span>
+          </div>
+          <div style={{ height: 6, background: D.bg, borderRadius: 6, overflow: "hidden" }}>
+            <div style={{ width: `${milestones.length ? (released / milestones.length) * 100 : 0}%`, height: "100%", background: D.success, borderRadius: 6, transition: "width 0.3s" }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Milestones */}
+      <h3 style={{ fontSize: 13, fontWeight: 700, color: D.text, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+        Milestones
+      </h3>
+      {milestones.map(m => (
+        <MilestoneCard key={m.milestone_id} deal={deal} milestone={m} isClient={isClient} isFreelancer={isFreelancer} reload={reload} />
+      ))}
+
+      {/* Deal details */}
+      <div style={card({ marginTop: 4 })}>
+        <h3 style={{ fontSize: 13, fontWeight: 700, color: D.text, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+          Deal Details
+        </h3>
+        <InfoRow label="Deal ID" value={deal.deal_id} mono />
+        <InfoRow label="Client (pays)" value={deal.client_email} />
+        <InfoRow label="Freelancer (gets paid)" value={deal.freelancer_email} />
+        <InfoRow label="Total value" value={fmtZAR(deal.amount)} mono />
+        <InfoRow label="Fee paid by" value={deal.fee_paid_by === "FREELANCER" ? "Freelancer" : "Client"} />
+        <InfoRow label="Created" value={new Date(deal.created_at).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" })} />
+        {deal.description && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${D.surfaceHi}` }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: D.textSoft, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 8px" }}>Scope</p>
+            <p style={{ fontSize: 13, color: D.textMuted, margin: 0, lineHeight: 1.6 }}>{deal.description}</p>
+          </div>
+        )}
+      </div>
+
+      <MessageThread dealId={deal.deal_id} messages={deal.messages || []} currentUserId={currentUser?.user_id} />
+
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} input:focus,textarea:focus{border-color:${D.blue}!important;outline:none;} *{box-sizing:border-box}`}</style>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CreateMilestoneDeal (seller-initiated)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function CreateMilestoneDeal() {
+  const navigate = useNavigate();
+  const [form, setForm] = useState({ title: "", description: "", buyer_email: "", fee_paid_by: "CLIENT" });
+  const [milestones, setMilestones] = useState([
+    { description: "", amount: "" },
+    { description: "", amount: "" },
+  ]);
+  const [errors, setErrors] = useState({});
+  const [apiError, setApiError] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+  const setMs = (i, k) => e => setMilestones(ms => ms.map((m, idx) => idx === i ? { ...m, [k]: e.target.value } : m));
+  const addMs = () => setMilestones(ms => ms.length < 20 ? [...ms, { description: "", amount: "" }] : ms);
+  const removeMs = i => setMilestones(ms => ms.length > 1 ? ms.filter((_, idx) => idx !== i) : ms);
+
+  const total = milestones.reduce((sum, m) => sum + (Number(m.amount) || 0), 0);
+
+  function validate() {
+    const e = {};
+    if (!form.title.trim()) e.title = "Required";
+    if (!form.buyer_email.includes("@")) e.buyer_email = "Enter a valid email";
+    milestones.forEach((m, i) => {
+      if (!m.description.trim()) e[`ms_desc_${i}`] = "Describe this milestone";
+      const amt = Number(m.amount);
+      if (!m.amount || isNaN(amt) || amt <= 0) e[`ms_amt_${i}`] = "Enter an amount";
+      else if (amt < MIN_TRANSACTION_AMOUNT) e[`ms_amt_${i}`] = `Min R${MIN_TRANSACTION_AMOUNT} per milestone`;
+    });
+    return e;
+  }
+
+  async function handleSubmit() {
+    const e = validate();
+    if (Object.keys(e).length) { setErrors(e); return; }
+    setLoading(true); setApiError(null);
+    try {
+      const res = await apiFetch("/api/smart-deals/milestone-deals", {
+        method: "POST",
+        body: JSON.stringify({
+          title: form.title,
+          description: form.description,
+          buyer_email: form.buyer_email,
+          fee_paid_by: form.fee_paid_by,
+          milestones: milestones.map(m => ({ description: m.description, amount: Number(m.amount) })),
+        }),
+      });
+      navigate(`/smart-deals/${res.deal_id}`);
+    } catch (err) {
+      setApiError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const fieldErr = k => errors[k] ? <p style={{ fontSize: 11, color: D.danger, margin: "2px 0 8px" }}>{errors[k]}</p> : null;
+  const borderErr = k => errors[k] ? D.danger : D.border;
+
+  return (
+    <div style={{ maxWidth: 680, margin: "0 auto", paddingBottom: 40 }}>
+      <Link to="/smart-deals" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, color: D.textMuted, textDecoration: "none", marginBottom: 20 }}>
+        <ArrowLeft size={14} /> All deals
+      </Link>
+
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #3b82f6, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Layers size={17} color="#fff" />
+          </div>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>New Milestone Smart Deal</h1>
+        </div>
+      </div>
+
+      {/* Seller explainer — plain English */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "14px 16px", borderRadius: 12, background: "linear-gradient(135deg, #0d1f3c 0%, #071428 100%)", border: `1px solid ${D.borderLight}`, marginBottom: 18 }}>
+        <Zap size={16} color={D.accent} style={{ flexShrink: 0, marginTop: 2 }} />
+        <p style={{ fontSize: 13, color: D.text, margin: 0, lineHeight: 1.6 }}>
+          Smart Deals let you get paid in stages. Your client pays each milestone upfront into escrow before you start that
+          phase of work. You only get paid when they approve your delivery — but they can't withhold payment unfairly because
+          the money is already locked in.
+        </p>
+      </div>
+
+      {apiError && (
+        <div style={{ padding: "12px 16px", borderRadius: 10, background: "#1A0808", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13, marginBottom: 14 }}>
+          {apiError}
+        </div>
+      )}
+
+      <div style={card()}>
+        <div style={{ marginBottom: 4 }}>
+          <label style={label}>Deal Title</label>
+          <input style={{ ...input, borderColor: borderErr("title") }} placeholder="e.g. Website build for Acme Co" value={form.title} onChange={set("title")} />
+          {fieldErr("title")}
+        </div>
+
+        <div style={{ marginBottom: 4 }}>
+          <label style={label}>Overview (optional)</label>
+          <textarea style={{ ...textarea }} placeholder="A short summary of the whole project…" value={form.description} onChange={set("description")} />
+        </div>
+
+        <div style={{ marginBottom: 4 }}>
+          <label style={label}>Client Email</label>
+          <input style={{ ...input, borderColor: borderErr("buyer_email") }} type="email" placeholder="client@example.com" value={form.buyer_email} onChange={set("buyer_email")} />
+          {fieldErr("buyer_email")}
+        </div>
+
+        {/* Milestones */}
+        <label style={{ ...label, marginTop: 8 }}>Milestones</label>
+        <p style={{ fontSize: 12, color: D.textMuted, margin: "0 0 12px" }}>
+          Break the work into stages. Each milestone is paid into escrow separately, so each must be at least R{MIN_TRANSACTION_AMOUNT}.
+        </p>
+
+        {milestones.map((m, i) => (
+          <div key={i} style={{ background: D.surfaceHi, border: `1px solid ${D.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: D.textSoft, textTransform: "uppercase", letterSpacing: "0.06em" }}>Milestone {i + 1}</span>
+              {milestones.length > 1 && (
+                <button onClick={() => removeMs(i)} style={{ background: "none", border: "none", color: D.textMuted, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, padding: 0 }}>
+                  <Trash2 size={13} /> Remove
+                </button>
+              )}
+            </div>
+            <input style={{ ...input, marginBottom: 8, borderColor: borderErr(`ms_desc_${i}`) }} placeholder="e.g. 50% deposit to start work" value={m.description} onChange={setMs(i, "description")} />
+            {fieldErr(`ms_desc_${i}`)}
+            <input style={{ ...input, fontFamily: "ui-monospace, monospace", fontWeight: 600, marginBottom: 4, borderColor: borderErr(`ms_amt_${i}`) }} type="number" min={MIN_TRANSACTION_AMOUNT} placeholder="Amount (ZAR)" value={m.amount} onChange={setMs(i, "amount")} />
+            {fieldErr(`ms_amt_${i}`)}
+          </div>
+        ))}
+
+        {milestones.length < 20 && (
+          <button onClick={addMs} style={{ ...btn("transparent", D.accent, { border: `1px dashed ${D.accent}66`, width: "100%", marginBottom: 14 }) }}>
+            <Plus size={14} /> Add another milestone
+          </button>
+        )}
+
+        {/* Running total */}
+        <div style={{ background: D.bg, border: `1px solid ${D.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: D.text }}>Total deal value</span>
+            <span style={{ fontSize: 17, fontWeight: 700, color: D.accent, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(total)}</span>
+          </div>
+          <p style={{ fontSize: 11, color: D.textMuted, margin: "6px 0 0" }}>This is the sum of all milestones. Your client pays them one at a time.</p>
+        </div>
+
+        {/* Fee payer */}
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ ...label, marginBottom: 10 }}>Who pays the TrustTrade fee?</label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[
+              { value: "CLIENT", title: "Client pays", desc: "Fee added to each milestone" },
+              { value: "FREELANCER", title: "I pay (freelancer)", desc: "Fee deducted from each payout" },
+            ].map(opt => {
+              const active = form.fee_paid_by === opt.value;
+              return (
+                <label key={opt.value} onClick={() => setForm(f => ({ ...f, fee_paid_by: opt.value }))} style={{
+                  display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", borderRadius: 10,
+                  border: `1.5px solid ${active ? D.blue : D.border}`, background: active ? "#071428" : D.surfaceHi, cursor: "pointer",
+                }}>
+                  <div style={{
+                    width: 16, height: 16, borderRadius: "50%", flexShrink: 0, marginTop: 1,
+                    border: `2px solid ${active ? D.blue : D.borderLight}`, background: active ? D.blue : "transparent",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    {active && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#fff" }} />}
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: D.text, margin: "0 0 2px" }}>{opt.title}</p>
+                    <p style={{ fontSize: 11, color: D.textMuted, margin: 0 }}>{opt.desc}</p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <button onClick={handleSubmit} disabled={loading} style={{ ...btn(D.accent, "#000"), width: "100%", opacity: loading ? 0.6 : 1, cursor: loading ? "not-allowed" : "pointer" }}>
+          {loading ? <><Spinner /> Creating…</> : <><Layers size={14} /> Send Smart Deal to client</>}
+        </button>
+      </div>
+
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} input:focus,textarea:focus{border-color:${D.blue}!important;box-shadow:0 0 0 3px ${D.blue}22;} *{box-sizing:border-box}`}</style>
     </div>
   );
 }

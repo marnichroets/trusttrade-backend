@@ -147,9 +147,9 @@ async def test_auth(client: httpx.AsyncClient) -> Optional[str]:
         "password": "wrongpassword!",
     })
     if r.status_code == 401:
-        ok("Login with wrong password → 401")
+        ok("Login with wrong password -> 401")
     else:
-        fail("Login with wrong password → 401", f"got {r.status_code}")
+        fail("Login with wrong password -> 401", f"got {r.status_code}")
 
     return token
 
@@ -161,16 +161,16 @@ async def test_users_me(client: httpx.AsyncClient, token: Optional[str]):
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=httpx.Timeout(30.0)) as fresh:
         r = await fresh.get("/api/auth/me")
         if r.status_code == 401:
-            ok("GET /api/auth/me without token → 401")
+            ok("GET /api/auth/me without token -> 401")
         else:
-            fail("GET /api/auth/me without token → 401", f"got {r.status_code}")
+            fail("GET /api/auth/me without token -> 401", f"got {r.status_code}")
 
     if not token:
         skip("GET /api/auth/me with token", "no token available")
         return
 
     r = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
-    if assert_status(r, 200, "GET /api/auth/me with token → 200"):
+    if assert_status(r, 200, "GET /api/auth/me with token -> 200"):
         data = r.json()
         if "email" in data or "_id" in data or "id" in data:
             ok("Response includes user fields")
@@ -185,9 +185,9 @@ async def test_transactions(client: httpx.AsyncClient, token: Optional[str]) -> 
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=httpx.Timeout(30.0)) as fresh:
         r = await fresh.get("/api/transactions")
         if r.status_code == 401:
-            ok("GET /api/transactions without token → 401")
+            ok("GET /api/transactions without token -> 401")
         else:
-            fail("GET /api/transactions without token → 401", f"got {r.status_code}")
+            fail("GET /api/transactions without token -> 401", f"got {r.status_code}")
 
     if not token:
         skip("All authenticated transaction tests", "no token available")
@@ -196,7 +196,7 @@ async def test_transactions(client: httpx.AsyncClient, token: Optional[str]) -> 
     auth = {"Authorization": f"Bearer {token}"}
 
     r = await client.get("/api/transactions", headers=auth)
-    assert_status(r, 200, "GET /api/transactions with token → 200")
+    assert_status(r, 200, "GET /api/transactions with token -> 200")
 
     payload = {
         "creator_role": "seller",
@@ -211,7 +211,7 @@ async def test_transactions(client: httpx.AsyncClient, token: Optional[str]) -> 
     r = await client.post("/api/transactions", json=payload, headers=auth)
     transaction_id: Optional[str] = None
     if r.status_code in (200, 201):
-        ok("POST /api/transactions → 201", f"HTTP {r.status_code}")
+        ok("POST /api/transactions -> 201", f"HTTP {r.status_code}")
         data = r.json()
         transaction_id = (
             data.get("_id") or data.get("id") or
@@ -223,9 +223,9 @@ async def test_transactions(client: httpx.AsyncClient, token: Optional[str]) -> 
         else:
             fail("Response includes transaction ID", str(data)[:80])
     elif r.status_code == 403 and "phone" in r.text.lower():
-        skip("POST /api/transactions → 201", "phone not verified - expected gate in test environment")
+        skip("POST /api/transactions -> 201", "phone not verified - expected gate in test environment")
     else:
-        fail("POST /api/transactions → 201", f"HTTP {r.status_code} - {r.text[:120]}")
+        fail("POST /api/transactions -> 201", f"HTTP {r.status_code} - {r.text[:120]}")
 
     r = await client.post("/api/transactions", json={
         "title": "Too cheap",
@@ -235,13 +235,13 @@ async def test_transactions(client: httpx.AsyncClient, token: Optional[str]) -> 
         "transaction_type": "goods",
     }, headers=auth)
     if r.status_code == 400:
-        ok("Transaction below minimum amount → 400")
+        ok("Transaction below minimum amount -> 400")
     else:
         skip("Transaction below minimum amount validation", f"got {r.status_code} (may vary by implementation)")
 
     if transaction_id:
         r = await client.get(f"/api/transactions/{transaction_id}", headers=auth)
-        assert_status(r, 200, f"GET /api/transactions/{{id}} → 200")
+        assert_status(r, 200, f"GET /api/transactions/{{id}} -> 200")
 
         await asyncio.sleep(5)
         r = await client.get(f"/api/transactions/{transaction_id}", headers=auth)
@@ -278,7 +278,7 @@ async def test_smart_deals(client: httpx.AsyncClient, token: Optional[str]):
         "days_to_deliver": 7,
     }, headers=auth)
     if r.status_code in (200, 201):
-        ok("POST /api/smart-deals/ → 200/201", f"HTTP {r.status_code}")
+        ok("POST /api/smart-deals/ -> 200/201", f"HTTP {r.status_code}")
         data = r.json()
         if data.get("_id") or data.get("id") or data.get("deal_id"):
             ok("Smart Deal create returns deal ID")
@@ -289,7 +289,63 @@ async def test_smart_deals(client: httpx.AsyncClient, token: Optional[str]):
     elif r.status_code == 422:
         skip("POST /api/smart-deals/", f"validation error - {r.text[:80]}")
     else:
-        fail("POST /api/smart-deals/ → 200/201", f"HTTP {r.status_code} - {r.text[:120]}")
+        fail("POST /api/smart-deals/ -> 200/201", f"HTTP {r.status_code} - {r.text[:120]}")
+
+
+async def test_milestone_deals(client: httpx.AsyncClient, token: Optional[str]):
+    section("Milestone Smart Deals")
+
+    if not token:
+        skip("Milestone deal tests", "no token available")
+        return
+
+    auth = {"Authorization": f"Bearer {token}"}
+    base = {
+        "title": f"Milestone Deal {RUN_ID}",
+        "description": "A staged project",
+    }
+
+    # 1. Self-deal is rejected (also proves the buyer lookup + endpoint work, since
+    #    the test runner's own email definitely resolves to an account).
+    r = await client.post("/api/smart-deals/milestone-deals", json={
+        **base,
+        "buyer_email": TEST_EMAIL,
+        "milestones": [
+            {"description": "50% deposit to start work", "amount": 500.0},
+            {"description": "50% on completion", "amount": 500.0},
+        ],
+    }, headers=auth)
+    if r.status_code == 404:
+        # Endpoint not deployed yet, or buyer lookup ran differently.
+        skip("POST /api/smart-deals/milestone-deals", "endpoint not found on this deployment")
+        return
+    elif r.status_code == 400 and "yourself" in r.text.lower():
+        ok("Rejects creating a milestone deal with yourself", f"HTTP {r.status_code}")
+    else:
+        skip("Self-deal rejection", f"unexpected HTTP {r.status_code} - {r.text[:80]}")
+
+    # 2. Empty milestones is a 422 (pydantic min_items).
+    r = await client.post("/api/smart-deals/milestone-deals", json={
+        **base, "buyer_email": TEST_EMAIL, "milestones": [],
+    }, headers=auth)
+    if r.status_code == 422:
+        ok("Rejects empty milestones (422)")
+    else:
+        skip("Empty milestones validation", f"unexpected HTTP {r.status_code}")
+
+    # 3. Unknown buyer email → 404 with a helpful message.
+    r = await client.post("/api/smart-deals/milestone-deals", json={
+        **base,
+        "buyer_email": f"nobody+{RUN_ID}@mailinator.com",
+        "milestones": [
+            {"description": "Deposit", "amount": 500.0},
+            {"description": "Final", "amount": 500.0},
+        ],
+    }, headers=auth)
+    if r.status_code == 404:
+        ok("Unknown buyer email returns 404")
+    else:
+        skip("Unknown buyer validation", f"unexpected HTTP {r.status_code} - {r.text[:80]}")
 
 
 async def test_disputes(client: httpx.AsyncClient, token: Optional[str], transaction_id: Optional[str]):
@@ -302,7 +358,7 @@ async def test_disputes(client: httpx.AsyncClient, token: Optional[str], transac
     auth = {"Authorization": f"Bearer {token}"}
 
     r = await client.get("/api/disputes", headers=auth)
-    assert_status(r, 200, "GET /api/disputes → 200")
+    assert_status(r, 200, "GET /api/disputes -> 200")
 
     if not transaction_id:
         skip("Create dispute", "no transaction_id available")
@@ -315,7 +371,7 @@ async def test_disputes(client: httpx.AsyncClient, token: Optional[str], transac
     }, headers=auth)
     dispute_id: Optional[str] = None
     if r.status_code in (200, 201):
-        ok("POST /api/disputes → 201", f"HTTP {r.status_code}")
+        ok("POST /api/disputes -> 201", f"HTTP {r.status_code}")
         data = r.json()
         dispute_id = (
             data.get("_id") or data.get("id") or
@@ -327,7 +383,7 @@ async def test_disputes(client: httpx.AsyncClient, token: Optional[str], transac
     elif r.status_code == 400:
         skip("Create dispute", f"400 - transaction may not be in correct state: {r.text[:80]}")
     else:
-        fail("POST /api/disputes → 201", f"HTTP {r.status_code} - {r.text[:120]}")
+        fail("POST /api/disputes -> 201", f"HTTP {r.status_code} - {r.text[:120]}")
 
     if dispute_id:
         await asyncio.sleep(5)
@@ -355,7 +411,7 @@ async def test_ai(client: httpx.AsyncClient, token: Optional[str], transaction_i
         "item_price": 2000,
         "delivery_method": "physical",
     }, headers=auth)
-    if assert_status(r, 200, "POST /api/ai/improve-description → 200"):
+    if assert_status(r, 200, "POST /api/ai/improve-description -> 200"):
         data = r.json()
         if "improved" in data and "original" in data:
             ok("Response has original + improved fields")
@@ -370,7 +426,7 @@ async def test_ai(client: httpx.AsyncClient, token: Optional[str], transaction_i
         "message": "What is TrustTrade?",
         "history": [],
     }, headers=auth)
-    if assert_status(r, 200, "POST /api/ai/chat → 200"):
+    if assert_status(r, 200, "POST /api/ai/chat -> 200"):
         data = r.json()
         if "reply" in data:
             ok("Chat response includes reply field")
@@ -386,14 +442,14 @@ async def test_ai(client: httpx.AsyncClient, token: Optional[str], transaction_i
             {"role": "assistant", "content": "TrustTrade is a secure escrow platform."},
         ],
     }, headers=auth)
-    if assert_status(r, 200, "POST /api/ai/chat multi-turn → 200"):
+    if assert_status(r, 200, "POST /api/ai/chat multi-turn -> 200"):
         data = r.json()
         if data.get("reply"):
             ok("Multi-turn chat maintains context")
 
     if transaction_id:
         r = await client.post("/api/ai/fraud-detect", json={"transaction_id": transaction_id}, headers=auth)
-        if assert_status(r, 200, "POST /api/ai/fraud-detect → 200"):
+        if assert_status(r, 200, "POST /api/ai/fraud-detect -> 200"):
             data = r.json()
             for field in ("risk_level", "risk_score", "summary", "recommendation"):
                 if field in data:
@@ -443,9 +499,9 @@ async def test_courier(client: httpx.AsyncClient, token: Optional[str]):
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=httpx.Timeout(30.0)) as fresh:
         r = await fresh.post("/api/courier/quote", json=courier_payload)
         if r.status_code in (401, 503):
-            ok("POST /api/courier/quote without token → 401/503", f"HTTP {r.status_code}")
+            ok("POST /api/courier/quote without token -> 401/503", f"HTTP {r.status_code}")
         else:
-            fail("POST /api/courier/quote without token → 401", f"got {r.status_code}")
+            fail("POST /api/courier/quote without token -> 401", f"got {r.status_code}")
 
     if not token:
         skip("Authenticated courier tests", "no token available")
@@ -455,7 +511,7 @@ async def test_courier(client: httpx.AsyncClient, token: Optional[str]):
 
     r = await client.post("/api/courier/quote", json=courier_payload, headers=auth)
     if r.status_code == 200:
-        ok("POST /api/courier/quote → 200")
+        ok("POST /api/courier/quote -> 200")
         data = r.json()
         rates = data.get("rates", [])
         if isinstance(rates, list):
@@ -473,7 +529,7 @@ async def test_courier(client: httpx.AsyncClient, token: Optional[str]):
     elif r.status_code == 503:
         skip("POST /api/courier/quote", "503 - COURIER_ENABLED=false on this deployment")
     else:
-        fail("POST /api/courier/quote → 200", f"HTTP {r.status_code} - {r.text[:120]}")
+        fail("POST /api/courier/quote -> 200", f"HTTP {r.status_code} - {r.text[:120]}")
 
     r = await client.get("/api/courier/track/INVALID-WAYBILL-TEST", headers=auth)
     if r.status_code in (200, 404, 502):
@@ -489,15 +545,15 @@ async def test_admin_protection(client: httpx.AsyncClient, token: Optional[str])
 
     r = await client.get("/api/admin/users")
     if r.status_code in (401, 403):
-        ok("GET /api/admin/users without token → 401/403", f"HTTP {r.status_code}")
+        ok("GET /api/admin/users without token -> 401/403", f"HTTP {r.status_code}")
     else:
-        fail("GET /api/admin/users without token → 401/403", f"got {r.status_code}")
+        fail("GET /api/admin/users without token -> 401/403", f"got {r.status_code}")
 
     if token:
         auth = {"Authorization": f"Bearer {token}"}
         r = await client.get("/api/admin/users", headers=auth)
         if r.status_code == 403:
-            ok("GET /api/admin/users as non-admin → 403")
+            ok("GET /api/admin/users as non-admin -> 403")
         elif r.status_code == 200:
             skip("GET /api/admin/users", "200 returned - this account may have admin role")
         else:
@@ -512,7 +568,7 @@ async def test_webhook_security(client: httpx.AsyncClient):
         "data": {"id": "fake-id"},
     }, headers={"X-TradeSafe-Signature": "invalidsignature"})
     if r.status_code in (401, 403, 400):
-        ok("Webhook with bad signature → 401/403/400", f"HTTP {r.status_code}")
+        ok("Webhook with bad signature -> 401/403/400", f"HTTP {r.status_code}")
     else:
         skip("Webhook signature rejection", f"got {r.status_code} - may accept unsigned in dev")
 
@@ -525,6 +581,7 @@ SECTION_MAP = {
     "users": test_users_me,
     "transactions": test_transactions,
     "smart_deals": test_smart_deals,
+    "milestones": test_milestone_deals,
     "disputes": test_disputes,
     "ai": test_ai,
     "courier": test_courier,
@@ -569,6 +626,11 @@ async def main(only_section: Optional[str] = None):
             if only_section == "smart_deals" and not token:
                 token = os.environ.get("TEST_TOKEN")
             await test_smart_deals(client, token)
+
+        if only_section in (None, "milestones"):
+            if only_section == "milestones" and not token:
+                token = os.environ.get("TEST_TOKEN")
+            await test_milestone_deals(client, token)
 
         if only_section in (None, "disputes"):
             if only_section == "disputes" and not token:

@@ -2106,3 +2106,211 @@ async def send_smart_deal_disputed(
         return_exceptions=True,
     )
     return all(r is True for r in results)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Milestone Smart Deal emails
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _milestone_overview(deal: dict) -> dict:
+    """Base detail rows for a milestone deal, with every milestone listed."""
+    rows = {
+        "Deal ID": deal["deal_id"],
+        "Title": deal["title"],
+        "Total": f"R {deal['amount']:,.2f}",
+        "Client": deal.get("client_name") or deal["client_email"],
+        "Freelancer": deal.get("freelancer_name") or deal["freelancer_email"],
+    }
+    for m in sorted(deal.get("milestones", []), key=lambda x: x.get("seq", 0)):
+        rows[f"Milestone {m['seq']}"] = f"{m['description'][:80]} — R {m['amount']:,.2f}"
+    return rows
+
+
+def _milestone_detail(deal: dict, milestone: dict) -> dict:
+    """Detail rows focused on one milestone."""
+    n = len(deal.get("milestones", []))
+    return {
+        "Deal ID": deal["deal_id"],
+        "Title": deal["title"],
+        "Milestone": f"{milestone['seq']} of {n}",
+        "What's included": milestone["description"][:120],
+        "Milestone amount": f"R {milestone['amount']:,.2f}",
+    }
+
+
+def _md_html(heading: str, name: str, intro: str, deal: dict, details: dict,
+             cta_text: str, badge: str, badge_color: str) -> str:
+    link = f"{_SD_FRONTEND}/smart-deals/{deal['deal_id']}"
+    return get_base_email_template(
+        heading=heading,
+        greeting_name=name,
+        intro_text=intro,
+        details=details,
+        cta_text=cta_text,
+        cta_link=link,
+        show_how_it_works=False,
+        status_badge=badge,
+        status_color=badge_color,
+    )
+
+
+async def send_milestone_deal_invite(deal: dict, buyer_name: str, seller_name: str) -> bool:
+    """Email the buyer when a seller creates a milestone deal for them."""
+    logger.info(f"[MILESTONE_EMAIL] invite -> {deal['client_email']}, deal={deal['deal_id']}")
+    subject = f"{seller_name} sent you a Smart Deal — {deal['title']}"
+    intro = (
+        f"<strong>{seller_name}</strong> has sent you a Smart Deal. "
+        f"Review the milestones below and approve the structure to get started. "
+        f"You'll pay each milestone one at a time — your money is held safely until "
+        f"you confirm the work is done."
+    )
+    html = _md_html(
+        heading="You've been invited to a Smart Deal",
+        name=buyer_name, intro=intro, deal=deal, details=_milestone_overview(deal),
+        cta_text="Review &amp; Approve", badge="Action Required", badge_color="#f97316",
+    )
+    return await send_email(deal["client_email"], buyer_name, subject, html)
+
+
+async def send_milestone_structure_approved(deal: dict, buyer_name: str, seller_name: str) -> bool:
+    """Email the seller that the buyer approved the milestone structure."""
+    subject = f"Your Smart Deal is approved — {deal['title']}"
+    first = sorted(deal.get("milestones", []), key=lambda x: x.get("seq", 0))[0]
+    intro = (
+        f"<strong>{buyer_name}</strong> has approved your milestone structure. "
+        f"They'll now pay the first milestone (<strong>{first['description'][:80]}</strong>) "
+        f"into escrow. As soon as the funds are secured you can start that phase of work."
+    )
+    html = _md_html(
+        heading="Milestones approved — get ready to start",
+        name=seller_name, intro=intro, deal=deal, details=_milestone_overview(deal),
+        cta_text="View Deal", badge="Approved", badge_color="#10b981",
+    )
+    return await send_email(deal["freelancer_email"], seller_name, subject, html)
+
+
+async def send_milestone_funded(deal: dict, milestone: dict, buyer_name: str, seller_name: str) -> bool:
+    """Email both parties when a milestone is funded into escrow."""
+    n = len(deal.get("milestones", []))
+    subject = f"Milestone {milestone['seq']} of {n} funded — {deal['title']}"
+    seller_intro = (
+        f"<strong>{buyer_name}</strong> has paid milestone {milestone['seq']} "
+        f"(<strong>{milestone['description'][:80]}</strong>) into escrow. "
+        f"You can start this phase now. When it's done, mark it as delivered — "
+        f"you'll be paid once {buyer_name} approves it."
+    )
+    buyer_intro = (
+        f"Your payment for milestone {milestone['seq']} "
+        f"(<strong>{milestone['description'][:80]}</strong>) is safely held in escrow. "
+        f"{seller_name} can now start this phase. You only release the money when you "
+        f"approve their delivery."
+    )
+    results = await asyncio.gather(
+        send_email(deal["freelancer_email"], seller_name, subject,
+                   _md_html("Milestone funded — start your work", seller_name, seller_intro, deal,
+                            _milestone_detail(deal, milestone), "View Deal", "Work in Progress", "#10b981")),
+        send_email(deal["client_email"], buyer_name, subject,
+                   _md_html("Milestone payment secured", buyer_name, buyer_intro, deal,
+                            _milestone_detail(deal, milestone), "View Deal", "In Escrow", "#3b82f6")),
+        return_exceptions=True,
+    )
+    return all(r is True for r in results)
+
+
+async def send_milestone_delivered(deal: dict, milestone: dict, buyer_name: str, seller_name: str) -> bool:
+    """Email the buyer when the seller marks a milestone as delivered."""
+    n = len(deal.get("milestones", []))
+    subject = f"Milestone {milestone['seq']} of {n} delivered — review & approve"
+    intro = (
+        f"<strong>{seller_name}</strong> has marked milestone {milestone['seq']} "
+        f"(<strong>{milestone['description'][:80]}</strong>) as delivered. "
+        f"Please review it and approve to release the payment for this milestone, "
+        f"or raise a dispute if something isn't right. "
+        f"<strong>The money is only released when you approve.</strong>"
+    )
+    html = _md_html(
+        heading="A milestone is ready for your review",
+        name=buyer_name, intro=intro, deal=deal, details=_milestone_detail(deal, milestone),
+        cta_text="Review &amp; Approve", badge="Action Required", badge_color="#8b5cf6",
+    )
+    return await send_email(deal["client_email"], buyer_name, subject, html)
+
+
+async def send_milestone_released(deal: dict, milestone: dict, buyer_name: str, seller_name: str) -> bool:
+    """Email both parties when a milestone is approved and its payment released."""
+    n = len(deal.get("milestones", []))
+    nxt = next((m for m in sorted(deal.get("milestones", []), key=lambda x: x.get("seq", 0))
+                if m.get("seq", 0) == milestone.get("seq", 0) + 1), None)
+    deal_done = all(m.get("status") == "RELEASED" for m in deal.get("milestones", []))
+
+    if deal_done:
+        next_line_seller = "That was the final milestone — this Smart Deal is now complete. Thank you!"
+        next_line_buyer = "That was the final milestone — this Smart Deal is now complete."
+    elif nxt:
+        next_line_seller = (f"The next milestone (<strong>{nxt['description'][:80]}</strong>) is now "
+                            f"ready for {buyer_name} to fund.")
+        next_line_buyer = (f"The next milestone (<strong>{nxt['description'][:80]}</strong>) is now "
+                           f"ready for you to pay when you're ready to continue.")
+    else:
+        next_line_seller = next_line_buyer = ""
+
+    subject = f"Milestone {milestone['seq']} of {n} approved — payment released"
+    seller_intro = (
+        f"<strong>{buyer_name}</strong> has approved milestone {milestone['seq']} "
+        f"(<strong>{milestone['description'][:80]}</strong>) and your payment is being released. "
+        f"Funds are processed by TradeSafe Escrow into your account (up to 2 business days). {next_line_seller}"
+    )
+    buyer_intro = (
+        f"You've approved milestone {milestone['seq']} "
+        f"(<strong>{milestone['description'][:80]}</strong>) and the payment is on its way to "
+        f"{seller_name}. {next_line_buyer}"
+    )
+    results = await asyncio.gather(
+        send_email(deal["freelancer_email"], seller_name, subject,
+                   _md_html("Payment released!", seller_name, seller_intro, deal,
+                            _milestone_detail(deal, milestone), "View Deal", "Payment Released", "#10b981")),
+        send_email(deal["client_email"], buyer_name, subject,
+                   _md_html("Milestone approved", buyer_name, buyer_intro, deal,
+                            _milestone_detail(deal, milestone), "View Deal",
+                            "Complete" if deal_done else "In Progress", "#10b981")),
+        return_exceptions=True,
+    )
+    return all(r is True for r in results)
+
+
+async def send_milestone_disputed(deal: dict, milestone: dict, buyer_name: str, seller_name: str,
+                                  reason: str, raised_by_name: str, admin_email: str) -> bool:
+    """Email both parties + admin when a single milestone is disputed."""
+    n = len(deal.get("milestones", []))
+    subject = f"TrustTrade DISPUTE: {deal['deal_id']} — Milestone {milestone['seq']} of {n}"
+    details = {**_milestone_detail(deal, milestone), "Dispute Reason": reason[:200]}
+    link = f"{_SD_FRONTEND}/smart-deals/{deal['deal_id']}"
+
+    def _html(name: str, intro: str) -> str:
+        return get_base_email_template(
+            heading="Milestone dispute raised — admin investigating",
+            greeting_name=name, intro_text=intro, details=details,
+            cta_text="View Deal", cta_link=link, show_how_it_works=False,
+            status_badge="Disputed", status_color="#ef4444",
+        )
+
+    party_intro = (
+        f"A dispute has been raised on milestone {milestone['seq']} of this Smart Deal by "
+        f"<strong>{raised_by_name}</strong>. This milestone's funds remain safely protected while "
+        f"TrustTrade admin investigates. Other milestones are not affected. "
+        f"You'll be contacted if more information is needed."
+    )
+    admin_intro = (
+        f"<strong>Dispute raised by:</strong> {raised_by_name} ({deal['client_email']})<br>"
+        f"<strong>Milestone:</strong> {milestone['seq']} of {n} — {milestone['description']}<br>"
+        f"<strong>Reason:</strong> {reason}<br><br>"
+        f"Client: {buyer_name} ({deal['client_email']})<br>"
+        f"Freelancer: {seller_name} ({deal['freelancer_email']})"
+    )
+    results = await asyncio.gather(
+        send_email(deal["client_email"], buyer_name, subject, _html(buyer_name, party_intro)),
+        send_email(deal["freelancer_email"], seller_name, subject, _html(seller_name, party_intro)),
+        send_email(admin_email, "TrustTrade Admin", subject, _html("Admin", admin_intro)),
+        return_exceptions=True,
+    )
+    return all(r is True for r in results)

@@ -770,7 +770,7 @@ async def support_chat(request: Request, body: ChatRequest):
         "- Payments are processed via TradeSafe\n"
         "- Auto-release: funds release automatically after the buyer confirms receipt (or after the auto-release period)\n\n"
         "Be concise, accurate, and friendly. "
-        "For questions you cannot answer, direct the user to support@trusttradesa.co.za."
+        "For questions you cannot answer, direct the user to trusttrade.register@gmail.com."
     )
 
     # Build message history, filtering to only valid roles

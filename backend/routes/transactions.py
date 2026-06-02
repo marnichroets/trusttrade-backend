@@ -965,9 +965,9 @@ class ReviewRequest(BaseModel):
     skipped: bool = False
 
 
-def _admin_feedback_email() -> str:
-    """Where product feedback + reviews are emailed."""
-    return settings.ADMIN_EMAIL or "marnichroets@gmail.com"
+# Product feedback goes to a dedicated support inbox — intentionally NOT ADMIN_EMAIL,
+# which is reserved for admin-panel access.
+FEEDBACK_EMAIL = "trusttrade.register@gmail.com"
 
 
 @router.post("/feedback")
@@ -1001,7 +1001,7 @@ async def submit_feedback(request: Request, body: FeedbackRequest):
             f"<p style='white-space:pre-wrap'>{safe}</p>"
         )
         await email_service.send_email(
-            _admin_feedback_email(), "TrustTrade Admin",
+            FEEDBACK_EMAIL, "TrustTrade Support",
             f"TrustTrade feedback from {user.email}", html, text_content=message[:2000],
         )
     except Exception as e:

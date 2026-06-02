@@ -329,7 +329,7 @@ async def send_funds_released_sms(
     message = (
         f"TrustTrade: Your {_format_rand(amount)} payout is being processed to "
         f"{bank_phrase}. Expected arrival {arrival_date}. "
-        f"Questions? support@trusttradesa.co.za"
+        f"Questions? trusttrade.register@gmail.com"
     )
     return await send_sms(to_phone, message)
 

@@ -42,7 +42,7 @@ export default function SupportChat() {
     } catch {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: "Sorry, I'm having trouble connecting. Please email support@trusttradesa.co.za.",
+        content: "Sorry, I'm having trouble connecting. Please email trusttrade.register@gmail.com.",
       }]);
     } finally {
       setLoading(false);

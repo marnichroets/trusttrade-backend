@@ -61,7 +61,9 @@ export function TrustTradeLogo({
           maxWidth: '100%',
           objectFit: 'contain',
           display: 'block',
-          ...(dark ? { filter: 'brightness(1.08)' } : {}),
+          // On dark surfaces (sidebar, landing nav/footer) render the wordmark
+          // solid white so the dark "Trade" half isn't lost against the background.
+          ...(dark ? { filter: 'brightness(0) invert(1)' } : {}),
         }}
       />
     </span>

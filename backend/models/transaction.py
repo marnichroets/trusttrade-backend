@@ -26,6 +26,9 @@ class Transaction(BaseModel):
     recipient_info: Optional[str] = None  # Email or phone used for invite
     recipient_type: Optional[str] = None  # "email" or "phone"
     invite_type: Optional[str] = None  # "email" or "phone" - alias for recipient_type for frontend
+    # Counterparty reputation, attached at read time for display next to each name.
+    buyer_trust: Optional[dict] = None   # {trust_score, total_trades, disputes}
+    seller_trust: Optional[dict] = None  # {trust_score, total_trades, disputes}
     item_description: str
     item_condition: Optional[str] = None
     known_issues: Optional[str] = None

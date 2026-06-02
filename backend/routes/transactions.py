@@ -930,7 +930,26 @@ async def get_transaction(request: Request, transaction_id: str):
     
     # Add invite_type and phone info to response
     transaction["invite_type"] = invite_type
-    
+
+    # Attach each party's trust stats (score / trades / disputes) for display so a
+    # user can size up who they're dealing with. Looked up by user_id, then email.
+    async def _trust_for(user_id, email):
+        doc = None
+        if user_id:
+            doc = await db.users.find_one({"user_id": user_id}, {"_id": 0, "trust_score": 1, "total_trades": 1, "valid_disputes_count": 1})
+        if not doc and email:
+            doc = await db.users.find_one({"email": email.lower()}, {"_id": 0, "trust_score": 1, "total_trades": 1, "valid_disputes_count": 1})
+        if not doc:
+            return None
+        return {
+            "trust_score": doc.get("trust_score", 50),
+            "total_trades": doc.get("total_trades", 0),
+            "disputes": doc.get("valid_disputes_count", 0),
+        }
+
+    transaction["buyer_trust"] = await _trust_for(transaction.get("buyer_user_id"), transaction.get("buyer_email"))
+    transaction["seller_trust"] = await _trust_for(transaction.get("seller_user_id"), transaction.get("seller_email"))
+
     return Transaction(**transaction)
 
 

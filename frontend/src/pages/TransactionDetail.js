@@ -2339,8 +2339,8 @@ function TransactionDetail() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <div className="td-parties-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                       {[
-                        { title: 'Buyer', icon: User, color: '#3b82f6', bg: '#eff6ff', name: transaction.buyer_name, email: transaction.buyer_email, phone: transaction.buyer_phone, confirmed: buyerConfirmed },
-                        { title: 'Seller', icon: User, color: '#f97316', bg: '#fff7ed', name: transaction.seller_name, email: transaction.seller_email, phone: transaction.seller_phone, confirmed: sellerConfirmed },
+                        { title: 'Buyer', icon: User, color: '#3b82f6', bg: '#eff6ff', name: transaction.buyer_name, email: transaction.buyer_email, phone: transaction.buyer_phone, confirmed: buyerConfirmed, trust: transaction.buyer_trust },
+                        { title: 'Seller', icon: User, color: '#f97316', bg: '#fff7ed', name: transaction.seller_name, email: transaction.seller_email, phone: transaction.seller_phone, confirmed: sellerConfirmed, trust: transaction.seller_trust },
                       ].map(p => (
                         <div key={p.title} style={{ background: '#f8fafc', borderRadius: 10, padding: '14px 16px', border: '1px solid #f1f5f9' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -2351,6 +2351,12 @@ function TransactionDetail() {
                             {p.confirmed && <CheckCircle2 size={13} color="#10b981" style={{ marginLeft: 'auto' }} />}
                           </div>
                           <p style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 4px' }}>{p.name}</p>
+                          {p.trust && (
+                            <p style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', margin: '0 0 4px' }}
+                               title="Trust score · completed trades · valid disputes">
+                              {p.trust.trust_score} trust · {p.trust.total_trades} {p.trust.total_trades === 1 ? 'trade' : 'trades'} · {p.trust.disputes} {p.trust.disputes === 1 ? 'dispute' : 'disputes'}
+                            </p>
+                          )}
                           {p.email && <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>{p.email}</p>}
                           {p.phone && <p style={{ fontSize: 12, color: '#64748b', margin: '2px 0 0', fontFamily: 'monospace' }}>{p.phone}</p>}
                           {transaction.invite_type === 'phone' && !p.email && !p.phone && <p style={{ fontSize: 12, color: '#3b82f6', margin: '2px 0 0' }}>Invited via phone</p>}
@@ -2667,8 +2673,8 @@ function TransactionDetail() {
             <div className="transaction-desktop-parties-card" style={{ ...S.card, padding: '14px 16px' }}>
               <p style={{ ...S.label, marginBottom: 12 }}>Parties</p>
               {[
-                { name: transaction.buyer_name, role: 'Buyer', phone: transaction.buyer_phone, confirmed: buyerConfirmed, color: '#3b82f6', bg: '#eff6ff' },
-                { name: transaction.seller_name, role: 'Seller', phone: transaction.seller_phone, confirmed: sellerConfirmed, color: '#f97316', bg: '#fff7ed' },
+                { name: transaction.buyer_name, role: 'Buyer', phone: transaction.buyer_phone, confirmed: buyerConfirmed, color: '#3b82f6', bg: '#eff6ff', trust: transaction.buyer_trust },
+                { name: transaction.seller_name, role: 'Seller', phone: transaction.seller_phone, confirmed: sellerConfirmed, color: '#f97316', bg: '#fff7ed', trust: transaction.seller_trust },
               ].map((p, i) => (
                 <div key={p.role} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i === 0 ? 10 : 0 }}>
                   <div style={{ width: 32, height: 32, borderRadius: '50%', background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -2677,6 +2683,12 @@ function TransactionDetail() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
                     <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>{p.role}{p.phone && ' · via phone'}</p>
+                    {p.trust && (
+                      <p style={{ fontSize: 11, fontWeight: 600, color: '#475569', margin: '2px 0 0' }}
+                         title="Trust score · completed trades · valid disputes">
+                        {p.trust.trust_score} trust · {p.trust.total_trades} {p.trust.total_trades === 1 ? 'trade' : 'trades'} · {p.trust.disputes} {p.trust.disputes === 1 ? 'dispute' : 'disputes'}
+                      </p>
+                    )}
                   </div>
                   {p.confirmed && <CheckCircle2 size={14} color="#10b981" />}
                 </div>

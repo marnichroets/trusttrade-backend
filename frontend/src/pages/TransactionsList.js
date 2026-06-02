@@ -203,7 +203,11 @@ function TransactionsList() {
                       return (
                     <tr
                       key={t.transaction_id}
-                      onClick={() => navigate(`/transactions/${t.transaction_id}`)}
+                      onClick={() => navigate(
+                        t.deal_type && String(t.deal_type).startsWith('DIGITAL_WORK')
+                          ? `/smart-deals/${t.deal_id || t.transaction_id}`
+                          : `/transactions/${t.transaction_id}`
+                      )}
                       data-testid={`transaction-row-${t.transaction_id}`}
                       style={{ cursor: 'pointer', transition: 'background 0.12s' }}
                       onMouseEnter={e => e.currentTarget.style.background = `${V.accent}08`}

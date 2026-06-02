@@ -89,7 +89,7 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
     { icon: Plus,            label: 'New Transaction', path: '/transactions/new', highlight: true },
     { icon: FileText,        label: 'My Transactions', path: '/transactions' },
     { icon: AlertCircle,     label: 'Disputes',        path: '/disputes-dashboard' },
-    { icon: Briefcase,       label: 'Smart Deals',     path: '/smart-deals', desc: 'Milestone contracts — pay as work is done' },
+    { icon: Briefcase,       label: 'Smart Deals',     path: '/smart-deals', desc: 'Projects paid in stages — pay as work is done' },
     { icon: Activity,        label: 'Live Activity',   path: '/activity' },
     { icon: User,            label: 'My Profile',      path: '/profile' },
   ];
@@ -444,7 +444,7 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, padding: '24px', paddingBottom: 80, background: '#F8FAFC', color: '#0F172A' }} className="lg:pb-6">
+        <main style={{ flex: 1, padding: '24px', paddingBottom: 80, background: '#F0F2F5', color: '#0F172A' }} className="lg:pb-6">
           {children}
         </main>
       </div>

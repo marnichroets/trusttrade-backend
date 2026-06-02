@@ -896,7 +896,7 @@ async def create_milestone_deal(body: CreateMilestoneDealRequest, request: Reque
         "seller_name": seller_name,
         "title": body.title,
         "description": body.description,
-        "item_description": f"{body.title} — {len(milestones)} milestones",
+        "item_description": f"{body.title} — {len(milestones)} stages",
         "currency": body.currency,
         "fee_paid_by": body.fee_paid_by,
         "fee_allocation": fee_allocation,

@@ -843,7 +843,7 @@ function buildActionItems(transactions, pendingDisputes, user, payoutSchedule) {
       }
 
       if (isBuyer && meta.state === 'FUNDED') {
-        return { ...base, priority: 3, title: 'Your next step: Fund escrow', button: 'Pay into Escrow', color: V.accent, helper: meta.secondaryLabel || 'Pay securely into escrow. Seller is paid only after you confirm delivery.' };
+        return { ...base, priority: 3, title: 'Your next step: Make payment', button: 'Pay now', color: V.accent, helper: meta.secondaryLabel || 'Your payment is held safely until you confirm you received your order.' };
       }
       if (isSeller && meta.state === 'FUNDED') {
         return { ...base, priority: 4, title: 'Waiting for buyer to fund escrow', button: 'View Transaction', color: V.warn, helper: meta.secondaryLabel || 'Share this link with the buyer. Funds will be protected once the buyer pays.' };

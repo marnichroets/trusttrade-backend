@@ -13,9 +13,10 @@ import logging
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from core.config import settings
 from core.payout_schedule import build_payout_schedule_summary
@@ -951,6 +952,101 @@ async def get_transaction(request: Request, transaction_id: str):
     transaction["seller_trust"] = await _trust_for(transaction.get("seller_user_id"), transaction.get("seller_email"))
 
     return Transaction(**transaction)
+
+
+class FeedbackRequest(BaseModel):
+    message: str
+    page: Optional[str] = None
+
+
+class ReviewRequest(BaseModel):
+    rating: Optional[int] = None       # 1–5; None when the user skips
+    comment: Optional[str] = ""
+    skipped: bool = False
+
+
+def _admin_feedback_email() -> str:
+    """Where product feedback + reviews are emailed."""
+    return settings.ADMIN_EMAIL or "marnichroets@gmail.com"
+
+
+@router.post("/feedback")
+async def submit_feedback(request: Request, body: FeedbackRequest):
+    """'What can we improve?' — emails the admin and keeps a copy for the record."""
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    message = (body.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Please enter a message")
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.feedback.insert_one({
+        "user_id": user.user_id,
+        "name": user.name,
+        "email": user.email,
+        "message": message[:2000],
+        "page": (body.page or "")[:300],
+        "created_at": now,
+    })
+
+    try:
+        import email_service
+        safe = message[:2000].replace("<", "&lt;").replace(">", "&gt;")
+        html = (
+            f"<p><strong>Feedback from {user.name} ({user.email})</strong></p>"
+            f"<p style='color:#64748b'>Page: {body.page or '—'} · {now}</p>"
+            f"<p style='white-space:pre-wrap'>{safe}</p>"
+        )
+        await email_service.send_email(
+            _admin_feedback_email(), "TrustTrade Admin",
+            f"TrustTrade feedback from {user.email}", html, text_content=message[:2000],
+        )
+    except Exception as e:
+        logger.error(f"[FEEDBACK] email failed (saved to db anyway): {e}")
+
+    return {"ok": True}
+
+
+@router.post("/transactions/{transaction_id}/review")
+async def submit_transaction_review(request: Request, transaction_id: str, body: ReviewRequest):
+    """Optional post-completion review. Records the rating/comment and marks the
+    prompt dismissed for this user so it never shows again (skip dismisses too)."""
+    db = get_database()
+    user = await get_user_from_token(request, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not transaction:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    is_buyer = transaction.get("buyer_user_id") == user.user_id
+    is_seller = transaction.get("seller_user_id") == user.user_id
+    if not (is_buyer or is_seller or user.is_admin):
+        raise HTTPException(status_code=403, detail="Not part of this transaction")
+
+    # Always mark dismissed so the prompt shows at most once per user.
+    update = {"$addToSet": {"review_dismissed_by": user.user_id}}
+
+    if not body.skipped and body.rating:
+        rating = max(1, min(5, int(body.rating)))
+        role = "buyer" if is_buyer else "seller"
+        review = {
+            "by_user_id": user.user_id,
+            "by_name": user.name,
+            "role": role,
+            "about_email": transaction.get("seller_email") if is_buyer else transaction.get("buyer_email"),
+            "rating": rating,
+            "comment": (body.comment or "").strip()[:1000],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        update["$push"] = {"reviews": review}
+
+    await db.transactions.update_one({"transaction_id": transaction_id}, update)
+    return {"ok": True}
 
 
 @router.patch("/transactions/{transaction_id}/photos")

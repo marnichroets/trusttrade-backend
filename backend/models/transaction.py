@@ -29,6 +29,8 @@ class Transaction(BaseModel):
     # Counterparty reputation, attached at read time for display next to each name.
     buyer_trust: Optional[dict] = None   # {trust_score, total_trades, disputes}
     seller_trust: Optional[dict] = None  # {trust_score, total_trades, disputes}
+    review_dismissed_by: Optional[list] = None  # user_ids who've reviewed or skipped
+    reviews: Optional[list] = None
     item_description: str
     item_condition: Optional[str] = None
     known_issues: Optional[str] = None

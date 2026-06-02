@@ -7,6 +7,7 @@ import TrustTradeLogo from './TrustTradeLogo';
 import api from '../utils/api';
 import { buildUserActivityFeed, getUnreadActivityCount, markActivitySeen } from '../utils/transactionActivity';
 import SupportChat from './SupportChat';
+import FeedbackButton from './FeedbackButton';
 
 export const V = {
   bg:      '#0A0E14',
@@ -523,6 +524,7 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
         </button>
       </nav>
       <SupportChat />
+      <FeedbackButton />
     </div>
   );
 }

@@ -688,6 +688,7 @@ function TransactionDetail() {
   const [hoverRating, setHoverRating] = useState(0);
   const [review, setReview] = useState('');
   const [submittingRating, setSubmittingRating] = useState(false);
+  const [reviewSkipped, setReviewSkipped] = useState(false);
   const [copied, setCopied] = useState(false);
   const [creatingEscrow, setCreatingEscrow] = useState(false);
   const [loadingPaymentLink, setLoadingPaymentLink] = useState(false);
@@ -1160,6 +1161,13 @@ function TransactionDetail() {
     finally { setSubmittingRating(false); }
   };
 
+  // Skip the review prompt — recorded server-side so it never shows again.
+  const handleSkipReview = async () => {
+    setReviewSkipped(true);
+    try { await api.post(`${API}/transactions/${transactionId}/review`, { skipped: true }, { withCredentials: true }); }
+    catch (e) { /* non-blocking: the prompt is already hidden for this session */ }
+  };
+
   const StarRating = ({ value, onSelect, onHover, readOnly = false, size = 'w-8 h-8' }) => (
     <div style={{ display: 'flex', gap: 4 }}>
       {[1,2,3,4,5].map((star) => (
@@ -1386,6 +1394,12 @@ function TransactionDetail() {
   const isDeliveryFlow = flowType === 'delivery';
   const isInstantFlow = flowType === 'instant';
   const isFinalized = ['COMPLETED', 'RELEASED'].includes(uiState.state);
+  // One-time review prompt: show the rating form only until the user rates or skips.
+  const reviewDismissed = reviewSkipped || (transaction.review_dismissed_by || []).includes(user?.user_id);
+  const myRating = isBuyer ? transaction.buyer_rating : isSeller ? transaction.seller_rating : null;
+  const counterpartyRating = isBuyer ? transaction.seller_rating : isSeller ? transaction.buyer_rating : null;
+  const showReviewForm = isFinalized && (isBuyer || isSeller) && !myRating && !reviewDismissed;
+  const showRatingCard = isFinalized && (myRating || counterpartyRating || showReviewForm);
   const isActionable = uiState.actionable && !uiState.terminal;
   const canBuyerConfirm = isActionable && isBuyer && !buyerConfirmed;
   const canSellerConfirm = isActionable && isSeller && !sellerConfirmed;
@@ -2472,7 +2486,7 @@ function TransactionDetail() {
             )}
 
             {/* Rating */}
-            {isFinalized && (
+            {showRatingCard && (
               <div style={{ ...S.card, padding: '22px 24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                   <Star size={16} color="#fbbf24" fill="#fbbf24" />
@@ -2482,17 +2496,22 @@ function TransactionDetail() {
                   <div><p style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>Your rating for the seller:</p><StarRating value={transaction.buyer_rating} readOnly size="w-6 h-6" />{transaction.buyer_review && <p style={{ fontSize: 13, color: '#64748b', fontStyle: 'italic', marginTop: 8 }}>"{transaction.buyer_review}"</p>}</div>
                 ) : isSeller && transaction.seller_rating ? (
                   <div><p style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>Your rating for the buyer:</p><StarRating value={transaction.seller_rating} readOnly size="w-6 h-6" />{transaction.seller_review && <p style={{ fontSize: 13, color: '#64748b', fontStyle: 'italic', marginTop: 8 }}>"{transaction.seller_review}"</p>}</div>
-                ) : (
+                ) : showReviewForm ? (
                   <div>
                     <p style={{ fontSize: 13, color: '#64748b', marginBottom: 12 }}>{isBuyer ? 'Rate your experience with the seller:' : 'Rate your experience with the buyer:'}</p>
                     <div style={{ marginBottom: 14 }}><StarRating value={rating} onSelect={setRating} onHover={setHoverRating} /></div>
                     <label style={{ display: 'block', fontSize: 13, color: '#64748b', marginBottom: 6 }}>Review (optional)</label>
                     <Textarea placeholder="Share your experience…" value={review} onChange={(e) => setReview(e.target.value)} rows={3} data-testid="review-textarea" style={{ marginBottom: 12 }} />
-                    <button onClick={handleSubmitRating} disabled={submittingRating || rating === 0} data-testid="submit-rating-btn" className="action-btn" style={{ ...S.btn('#0f1729'), opacity: (submittingRating || rating === 0) ? 0.5 : 1 }}>
-                      {submittingRating ? 'Submitting…' : 'Submit Rating'}
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <button onClick={handleSubmitRating} disabled={submittingRating || rating === 0} data-testid="submit-rating-btn" className="action-btn" style={{ ...S.btn('#0f1729'), opacity: (submittingRating || rating === 0) ? 0.5 : 1 }}>
+                        {submittingRating ? 'Submitting…' : 'Submit Rating'}
+                      </button>
+                      <button onClick={handleSkipReview} data-testid="skip-rating-btn" style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: 13, fontWeight: 500, cursor: 'pointer', padding: '8px 4px' }}>
+                        Skip
+                      </button>
+                    </div>
                   </div>
-                )}
+                ) : null}
                 {isBuyer && transaction.seller_rating && <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}><p style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>Seller's rating for you:</p><StarRating value={transaction.seller_rating} readOnly size="w-5 h-5" />{transaction.seller_review && <p style={{ fontSize: 13, color: '#64748b', fontStyle: 'italic', marginTop: 6 }}>"{transaction.seller_review}"</p>}</div>}
                 {isSeller && transaction.buyer_rating && <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}><p style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>Buyer's rating for you:</p><StarRating value={transaction.buyer_rating} readOnly size="w-5 h-5" />{transaction.buyer_review && <p style={{ fontSize: 13, color: '#64748b', fontStyle: 'italic', marginTop: 6 }}>"{transaction.buyer_review}"</p>}</div>}
               </div>

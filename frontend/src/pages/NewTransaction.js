@@ -55,9 +55,9 @@ const ITEM_CATEGORIES = [
 const S = {
   page: { maxWidth: 640, margin: '0 auto' },
   card: {
-    background: '#fff',
+    background: '#1E293B',
     borderRadius: 14,
-    border: '1px solid #f1f5f9',
+    border: '1px solid #334155',
     boxShadow: '0 1px 4px rgba(15,23,42,0.06)',
     padding: '22px 24px',
     marginBottom: 14,
@@ -66,7 +66,7 @@ const S = {
     display: 'block',
     fontSize: 11,
     fontWeight: 600,
-    color: '#64748b',
+    color: '#94A3B8',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
     marginBottom: 6,
@@ -76,10 +76,10 @@ const S = {
     height: 40,
     padding: '0 12px',
     borderRadius: 8,
-    border: '1px solid #e2e8f0',
+    border: '1px solid #334155',
     fontSize: 13,
-    color: '#0f172a',
-    background: '#fff',
+    color: '#F8FAFC',
+    background: '#1E293B',
     outline: 'none',
     boxSizing: 'border-box',
     fontFamily: 'inherit',
@@ -89,10 +89,10 @@ const S = {
     width: '100%',
     padding: '10px 12px',
     borderRadius: 8,
-    border: '1px solid #e2e8f0',
+    border: '1px solid #334155',
     fontSize: 13,
-    color: '#0f172a',
-    background: '#fff',
+    color: '#F8FAFC',
+    background: '#1E293B',
     outline: 'none',
     boxSizing: 'border-box',
     fontFamily: 'inherit',
@@ -105,10 +105,10 @@ const S = {
     height: 40,
     padding: '0 12px',
     borderRadius: 8,
-    border: '1px solid #e2e8f0',
+    border: '1px solid #334155',
     fontSize: 13,
-    color: '#0f172a',
-    background: '#fff',
+    color: '#F8FAFC',
+    background: '#1E293B',
     outline: 'none',
     boxSizing: 'border-box',
     fontFamily: 'inherit',
@@ -129,7 +129,7 @@ const S = {
     borderRadius: 10,
     border: 'none',
     background: '#3b82f6',
-    color: '#fff',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: 600,
     cursor: 'pointer',
@@ -146,7 +146,7 @@ const S = {
     borderRadius: 10,
     border: 'none',
     background: '#10b981',
-    color: '#fff',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: 600,
     cursor: 'pointer',
@@ -161,7 +161,7 @@ const S = {
     borderRadius: 8,
     border: 'none',
     background: 'transparent',
-    color: '#64748b',
+    color: '#94A3B8',
     fontSize: 13,
     fontWeight: 500,
     cursor: 'pointer',
@@ -429,7 +429,7 @@ function NewTransaction() {
   if (!user) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 32, height: 32, border: '3px solid #e2e8f0', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <div style={{ width: 32, height: 32, border: '3px solid #334155', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
       </div>
     );
   }
@@ -441,11 +441,11 @@ function NewTransaction() {
       <div style={S.page}>
 
         {!user.phone_verified && (
-          <div style={{ ...S.card, borderLeft: '3px solid #f59e0b', background: '#fffbeb', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <AlertCircle size={18} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ ...S.card, borderLeft: '3px solid #f59e0b', background: 'rgba(245,158,11,0.14)', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <AlertCircle size={18} color="#FBBF24" style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ flex: 1 }}>
-              <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#78350f' }}>Verify your phone number to continue.</p>
-              <p style={{ margin: 0, fontSize: 13, color: '#92400e' }}>Phone verification is required before you can create a transaction or access payment actions.</p>
+              <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#FBBF24' }}>Verify your phone number to continue.</p>
+              <p style={{ margin: 0, fontSize: 13, color: '#FBBF24' }}>Phone verification is required before you can create a transaction or access payment actions.</p>
             </div>
             <button type="button" onClick={() => navigate('/verify/phone')} style={{ ...S.btnPrimary, width: 'auto', height: 38, padding: '0 14px', background: '#f59e0b' }}>
               Verify phone
@@ -454,13 +454,13 @@ function NewTransaction() {
         )}
 
         {role === 'seller' && !hasBankingDetails && (
-          <div style={{ ...S.card, borderLeft: '3px solid #dc2626', background: '#fef2f2', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <AlertCircle size={18} color="#dc2626" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ ...S.card, borderLeft: '3px solid #F87171', background: 'rgba(239,68,68,0.14)', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <AlertCircle size={18} color="#F87171" style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ flex: 1 }}>
-              <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#7f1d1d' }}>Add your banking details to receive payouts</p>
-              <p style={{ margin: 0, fontSize: 13, color: '#991b1b' }}>You must add your banking details before creating a deal as a seller.</p>
+              <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#F87171' }}>Add your banking details to receive payouts</p>
+              <p style={{ margin: 0, fontSize: 13, color: '#F87171' }}>You must add your banking details before creating a deal as a seller.</p>
             </div>
-            <button type="button" onClick={() => navigate('/settings/banking')} style={{ ...S.btnPrimary, width: 'auto', height: 38, padding: '0 14px', background: '#dc2626', flexShrink: 0 }}>
+            <button type="button" onClick={() => navigate('/settings/banking')} style={{ ...S.btnPrimary, width: 'auto', height: 38, padding: '0 14px', background: '#F87171', flexShrink: 0 }}>
               My Profile
             </button>
           </div>
@@ -490,7 +490,7 @@ function NewTransaction() {
                     width: 30, height: 30, borderRadius: '50%',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 12, fontWeight: 700,
-                    background: done ? '#10b981' : active ? '#3b82f6' : '#f1f5f9',
+                    background: done ? '#10b981' : active ? '#3b82f6' : '#334155',
                     color: done || active ? '#fff' : '#94a3b8',
                     flexShrink: 0,
                     transition: 'all 0.2s',
@@ -500,7 +500,7 @@ function NewTransaction() {
                   <span style={{
                     fontSize: 12,
                     fontWeight: active ? 600 : 400,
-                    color: active ? '#0f172a' : '#94a3b8',
+                    color: active ? '#F8FAFC' : '#94a3b8',
                     whiteSpace: 'nowrap',
                   }} className="hidden sm:inline">
                     {label}
@@ -509,7 +509,7 @@ function NewTransaction() {
                 {idx < STEPS.length - 1 && (
                   <div style={{
                     flex: 1, height: 2, margin: '0 10px',
-                    background: step > num ? '#10b981' : '#f1f5f9',
+                    background: step > num ? '#10b981' : '#334155',
                     transition: 'background 0.3s',
                     minWidth: 16,
                   }} />
@@ -525,10 +525,10 @@ function NewTransaction() {
           {step === 1 && (
             <div>
               <div style={S.card}>
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', margin: '0 0 4px' }}>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#F8FAFC', margin: '0 0 4px' }}>
                   Who are you in this transaction?
                 </h2>
-                <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 18px' }}>
+                <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 18px' }}>
                   Select your role. We'll auto-fill your details.
                 </p>
 
@@ -560,8 +560,8 @@ function NewTransaction() {
                       style={{
                         padding: '14px 14px',
                         borderRadius: 10,
-                        border: `2px solid ${role === opt.value ? '#3b82f6' : '#e2e8f0'}`,
-                        background: role === opt.value ? '#eff6ff' : '#fff',
+                        border: `2px solid ${role === opt.value ? '#3b82f6' : '#334155'}`,
+                        background: role === opt.value ? 'rgba(59,130,246,0.14)' : '#0F172A',
                         cursor: 'pointer',
                         textAlign: 'left',
                         transition: 'all 0.15s',
@@ -570,9 +570,9 @@ function NewTransaction() {
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
                         <opt.icon size={15} color={opt.iconColor} />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{opt.title}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC' }}>{opt.title}</span>
                       </div>
-                      <p style={{ fontSize: 11, color: '#64748b', margin: 0, lineHeight: 1.4 }}>{opt.desc}</p>
+                      <p style={{ fontSize: 11, color: '#94A3B8', margin: 0, lineHeight: 1.4 }}>{opt.desc}</p>
                     </button>
                   ))}
                 </div>
@@ -581,25 +581,25 @@ function NewTransaction() {
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '11px 14px', borderRadius: 10,
-                  background: '#f8fafc', border: '1px solid #f1f5f9',
+                  background: '#0F172A', border: '1px solid #334155',
                   marginBottom: 20,
                 }}>
                   <div style={{
                     width: 32, height: 32, borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                    background: 'linear-gradient(135deg, #3b82f6, #60A5FA)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     flexShrink: 0,
                   }}>
                     <User size={14} color="#fff" />
                   </div>
                   <div>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', margin: 0 }}>{user.name}</p>
-                    <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>{user.email}</p>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: '#F8FAFC', margin: 0 }}>{user.name}</p>
+                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>{user.email}</p>
                   </div>
                   <span style={{
                     marginLeft: 'auto', fontSize: 10, fontWeight: 700,
-                    background: role === 'seller' ? '#ecfdf5' : '#eff6ff',
-                    color: role === 'seller' ? '#059669' : '#2563eb',
+                    background: role === 'seller' ? 'rgba(16,185,129,0.14)' : 'rgba(59,130,246,0.14)',
+                    color: role === 'seller' ? '#34D399' : '#60A5FA',
                     padding: '3px 8px', borderRadius: 20,
                     textTransform: 'uppercase', letterSpacing: '0.04em',
                   }}>
@@ -610,17 +610,17 @@ function NewTransaction() {
                 {/* Other party prompt */}
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 10,
-                  background: '#eff6ff', border: '1.5px solid #93c5fd',
+                  background: 'rgba(59,130,246,0.14)', border: '1.5px solid #93c5fd',
                   borderRadius: 10, padding: '11px 14px', marginBottom: 16,
                 }}>
                   <span style={{ fontSize: 18 }}>👇</span>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#1e40af' }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#60A5FA' }}>
                     Now enter your {role === 'buyer' ? 'seller' : 'buyer'}'s details below
                   </p>
                 </div>
 
                 {/* Other party */}
-                <h3 style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', margin: '0 0 12px' }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC', margin: '0 0 12px' }}>
                   {role === 'buyer' ? 'Seller' : 'Buyer'} Details
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -668,7 +668,7 @@ function NewTransaction() {
             <div>
               {/* Item basics */}
               <div style={S.card}>
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', margin: '0 0 18px' }}>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#F8FAFC', margin: '0 0 18px' }}>
                   What's being sold?
                 </h2>
 
@@ -691,8 +691,8 @@ function NewTransaction() {
                         disabled={!formData.item_description || improveLoading}
                         data-testid="improve-description-btn"
                         style={{
-                          padding: '5px 12px', borderRadius: 6, border: '1px solid #bfdbfe',
-                          background: 'transparent', color: '#2563eb', fontSize: 12, fontWeight: 600,
+                          padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(59,130,246,0.30)',
+                          background: 'transparent', color: '#60A5FA', fontSize: 12, fontWeight: 600,
                           cursor: !formData.item_description || improveLoading ? 'not-allowed' : 'pointer',
                           opacity: !formData.item_description || improveLoading ? 0.5 : 1,
                           fontFamily: 'inherit',
@@ -761,11 +761,11 @@ function NewTransaction() {
                       aria-invalid={Boolean(amountError)}
                       data-testid="item-price-input"
                     />
-                    <p style={{ fontSize: 11, color: amountError ? '#dc2626' : '#94a3b8', margin: '5px 0 0' }}>
+                    <p style={{ fontSize: 11, color: amountError ? '#F87171' : '#94a3b8', margin: '5px 0 0' }}>
                       Minimum transaction amount is R{minimumTransactionAmount.toFixed(0)}. No maximum limit.
                     </p>
                     {amountError && (
-                      <p style={{ fontSize: 11, color: '#dc2626', margin: '4px 0 0', fontWeight: 600 }}>
+                      <p style={{ fontSize: 11, color: '#F87171', margin: '4px 0 0', fontWeight: 600 }}>
                         {amountError}
                       </p>
                     )}
@@ -775,7 +775,7 @@ function NewTransaction() {
 
               {/* Delivery Method */}
               <div style={S.card}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 14px' }}>How will the item be delivered?</h3>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC', margin: '0 0 14px' }}>How will the item be delivered?</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
                     { value: 'courier', icon: Truck, label: 'Courier Guy — we book delivery for you', desc: 'Buyer confirms receipt before payment is released.' },
@@ -789,8 +789,8 @@ function NewTransaction() {
                         style={{
                           display: 'flex', alignItems: 'center', gap: 12,
                           padding: '11px 14px', borderRadius: 10,
-                          border: `1.5px solid ${active ? '#3b82f6' : '#e2e8f0'}`,
-                          background: active ? '#eff6ff' : '#fff',
+                          border: `1.5px solid ${active ? '#3b82f6' : '#334155'}`,
+                          background: active ? 'rgba(59,130,246,0.14)' : '#0F172A',
                           cursor: 'pointer',
                           transition: 'all 0.15s',
                         }}
@@ -805,16 +805,16 @@ function NewTransaction() {
                         />
                         <div style={{
                           width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
-                          border: `2px solid ${active ? '#3b82f6' : '#cbd5e1'}`,
-                          background: active ? '#3b82f6' : '#fff',
+                          border: `2px solid ${active ? '#3b82f6' : '#475569'}`,
+                          background: active ? '#3b82f6' : '#0F172A',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           transition: 'all 0.15s',
                         }}>
-                          {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+                          {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1E293B' }} />}
                         </div>
                         <opt.icon size={15} color={active ? '#3b82f6' : '#94a3b8'} />
                         <div style={{ flex: 1 }}>
-                          <span style={{ fontSize: 13, fontWeight: 500, color: '#0f172a' }}>{opt.label}</span>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: '#F8FAFC' }}>{opt.label}</span>
                           <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>{opt.desc}</span>
                         </div>
                       </label>
@@ -825,8 +825,8 @@ function NewTransaction() {
 
               {/* Fee Allocation */}
               <div style={S.card}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', margin: '0 0 6px' }}>Who pays the TrustTrade platform fee?</h3>
-                <p style={{ fontSize: 12, color: '#64748b', margin: '0 0 14px' }}>TrustTrade charges a 2% fee (min R5) to protect both parties.</p>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC', margin: '0 0 6px' }}>Who pays the TrustTrade platform fee?</h3>
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: '0 0 14px' }}>TrustTrade charges a 2% fee (min R5) to protect both parties.</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
                     {
@@ -847,14 +847,14 @@ function NewTransaction() {
                   ].map(opt => {
                     const active = feeAlloc === opt.value;
                     return (
-                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${active ? '#3b82f6' : '#e2e8f0'}`, background: active ? '#eff6ff' : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
+                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${active ? '#3b82f6' : '#334155'}`, background: active ? 'rgba(59,130,246,0.14)' : '#0F172A', cursor: 'pointer', transition: 'all 0.15s' }}>
                         <input type="radio" name="fee_allocation" value={opt.value} checked={active} onChange={handleChange} style={{ display: 'none' }} />
-                        <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${active ? '#3b82f6' : '#cbd5e1'}`, background: active ? '#3b82f6' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
-                          {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+                        <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${active ? '#3b82f6' : '#475569'}`, background: active ? '#3b82f6' : '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
+                          {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1E293B' }} />}
                         </div>
                         <div style={{ flex: 1 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{opt.label}</span>
-                          <span style={{ fontSize: 11, color: '#64748b', marginLeft: 8 }}>{opt.desc}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC' }}>{opt.label}</span>
+                          <span style={{ fontSize: 11, color: '#94A3B8', marginLeft: 8 }}>{opt.desc}</span>
                         </div>
                       </label>
                     );
@@ -865,11 +865,11 @@ function NewTransaction() {
               {/* Courier Guy Delivery — shown automatically when Courier Guy is the chosen delivery method */}
               {COURIER_ENABLED && isCourierDelivery && (
                 <div style={S.card}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, padding: '12px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, padding: '12px 14px', background: 'rgba(59,130,246,0.14)', border: '1px solid rgba(59,130,246,0.30)', borderRadius: 10 }}>
                     <Truck size={16} color="#3b82f6" style={{ flexShrink: 0, marginTop: 1 }} />
                     <div>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1e3a8a', display: 'block', marginBottom: 2 }}>TrustTrade books the courier for you</span>
-                      <span style={{ fontSize: 12, color: '#1d4ed8', lineHeight: 1.5 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#60A5FA', display: 'block', marginBottom: 2 }}>TrustTrade books the courier for you</span>
+                      <span style={{ fontSize: 12, color: '#60A5FA', lineHeight: 1.5 }}>
                         Enter the pickup and delivery addresses below and we'll arrange the Courier Guy shipment on your behalf —
                         the delivery cost is added to this transaction and held in escrow. You don't need to book or pay the courier separately.
                       </span>
@@ -888,14 +888,14 @@ function NewTransaction() {
                           ].map(opt => {
                             const active = courierForm.collection_preference === opt.value;
                             return (
-                              <label key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${active ? '#3b82f6' : '#e2e8f0'}`, background: active ? '#eff6ff' : '#fff', cursor: 'pointer', transition: 'all 0.15s' }}>
+                              <label key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${active ? '#3b82f6' : '#334155'}`, background: active ? 'rgba(59,130,246,0.14)' : '#0F172A', cursor: 'pointer', transition: 'all 0.15s' }}>
                                 <input type="radio" name="collection_preference" value={opt.value} checked={active} onChange={e => setCourierForm(p => ({ ...p, collection_preference: e.target.value }))} style={{ display: 'none' }} />
-                                <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, marginTop: 1, border: `2px solid ${active ? '#3b82f6' : '#cbd5e1'}`, background: active ? '#3b82f6' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+                                <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, marginTop: 1, border: `2px solid ${active ? '#3b82f6' : '#475569'}`, background: active ? '#3b82f6' : '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1E293B' }} />}
                                 </div>
                                 <div>
-                                  <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', display: 'block' }}>{opt.label}</span>
-                                  <span style={{ fontSize: 11, color: '#64748b' }}>{opt.desc}</span>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC', display: 'block' }}>{opt.label}</span>
+                                  <span style={{ fontSize: 11, color: '#94A3B8' }}>{opt.desc}</span>
                                 </div>
                               </label>
                             );
@@ -961,7 +961,7 @@ function NewTransaction() {
                         disabled={courierLoading || (!isDropoff && !courierForm.pickup_street) || !courierForm.pickup_city || !courierForm.pickup_code || !courierForm.delivery_street || !courierForm.delivery_city || !courierForm.delivery_code}
                         style={{
                           alignSelf: 'flex-start', padding: '9px 18px', borderRadius: 8, border: 'none',
-                          background: '#3b82f6', color: '#fff', fontSize: 13, fontWeight: 600,
+                          background: '#3b82f6', color: '#0F172A', fontSize: 13, fontWeight: 600,
                           cursor: courierLoading ? 'not-allowed' : 'pointer',
                           opacity: (courierLoading || (!isDropoff && !courierForm.pickup_street) || !courierForm.pickup_city || !courierForm.pickup_code || !courierForm.delivery_street || !courierForm.delivery_city || !courierForm.delivery_code) ? 0.5 : 1,
                           display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'inherit',
@@ -989,17 +989,17 @@ function NewTransaction() {
                                 <label key={i} style={{
                                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                   padding: '11px 14px', borderRadius: 10, cursor: 'pointer',
-                                  border: `1.5px solid ${isSelected ? '#3b82f6' : '#e2e8f0'}`,
-                                  background: isSelected ? '#eff6ff' : '#fff',
+                                  border: `1.5px solid ${isSelected ? '#3b82f6' : '#334155'}`,
+                                  background: isSelected ? 'rgba(59,130,246,0.14)' : '#0F172A',
                                   transition: 'all 0.15s',
                                 }}>
                                   <input type="radio" checked={isSelected} onChange={() => setSelectedQuote(q)} style={{ display: 'none' }} />
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                                    <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${isSelected ? '#3b82f6' : '#cbd5e1'}`, background: isSelected ? '#3b82f6' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                      {isSelected && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />}
+                                    <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${isSelected ? '#3b82f6' : '#475569'}`, background: isSelected ? '#3b82f6' : '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      {isSelected && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1E293B' }} />}
                                     </div>
                                     <div style={{ minWidth: 0 }}>
-                                      <span style={{ fontSize: 13, fontWeight: 500, color: '#0f172a', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                                      <span style={{ fontSize: 13, fontWeight: 500, color: '#F8FAFC', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                                       {days && <span style={{ fontSize: 11, color: '#94a3b8' }}>{days} business day{days !== 1 ? 's' : ''}</span>}
                                     </div>
                                   </div>
@@ -1026,12 +1026,12 @@ function NewTransaction() {
               {/* Price breakdown */}
               {itemPrice >= 100 && (
                 <div style={{
-                  background: 'linear-gradient(135deg, #0f1729 0%, #1e293b 100%)',
+                  background: 'linear-gradient(135deg, #3B82F6 0%, #1e293b 100%)',
                   borderRadius: 12, padding: '16px 20px', marginBottom: 14,
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                     <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Item Value (held safely)</span>
-                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: '#fff' }}>
+                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: '#0F172A' }}>
                       R {itemPrice.toFixed(2)}
                     </span>
                   </div>
@@ -1060,7 +1060,7 @@ function NewTransaction() {
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: 10 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>Buyer Pays Total</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>Buyer Pays Total</span>
                     <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#60a5fa' }}>
                       R {buyerPaysTotal.toFixed(2)}
                     </span>
@@ -1095,20 +1095,20 @@ function NewTransaction() {
             <div>
               <div style={S.card}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 9, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(59,130,246,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Camera size={16} color="#3b82f6" />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', margin: 0 }}>Add Photos</h2>
-                    <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>Good photos build trust and prevent disputes</p>
+                    <h2 style={{ fontSize: 17, fontWeight: 700, color: '#F8FAFC', margin: 0 }}>Add Photos</h2>
+                    <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Good photos build trust and prevent disputes</p>
                   </div>
                 </div>
 
                 <div style={{
-                  background: '#fefce8', border: '1px solid #fde68a',
+                  background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.30)',
                   borderRadius: 10, padding: '10px 14px', marginBottom: 16, marginTop: 14,
                 }}>
-                  <p style={{ fontSize: 12, color: '#92400e', margin: 0 }}>
+                  <p style={{ fontSize: 12, color: '#FBBF24', margin: 0 }}>
                     Upload <strong>1–5 clear photos</strong>. Include all angles and any defects.
                   </p>
                 </div>
@@ -1133,21 +1133,21 @@ function NewTransaction() {
               {emailVerificationRequired && <EmailVerificationPrompt />}
               {/* Summary */}
               <div style={S.card}>
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', margin: '0 0 18px' }}>Review & Confirm</h2>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#F8FAFC', margin: '0 0 18px' }}>Review & Confirm</h2>
 
                 {/* Parties side by side */}
                 <div className="tt-party-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
                   {[
-                    { roleLabel: 'Buyer', name: role === 'buyer' ? user.name : formData.buyer_name, email: role === 'buyer' ? user.email : formData.buyer_email, accent: '#3b82f6', bg: '#eff6ff', isYou: role === 'buyer' },
-                    { roleLabel: 'Seller', name: role === 'seller' ? user.name : formData.seller_name, email: role === 'seller' ? user.email : formData.seller_email, accent: '#10b981', bg: '#ecfdf5', isYou: role === 'seller' },
+                    { roleLabel: 'Buyer', name: role === 'buyer' ? user.name : formData.buyer_name, email: role === 'buyer' ? user.email : formData.buyer_email, accent: '#3b82f6', bg: 'rgba(59,130,246,0.14)', isYou: role === 'buyer' },
+                    { roleLabel: 'Seller', name: role === 'seller' ? user.name : formData.seller_name, email: role === 'seller' ? user.email : formData.seller_email, accent: '#10b981', bg: 'rgba(16,185,129,0.14)', isYou: role === 'seller' },
                   ].map(p => (
                     <div key={p.roleLabel} style={{ background: p.bg, border: `1px solid ${p.accent}33`, borderRadius: 10, padding: '12px 14px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                         <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: p.accent }}>{p.roleLabel}</span>
-                        {p.isYou && <span style={{ fontSize: 9, fontWeight: 600, background: p.accent, color: '#fff', padding: '1px 5px', borderRadius: 20 }}>You</span>}
+                        {p.isYou && <span style={{ fontSize: 9, fontWeight: 600, background: p.accent, color: '#0F172A', padding: '1px 5px', borderRadius: 20 }}>You</span>}
                       </div>
-                      <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name || '—'}</p>
-                      <p style={{ margin: 0, fontSize: 11, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email || '—'}</p>
+                      <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 600, color: '#F8FAFC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name || '—'}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email || '—'}</p>
                     </div>
                   ))}
                 </div>
@@ -1161,7 +1161,7 @@ function NewTransaction() {
                     ] : []),
                     { label: 'Buyer TrustTrade Fee', value: `R ${buyerFeeContrib.toFixed(2)}`, mono: true },
                     { label: 'Seller TrustTrade Fee', value: `R ${sellerFeeContrib.toFixed(2)}`, mono: true },
-                    { label: 'Buyer Pays Total', value: `R ${buyerPaysTotal.toFixed(2)}`, mono: true, accent: '#2563eb' },
+                    { label: 'Buyer Pays Total', value: `R ${buyerPaysTotal.toFixed(2)}`, mono: true, accent: '#60A5FA' },
                     { label: 'Seller Receives', value: `R ${sellerPayout.toFixed(2)}`, mono: true, accent: '#10b981' },
                     { label: 'Photos', value: `${photos.length} uploaded` },
                     { label: 'Delivery', value: formData.delivery_method.replace('_', ' ') },
@@ -1169,13 +1169,13 @@ function NewTransaction() {
                     <div key={row.label} style={{
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       padding: '10px 0',
-                      borderBottom: i < arr.length - 1 ? '1px solid #f8fafc' : 'none',
+                      borderBottom: i < arr.length - 1 ? '1px solid #0F172A' : 'none',
                     }}>
-                      <span style={{ fontSize: 13, color: '#64748b' }}>{row.label}</span>
+                      <span style={{ fontSize: 13, color: '#94A3B8' }}>{row.label}</span>
                       <span style={{
                         fontSize: 13,
                         fontWeight: 600,
-                        color: row.accent || '#0f172a',
+                        color: row.accent || '#F8FAFC',
                         fontFamily: row.mono ? 'ui-monospace, monospace' : 'inherit',
                         maxWidth: 220,
                         overflow: 'hidden',
@@ -1192,7 +1192,7 @@ function NewTransaction() {
 
               {/* Confirmations */}
               <div style={S.card}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', margin: '0 0 14px' }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC', margin: '0 0 14px' }}>
                   Please confirm all of the following:
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1211,14 +1211,14 @@ function NewTransaction() {
                       >
                         <div style={{
                           width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-                          border: `2px solid ${checked ? '#10b981' : '#cbd5e1'}`,
-                          background: checked ? '#10b981' : '#fff',
+                          border: `2px solid ${checked ? '#10b981' : '#475569'}`,
+                          background: checked ? '#10b981' : '#0F172A',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           transition: 'all 0.15s',
                         }}>
                           {checked && <Check size={11} color="#fff" strokeWidth={3} />}
                         </div>
-                        <span style={{ fontSize: 13, color: '#374151' }}>{item.label}</span>
+                        <span style={{ fontSize: 13, color: '#E2E8F0' }}>{item.label}</span>
                       </label>
                     );
                   })}
@@ -1237,7 +1237,7 @@ function NewTransaction() {
               >
                 {loading ? (
                   <>
-                    <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                    <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#0F172A', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                     Creating...
                   </>
                 ) : (

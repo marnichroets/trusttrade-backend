@@ -10,16 +10,16 @@ import SupportChat from './SupportChat';
 import FeedbackButton from './FeedbackButton';
 
 export const V = {
-  bg:      '#0A0E14',
-  surface: '#1C2128',
-  border:  '#2D333B',
-  accent:  '#38BDF8',
-  success: '#34D399',
-  error:   '#FF3B30',
-  warn:    '#F0B429',
-  text:    '#E6EDF3',
-  sub:     '#8B949E',
-  dim:     '#4A5568',
+  bg:      '#0F172A',  // deep navy app background
+  surface: '#1E293B',  // cards, elevated from background
+  border:  '#334155',  // subtle card border
+  accent:  '#3B82F6',  // primary / CTA blue
+  success: '#10B981',
+  error:   '#EF4444',
+  warn:    '#F59E0B',
+  text:    '#F8FAFC',  // primary near-white text
+  sub:     '#94A3B8',  // secondary muted grey-blue
+  dim:     '#64748B',
   mono:    "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
   sans:    "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
 };
@@ -445,7 +445,7 @@ function DashboardLayout({ children, user: userProp, loading = false, darkMain =
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, padding: '24px', paddingBottom: 80, background: darkMain ? '#1a2332' : '#F0F2F5', color: darkMain ? '#e2e8f0' : '#0F172A' }} className="lg:pb-6">
+        <main style={{ flex: 1, padding: '24px', paddingBottom: 80, background: V.bg, color: V.text }} className="lg:pb-6">
           {children}
         </main>
       </div>

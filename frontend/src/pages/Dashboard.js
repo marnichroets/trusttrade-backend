@@ -317,7 +317,7 @@ function Dashboard() {
     : `${new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 18 ? 'Good afternoon' : 'Good evening'}, ${user?.name?.split(' ')[0] ?? ''}`;
 
   return (
-    <DashboardLayout user={user} loading={loading}>
+    <DashboardLayout user={user} loading={loading} darkMain>
       <style>{`
         .tt-command {
           position: relative;
@@ -341,10 +341,11 @@ function Dashboard() {
         }
         .tt-command-panel {
           position: relative;
-          border: 1px solid rgba(255,255,255,0.1);
-          background: linear-gradient(145deg, rgba(28,33,40,0.88), rgba(8,12,20,0.96));
-          box-shadow: 0 6px 20px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.03);
-          backdrop-filter: blur(22px);
+          border: 1px solid rgba(255,255,255,0.12);
+          /* Solid card, a step lighter than the #1a2332 canvas, so cards (incl. the
+             'Your next step' hero) stand clearly apart from the background. */
+          background: #1e2d42;
+          box-shadow: 0 6px 20px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04);
         }
         .tt-command-panel::after {
           content: "";

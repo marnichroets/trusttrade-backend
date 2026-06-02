@@ -24,7 +24,7 @@ export const V = {
   sans:    "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
-function DashboardLayout({ children, user: userProp, loading = false }) {
+function DashboardLayout({ children, user: userProp, loading = false, darkMain = false }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, user: authUser } = useAuth();
@@ -445,7 +445,7 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, padding: '24px', paddingBottom: 80, background: '#F0F2F5', color: '#0F172A' }} className="lg:pb-6">
+        <main style={{ flex: 1, padding: '24px', paddingBottom: 80, background: darkMain ? '#1a2332' : '#F0F2F5', color: darkMain ? '#e2e8f0' : '#0F172A' }} className="lg:pb-6">
           {children}
         </main>
       </div>

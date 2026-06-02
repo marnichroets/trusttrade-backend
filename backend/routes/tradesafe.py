@@ -925,11 +925,29 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
 
     transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
     if not transaction:
+        logger.warning(f"[ACCEPT_DELIVERY] txn={transaction_id} NOT FOUND (called by {user.email})")
         raise HTTPException(status_code=404, detail="Transaction not found")
+
+    # Entry breadcrumb — one line that captures everything needed to explain why a
+    # buyer's "Confirm Receipt" did or didn't trigger the payout, without DB access.
+    logger.info(
+        f"[ACCEPT_DELIVERY] confirm-receipt CALLED by {user.email} (admin={user.is_admin}) "
+        f"txn={transaction_id} tradesafe_state={transaction.get('tradesafe_state')!r} "
+        f"payment_status={transaction.get('payment_status')!r} "
+        f"delivery_method={transaction.get('delivery_method')!r} "
+        f"delivery_confirmed={transaction.get('delivery_confirmed')!r} "
+        f"allocation_id={transaction.get('tradesafe_allocation_id')!r} "
+        f"seller_token_id={transaction.get('tradesafe_seller_token_id')!r} "
+        f"buyer_email={transaction.get('buyer_email')!r}"
+    )
 
     # Only buyer can accept delivery
     is_buyer = transaction.get("buyer_email") == user.email or transaction.get("buyer_user_id") == user.user_id
     if not is_buyer and not user.is_admin:
+        logger.warning(
+            f"[ACCEPT_DELIVERY] REJECTED txn={transaction_id}: caller {user.email} is not the buyer "
+            f"(buyer_email={transaction.get('buyer_email')!r})"
+        )
         raise HTTPException(status_code=403, detail="Only buyer can confirm delivery")
     if is_buyer and not user.is_admin:
         buyer_user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
@@ -937,6 +955,11 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
 
     # Check TradeSafe state
     if transaction.get("tradesafe_state") not in ["INITIATED", "SENT", "DELIVERED"]:
+        logger.warning(
+            f"[ACCEPT_DELIVERY] REJECTED txn={transaction_id}: tradesafe_state "
+            f"{transaction.get('tradesafe_state')!r} not in [INITIATED, SENT, DELIVERED] — "
+            f"buyer cannot confirm from this state"
+        )
         raise HTTPException(
             status_code=400,
             detail=f"Cannot accept delivery in current state: {transaction.get('tradesafe_state')}"
@@ -944,7 +967,10 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
 
     allocation_id = transaction.get("tradesafe_allocation_id")
     if not allocation_id:
+        logger.warning(f"[ACCEPT_DELIVERY] REJECTED txn={transaction_id}: missing tradesafe_allocation_id")
         raise HTTPException(status_code=400, detail="Transaction not properly linked to TradeSafe")
+
+    logger.info(f"[ACCEPT_DELIVERY] guards passed txn={transaction_id} — proceeding to payout preflight")
 
     # ===== PAYOUT PREFLIGHT: Step 1 - Verify seller token exists =====
     seller_token_id = transaction.get("tradesafe_seller_token_id")

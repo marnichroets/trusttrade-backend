@@ -1097,27 +1097,39 @@ function TransactionDetail() {
   };
 
   const handleAcceptDelivery = async () => {
+    console.log('[CONFIRM_RECEIPT] clicked', { transactionId, tradesafe_state: transaction?.tradesafe_state, payment_status: transaction?.payment_status, delivery_confirmed: transaction?.delivery_confirmed, phone_verified: user?.phone_verified });
     if (!user?.phone_verified) {
+      console.warn('[CONFIRM_RECEIPT] blocked: phone not verified — redirecting to /verify/phone');
       toast.info(PHONE_VERIFICATION_PROMPT);
       navigate('/verify/phone');
       return;
     }
     const readiness = payoutReadiness?.payout_ready ? payoutReadiness : await checkPayoutReadiness();
+    console.log('[CONFIRM_RECEIPT] payout readiness', readiness);
     if (readiness && !readiness.payout_ready) {
       const issues = readiness.issues?.join(', ') || 'Unknown issue';
+      console.warn('[CONFIRM_RECEIPT] blocked: payout not ready', issues);
       toast.warning(issues);
       return;
     }
-    if (!window.confirm(`Confirm you have received the item? This will release funds to the seller. ${payoutSchedule.copy} This action cannot be undone.`)) return;
+    if (!window.confirm(`Confirm you have received the item? This will release funds to the seller. ${payoutSchedule.copy} This action cannot be undone.`)) {
+      console.log('[CONFIRM_RECEIPT] cancelled at confirm dialog');
+      return;
+    }
     setAcceptingDelivery(true);
     try {
-      await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true });
+      console.log('[CONFIRM_RECEIPT] POST /tradesafe/accept-delivery', transactionId);
+      const res = await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true });
+      console.log('[CONFIRM_RECEIPT] accept-delivery OK', res?.data);
       setDeliveryConfirmedLocally(true);
       setTransaction(prev => prev ? { ...prev, delivery_confirmed: true, tradesafe_state: 'FUNDS_RELEASED', payment_status: 'Payment processing' } : prev);
       toast.success(payoutSchedule.copy);
       fetchData();
     }
-    catch (error) { if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') { setEmailVerificationRequired(true); } else { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); } }
+    catch (error) {
+      console.error('[CONFIRM_RECEIPT] accept-delivery FAILED', { status: error.response?.status, detail: error.response?.data?.detail, error });
+      if (error.response?.data?.detail === 'EMAIL_NOT_VERIFIED') { setEmailVerificationRequired(true); } else { toast.error(parseErrorMessage(error) || 'Failed to confirm delivery.'); }
+    }
     finally { setAcceptingDelivery(false); }
   };
 

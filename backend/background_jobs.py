@@ -414,10 +414,15 @@ async def book_pending_courier_shipments(db: AsyncIOMotorDatabase) -> Dict[str, 
     try:
         # delivery_method=courier AND funded/payment-secured AND no waybill yet,
         # excluding deals that are already released or refunded (booking would be moot).
+        # NOTE: we intentionally do NOT filter out courier_booking_in_progress here.
+        # A claim can get stuck True if a previous attempt's process died mid-booking
+        # (e.g. a deploy or Railway boot/disk failure). book_courier_for_transaction
+        # now reclaims a stale claim, so surfacing these is exactly what lets the
+        # backstop recover a transaction that would otherwise be hidden forever.
+        # delivery_method is matched case-insensitively to be robust to stored casing.
         candidates = await db.transactions.find({
-            "delivery_method": "courier",
+            "delivery_method": {"$regex": "^\\s*courier\\s*$", "$options": "i"},
             "courier_waybill": {"$in": [None, ""]},
-            "courier_booking_in_progress": {"$ne": True},
             "$or": [
                 {"payment_status": "Funds Secured"},
                 {"tradesafe_state": {"$in": ["FUNDS_DEPOSITED", "FUNDS_RECEIVED"]}},

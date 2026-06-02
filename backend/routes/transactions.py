@@ -577,8 +577,10 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
             "details": risk_assessment.warnings
         })
     
-    # Determine auto-release days based on delivery method
-    delivery_method = transaction_data.delivery_method
+    # Determine auto-release days based on delivery method. Normalise the stored value
+    # (strip + lowercase) so downstream exact-match checks — courier auto-booking in
+    # particular — can never be skipped by a stray capitalised/padded "Courier".
+    delivery_method = (transaction_data.delivery_method or "courier").strip().lower()
     if delivery_method == "courier":
         auto_release_days = 3
     elif delivery_method == "bank_deposit":

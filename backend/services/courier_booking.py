@@ -11,7 +11,7 @@ tracking link. Designed to be:
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from core.config import settings
@@ -73,15 +73,33 @@ async def book_courier_for_transaction(
             logger.info(f"[COURIER_BOOK] {transaction_id} already booked — waybill={transaction.get('courier_waybill')}")
             return None
 
-        # Atomically claim the booking: only one caller can flip the flag from unset
-        # to True while no waybill exists. A non-match means someone else owns it.
+        # Atomically claim the booking. Only one caller may own an in-progress booking
+        # while no waybill exists — but the claim is allowed to EXPIRE. If a previous
+        # attempt set the flag and then died mid-booking (e.g. the process was killed
+        # during a deploy or Railway boot/disk failure), the flag would otherwise stay
+        # True forever and permanently hide this transaction from both this function and
+        # the backstop job — booking would never happen and nothing would log. So we
+        # also reclaim a stale claim: one older than CLAIM_TTL_MINUTES, or one with no
+        # timestamp at all (a legacy flag stuck before this self-healing existed).
+        CLAIM_TTL_MINUTES = 10
+        claim_now = datetime.now(timezone.utc)
+        stale_before = (claim_now - timedelta(minutes=CLAIM_TTL_MINUTES)).isoformat()
         claim = await db.transactions.update_one(
             {
                 "transaction_id": transaction_id,
                 "courier_waybill": {"$in": [None, ""]},
-                "courier_booking_in_progress": {"$ne": True},
+                "$or": [
+                    {"courier_booking_in_progress": {"$ne": True}},
+                    # in-progress but no claim timestamp → legacy/pre-fix stuck flag
+                    {"courier_booking_claimed_at": {"$in": [None, ""]}},
+                    # in-progress but the claim has expired → a previous attempt died
+                    {"courier_booking_claimed_at": {"$lt": stale_before}},
+                ],
             },
-            {"$set": {"courier_booking_in_progress": True}},
+            {"$set": {
+                "courier_booking_in_progress": True,
+                "courier_booking_claimed_at": claim_now.isoformat(),
+            }},
         )
         if claim.matched_count == 0:
             logger.info(f"[COURIER_BOOK] {transaction_id} booking already claimed/done — skipping")

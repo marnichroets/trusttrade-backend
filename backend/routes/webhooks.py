@@ -906,7 +906,7 @@ async def tradesafe_webhook(request: Request):
                 # safe to fire on every FUNDS_DEPOSITED webhook. This is the PRIMARY
                 # booking trigger — the fallback job and manual force-sync only exist
                 # as backstops if this webhook is delayed or missed.
-                if delivery_method == "courier":
+                if (delivery_method or "").strip().lower() == "courier":
                     from services.courier_booking import book_courier_for_transaction
                     asyncio.create_task(_bg(
                         book_courier_for_transaction(db, txn, email_service=email_service)

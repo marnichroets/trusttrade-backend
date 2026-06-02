@@ -41,14 +41,14 @@ const STATUS = {
   PENDING:         { label: "Awaiting agreement",                      color: "#D97706", bg: "#FFFBEB", dot: "#F59E0B" },
   ACCEPTED:        { label: "Awaiting payment",                        color: "#3B82F6", bg: "#EFF6FF", dot: "#3B82F6" },
   PAYMENT_PENDING: { label: "Awaiting payment",                        color: "#3B82F6", bg: "#EFF6FF", dot: "#60A5FA" },
-  FUNDED:          { label: "Funds secured in escrow",                 color: "#10B981", bg: "#ECFDF5", dot: "#10B981" },
+  FUNDED:          { label: "Money held safely",                       color: "#10B981", bg: "#ECFDF5", dot: "#10B981" },
   DELIVERED:       { label: "Awaiting buyer confirmation",             color: "#8B5CF6", bg: "#F5F3FF", dot: "#8B5CF6" },
   APPROVED:        { label: "Payout processing · up to 2 business days",    color: "#10B981", bg: "#ECFDF5", dot: "#10B981" },
   COMPLETE:        { label: "Completed",                               color: "#10B981", bg: "#ECFDF5", dot: "#10B981" },
   DISPUTED:        { label: "Disputed / protection hold",              color: "#EF4444", bg: "#FEF2F2", dot: "#EF4444" },
   // Milestone-deal (parent) statuses:
   PROPOSED:          { label: "Awaiting approval",        color: "#D97706", bg: "#FFFBEB", dot: "#F59E0B" },
-  STRUCTURE_APPROVED:{ label: "Approved — pay milestone", color: "#3B82F6", bg: "#EFF6FF", dot: "#3B82F6" },
+  STRUCTURE_APPROVED:{ label: "Approved — pay first stage", color: "#3B82F6", bg: "#EFF6FF", dot: "#3B82F6" },
   IN_PROGRESS:       { label: "In progress",              color: "#3B82F6", bg: "#EFF6FF", dot: "#60A5FA" },
 };
 
@@ -164,7 +164,7 @@ function StatusBadge({ status }) {
 
 function ProgressTracker({ status }) {
   const steps = ["PENDING", "ACCEPTED", "FUNDED", "DELIVERED", "COMPLETE"];
-    const stepLabels = { PENDING: "Agreement", ACCEPTED: "Payment", FUNDED: "Escrow", DELIVERED: "Confirm", COMPLETE: "Complete" };
+    const stepLabels = { PENDING: "Agreement", ACCEPTED: "Payment", FUNDED: "Held safely", DELIVERED: "Confirm", COMPLETE: "Complete" };
   const cur = status === "DISPUTED" ? "DELIVERED" : status === "PAYMENT_PENDING" ? "ACCEPTED" : status;
   const curIdx = steps.indexOf(cur);
   return (
@@ -322,7 +322,7 @@ function FundPanel({ deal }) {
       }
       setErr(
         res.message ||
-        "Could not open the secure payment page. Please try again or choose a different payment method."
+        "Couldn't start the payment. Please try again or pick another method."
       );
     } catch (e) {
       setErr(e.message);
@@ -339,10 +339,10 @@ function FundPanel({ deal }) {
     <ActionCard accent={D.blue}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
         <Lock size={15} color={D.blue} />
-        <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Fund Secure Vault Escrow</h3>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Pay safely</h3>
       </div>
       <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 16px", lineHeight: 1.5 }}>
-          Choose a payment method. Funds are held in Secure Escrow and only released when <strong style={{ color: D.text }}>you approve</strong> the delivery. Bank settlement may take up to 2 business days.
+          We hold your money safely and only pay it out when <strong style={{ color: D.text }}>you approve</strong> the work. Payouts can take up to 2 business days.
       </p>
 
       {/* Payment method selection */}
@@ -386,13 +386,14 @@ function FundPanel({ deal }) {
           <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmt(deal.amount)}</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-          <span style={{ fontSize: 12, color: D.textMuted }}>TrustTrade fee (2% — you pay)</span>
+          <span style={{ fontSize: 12, color: D.textMuted }}>TrustTrade fee (2%)</span>
           <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmt(platformFee)}</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${D.border}`, paddingTop: 8, marginTop: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: D.text }}>Total to pay</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: D.text }}>Total you pay</span>
           <span style={{ fontSize: 15, fontWeight: 700, color: D.accent, fontFamily: "ui-monospace, monospace" }}>{fmt(total)}</span>
         </div>
+        <p style={{ fontSize: 11, color: D.textSoft, margin: "8px 0 0" }}>That's everything — no hidden fees.</p>
       </div>
 
       {err && (
@@ -406,7 +407,7 @@ function FundPanel({ deal }) {
         disabled={loading}
         style={{ ...btn(D.blue), width: "100%", opacity: loading ? 0.6 : 1, cursor: loading ? "not-allowed" : "pointer" }}
       >
-        {loading ? <><Spinner /> Creating secure escrow…</> : <><Lock size={14} /> Continue to payment · {fmt(total)}</>}
+        {loading ? <><Spinner /> Setting up payment…</> : <><Lock size={14} /> Continue to payment · {fmt(total)}</>}
       </button>
     </ActionCard>
   );
@@ -576,7 +577,7 @@ export function CreateSmartDeal() {
           <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>New Smart Deal</h1>
         </div>
         <p style={{ fontSize: 13, color: D.textMuted, margin: 0 }}>
-          Funds held in Secure Vault escrow. Funds release only when you approve delivery. Bank settlement may take up to 2 business days.
+          We hold your money safely and only pay it out when you approve the work. Payouts can take up to 2 business days.
         </p>
       </div>
 
@@ -654,7 +655,7 @@ export function CreateSmartDeal() {
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#F0F9FF", border: `1px solid ${D.accent}33`, marginBottom: 18 }}>
           <Shield size={15} color={D.accent} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 12, color: D.textMuted, margin: 0, lineHeight: 1.5 }}>
-            Your freelancer will accept, you fund the Secure Vault, they deliver, and you approve to release funds from escrow. Disputes pause payout before release.
+            Your freelancer accepts, you pay (we hold the money safely), they do the work, and you approve to pay them. A dispute pauses the payout.
           </p>
         </div>
 
@@ -748,7 +749,7 @@ export function SmartDealDetail() {
   }
 
   async function handleApprove() {
-    if (!window.confirm("Approve this deliverable and release funds from escrow? Bank settlement may take up to 2 business days.")) return;
+    if (!window.confirm("Approve the work and pay the freelancer? Payouts can take up to 2 business days.")) return;
     setApproving(true); setActionError(null);
     try { await apiFetch(`/api/smart-deals/${dealId}/approve`, { method: "POST" }); await load(); }
     catch (e) { setActionError(e.message); } finally { setApproving(false); }
@@ -853,7 +854,7 @@ export function SmartDealDetail() {
               {copied ? <><CheckCircle size={13} /> Copied!</> : "Copy link"}
             </button>
             <a
-              href={`https://wa.me/?text=${encodeURIComponent(`I've created a secure TrustTrade escrow for you. Click the link to view and confirm the transaction: ${window.location.href}`)}`}
+              href={`https://wa.me/?text=${encodeURIComponent(`I've set up a secure TrustTrade deal for you. Click the link to view and confirm it: ${window.location.href}`)}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{ background: '#25D366', color: 'white', padding: '8px 14px', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, borderRadius: 4, textDecoration: 'none', flexShrink: 0 }}
@@ -875,7 +876,7 @@ export function SmartDealDetail() {
             <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Accept this deal</h3>
           </div>
           <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 14px", lineHeight: 1.5 }}>
-            Review the scope and amount. Once you accept, the client funds escrow and work begins.
+            Check the work and amount. Once you accept, the client pays and you can start.
           </p>
           <button onClick={handleAccept} disabled={accepting} style={{ ...btn(D.orange), opacity: accepting ? 0.6 : 1 }}>
             {accepting ? <><Spinner /> Accepting…</> : <>Accept deal <ArrowRight size={14} /></>}
@@ -903,8 +904,8 @@ export function SmartDealDetail() {
             </div>
             <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 14px", lineHeight: 1.5 }}>
               {deal.eft_details
-                ? "Once you've made the EFT using the details above, your payment will be confirmed within 1–2 business days. The freelancer is notified the moment funds clear. This page updates automatically."
-                : "Our escrow provider is waiting for your payment to clear. Once confirmed, the freelancer will be notified to start work. This page updates automatically."}
+                ? "Once you've paid using the details above, it can take 1–2 business days to show. The freelancer is told the moment it's in. This page updates on its own."
+                : "We're waiting for your payment to come through. Once it's in, the freelancer can start. This page updates on its own."}
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               {deal.payment_link && (
@@ -937,7 +938,7 @@ export function SmartDealDetail() {
             <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Mark as delivered</h3>
           </div>
           <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 14px", lineHeight: 1.5 }}>
-            When your work is complete, mark it as delivered. The client will review and manually approve escrow release.
+            When the work is done, mark it as done. The client reviews and approves to pay you.
           </p>
           <button onClick={handleDeliver} disabled={delivering} style={{ ...btn(D.purple), opacity: delivering ? 0.6 : 1 }}>
             {delivering ? <><Spinner /> Submitting…</> : <><CheckCircle size={14} /> Mark as delivered</>}
@@ -950,10 +951,10 @@ export function SmartDealDetail() {
         <ActionCard accent={D.success}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
             <CheckCircle size={16} color={D.success} />
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Review the deliverable</h3>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Review the work</h3>
           </div>
           <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 14px", lineHeight: 1.5 }}>
-            Approve to release funds from escrow. Bank settlement may take up to 2 business days. Not satisfied? Raise a dispute to pause payout before release.
+            Approve to pay the freelancer. Payouts can take up to 2 business days. Not happy? Raise a dispute to pause it.
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button onClick={handleApprove} disabled={approving} style={{ ...btn(D.success), flex: 1, minWidth: 160, opacity: approving ? 0.6 : 1 }}>
@@ -969,7 +970,7 @@ export function SmartDealDetail() {
               <label style={{ ...label, marginBottom: 8 }}>Describe the issue</label>
               <textarea
                 style={{ ...textarea, marginBottom: 10 }}
-                placeholder="What's wrong with the deliverable? Be specific."
+                placeholder="What's wrong with the work? Be specific."
                 value={disputeReason}
                 onChange={e => setDisputeReason(e.target.value)}
               />
@@ -991,7 +992,7 @@ export function SmartDealDetail() {
       {deal.status === "PAYMENT_PENDING" && isFreelancer && (
         <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#EFF6FF", border: `1px solid ${D.blue}44`, borderLeft: `3px solid ${D.blue}`, marginBottom: 14 }}>
           <Clock size={15} color={D.blue} style={{ flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: 13, color: D.blue, margin: 0 }}>Client is processing payment. You'll be notified once funds are secured in escrow.</p>
+          <p style={{ fontSize: 13, color: D.blue, margin: 0 }}>The client is paying. We'll let you know once it's in.</p>
         </div>
       )}
       {deal.status === "PENDING" && isClient && (
@@ -1003,13 +1004,13 @@ export function SmartDealDetail() {
       {deal.status === "ACCEPTED" && isFreelancer && (
         <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#EFF6FF", border: `1px solid ${D.blue}44`, borderLeft: `3px solid ${D.blue}`, marginBottom: 14 }}>
           <Clock size={15} color={D.blue} style={{ flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: 13, color: D.blue, margin: 0 }}>Waiting for the client to fund the escrow.</p>
+          <p style={{ fontSize: 13, color: D.blue, margin: 0 }}>Waiting for the client to pay.</p>
         </div>
       )}
       {deal.status === "FUNDED" && isClient && (
         <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#F5F3FF", border: `1px solid ${D.purple}44`, borderLeft: `3px solid ${D.purple}`, marginBottom: 14 }}>
           <Clock size={15} color={D.purple} style={{ flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: 13, color: D.purple, margin: 0 }}>Escrow funded. Waiting for the freelancer to deliver.</p>
+          <p style={{ fontSize: 13, color: D.purple, margin: 0 }}>Paid. Waiting for the freelancer to do the work.</p>
         </div>
       )}
       {deal.status === "DELIVERED" && isFreelancer && (
@@ -1021,7 +1022,7 @@ export function SmartDealDetail() {
       {(deal.status === "COMPLETE" || deal.status === "APPROVED") && (
         <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#ECFDF5", border: `1px solid ${D.success}44`, borderLeft: `3px solid ${D.success}`, marginBottom: 14 }}>
           <CheckCircle size={15} color={D.success} style={{ flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: 13, color: D.success, margin: 0, fontWeight: 500 }}>Funds released from escrow. Bank settlement may take up to 2 business days.</p>
+          <p style={{ fontSize: 13, color: D.success, margin: 0, fontWeight: 500 }}>Payment sent. Payouts can take up to 2 business days.</p>
         </div>
       )}
       {deal.dispute && (
@@ -1097,11 +1098,11 @@ export function SmartDealList() {
             </div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>Smart Deals</h1>
           </div>
-          <p style={{ fontSize: 13, color: D.textMuted, margin: 0 }}>Milestone-based payment contracts</p>
+          <p style={{ fontSize: 13, color: D.textMuted, margin: 0 }}>Pay for work in stages</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <button onClick={() => navigate("/smart-deals/new-milestone")} style={{ ...btn(D.accent, "#fff") }}>
-            <Layers size={14} /> New Milestone Deal
+            <Layers size={14} /> New staged deal
           </button>
           <button onClick={() => navigate("/smart-deals/new")} style={{ ...btn(D.blue) }}>
             + New Deal
@@ -1119,12 +1120,12 @@ export function SmartDealList() {
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <Zap size={16} color={D.accent} />
-          <span style={{ fontSize: 13, fontWeight: 700, color: D.accent, letterSpacing: "0.04em", textTransform: "uppercase" }}>Smart Deals — Milestone-Based Escrow Contracts</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: D.accent, letterSpacing: "0.04em", textTransform: "uppercase" }}>Get paid in stages</span>
         </div>
 
         <p style={{ fontSize: 14, color: D.text, lineHeight: 1.65, margin: "0 0 16px" }}>
-          Set deliverables, deadlines and payment terms upfront. Funds are locked in escrow and released
-          as each milestone is completed. Both parties are protected throughout.
+          Agree the stages and price upfront. We hold each payment safely and release it to the freelancer
+          only when the client approves that stage.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {[
@@ -1144,7 +1145,7 @@ export function SmartDealList() {
             </span>
           ))}
         </div>
-        <p style={{ fontSize: 11, color: D.textSoft, margin: "12px 0 0" }}>Pay as work is done — funds only release when you approve each milestone.</p>
+        <p style={{ fontSize: 11, color: D.textSoft, margin: "12px 0 0" }}>Pay as the work is done — money is only released when you approve each stage.</p>
       </div>
 
       {loading && (
@@ -1159,7 +1160,7 @@ export function SmartDealList() {
             <Briefcase size={22} color={D.textSoft} />
           </div>
           <h3 style={{ fontSize: 15, fontWeight: 600, color: D.text, margin: "0 0 6px" }}>No Smart Deals yet</h3>
-          <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 20px" }}>Create a Secure Vault escrow deal for your freelance work.</p>
+          <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 20px" }}>Set up a deal and get paid safely, stage by stage.</p>
           <button onClick={() => navigate("/smart-deals/new")} style={btn(D.blue)}>
             <Zap size={14} /> Create your first Smart Deal
           </button>
@@ -1186,7 +1187,7 @@ export function SmartDealList() {
                   </p>
                   {d.deal_type === "DIGITAL_WORK_MILESTONE" && d.milestone_count != null && (
                     <p style={{ fontSize: 11, color: D.accent, margin: "5px 0 0", display: "inline-flex", alignItems: "center", gap: 5 }}>
-                      <Layers size={11} /> {d.milestones_released ?? 0} of {d.milestone_count} milestones released
+                      <Layers size={11} /> Stage {d.milestones_released ?? 0} of {d.milestone_count} complete
                     </p>
                   )}
                 </div>
@@ -1248,7 +1249,7 @@ function MilestoneFundPanel({ deal, milestone, reload }) {
       });
       if (res.payment_link) { window.location.href = res.payment_link; return; }
       if (res.eft_details) { setEftDetails(res.eft_details); reload && reload(); return; }
-      setErr(res.message || "Could not open the secure payment page. Please try again or choose a different method.");
+      setErr(res.message || "Couldn't start the payment. Please try again or pick another method.");
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -1261,8 +1262,8 @@ function MilestoneFundPanel({ deal, milestone, reload }) {
   return (
     <div style={{ marginTop: 4 }}>
       <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 12px", lineHeight: 1.5 }}>
-        Pay this milestone into escrow. <strong style={{ color: D.text }}>{deal.freelancer_name || "The freelancer"}</strong> only
-        gets paid when <strong style={{ color: D.text }}>you approve</strong> their delivery. Bank settlement may take up to 2 business days.
+        Pay for this stage now. <strong style={{ color: D.text }}>{deal.freelancer_name || "The freelancer"}</strong> only
+        gets paid once <strong style={{ color: D.text }}>you approve</strong> the work. Payouts can take up to 2 business days.
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
@@ -1292,19 +1293,20 @@ function MilestoneFundPanel({ deal, milestone, reload }) {
 
       <div style={{ background: D.bg, border: `1px solid ${D.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-          <span style={{ fontSize: 12, color: D.textMuted }}>Milestone amount</span>
+          <span style={{ fontSize: 12, color: D.textMuted }}>This stage</span>
           <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(milestone.amount)}</span>
         </div>
         {money.clientPays && (
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-            <span style={{ fontSize: 12, color: D.textMuted }}>TrustTrade fee (2% — you pay)</span>
+            <span style={{ fontSize: 12, color: D.textMuted }}>TrustTrade fee (2%)</span>
             <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(platformFee)}</span>
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${D.border}`, paddingTop: 8, marginTop: 4 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: D.text }}>Total to pay now</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: D.text }}>Total you pay now</span>
           <span style={{ fontSize: 15, fontWeight: 700, color: D.accent, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(total)}</span>
         </div>
+        <p style={{ fontSize: 11, color: D.textSoft, margin: "8px 0 0" }}>That's everything — no hidden fees.</p>
       </div>
 
       {err && (
@@ -1314,7 +1316,7 @@ function MilestoneFundPanel({ deal, milestone, reload }) {
       )}
 
       <button onClick={handleFund} disabled={loading} style={{ ...btn(D.blue), width: "100%", opacity: loading ? 0.6 : 1, cursor: loading ? "not-allowed" : "pointer" }}>
-        {loading ? <><Spinner /> Creating secure escrow…</> : <><Lock size={14} /> Pay this milestone · {fmtZAR(total)}</>}
+        {loading ? <><Spinner /> Setting up payment…</> : <><Lock size={14} /> Pay this stage · {fmtZAR(total)}</>}
       </button>
     </div>
   );
@@ -1355,7 +1357,7 @@ function MilestoneCard({ deal, milestone, isClient, isFreelancer, reload }) {
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 11, fontWeight: 700, color: D.textSoft, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 3px" }}>
-            Milestone {milestone.seq}
+            Stage {milestone.seq}
           </p>
           <p style={{ fontSize: 14, fontWeight: 600, color: D.text, margin: 0, lineHeight: 1.45, wordBreak: "break-word" }}>
             {milestone.description}
@@ -1392,8 +1394,8 @@ function MilestoneCard({ deal, milestone, isClient, isFreelancer, reload }) {
           {milestone.eft_details && <EftDetailsCard details={milestone.eft_details} fallbackAmount={milestone.total ?? milestone.amount} />}
           <p style={{ fontSize: 13, color: D.textMuted, margin: "6px 0 12px", lineHeight: 1.5 }}>
             {milestone.eft_details
-              ? "Once you've made the EFT using the details above, payment is confirmed within 1–2 business days. This page updates automatically."
-              : "Waiting for your payment to clear. This page updates automatically once it's secured in escrow."}
+              ? "Once you've paid using the details above, it can take 1–2 business days to show. This page updates on its own."
+              : "Waiting for your payment to come through. This page updates on its own."}
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {milestone.payment_link && (
@@ -1411,9 +1413,9 @@ function MilestoneCard({ deal, milestone, isClient, isFreelancer, reload }) {
 
       {/* Seller: mark delivered */}
       {isFreelancer && milestone.status === "FUNDED" && (
-        <button onClick={() => act("/deliver", "deliver", null, "Mark this milestone as delivered? The client will be notified to review.")}
+        <button onClick={() => act("/deliver", "deliver", null, "Mark this stage as done? We'll let the client know to review it.")}
           disabled={busy === "deliver"} style={{ ...btn(D.purple), marginTop: 6, opacity: busy === "deliver" ? 0.6 : 1 }}>
-          {busy === "deliver" ? <><Spinner /> Submitting…</> : <><CheckCircle size={14} /> Mark milestone delivered</>}
+          {busy === "deliver" ? <><Spinner /> Submitting…</> : <><CheckCircle size={14} /> Mark stage done</>}
         </button>
       )}
 
@@ -1421,9 +1423,9 @@ function MilestoneCard({ deal, milestone, isClient, isFreelancer, reload }) {
       {isClient && milestone.status === "DELIVERED" && (
         <div style={{ marginTop: 6 }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button onClick={() => act("/approve", "approve", null, "Approve this milestone and release its payment? Bank settlement may take up to 2 business days.")}
+            <button onClick={() => act("/approve", "approve", null, "Approve this stage and pay the freelancer? Payouts can take up to 2 business days.")}
               disabled={busy === "approve"} style={{ ...btn(D.success), flex: 1, minWidth: 160, opacity: busy === "approve" ? 0.6 : 1 }}>
-              {busy === "approve" ? <><Spinner /> Releasing…</> : <><CheckCircle size={14} /> Approve & release payment</>}
+              {busy === "approve" ? <><Spinner /> Releasing…</> : <><CheckCircle size={14} /> Approve & pay</>}
             </button>
             <button onClick={() => setShowDispute(v => !v)} style={{ ...btn(D.danger), minWidth: 100 }}>
               <AlertTriangle size={14} /> Dispute
@@ -1431,7 +1433,7 @@ function MilestoneCard({ deal, milestone, isClient, isFreelancer, reload }) {
           </div>
           {showDispute && (
             <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${D.success}33` }}>
-              <label style={{ ...label, marginBottom: 8 }}>What's wrong with this milestone?</label>
+              <label style={{ ...label, marginBottom: 8 }}>What's wrong with this stage?</label>
               <textarea style={{ ...textarea, marginBottom: 10 }} placeholder="Be specific so we can help resolve it quickly."
                 value={disputeReason} onChange={e => setDisputeReason(e.target.value)} />
               <div style={{ display: "flex", gap: 8 }}>
@@ -1451,21 +1453,21 @@ function MilestoneCard({ deal, milestone, isClient, isFreelancer, reload }) {
 
       {/* Status notes */}
       {isFreelancer && milestone.status === "PAYMENT_PENDING" && (
-        <p style={{ fontSize: 12, color: D.blue, margin: "6px 0 0" }}>The client is paying this milestone. You'll be notified once funds are secured.</p>
+        <p style={{ fontSize: 12, color: D.blue, margin: "6px 0 0" }}>The client is paying for this stage. We'll let you know once it's paid.</p>
       )}
       {isFreelancer && milestone.status === "DELIVERED" && (
-        <p style={{ fontSize: 12, color: D.success, margin: "6px 0 0" }}>Delivered — waiting for the client to review and approve.</p>
+        <p style={{ fontSize: 12, color: D.success, margin: "6px 0 0" }}>Done — waiting for the client to check and approve.</p>
       )}
       {isClient && milestone.status === "FUNDED" && (
-        <p style={{ fontSize: 12, color: D.success, margin: "6px 0 0" }}>Paid into escrow. Waiting for {deal.freelancer_name || "the freelancer"} to deliver this milestone.</p>
+        <p style={{ fontSize: 12, color: D.success, margin: "6px 0 0" }}>Paid. Waiting for {deal.freelancer_name || "the freelancer"} to do this stage.</p>
       )}
       {milestone.status === "RELEASED" && (
         <p style={{ fontSize: 12, color: D.success, margin: "6px 0 0", display: "flex", alignItems: "center", gap: 6 }}>
-          <CheckCircle size={13} /> Approved — payment released (settles within 2 business days).
+          <CheckCircle size={13} /> Approved — payment sent (can take up to 2 business days).
         </p>
       )}
       {milestone.status === "PROPOSED" && (
-        <p style={{ fontSize: 12, color: D.textSoft, margin: "6px 0 0" }}>Opens for payment once the previous milestone is approved.</p>
+        <p style={{ fontSize: 12, color: D.textSoft, margin: "6px 0 0" }}>You'll pay for this once the previous stage is approved.</p>
       )}
       {milestone.status === "DISPUTED" && milestone.dispute && (
         <p style={{ fontSize: 12, color: "#B91C1C", margin: "6px 0 0" }}>
@@ -1488,15 +1490,15 @@ function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }
 
   const DEAL_LABEL = {
     PROPOSED: "Awaiting your approval",
-    STRUCTURE_APPROVED: "Approved — pay the first milestone",
-    IN_PROGRESS: `${released} of ${milestones.length} milestones paid out`,
-    COMPLETE: "All milestones complete",
-    DISPUTED: "A milestone is disputed",
+    STRUCTURE_APPROVED: "Approved — pay the first stage",
+    IN_PROGRESS: `Stage ${released} of ${milestones.length} complete`,
+    COMPLETE: "All stages complete",
+    DISPUTED: "A stage is disputed",
   };
   const dealColor = deal.status === "DISPUTED" ? D.danger : deal.status === "COMPLETE" ? D.success : D.blue;
 
   async function approveStructure() {
-    if (!window.confirm("Approve these milestones? You'll pay them one at a time, starting with the first.")) return;
+    if (!window.confirm("Approve these stages? You'll pay one at a time, starting with the first.")) return;
     setApprovingStructure(true); setActionError(null);
     try { await apiFetch(`/api/smart-deals/${deal.deal_id}/approve-structure`, { method: "POST" }); await reload(); }
     catch (e) { setActionError(e.message); } finally { setApprovingStructure(false); }
@@ -1526,7 +1528,7 @@ function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <div style={{ fontSize: 22, fontWeight: 700, color: D.accent, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(deal.amount)}</div>
           <div style={{ fontSize: 11, color: D.textSoft, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-            {milestones.length} milestones
+            {milestones.length} stages
           </div>
         </div>
       </div>
@@ -1544,13 +1546,15 @@ function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }
             <Shield size={16} color={D.accent} />
             <h3 style={{ fontSize: 15, fontWeight: 700, color: D.text, margin: 0 }}>Review &amp; approve to get started</h3>
           </div>
-          <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 14px", lineHeight: 1.6 }}>
-            <strong style={{ color: D.text }}>{sellerName}</strong> has sent you a Smart Deal. Review the milestones below and
-            approve the structure to get started. You'll pay each milestone one at a time — your money is held safely until
-            you confirm the work is done.
+          <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 10px", lineHeight: 1.6 }}>
+            <strong style={{ color: D.text }}>{sellerName}</strong> has sent you a deal in {milestones.length} stages. Approve it to start.
+            You pay one stage at a time, and we hold your money safely until you say the work is done.
+          </p>
+          <p style={{ fontSize: 12, color: D.textSoft, margin: "0 0 14px", lineHeight: 1.6 }}>
+            You'll see the exact amount, plus our 2% fee, before every payment — no surprises.
           </p>
           <button onClick={approveStructure} disabled={approvingStructure} style={{ ...btn(D.accent, "#fff"), opacity: approvingStructure ? 0.6 : 1 }}>
-            {approvingStructure ? <><Spinner /> Approving…</> : <><CheckCircle size={14} /> Approve milestones</>}
+            {approvingStructure ? <><Spinner /> Approving…</> : <><CheckCircle size={14} /> Approve &amp; start</>}
           </button>
         </ActionCard>
       )}
@@ -1560,7 +1564,7 @@ function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }
         <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#FFFBEB", border: `1px solid ${D.warning}44`, borderLeft: `3px solid ${D.warning}`, marginBottom: 14 }}>
           <Clock size={15} color={D.warning} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 13, color: D.warning, margin: 0 }}>
-            Waiting for {deal.client_name || "your client"} to review and approve the milestones. They'll pay the first one to start.
+            Waiting for {deal.client_name || "your client"} to review and approve. They'll pay the first stage to start.
           </p>
         </div>
       )}
@@ -1569,7 +1573,7 @@ function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }
       {deal.status === "COMPLETE" && (
         <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#ECFDF5", border: `1px solid ${D.success}44`, borderLeft: `3px solid ${D.success}`, marginBottom: 14 }}>
           <CheckCircle size={15} color={D.success} style={{ flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: 13, color: D.success, margin: 0, fontWeight: 500 }}>All milestones approved and paid out. This Smart Deal is complete.</p>
+          <p style={{ fontSize: 13, color: D.success, margin: 0, fontWeight: 500 }}>All stages approved and paid out. This deal is complete.</p>
         </div>
       )}
 
@@ -1578,7 +1582,7 @@ function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: D.text }}>Progress</span>
-            <span style={{ fontSize: 12, color: D.textMuted }}>{released} of {milestones.length} released</span>
+            <span style={{ fontSize: 12, color: D.textMuted }}>Stage {released} of {milestones.length} complete</span>
           </div>
           <div style={{ height: 6, background: D.bg, borderRadius: 6, overflow: "hidden" }}>
             <div style={{ width: `${milestones.length ? (released / milestones.length) * 100 : 0}%`, height: "100%", background: D.success, borderRadius: 6, transition: "width 0.3s" }} />
@@ -1588,7 +1592,7 @@ function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }
 
       {/* Milestones */}
       <h3 style={{ fontSize: 13, fontWeight: 700, color: D.text, margin: "0 0 12px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-        Milestones
+        Stages
       </h3>
       {milestones.map(m => (
         <MilestoneCard key={m.milestone_id} deal={deal} milestone={m} isClient={isClient} isFreelancer={isFreelancer} reload={reload} />
@@ -1650,7 +1654,7 @@ export function CreateMilestoneDeal() {
       if (!m.description.trim()) e[`ms_desc_${i}`] = "Describe this milestone";
       const amt = Number(m.amount);
       if (!m.amount || isNaN(amt) || amt <= 0) e[`ms_amt_${i}`] = "Enter an amount";
-      else if (amt < MIN_TRANSACTION_AMOUNT) e[`ms_amt_${i}`] = `Min R${MIN_TRANSACTION_AMOUNT} per milestone`;
+      else if (amt < MIN_TRANSACTION_AMOUNT) e[`ms_amt_${i}`] = `Min R${MIN_TRANSACTION_AMOUNT} per stage`;
     });
     return e;
   }
@@ -1692,7 +1696,7 @@ export function CreateMilestoneDeal() {
           <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #3b82f6, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Layers size={17} color="#fff" />
           </div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>New Milestone Smart Deal</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>New staged deal</h1>
         </div>
       </div>
 
@@ -1700,9 +1704,8 @@ export function CreateMilestoneDeal() {
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "14px 16px", borderRadius: 12, background: "linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%)", border: `1px solid ${D.borderLight}`, marginBottom: 18 }}>
         <Zap size={16} color={D.accent} style={{ flexShrink: 0, marginTop: 2 }} />
         <p style={{ fontSize: 13, color: D.text, margin: 0, lineHeight: 1.6 }}>
-          Smart Deals let you get paid in stages. Your client pays each milestone upfront into escrow before you start that
-          phase of work. You only get paid when they approve your delivery — but they can't withhold payment unfairly because
-          the money is already locked in.
+          Get paid in stages. Your client pays for each stage before you start it, and we hold the money safely.
+          You're paid as soon as they approve the work — and they can't unfairly hold it back.
         </p>
       </div>
 
@@ -1731,15 +1734,15 @@ export function CreateMilestoneDeal() {
         </div>
 
         {/* Milestones */}
-        <label style={{ ...label, marginTop: 8 }}>Milestones</label>
+        <label style={{ ...label, marginTop: 8 }}>Stages</label>
         <p style={{ fontSize: 12, color: D.textMuted, margin: "0 0 12px" }}>
-          Break the work into stages. Each milestone is paid into escrow separately, so each must be at least R{MIN_TRANSACTION_AMOUNT}.
+          Break the work into stages. Each stage is paid for separately, so each must be at least R{MIN_TRANSACTION_AMOUNT}.
         </p>
 
         {milestones.map((m, i) => (
           <div key={i} style={{ background: D.surfaceHi, border: `1px solid ${D.border}`, borderRadius: 10, padding: "12px 14px", marginBottom: 10 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: D.textSoft, textTransform: "uppercase", letterSpacing: "0.06em" }}>Milestone {i + 1}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: D.textSoft, textTransform: "uppercase", letterSpacing: "0.06em" }}>Stage {i + 1}</span>
               {milestones.length > 1 && (
                 <button onClick={() => removeMs(i)} style={{ background: "none", border: "none", color: D.textMuted, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, padding: 0 }}>
                   <Trash2 size={13} /> Remove
@@ -1755,7 +1758,7 @@ export function CreateMilestoneDeal() {
 
         {milestones.length < 20 && (
           <button onClick={addMs} style={{ ...btn("transparent", D.accent, { border: `1px dashed ${D.accent}66`, width: "100%", marginBottom: 14 }) }}>
-            <Plus size={14} /> Add another milestone
+            <Plus size={14} /> Add another stage
           </button>
         )}
 
@@ -1765,7 +1768,7 @@ export function CreateMilestoneDeal() {
             <span style={{ fontSize: 13, fontWeight: 700, color: D.text }}>Total deal value</span>
             <span style={{ fontSize: 17, fontWeight: 700, color: D.accent, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(total)}</span>
           </div>
-          <p style={{ fontSize: 11, color: D.textMuted, margin: "6px 0 0" }}>This is the sum of all milestones. Your client pays them one at a time.</p>
+          <p style={{ fontSize: 11, color: D.textMuted, margin: "6px 0 0" }}>The total of all stages. Your client pays one stage at a time.</p>
         </div>
 
         {/* Fee payer */}
@@ -1773,7 +1776,7 @@ export function CreateMilestoneDeal() {
           <label style={{ ...label, marginBottom: 10 }}>Who pays the TrustTrade fee?</label>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {[
-              { value: "CLIENT", title: "Client pays", desc: "Fee added to each milestone" },
+              { value: "CLIENT", title: "Client pays", desc: "Fee added to each stage" },
               { value: "FREELANCER", title: "I pay (freelancer)", desc: "Fee deducted from each payout" },
             ].map(opt => {
               const active = form.fee_paid_by === opt.value;

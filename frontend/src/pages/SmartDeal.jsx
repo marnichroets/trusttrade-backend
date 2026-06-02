@@ -1102,7 +1102,7 @@ export function SmartDealList() {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <button onClick={() => navigate("/smart-deals/new-milestone")} style={{ ...btn(D.accent, "#fff") }}>
-            <Layers size={14} /> New staged deal
+            <Layers size={14} /> New Project Deal
           </button>
           <button onClick={() => navigate("/smart-deals/new")} style={{ ...btn(D.blue) }}>
             + New Deal
@@ -1696,7 +1696,7 @@ export function CreateMilestoneDeal() {
           <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #3b82f6, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Layers size={17} color="#fff" />
           </div>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>New staged deal</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>New Project Deal</h1>
         </div>
       </div>
 

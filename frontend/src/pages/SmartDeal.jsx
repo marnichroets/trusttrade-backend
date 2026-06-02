@@ -18,16 +18,17 @@ const MIN_DELIVERY_DAYS = 1;
 const MAX_DELIVERY_DAYS = 60;
 const DELIVERY_DAYS_MESSAGE = `Delivery days must be between ${MIN_DELIVERY_DAYS} and ${MAX_DELIVERY_DAYS}`;
 
+// Light "clean fintech" palette. bg = subtle page/field grey, surface = white card.
 const D = {
-  bg:           "#070D18",
-  surface:      "#0D1526",
-  surfaceHi:    "#121D33",
-  border:       "#1A2A45",
-  borderLight:  "#1E3254",
-  text:         "#E2E8F0",
-  textMuted:    "#8892A4",
-  textSoft:     "#4E6080",
-  accent:       "#00D1FF",
+  bg:           "#F8FAFC",  // subtle grey: page panels & input fields (sit on white cards)
+  surface:      "#FFFFFF",  // card background
+  surfaceHi:    "#F1F5F9",  // raised rows / inbound chat bubbles / inactive toggles
+  border:       "#E2E8F0",
+  borderLight:  "#CBD5E1",
+  text:         "#0F172A",
+  textMuted:    "#64748B",
+  textSoft:     "#94A3B8",
+  accent:       "#0284C7",  // primary CTA blue (reads as white-on-blue AND as text on light)
   blue:         "#3B82F6",
   success:      "#10B981",
   warning:      "#F59E0B",
@@ -37,29 +38,29 @@ const D = {
 };
 
 const STATUS = {
-  PENDING:         { label: "Awaiting agreement",                      color: "#D97706", bg: "#1A1200", dot: "#F59E0B" },
-  ACCEPTED:        { label: "Awaiting payment",                        color: "#3B82F6", bg: "#071428", dot: "#3B82F6" },
-  PAYMENT_PENDING: { label: "Awaiting payment",                        color: "#3B82F6", bg: "#071428", dot: "#60A5FA" },
-  FUNDED:          { label: "Funds secured in escrow",                 color: "#10B981", bg: "#041A0F", dot: "#10B981" },
-  DELIVERED:       { label: "Awaiting buyer confirmation",             color: "#8B5CF6", bg: "#100820", dot: "#8B5CF6" },
-  APPROVED:        { label: "Payout processing · up to 2 business days",    color: "#10B981", bg: "#041A0F", dot: "#10B981" },
-  COMPLETE:        { label: "Completed",                               color: "#10B981", bg: "#041A0F", dot: "#10B981" },
-  DISPUTED:        { label: "Disputed / protection hold",              color: "#EF4444", bg: "#1A0808", dot: "#EF4444" },
+  PENDING:         { label: "Awaiting agreement",                      color: "#D97706", bg: "#FFFBEB", dot: "#F59E0B" },
+  ACCEPTED:        { label: "Awaiting payment",                        color: "#3B82F6", bg: "#EFF6FF", dot: "#3B82F6" },
+  PAYMENT_PENDING: { label: "Awaiting payment",                        color: "#3B82F6", bg: "#EFF6FF", dot: "#60A5FA" },
+  FUNDED:          { label: "Funds secured in escrow",                 color: "#10B981", bg: "#ECFDF5", dot: "#10B981" },
+  DELIVERED:       { label: "Awaiting buyer confirmation",             color: "#8B5CF6", bg: "#F5F3FF", dot: "#8B5CF6" },
+  APPROVED:        { label: "Payout processing · up to 2 business days",    color: "#10B981", bg: "#ECFDF5", dot: "#10B981" },
+  COMPLETE:        { label: "Completed",                               color: "#10B981", bg: "#ECFDF5", dot: "#10B981" },
+  DISPUTED:        { label: "Disputed / protection hold",              color: "#EF4444", bg: "#FEF2F2", dot: "#EF4444" },
   // Milestone-deal (parent) statuses:
-  PROPOSED:          { label: "Awaiting approval",        color: "#D97706", bg: "#1A1200", dot: "#F59E0B" },
-  STRUCTURE_APPROVED:{ label: "Approved — pay milestone", color: "#3B82F6", bg: "#071428", dot: "#3B82F6" },
-  IN_PROGRESS:       { label: "In progress",              color: "#3B82F6", bg: "#071428", dot: "#60A5FA" },
+  PROPOSED:          { label: "Awaiting approval",        color: "#D97706", bg: "#FFFBEB", dot: "#F59E0B" },
+  STRUCTURE_APPROVED:{ label: "Approved — pay milestone", color: "#3B82F6", bg: "#EFF6FF", dot: "#3B82F6" },
+  IN_PROGRESS:       { label: "In progress",              color: "#3B82F6", bg: "#EFF6FF", dot: "#60A5FA" },
 };
 
 // Per-milestone status chips (milestone deals).
 const MS_STATUS = {
-  PROPOSED:        { label: "Not started yet",          color: "#8892A4", bg: "#0D1526", dot: "#4E6080" },
-  AWAITING_PAYMENT:{ label: "Ready to pay",             color: "#3B82F6", bg: "#071428", dot: "#3B82F6" },
-  PAYMENT_PENDING: { label: "Awaiting payment",         color: "#3B82F6", bg: "#071428", dot: "#60A5FA" },
-  FUNDED:          { label: "Paid — work in progress",  color: "#10B981", bg: "#041A0F", dot: "#10B981" },
-  DELIVERED:       { label: "Delivered — please review",color: "#8B5CF6", bg: "#100820", dot: "#8B5CF6" },
-  RELEASED:        { label: "Approved & paid",          color: "#10B981", bg: "#041A0F", dot: "#10B981" },
-  DISPUTED:        { label: "On hold — disputed",       color: "#EF4444", bg: "#1A0808", dot: "#EF4444" },
+  PROPOSED:        { label: "Not started yet",          color: "#64748B", bg: "#F1F5F9", dot: "#94A3B8" },
+  AWAITING_PAYMENT:{ label: "Ready to pay",             color: "#3B82F6", bg: "#EFF6FF", dot: "#3B82F6" },
+  PAYMENT_PENDING: { label: "Awaiting payment",         color: "#3B82F6", bg: "#EFF6FF", dot: "#60A5FA" },
+  FUNDED:          { label: "Paid — work in progress",  color: "#10B981", bg: "#ECFDF5", dot: "#10B981" },
+  DELIVERED:       { label: "Delivered — please review",color: "#8B5CF6", bg: "#F5F3FF", dot: "#8B5CF6" },
+  RELEASED:        { label: "Approved & paid",          color: "#10B981", bg: "#ECFDF5", dot: "#10B981" },
+  DISPUTED:        { label: "On hold — disputed",       color: "#EF4444", bg: "#FEF2F2", dot: "#EF4444" },
 };
 
 const PAYMENT_METHODS = [
@@ -277,7 +278,7 @@ function EftDetailsCard({ details, fallbackAmount }) {
           </div>
         ))}
       </div>
-      <p style={{ fontSize: 12, color: D.warning, background: "#1A1200", border: `1px solid ${D.warning}44`, borderRadius: 8, padding: "10px 12px", margin: 0 }}>
+      <p style={{ fontSize: 12, color: D.warning, background: "#FFFBEB", border: `1px solid ${D.warning}44`, borderRadius: 8, padding: "10px 12px", margin: 0 }}>
         Use the reference <strong>exactly as shown</strong>. This deal stays in <strong>Awaiting Payment</strong> until the funds are confirmed (1–2 business days).
       </p>
     </ActionCard>
@@ -356,7 +357,7 @@ function FundPanel({ deal }) {
                 display: "flex", alignItems: "center", gap: 12,
                 padding: "12px 14px", borderRadius: 10, cursor: "pointer",
                 border: `1.5px solid ${active ? D.blue : D.border}`,
-                background: active ? "#071428" : D.surfaceHi,
+                background: active ? "#EFF6FF" : D.surfaceHi,
                 transition: "all 0.15s",
               }}
             >
@@ -395,7 +396,7 @@ function FundPanel({ deal }) {
       </div>
 
       {err && (
-        <div style={{ padding: "10px 14px", borderRadius: 8, background: "#1A0808", border: `1px solid ${D.danger}44`, color: D.danger, fontSize: 13, marginBottom: 12 }}>
+        <div style={{ padding: "10px 14px", borderRadius: 8, background: "#FEF2F2", border: `1px solid ${D.danger}44`, color: D.danger, fontSize: 13, marginBottom: 12 }}>
           {err}
         </div>
       )}
@@ -477,8 +478,8 @@ function MessageThread({ dealId, messages, currentUserId }) {
                 {!mine && (
                   <p style={{ fontSize: 10, fontWeight: 600, color: D.accent, margin: "0 0 3px" }}>{m.sender_name || m.sender_email}</p>
                 )}
-                <p style={{ fontSize: 13, color: D.text, margin: 0, lineHeight: 1.4, wordBreak: "break-word" }}>{m.content}</p>
-                <p style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", margin: "3px 0 0", textAlign: mine ? "right" : "left" }}>
+                <p style={{ fontSize: 13, color: mine ? "#fff" : D.text, margin: 0, lineHeight: 1.4, wordBreak: "break-word" }}>{m.content}</p>
+                <p style={{ fontSize: 10, color: mine ? "rgba(255,255,255,0.75)" : D.textMuted, margin: "3px 0 0", textAlign: mine ? "right" : "left" }}>
                   {new Date(m.sent_at).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit" })}
                 </p>
               </div>
@@ -580,7 +581,7 @@ export function CreateSmartDeal() {
       </div>
 
       {apiError && (
-        <div style={{ padding: "12px 16px", borderRadius: 10, background: "#1A0808", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13, marginBottom: 14 }}>
+        <div style={{ padding: "12px 16px", borderRadius: 10, background: "#FEF2F2", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13, marginBottom: 14 }}>
           {apiError}
         </div>
       )}
@@ -630,7 +631,7 @@ export function CreateSmartDeal() {
                   display: "flex", alignItems: "flex-start", gap: 10,
                   padding: "12px 14px", borderRadius: 10,
                   border: `1.5px solid ${active ? D.blue : D.border}`,
-                  background: active ? "#071428" : D.surfaceHi, cursor: "pointer",
+                  background: active ? "#EFF6FF" : D.surfaceHi, cursor: "pointer",
                 }}>
                   <div style={{
                     width: 16, height: 16, borderRadius: "50%", flexShrink: 0, marginTop: 1,
@@ -650,14 +651,14 @@ export function CreateSmartDeal() {
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#070D18", border: `1px solid ${D.accent}33`, marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#F0F9FF", border: `1px solid ${D.accent}33`, marginBottom: 18 }}>
           <Shield size={15} color={D.accent} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 12, color: D.textMuted, margin: 0, lineHeight: 1.5 }}>
             Your freelancer will accept, you fund the Secure Vault, they deliver, and you approve to release funds from escrow. Disputes pause payout before release.
           </p>
         </div>
 
-        <button onClick={handleSubmit} disabled={loading} style={{ ...btn(D.accent, "#000"), width: "100%", opacity: loading ? 0.6 : 1, cursor: loading ? "not-allowed" : "pointer" }}>
+        <button onClick={handleSubmit} disabled={loading} style={{ ...btn(D.accent, "#fff"), width: "100%", opacity: loading ? 0.6 : 1, cursor: loading ? "not-allowed" : "pointer" }}>
           {loading ? <><Spinner /> Creating…</> : <><Zap size={14} /> Create Smart Deal</>}
         </button>
       </div>
@@ -777,7 +778,7 @@ export function SmartDealDetail() {
 
   if (error) return (
     <div style={{ maxWidth: 680, margin: "0 auto" }}>
-      <div style={{ padding: "14px 16px", borderRadius: 10, background: "#1A0808", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13 }}>
+      <div style={{ padding: "14px 16px", borderRadius: 10, background: "#FEF2F2", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13 }}>
         {error}
       </div>
     </div>
@@ -819,7 +820,7 @@ export function SmartDealDetail() {
       </div>
 
       {actionError && (
-        <div style={{ padding: "12px 16px", borderRadius: 10, background: "#1A0808", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13, marginBottom: 14 }}>
+        <div style={{ padding: "12px 16px", borderRadius: 10, background: "#FEF2F2", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13, marginBottom: 14 }}>
           {actionError}
         </div>
       )}
@@ -988,49 +989,49 @@ export function SmartDealDetail() {
       {/* ── Status alerts ── */}
 
       {deal.status === "PAYMENT_PENDING" && isFreelancer && (
-        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#071428", border: `1px solid ${D.blue}44`, borderLeft: `3px solid ${D.blue}`, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#EFF6FF", border: `1px solid ${D.blue}44`, borderLeft: `3px solid ${D.blue}`, marginBottom: 14 }}>
           <Clock size={15} color={D.blue} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 13, color: D.blue, margin: 0 }}>Client is processing payment. You'll be notified once funds are secured in escrow.</p>
         </div>
       )}
       {deal.status === "PENDING" && isClient && (
-        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#1A1200", border: `1px solid ${D.warning}44`, borderLeft: `3px solid ${D.warning}`, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#FFFBEB", border: `1px solid ${D.warning}44`, borderLeft: `3px solid ${D.warning}`, marginBottom: 14 }}>
           <Clock size={15} color={D.warning} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 13, color: D.warning, margin: 0 }}>Waiting for the freelancer to accept the deal.</p>
         </div>
       )}
       {deal.status === "ACCEPTED" && isFreelancer && (
-        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#071428", border: `1px solid ${D.blue}44`, borderLeft: `3px solid ${D.blue}`, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#EFF6FF", border: `1px solid ${D.blue}44`, borderLeft: `3px solid ${D.blue}`, marginBottom: 14 }}>
           <Clock size={15} color={D.blue} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 13, color: D.blue, margin: 0 }}>Waiting for the client to fund the escrow.</p>
         </div>
       )}
       {deal.status === "FUNDED" && isClient && (
-        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#100820", border: `1px solid ${D.purple}44`, borderLeft: `3px solid ${D.purple}`, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#F5F3FF", border: `1px solid ${D.purple}44`, borderLeft: `3px solid ${D.purple}`, marginBottom: 14 }}>
           <Clock size={15} color={D.purple} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 13, color: D.purple, margin: 0 }}>Escrow funded. Waiting for the freelancer to deliver.</p>
         </div>
       )}
       {deal.status === "DELIVERED" && isFreelancer && (
-        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#041A0F", border: `1px solid ${D.success}44`, borderLeft: `3px solid ${D.success}`, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#ECFDF5", border: `1px solid ${D.success}44`, borderLeft: `3px solid ${D.success}`, marginBottom: 14 }}>
           <Clock size={15} color={D.success} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 13, color: D.success, margin: 0 }}>Work delivered. Waiting for the client to review and approve.</p>
         </div>
       )}
       {(deal.status === "COMPLETE" || deal.status === "APPROVED") && (
-        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#041A0F", border: `1px solid ${D.success}44`, borderLeft: `3px solid ${D.success}`, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#ECFDF5", border: `1px solid ${D.success}44`, borderLeft: `3px solid ${D.success}`, marginBottom: 14 }}>
           <CheckCircle size={15} color={D.success} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 13, color: D.success, margin: 0, fontWeight: 500 }}>Funds released from escrow. Bank settlement may take up to 2 business days.</p>
         </div>
       )}
       {deal.dispute && (
-        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#1A0808", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#FEF2F2", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, marginBottom: 14 }}>
           <AlertTriangle size={15} color={D.danger} style={{ flexShrink: 0, marginTop: 1 }} />
           <div>
             <p style={{ fontSize: 13, color: D.danger, margin: "0 0 3px", fontWeight: 600 }}>
               Dispute raised {new Date(deal.dispute.raised_at).toLocaleDateString("en-ZA")}
             </p>
-            <p style={{ fontSize: 12, color: "#ff9999", margin: 0 }}>{deal.dispute.reason}</p>
+            <p style={{ fontSize: 12, color: "#B91C1C", margin: 0 }}>{deal.dispute.reason}</p>
           </div>
         </div>
       )}
@@ -1099,7 +1100,7 @@ export function SmartDealList() {
           <p style={{ fontSize: 13, color: D.textMuted, margin: 0 }}>Milestone-based payment contracts</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button onClick={() => navigate("/smart-deals/new-milestone")} style={{ ...btn(D.accent, "#000") }}>
+          <button onClick={() => navigate("/smart-deals/new-milestone")} style={{ ...btn(D.accent, "#fff") }}>
             <Layers size={14} /> New Milestone Deal
           </button>
           <button onClick={() => navigate("/smart-deals/new")} style={{ ...btn(D.blue) }}>
@@ -1110,7 +1111,7 @@ export function SmartDealList() {
 
       {/* Hero explanation */}
       <div style={{
-        background: "linear-gradient(135deg, #0d1f3c 0%, #071428 100%)",
+        background: "linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%)",
         border: `1px solid ${D.borderLight}`,
         borderRadius: 14,
         padding: "20px 22px",
@@ -1172,7 +1173,7 @@ export function SmartDealList() {
               key={d.deal_id}
               onClick={() => navigate(`/smart-deals/${d.deal_id}`)}
               style={{ ...card({ marginBottom: 0, cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s" }) }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = D.borderLight; e.currentTarget.style.boxShadow = `0 4px 24px rgba(0,0,0,0.4)`; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = D.borderLight; e.currentTarget.style.boxShadow = `0 4px 16px rgba(15,23,42,0.10)`; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = D.border; e.currentTarget.style.boxShadow = "none"; }}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
@@ -1270,7 +1271,7 @@ function MilestoneFundPanel({ deal, milestone, reload }) {
           return (
             <label key={m.id} onClick={() => setMethod(m.id)} style={{
               display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, cursor: "pointer",
-              border: `1.5px solid ${active ? D.blue : D.border}`, background: active ? "#071428" : D.surfaceHi, transition: "all 0.15s",
+              border: `1.5px solid ${active ? D.blue : D.border}`, background: active ? "#EFF6FF" : D.surfaceHi, transition: "all 0.15s",
             }}>
               <div style={{
                 width: 16, height: 16, borderRadius: "50%", flexShrink: 0,
@@ -1307,7 +1308,7 @@ function MilestoneFundPanel({ deal, milestone, reload }) {
       </div>
 
       {err && (
-        <div style={{ padding: "10px 14px", borderRadius: 8, background: "#1A0808", border: `1px solid ${D.danger}44`, color: D.danger, fontSize: 13, marginBottom: 12 }}>
+        <div style={{ padding: "10px 14px", borderRadius: 8, background: "#FEF2F2", border: `1px solid ${D.danger}44`, color: D.danger, fontSize: 13, marginBottom: 12 }}>
           {err}
         </div>
       )}
@@ -1375,7 +1376,7 @@ function MilestoneCard({ deal, milestone, isClient, isFreelancer, reload }) {
       </div>
 
       {err && (
-        <div style={{ padding: "9px 12px", borderRadius: 8, background: "#1A0808", border: `1px solid ${D.danger}44`, color: D.danger, fontSize: 12, margin: "8px 0" }}>
+        <div style={{ padding: "9px 12px", borderRadius: 8, background: "#FEF2F2", border: `1px solid ${D.danger}44`, color: D.danger, fontSize: 12, margin: "8px 0" }}>
           {err}
         </div>
       )}
@@ -1467,7 +1468,7 @@ function MilestoneCard({ deal, milestone, isClient, isFreelancer, reload }) {
         <p style={{ fontSize: 12, color: D.textSoft, margin: "6px 0 0" }}>Opens for payment once the previous milestone is approved.</p>
       )}
       {milestone.status === "DISPUTED" && milestone.dispute && (
-        <p style={{ fontSize: 12, color: "#ff9999", margin: "6px 0 0" }}>
+        <p style={{ fontSize: 12, color: "#B91C1C", margin: "6px 0 0" }}>
           On hold — disputed: {milestone.dispute.reason}
         </p>
       )}
@@ -1531,7 +1532,7 @@ function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }
       </div>
 
       {actionError && (
-        <div style={{ padding: "12px 16px", borderRadius: 10, background: "#1A0808", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13, marginBottom: 14 }}>
+        <div style={{ padding: "12px 16px", borderRadius: 10, background: "#FEF2F2", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13, marginBottom: 14 }}>
           {actionError}
         </div>
       )}
@@ -1548,7 +1549,7 @@ function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }
             approve the structure to get started. You'll pay each milestone one at a time — your money is held safely until
             you confirm the work is done.
           </p>
-          <button onClick={approveStructure} disabled={approvingStructure} style={{ ...btn(D.accent, "#000"), opacity: approvingStructure ? 0.6 : 1 }}>
+          <button onClick={approveStructure} disabled={approvingStructure} style={{ ...btn(D.accent, "#fff"), opacity: approvingStructure ? 0.6 : 1 }}>
             {approvingStructure ? <><Spinner /> Approving…</> : <><CheckCircle size={14} /> Approve milestones</>}
           </button>
         </ActionCard>
@@ -1556,7 +1557,7 @@ function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }
 
       {/* Seller: waiting for buyer approval */}
       {isFreelancer && deal.status === "PROPOSED" && (
-        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#1A1200", border: `1px solid ${D.warning}44`, borderLeft: `3px solid ${D.warning}`, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#FFFBEB", border: `1px solid ${D.warning}44`, borderLeft: `3px solid ${D.warning}`, marginBottom: 14 }}>
           <Clock size={15} color={D.warning} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 13, color: D.warning, margin: 0 }}>
             Waiting for {deal.client_name || "your client"} to review and approve the milestones. They'll pay the first one to start.
@@ -1566,7 +1567,7 @@ function MilestoneDealView({ deal, currentUser, isClient, isFreelancer, reload }
 
       {/* Completed banner */}
       {deal.status === "COMPLETE" && (
-        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#041A0F", border: `1px solid ${D.success}44`, borderLeft: `3px solid ${D.success}`, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 10, background: "#ECFDF5", border: `1px solid ${D.success}44`, borderLeft: `3px solid ${D.success}`, marginBottom: 14 }}>
           <CheckCircle size={15} color={D.success} style={{ flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: 13, color: D.success, margin: 0, fontWeight: 500 }}>All milestones approved and paid out. This Smart Deal is complete.</p>
         </div>
@@ -1696,7 +1697,7 @@ export function CreateMilestoneDeal() {
       </div>
 
       {/* Seller explainer — plain English */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "14px 16px", borderRadius: 12, background: "linear-gradient(135deg, #0d1f3c 0%, #071428 100%)", border: `1px solid ${D.borderLight}`, marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "14px 16px", borderRadius: 12, background: "linear-gradient(135deg, #EFF6FF 0%, #F8FAFC 100%)", border: `1px solid ${D.borderLight}`, marginBottom: 18 }}>
         <Zap size={16} color={D.accent} style={{ flexShrink: 0, marginTop: 2 }} />
         <p style={{ fontSize: 13, color: D.text, margin: 0, lineHeight: 1.6 }}>
           Smart Deals let you get paid in stages. Your client pays each milestone upfront into escrow before you start that
@@ -1706,7 +1707,7 @@ export function CreateMilestoneDeal() {
       </div>
 
       {apiError && (
-        <div style={{ padding: "12px 16px", borderRadius: 10, background: "#1A0808", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13, marginBottom: 14 }}>
+        <div style={{ padding: "12px 16px", borderRadius: 10, background: "#FEF2F2", border: `1px solid ${D.danger}44`, borderLeft: `3px solid ${D.danger}`, color: D.danger, fontSize: 13, marginBottom: 14 }}>
           {apiError}
         </div>
       )}
@@ -1779,7 +1780,7 @@ export function CreateMilestoneDeal() {
               return (
                 <label key={opt.value} onClick={() => setForm(f => ({ ...f, fee_paid_by: opt.value }))} style={{
                   display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", borderRadius: 10,
-                  border: `1.5px solid ${active ? D.blue : D.border}`, background: active ? "#071428" : D.surfaceHi, cursor: "pointer",
+                  border: `1.5px solid ${active ? D.blue : D.border}`, background: active ? "#EFF6FF" : D.surfaceHi, cursor: "pointer",
                 }}>
                   <div style={{
                     width: 16, height: 16, borderRadius: "50%", flexShrink: 0, marginTop: 1,
@@ -1798,7 +1799,7 @@ export function CreateMilestoneDeal() {
           </div>
         </div>
 
-        <button onClick={handleSubmit} disabled={loading} style={{ ...btn(D.accent, "#000"), width: "100%", opacity: loading ? 0.6 : 1, cursor: loading ? "not-allowed" : "pointer" }}>
+        <button onClick={handleSubmit} disabled={loading} style={{ ...btn(D.accent, "#fff"), width: "100%", opacity: loading ? 0.6 : 1, cursor: loading ? "not-allowed" : "pointer" }}>
           {loading ? <><Spinner /> Creating…</> : <><Layers size={14} /> Send Smart Deal to client</>}
         </button>
       </div>

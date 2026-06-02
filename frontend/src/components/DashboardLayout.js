@@ -444,7 +444,7 @@ function DashboardLayout({ children, user: userProp, loading = false }) {
         </header>
 
         {/* Page content */}
-        <main style={{ flex: 1, padding: '24px', paddingBottom: 80, background: V.bg }} className="lg:pb-6">
+        <main style={{ flex: 1, padding: '24px', paddingBottom: 80, background: '#F8FAFC', color: '#0F172A' }} className="lg:pb-6">
           {children}
         </main>
       </div>

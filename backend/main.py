@@ -73,6 +73,15 @@ async def _finance_reconciliation_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Free ephemeral container disk first thing on every boot (Railway was failing
+    # to start with "only 230MB free, needs 524MB"). Runs off the event loop and
+    # can never raise, so it cannot block startup.
+    try:
+        from startup_cleanup import run_startup_cleanup
+        await asyncio.to_thread(run_startup_cleanup)
+    except Exception as e:
+        logger.warning(f"[STARTUP] Disk cleanup failed (non-fatal): {e}")
+
     from core.database import get_database, create_indexes
     try:
         db_instance = get_database()

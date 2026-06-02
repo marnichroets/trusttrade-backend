@@ -1072,6 +1072,79 @@ async def process_auto_releases(request: Request):
     return {"message": f"Processed {released_count} auto-releases", "released_count": released_count}
 
 
+@router.post("/disk-cleanup")
+async def admin_disk_cleanup(request: Request):
+    """Trigger the startup disk cleanup on demand (admin only). Frees __pycache__,
+    the pip cache, and legacy uploads/photos older than the keep window. Never
+    touches uploads/verification, uploads/disputes, or uploads/pdfs."""
+    db = get_database()
+    await require_admin(request, db)
+
+    from startup_cleanup import run_startup_cleanup, _fmt_bytes
+    result = await asyncio.to_thread(run_startup_cleanup)
+
+    if result.get("enabled") is False:
+        return {"success": True, "enabled": False,
+                "message": "Cleanup is disabled via STARTUP_CLEANUP_ENABLED."}
+
+    return {
+        "success": True,
+        "freed_total": _fmt_bytes(result.get("total_bytes", 0)),
+        "freed_breakdown": {
+            "pycache": _fmt_bytes(result.get("pycache_bytes", 0)),
+            "pip_cache": _fmt_bytes(result.get("pip_cache_bytes", 0)),
+            "photos": _fmt_bytes(result.get("photos_bytes", 0)),
+        },
+        "bytes": result,
+    }
+
+
+@router.get("/disk-usage")
+async def admin_disk_usage(request: Request):
+    """Disk usage summary for the admin dashboard (admin only): filesystem
+    total/used/free plus a per-directory breakdown of /app/uploads."""
+    db = get_database()
+    await require_admin(request, db)
+
+    import shutil
+    from pathlib import Path
+    from startup_cleanup import _dir_size, _fmt_bytes
+
+    base = Path(settings.UPLOAD_BASE_PATH)
+    # Resolve the filesystem to report on: the uploads volume if present, else the app root.
+    fs_path = str(base) if base.exists() else str(Path(__file__).resolve().parents[1])
+
+    def _gather():
+        total, used, free = shutil.disk_usage(fs_path)
+        subdirs = {}
+        for name in ("photos", "verification", "disputes", "pdfs"):
+            p = base / name
+            subdirs[name] = _dir_size(p) if p.is_dir() else 0
+        uploads_total = _dir_size(base) if base.is_dir() else 0
+        return total, used, free, uploads_total, subdirs
+
+    total, used, free, uploads_total, subdirs = await asyncio.to_thread(_gather)
+
+    return {
+        "filesystem": {
+            "path": fs_path,
+            "total": _fmt_bytes(total),
+            "used": _fmt_bytes(used),
+            "free": _fmt_bytes(free),
+            "percent_used": round(used / total * 100, 1) if total else 0,
+            "bytes": {"total": total, "used": used, "free": free},
+        },
+        "uploads": {
+            "base_path": str(base),
+            "total": _fmt_bytes(uploads_total),
+            "by_dir": {
+                name: {"size": _fmt_bytes(size), "bytes": size, "cleaned_by_cleanup": name == "photos"}
+                for name, size in subdirs.items()
+            },
+        },
+    }
+
+
 @router.get("/pending-auto-releases")
 async def get_pending_auto_releases(request: Request):
     """Get list of transactions pending auto-release"""

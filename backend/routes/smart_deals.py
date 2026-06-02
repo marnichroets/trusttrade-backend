@@ -23,6 +23,11 @@ router = APIRouter()
 REVIEW_WINDOW_HOURS = 48
 ADMIN_DISPUTE_EMAIL = "marnichr@gmail.com"
 
+# Estimated TradeSafe payment-processing fee, mirroring calculate_fees and the normal
+# transaction flow. Note: TradeSafe bills this per payment, so each milestone a client
+# pays separately incurs its own processing fee (only a single upfront payment avoids that).
+TRADESAFE_PROCESSING_FEE_PERCENT = 2.5
+
 
 class CreateDealRequest(BaseModel):
     title: str = Field(..., min_length=3, max_length=200)
@@ -121,12 +126,14 @@ async def create_deal(body: CreateDealRequest, request: Request):
     #   FREELANCER pays the fee → fee deducted from the freelancer payout (SELLER allocation)
     fee_allocation = "SELLER" if (body.fee_paid_by or "CLIENT").upper() == "FREELANCER" else "BUYER"
     platform_fee = max(round(body.amount * settings.PLATFORM_FEE_PERCENT / 100, 2), 5.0)
+    processing_fee = round(body.amount * TRADESAFE_PROCESSING_FEE_PERCENT / 100, 2)
+    fees = round(platform_fee + processing_fee, 2)
     if fee_allocation == "SELLER":
-        net_amount = round(body.amount - platform_fee, 2)   # freelancer payout after fee
+        net_amount = round(body.amount - fees, 2)           # freelancer payout after fees
         total = round(body.amount, 2)                       # client funds the amount only
     else:
         net_amount = round(body.amount, 2)                  # freelancer gets the full amount
-        total = round(body.amount + platform_fee, 2)        # client funds amount + fee
+        total = round(body.amount + fees, 2)                # client funds amount + fees
 
     # "deal title — scope" so the admin transactions list shows a meaningful item.
     item_description = f"{body.title} — {body.description}"
@@ -156,6 +163,7 @@ async def create_deal(body: CreateDealRequest, request: Request):
         "fee_allocation": fee_allocation,
         "platform_fee": platform_fee,
         "trusttrade_fee": platform_fee,
+        "processing_fee": processing_fee,
         "net_amount": net_amount,
         "seller_receives": net_amount,
         "total": total,
@@ -710,21 +718,23 @@ class CreateMilestoneDealRequest(BaseModel):
     milestones: list[MilestoneInput] = Field(..., min_length=1, max_length=20)
 
 
-def _milestone_money(amount: float, fee_paid_by: str):
-    """Per-milestone fee/net/total — identical model to a single Smart Deal.
+def _split_fee_across(total_fee: float, amounts: list, deal_total: float) -> list:
+    """Split a deal-level fee across stages in proportion to each stage's amount.
 
-    CLIENT pays the 2% fee → buyer funds amount + fee, seller receives the amount.
-    FREELANCER pays the fee → buyer funds the amount, seller receives amount − fee.
+    The last stage absorbs the rounding remainder so the parts always sum to exactly
+    total_fee. This is how we keep a multi-stage deal's fees identical to a single
+    transaction of the same total — we never charge a per-stage minimum on top.
     """
-    fee_allocation = "SELLER" if (fee_paid_by or "CLIENT").upper() == "FREELANCER" else "BUYER"
-    platform_fee = max(round(amount * settings.PLATFORM_FEE_PERCENT / 100, 2), 5.0)
-    if fee_allocation == "SELLER":
-        net_amount = round(amount - platform_fee, 2)
-        total = round(amount, 2)
-    else:
-        net_amount = round(amount, 2)
-        total = round(amount + platform_fee, 2)
-    return fee_allocation, platform_fee, net_amount, total
+    shares = []
+    allocated = 0.0
+    for i, amt in enumerate(amounts):
+        if i == len(amounts) - 1:
+            shares.append(round(total_fee - allocated, 2))
+        else:
+            share = round(total_fee * (amt / deal_total), 2) if deal_total else 0.0
+            allocated = round(allocated + share, 2)
+            shares.append(share)
+    return shares
 
 
 def _find_milestone(deal: dict, milestone_id: str) -> Optional[dict]:
@@ -838,15 +848,32 @@ async def create_milestone_deal(body: CreateMilestoneDealRequest, request: Reque
     # Deal-level fee allocation follows fee_paid_by (same for every milestone).
     fee_allocation = "SELLER" if (body.fee_paid_by or "CLIENT").upper() == "FREELANCER" else "BUYER"
 
+    # Fees are charged on the WHOLE deal once, then split across stages in proportion
+    # to each stage's amount — so a multi-stage deal never costs more in TrustTrade
+    # fees than a single transaction of the same total. The 2% has a single R5 floor
+    # on the deal, NOT one per stage.
+    amounts = [ms.amount for ms in body.milestones]
+    total_amount = round(sum(amounts), 2)
+    deal_platform_fee = max(round(total_amount * settings.PLATFORM_FEE_PERCENT / 100, 2), 5.0)
+    deal_processing_fee = round(total_amount * TRADESAFE_PROCESSING_FEE_PERCENT / 100, 2)
+    platform_shares = _split_fee_across(deal_platform_fee, amounts, total_amount)
+    processing_shares = _split_fee_across(deal_processing_fee, amounts, total_amount)
+
     milestones = []
-    total_amount = 0.0
-    total_fee = 0.0
+    total_fee = deal_platform_fee
+    total_processing_fee = deal_processing_fee
     total_net = 0.0
     total_to_fund = 0.0
     for seq, ms in enumerate(body.milestones, start=1):
-        _alloc, platform_fee, net_amount, total = _milestone_money(ms.amount, body.fee_paid_by)
-        total_amount += ms.amount
-        total_fee += platform_fee
+        platform_fee = platform_shares[seq - 1]
+        processing_fee = processing_shares[seq - 1]
+        fees = round(platform_fee + processing_fee, 2)
+        if fee_allocation == "SELLER":
+            net_amount = round(ms.amount - fees, 2)   # freelancer payout after fees
+            total = round(ms.amount, 2)               # client funds the amount only
+        else:
+            net_amount = round(ms.amount, 2)          # freelancer gets the full amount
+            total = round(ms.amount + fees, 2)        # client funds amount + fees
         total_net += net_amount
         total_to_fund += total
         milestones.append({
@@ -855,6 +882,7 @@ async def create_milestone_deal(body: CreateMilestoneDealRequest, request: Reque
             "description": ms.description.strip(),
             "amount": round(ms.amount, 2),
             "platform_fee": platform_fee,
+            "processing_fee": processing_fee,
             "net_amount": net_amount,
             "total": total,
             "status": "PROPOSED",
@@ -903,6 +931,7 @@ async def create_milestone_deal(body: CreateMilestoneDealRequest, request: Reque
         "amount": round(total_amount, 2),
         "platform_fee": round(total_fee, 2),
         "trusttrade_fee": round(total_fee, 2),
+        "processing_fee": round(total_processing_fee, 2),
         "net_amount": round(total_net, 2),
         "total": round(total_to_fund, 2),
         "milestones": milestones,

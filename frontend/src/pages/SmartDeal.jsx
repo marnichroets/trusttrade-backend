@@ -293,12 +293,16 @@ function FundPanel({ deal }) {
   const [err, setErr] = useState(null);
   const [eftDetails, setEftDetails] = useState(null);
 
-  // The client always pays the 2% TrustTrade fee on top of the deal amount, matching
-  // the values the backend stored at deal creation (deal.platform_fee / deal.total).
+  // The client pays the 2% TrustTrade fee plus TradeSafe's ~2.5% payment-processing
+  // fee on top of the deal amount. Computed fresh so the total always matches what
+  // TradeSafe will charge, even for deals created before the processing fee was shown.
   const platformFee = deal.platform_fee != null
     ? Number(deal.platform_fee)
     : Math.max(Number(deal.amount) * 0.02, 5);
-  const total = deal.total != null ? Number(deal.total) : Number(deal.amount) + platformFee;
+  const processingFee = deal.processing_fee != null
+    ? Number(deal.processing_fee)
+    : Math.round(Number(deal.amount) * 0.025 * 100) / 100;
+  const total = Math.round((Number(deal.amount) + platformFee + processingFee) * 100) / 100;
   const fmt = v => `R ${Number(v).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}`;
 
   async function handleFund() {
@@ -389,11 +393,15 @@ function FundPanel({ deal }) {
           <span style={{ fontSize: 12, color: D.textMuted }}>TrustTrade fee (2%)</span>
           <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmt(platformFee)}</span>
         </div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+          <span style={{ fontSize: 12, color: D.textMuted }}>Payment processing fee (est.)</span>
+          <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmt(processingFee)}</span>
+        </div>
         <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${D.border}`, paddingTop: 8, marginTop: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: D.text }}>Total you pay</span>
           <span style={{ fontSize: 15, fontWeight: 700, color: D.accent, fontFamily: "ui-monospace, monospace" }}>{fmt(total)}</span>
         </div>
-        <p style={{ fontSize: 11, color: D.textSoft, margin: "8px 0 0" }}>That's everything — no hidden fees.</p>
+        <p style={{ fontSize: 11, color: D.textSoft, margin: "8px 0 0" }}>This is everything you pay. The processing fee is an estimate confirmed at checkout.</p>
       </div>
 
       {err && (
@@ -1214,15 +1222,22 @@ export function SmartDealList() {
 
 const fmtZAR = v => `R ${Number(v).toLocaleString("en-ZA", { minimumFractionDigits: 2 })}`;
 
-// Per-milestone fee math — mirrors the backend (_milestone_money).
+// Per-stage fee math — mirrors the backend. Two fees: TrustTrade's 2% and TradeSafe's
+// ~2.5% payment-processing fee. Each stage's 2% is its proportional share of the deal's
+// 2%, so the stages together never cost more than a single transaction of the total.
+const round2 = v => Math.round(v * 100) / 100;
 function milestoneMoney(amount, feePaidBy) {
   const amt = Number(amount) || 0;
-  const fee = Math.max(Math.round(amt * 0.02 * 100) / 100, 5);
+  const fee = round2(amt * 0.02);          // TrustTrade fee (2%)
+  const processing = round2(amt * 0.025);  // TradeSafe payment fee (est.)
+  const fees = round2(fee + processing);
   const clientPays = (feePaidBy || "CLIENT").toUpperCase() !== "FREELANCER";
   return {
     fee,
-    net: clientPays ? amt : Math.round((amt - fee) * 100) / 100,
-    total: clientPays ? Math.round((amt + fee) * 100) / 100 : amt,
+    processing,
+    fees,
+    net: clientPays ? amt : round2(amt - fees),
+    total: clientPays ? round2(amt + fees) : amt,
     clientPays,
   };
 }
@@ -1236,9 +1251,12 @@ function MilestoneFundPanel({ deal, milestone, reload }) {
   const [err, setErr] = useState(null);
   const [eftDetails, setEftDetails] = useState(null);
 
+  // Compute the breakdown fresh from the amount so it's consistent for both old and
+  // new deals and always matches what TradeSafe will charge for this stage.
   const money = milestoneMoney(milestone.amount, deal.fee_paid_by);
-  const platformFee = milestone.platform_fee != null ? Number(milestone.platform_fee) : money.fee;
-  const total = milestone.total != null ? Number(milestone.total) : money.total;
+  const platformFee = money.fee;
+  const processingFee = money.processing;
+  const total = money.total;
 
   async function handleFund() {
     setLoading(true); setErr(null);
@@ -1297,16 +1315,22 @@ function MilestoneFundPanel({ deal, milestone, reload }) {
           <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(milestone.amount)}</span>
         </div>
         {money.clientPays && (
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-            <span style={{ fontSize: 12, color: D.textMuted }}>TrustTrade fee (2%)</span>
-            <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(platformFee)}</span>
-          </div>
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+              <span style={{ fontSize: 12, color: D.textMuted }}>TrustTrade fee (2%)</span>
+              <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(platformFee)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+              <span style={{ fontSize: 12, color: D.textMuted }}>Payment processing fee (est.)</span>
+              <span style={{ fontSize: 12, color: D.text, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(processingFee)}</span>
+            </div>
+          </>
         )}
         <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${D.border}`, paddingTop: 8, marginTop: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: D.text }}>Total you pay now</span>
           <span style={{ fontSize: 15, fontWeight: 700, color: D.accent, fontFamily: "ui-monospace, monospace" }}>{fmtZAR(total)}</span>
         </div>
-        <p style={{ fontSize: 11, color: D.textSoft, margin: "8px 0 0" }}>That's everything — no hidden fees.</p>
+        <p style={{ fontSize: 11, color: D.textSoft, margin: "8px 0 0" }}>This is everything you pay for this stage. The processing fee is an estimate confirmed at checkout.</p>
       </div>
 
       {err && (

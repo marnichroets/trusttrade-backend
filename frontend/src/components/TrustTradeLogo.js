@@ -2,6 +2,10 @@ import { Link } from 'react-router-dom';
 
 export const TRUSTTRADE_LOGO_SRC = '/assets/trusttrade-logo.png';
 export const TRUSTTRADE_LOGO_MARK_SRC = '/assets/trusttrade-logo-mark.png';
+// Dark-surface variants: the dark "Trade" wordmark + dark shield icons are
+// recoloured white, while the blue shield is kept. Used on the dark sidebar/landing.
+export const TRUSTTRADE_LOGO_DARK_SRC = '/assets/trusttrade-logo-dark.png';
+export const TRUSTTRADE_LOGO_MARK_DARK_SRC = '/assets/trusttrade-logo-mark-dark.png';
 
 const SIZES = {
   small: {
@@ -39,7 +43,9 @@ export function TrustTradeLogo({
 }) {
   const normalizedSize = SIZES[size] ? size : LEGACY_SIZE_MAP[size] || 'medium';
   const dimensions = showText ? SIZES[normalizedSize].wordmark : SIZES[normalizedSize].mark;
-  const src = showText ? TRUSTTRADE_LOGO_SRC : TRUSTTRADE_LOGO_MARK_SRC;
+  const src = dark
+    ? (showText ? TRUSTTRADE_LOGO_DARK_SRC : TRUSTTRADE_LOGO_MARK_DARK_SRC)
+    : (showText ? TRUSTTRADE_LOGO_SRC : TRUSTTRADE_LOGO_MARK_SRC);
 
   const logo = (
     <span
@@ -61,9 +67,6 @@ export function TrustTradeLogo({
           maxWidth: '100%',
           objectFit: 'contain',
           display: 'block',
-          // On dark surfaces (sidebar, landing nav/footer) render the wordmark
-          // solid white so the dark "Trade" half isn't lost against the background.
-          ...(dark ? { filter: 'brightness(0) invert(1)' } : {}),
         }}
       />
     </span>

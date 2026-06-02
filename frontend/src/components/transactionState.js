@@ -196,12 +196,21 @@ export function resolveEscrowUiState(transaction = {}, disputes = []) {
     payment.includes('released') ||
     tradesafe.includes('funds_received') ||
     tradesafe.includes('funds_deposited') ||
-    tradesafe.includes('funds_released');
+    tradesafe.includes('funds_released') ||
+    // Once a transaction has been dispatched or its receipt confirmed, the funds
+    // are definitionally in escrow. Treat these as "secured" so a post-payment
+    // transaction can never fall back to the "awaiting buyer payment" state.
+    deliveryStarted ||
+    deliveryConfirmed ||
+    Boolean(transaction.auto_release_at) ||
+    Boolean(transaction.buyer_confirmed_receipt_at);
   const released = (!notReleased && release.includes('released')) ||
     payment.includes('released') ||
     payout.includes('paid') ||
     payout.includes('released') ||
-    tradesafe.includes('funds_released');
+    tradesafe.includes('funds_released') ||
+    // The buyer confirming receipt is our reliable signal that payout is in motion.
+    Boolean(transaction.buyer_confirmed_receipt_at);
   const completed = transactionStatus.includes('completed') ||
     payment.includes('completed') ||
     (deliveryConfirmed && fundsSecured && released);

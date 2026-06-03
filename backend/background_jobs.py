@@ -44,11 +44,19 @@ async def verify_pending_payments(db: AsyncIOMotorDatabase, tradesafe_service) -
         # Find transactions awaiting payment that were created more than 5 minutes ago
         cutoff_time = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
         
-        # Query for transactions that might have missed webhooks
+        # Query for transactions that might have missed webhooks.
+        # NOTE: FUNDS_RECEIVED is intentionally included in the tradesafe_state bucket.
+        # When a payment gets a partial webhook (FUNDS_RECEIVED arrives but the final
+        # FUNDS_DEPOSITED never does — common with card payments), the webhook FUNDED
+        # path moves the txn to payment_status="Funds Secured" / tradesafe_state=
+        # "FUNDS_RECEIVED", which matched NONE of the old buckets and orphaned the txn
+        # from this fallback. Keeping FUNDS_RECEIVED here (gated by payment_verified
+        # !=True, which is only set once funds DEPOSIT and notifications fire) means we
+        # keep re-checking such a txn until TradeSafe reports it actually cleared.
         pending_transactions = await db.transactions.find({
             "$or": [
                 {"transaction_state": {"$in": ["AWAITING_PAYMENT", "CREATED", "PENDING_CONFIRMATION"]}},
-                {"tradesafe_state": {"$in": ["CREATED", "PENDING", None]}},
+                {"tradesafe_state": {"$in": ["CREATED", "PENDING", "FUNDS_RECEIVED", None]}},
                 {"payment_status": {"$in": ["Awaiting Payment", "Ready for Payment", "Pending Seller Confirmation"]}}
             ],
             "tradesafe_id": {"$exists": True, "$ne": None},
@@ -115,6 +123,31 @@ async def verify_single_transaction(
 
             # Only update if not already in a more advanced state
             if current_state in ["AWAITING_PAYMENT", "CREATED", "PENDING_CONFIRMATION", None]:
+                now = datetime.now(timezone.utc).isoformat()
+
+                # FUNDS_RECEIVED only — deposit attempted but not yet cleared. Advance
+                # local fields so the UI shows "in escrow", but DO NOT set
+                # payment_verified and DO NOT send the Payment Secured email or book the
+                # courier — those wait for FUNDS_DEPOSITED. Leaving payment_verified
+                # unset keeps this txn in the fallback list so the next run re-checks it.
+                if ts_state == "FUNDS_RECEIVED":
+                    await db.transactions.update_one(
+                        {"transaction_id": transaction_id},
+                        {"$set": {
+                            "tradesafe_state": ts_state,
+                            "payment_status": "Funds Secured",
+                            "release_status": "In Escrow",
+                            "funds_received_at": txn.get("funds_received_at") or now,
+                        }}
+                    )
+                    logger.info(
+                        f"FALLBACK: {transaction_id} at FUNDS_RECEIVED — fields advanced, "
+                        f"Payment Secured email/courier withheld until FUNDS_DEPOSITED; "
+                        f"will re-check next cycle"
+                    )
+                    return {"updated": True, "action": "state_advanced_FUNDS_RECEIVED_no_email"}
+
+                # FUNDS_DEPOSITED — funds have actually cleared into escrow.
                 # Prominent, greppable marker so we can see the fallback catching a
                 # payment the live webhook missed (e.g. card payments where the
                 # FUNDS_DEPOSITED webhook never reached us).
@@ -124,8 +157,6 @@ async def verify_single_transaction(
                     f"method={txn.get('delivery_method')}, ts_state={ts_state}) — "
                     f"webhook was missed/delayed; advancing to PAYMENT_SECURED"
                 )
-
-                now = datetime.now(timezone.utc).isoformat()
 
                 # Build timeline entry
                 timeline = txn.get("timeline", [])
@@ -137,15 +168,16 @@ async def verify_single_transaction(
                 })
 
                 auto_release_at = (datetime.now(timezone.utc) + timedelta(hours=48)).isoformat()
-                # Update transaction
+                # Update transaction — payment_verified=True ONLY here, on cleared funds.
                 update_data = {
                     "transaction_state": TransactionState.PAYMENT_SECURED.value,
                     "tradesafe_state": ts_state,
-                    "payment_status": "Paid",
+                    "payment_status": "Funds Secured",
+                    "release_status": "In Escrow",
                     "payment_verified": True,
                     "payment_verified_at": now,
                     "payment_verified_by": "fallback_job",
-                    "funds_received_at": now,
+                    "funds_received_at": txn.get("funds_received_at") or now,
                     "auto_release_at": auto_release_at,
                     "timeline": timeline
                 }
@@ -155,29 +187,20 @@ async def verify_single_transaction(
                     {"$set": update_data}
                 )
 
-                # Send Payment Secured emails ONLY on FUNDS_DEPOSITED (funds cleared).
-                # FUNDS_RECEIVED is a precursor state and would email prematurely.
-                if ts_state == "FUNDS_DEPOSITED":
-                    await send_fallback_payment_notifications(db, txn)
+                await send_fallback_payment_notifications(db, txn)
 
-                    # Backstop courier booking: if the primary webhook was delayed or
-                    # missed, make sure the Courier Guy shipment is booked here too.
-                    # book_courier_for_transaction is idempotent and only acts on
-                    # courier deliveries, so this can never double-book or misfire.
-                    try:
-                        import email_service
-                        from services.courier_booking import book_courier_for_transaction
-                        await book_courier_for_transaction(db, txn, email_service=email_service)
-                    except Exception as e:
-                        logger.error(f"FALLBACK: courier auto-book failed (non-fatal) for {transaction_id}: {e}")
+                # Backstop courier booking: if the primary webhook was delayed or
+                # missed, make sure the Courier Guy shipment is booked here too.
+                # book_courier_for_transaction is idempotent and only acts on
+                # courier deliveries, so this can never double-book or misfire.
+                try:
+                    import email_service
+                    from services.courier_booking import book_courier_for_transaction
+                    await book_courier_for_transaction(db, txn, email_service=email_service)
+                except Exception as e:
+                    logger.error(f"FALLBACK: courier auto-book failed (non-fatal) for {transaction_id}: {e}")
 
-                    return {"updated": True, "action": "state_updated_to_PAYMENT_SECURED_with_email"}
-
-                logger.info(
-                    f"FALLBACK: {transaction_id} state advanced on {ts_state} but Payment Secured "
-                    f"emails withheld until FUNDS_DEPOSITED"
-                )
-                return {"updated": True, "action": "state_updated_to_PAYMENT_SECURED_no_email"}
+                return {"updated": True, "action": "state_updated_to_PAYMENT_SECURED_with_email"}
         
         return {"updated": False, "reason": "no_payment_detected", "ts_state": ts_state}
         

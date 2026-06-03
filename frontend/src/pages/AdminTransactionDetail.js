@@ -121,6 +121,30 @@ function AdminTransactionDetail() {
     }
   };
 
+  // Manually run the payment-verification fallback for this transaction. Same path
+  // the background job runs every few minutes — queries TradeSafe directly and, if
+  // funds have cleared (FUNDS_DEPOSITED), advances the txn to Payment Secured, sends
+  // notifications and books the courier. Use this for transactions stuck in
+  // "Awaiting Payment" after a card payment whose webhook never reached us.
+  const verifyPayment = async () => {
+    setActionLoading(true);
+    try {
+      const res = await api.post(`/admin/transactions/${transactionId}/verify-payment`, {});
+      const result = res.data?.result || {};
+      if (result.updated) {
+        toast.success(`Payment verified — ${result.action || 'transaction updated'}`, { duration: 8000 });
+      } else {
+        const ts = result.ts_state ? ` (TradeSafe state: ${result.ts_state})` : '';
+        toast(`No payment detected yet${ts}. ${result.reason || ''}`, { duration: 8000 });
+      }
+      await fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Verification failed', { duration: 8000 });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleAction = async () => {
     const action = confirmModal.action;
     setConfirmModal({ ...confirmModal, open: false });
@@ -657,7 +681,25 @@ function AdminTransactionDetail() {
             <Card className="p-6" style={{ backgroundColor: COLORS.background }} data-testid="admin-actions-panel">
               <h2 className="text-lg font-semibold mb-4" style={{ color: COLORS.primary }}>Admin Actions</h2>
               <div className="space-y-3">
-                <Button 
+                {/* Verify Payment — recover a transaction whose payment webhook was
+                    missed (e.g. card payments stuck in "Awaiting Payment"). Re-queries
+                    TradeSafe and advances the txn if funds have cleared. */}
+                {['Awaiting Payment', 'Ready for Payment', 'Pending Payment', 'Funds Secured'].includes(transaction.payment_status) && (
+                  <Button
+                    onClick={verifyPayment}
+                    disabled={actionLoading}
+                    className="w-full text-white justify-center"
+                    style={{ backgroundColor: COLORS.info }}
+                    data-testid="verify-payment-btn"
+                  >
+                    {actionLoading
+                      ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      : <CheckCircle className="w-4 h-4 mr-2" />}
+                    Verify Payment
+                  </Button>
+                )}
+
+                <Button
                   onClick={() => openConfirmModal('release_funds', 'Release Funds', `Release funds to ${transaction.seller_name}? This action cannot be undone.`)}
                   disabled={actionLoading || !['Paid', 'Funds in Escrow'].includes(transaction.payment_status)}
                   className="w-full text-white justify-center"

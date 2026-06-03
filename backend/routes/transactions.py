@@ -754,7 +754,12 @@ async def list_transactions(request: Request):
             ])
         
         query = {"$or": or_conditions}
-    
+
+    # Milestone child transactions (per-stage escrow records with deal_id like SD-…-M1)
+    # are internal — they belong on the Smart Deals page, not in My Transactions.
+    # Regular transactions have no deal_type field, so $ne keeps them (and parent deals).
+    query["deal_type"] = {"$ne": "DIGITAL_WORK_MILESTONE_ITEM"}
+
     try:
         # Optimize query with projection for list view
         projection = {

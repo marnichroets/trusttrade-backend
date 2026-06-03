@@ -1511,6 +1511,9 @@ async def list_deals(request: Request):
         if milestones is not None:
             deal["milestone_count"] = len(milestones)
             deal["milestones_released"] = sum(1 for m in milestones if m.get("status") == "RELEASED")
+            # Display-only self-heal: all stages released => Complete (get_deal persists it).
+            if deal["milestone_count"] and deal["milestones_released"] == deal["milestone_count"] and deal.get("status") != "COMPLETE":
+                deal["status"] = "COMPLETE"
         deals.append(deal)
     return {"deals": deals, "count": len(deals)}
 
@@ -1524,6 +1527,16 @@ async def get_deal(deal_id: str, request: Request):
 
     deal = await get_deal_or_404(deal_id, db)
     assert_participant(deal, str(current_user.user_id))
+
+    # Self-heal: if every milestone is released but the parent never advanced to
+    # COMPLETE (e.g. a missed recompute on the final release), fix it on read so the
+    # deal never stays stuck on "In progress" once all stages are done.
+    if _is_milestone_deal(deal) and deal.get("status") != "COMPLETE":
+        ms = deal.get("milestones") or []
+        if ms and all(m.get("status") == "RELEASED" for m in ms):
+            await _recompute_parent_status(db, deal_id)
+            deal = await get_deal_or_404(deal_id, db)
+
     deal["_id"] = str(deal["_id"])
     return deal
 

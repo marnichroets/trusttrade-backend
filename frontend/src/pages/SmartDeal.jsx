@@ -4,7 +4,7 @@ import {
   ArrowLeft, CheckCircle, Clock, Briefcase, Shield,
   AlertTriangle, Zap, ArrowRight, Send,
   MessageSquare, Lock, CreditCard, Landmark, Bolt,
-  Plus, Trash2, Layers,
+  Plus, Trash2, Layers, X,
 } from "lucide-react";
 
 const API = process.env.REACT_APP_API_URL || "https://trusttrade-backend-production-3efa.up.railway.app";
@@ -1087,6 +1087,7 @@ export function SmartDealDetail() {
 export function SmartDealList() {
   const [deals, setDeals] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showChoice, setShowChoice] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -1109,14 +1110,52 @@ export function SmartDealList() {
           <p style={{ fontSize: 13, color: D.textMuted, margin: 0 }}>Pay for work in stages</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <button onClick={() => navigate("/smart-deals/new-milestone")} style={{ ...btn(D.accent, "#fff") }}>
-            <Layers size={14} /> New Project Deal
-          </button>
-          <button onClick={() => navigate("/smart-deals/new")} style={{ ...btn(D.blue) }}>
+          <button onClick={() => setShowChoice(true)} style={{ ...btn(D.accent, "#fff") }}>
             + New Deal
           </button>
         </div>
       </div>
+
+      {/* Choice screen — pick the deal type */}
+      {showChoice && (
+        <div
+          onClick={() => setShowChoice(false)}
+          style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(2,6,23,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ ...card({ marginBottom: 0 }), maxWidth: 460, width: "100%" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <h2 style={{ fontSize: 17, fontWeight: 700, color: D.text, margin: 0 }}>Start a new deal</h2>
+              <button onClick={() => setShowChoice(false)} style={{ background: "none", border: "none", color: D.textMuted, cursor: "pointer", padding: 4 }}>
+                <X size={18} />
+              </button>
+            </div>
+            <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 16px" }}>How do you want to get paid?</p>
+
+            {[
+              { icon: Lock, title: "Single payment", desc: "One payment for the whole job, released when the work is approved.", to: "/smart-deals/new" },
+              { icon: Layers, title: "Paid in stages", desc: "Break the job into stages — the client pays and approves each one as you go.", to: "/smart-deals/new-milestone" },
+            ].map(opt => (
+              <button
+                key={opt.to}
+                onClick={() => { setShowChoice(false); navigate(opt.to); }}
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: 12, width: "100%", textAlign: "left",
+                  padding: "14px 16px", marginBottom: 10, borderRadius: 12, cursor: "pointer",
+                  background: D.surfaceHi, border: `1px solid ${D.border}`, color: D.text,
+                }}
+              >
+                <div style={{ width: 34, height: 34, borderRadius: 9, flexShrink: 0, background: "rgba(59,130,246,0.14)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <opt.icon size={16} color={D.blue} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: D.text, margin: "0 0 2px" }}>{opt.title}</p>
+                  <p style={{ fontSize: 12, color: D.textMuted, margin: 0, lineHeight: 1.5 }}>{opt.desc}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Hero explanation */}
       <div style={{

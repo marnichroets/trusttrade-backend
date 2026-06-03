@@ -2046,9 +2046,15 @@ function TransactionDetail() {
                   })}
                 </div>
 
-                {/* Price summary — item + TrustTrade fee (+ courier). The exact bank
-                    processing fee is shown from TradeSafe right before you pay. */}
+                {/* Price summary — item + TrustTrade fee (+ courier). The Total updates per
+                    selected method with the ESTIMATED bank fee; the exact amount is confirmed
+                    from TradeSafe in the modal right before paying. */}
                 {(() => {
+                  // Estimated bank processing fee per method (exact is confirmed at pay).
+                  const PM_FEE_PCT = { eft: 0, card: 2.5, ozow: 1.7 };
+                  const feePct = selectedPaymentMethod ? (PM_FEE_PCT[selectedPaymentMethod] ?? 0) : 0;
+                  const estFee = Math.round(totalSecurePayment * (feePct / 100) * 100) / 100;
+                  const estTotal = Math.round((totalSecurePayment + estFee) * 100) / 100;
                   return (
                     <div style={{ background: '#0F172A', border: '1px solid #334155', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
                       <p style={{ ...S.label, marginBottom: 12 }}>Payment Breakdown</p>
@@ -2068,12 +2074,20 @@ function TransactionDetail() {
                           <span style={{ fontWeight: 500, color: '#F8FAFC' }}>R {_courierTotal.toFixed(2)}</span>
                         </div>
                       )}
+                      {feePct > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
+                          <span style={{ color: '#94A3B8' }}>Bank processing fee ({feePct}% est.)</span>
+                          <span style={{ fontWeight: 500, color: '#F8FAFC' }}>R {estFee.toFixed(2)}</span>
+                        </div>
+                      )}
                       <div style={{ borderTop: '1px solid #334155', paddingTop: 10, marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC' }}>Total</span>
-                        <span style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>R {totalSecurePayment.toFixed(2)}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC' }}>Total{feePct > 0 ? ' (est.)' : ''}</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>R {estTotal.toFixed(2)}</span>
                       </div>
                       <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
-                        A small bank processing fee will be added at checkout — you'll see the exact amount before you pay.
+                        {feePct > 0
+                          ? 'Estimated total — the exact bank fee is confirmed before you pay.'
+                          : 'No extra bank fee for EFT.'}
                         {' '}{['SELLER_AGENT','SELLER'].includes(_fa) ? 'TrustTrade 2% fee is deducted from the seller\'s payout.' : ['BUYER_SELLER','SPLIT_AGENT','BUYER_SELLER_AGENT','SPLIT'].includes(_fa) ? 'TrustTrade 2% fee is split — half from buyer, half from seller.' : 'TrustTrade 2% platform fee is included. Seller receives the full item value.'}
                       </p>
                     </div>

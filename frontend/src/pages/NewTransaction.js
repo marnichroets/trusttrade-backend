@@ -325,21 +325,20 @@ function NewTransaction() {
   const isDropoff = courierForm.collection_preference === 'dropoff';
   // Coerce to a number — ShipLogic can return the rate as a string, which would
   // otherwise string-concatenate into the totals instead of adding numerically.
-  const courierFee = isCourierDelivery && selectedQuote ? (Number(selectedQuote?.price ?? selectedQuote?.rate ?? 0) || 0) : 0;
+  const courierFee = isCourierDelivery && selectedQuote ? (Number(selectedQuote?.price ?? selectedQuote?.rate ?? selectedQuote?.total ?? 0) || 0) : 0;
   const courierTotal = courierFee;
   const platformFee = roundMoney(Math.max(itemPrice * 0.02, 5));
   const trusttradeFee = platformFee; // alias kept for any legacy references
-  // TradeSafe charges a payment-processing fee on the buyer's deposit (~2.5%, the same
-  // estimate the backend fee model uses). The buyer always bears it at checkout, so it's
-  // shown on top regardless of who pays the TrustTrade platform fee — no surprises.
-  const processingFee = roundMoney((itemPrice + courierTotal) * 0.025);
+  // We don't add a payment-processing fee estimate — TradeSafe's exact bank fee is only
+  // known at checkout. The total below is item + courier + TrustTrade fee; a note tells
+  // the user a small bank fee is added at checkout (honest, no wrong numbers).
   const { buyerFee: buyerFeeContrib, sellerFee: sellerFeeContrib } = splitTrustTradeFee(platformFee, feeAlloc);
-  const buyerPaysTotal = roundMoney(itemPrice + courierTotal + buyerFeeContrib + processingFee);
+  const buyerPaysTotal = roundMoney(itemPrice + courierTotal + buyerFeeContrib);
   const sellerPayout = roundMoney(itemPrice - sellerFeeContrib);
   const feePreview = (allocation) => {
     const { buyerFee, sellerFee } = splitTrustTradeFee(platformFee, allocation);
     return {
-      buyerPays: roundMoney(itemPrice + courierTotal + buyerFee + processingFee),
+      buyerPays: roundMoney(itemPrice + courierTotal + buyerFee),
       sellerReceives: roundMoney(itemPrice - sellerFee),
     };
   };
@@ -353,7 +352,9 @@ function NewTransaction() {
   const amountTooLow = itemPrice > 0 && itemPrice < minimumTransactionAmount;
   const amountTooHigh = maximumTransactionAmount > 0 && itemPrice > maximumTransactionAmount;
   const canProceedStep2 = formData.item_description && formData.item_category &&
-    formData.item_condition && itemPrice >= minimumTransactionAmount && !amountTooHigh;
+    formData.item_condition && itemPrice >= minimumTransactionAmount && !amountTooHigh &&
+    // Courier needs a selected rate so the delivery cost is captured + shown in the summary.
+    (!isCourierDelivery || !!selectedQuote);
   const amountError = amountTooLow
     ? `Minimum transaction amount is R${minimumTransactionAmount.toFixed(0)} to cover processing fees.`
     : amountTooHigh
@@ -1075,18 +1076,15 @@ function NewTransaction() {
                       </span>
                     </div>
                   )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Payment processing fee (est.)</span>
-                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
-                      + R {processingFee.toFixed(2)}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: 4 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>Buyer Pays Total</span>
                     <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#60a5fa' }}>
                       R {buyerPaysTotal.toFixed(2)}
                     </span>
                   </div>
+                  <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', margin: '0 0 10px' }}>
+                    A small bank processing fee will be added at checkout.
+                  </p>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Seller Receives</span>
                     <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#10b981' }}>
@@ -1210,6 +1208,9 @@ function NewTransaction() {
                     </div>
                   ))}
                 </div>
+                <p style={{ fontSize: 12, color: '#94A3B8', margin: '12px 0 0' }}>
+                  A small bank processing fee will be added at checkout.
+                </p>
               </div>
 
               {/* Confirmations */}

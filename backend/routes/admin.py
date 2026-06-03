@@ -3436,6 +3436,99 @@ async def admin_release_transaction(tradesafe_id: str, request: Request):
     }
 
 
+@router.get("/smart-deals/{deal_id}/debug")
+async def admin_debug_smart_deal(deal_id: str, request: Request):
+    """TEMP diagnostic: dump what MongoDB has for a milestone deal vs what TradeSafe
+    actually holds, so we can pinpoint a stored-vs-real allocation mismatch.
+
+    GET /api/admin/smart-deals/{deal_id}/debug
+    """
+    db = get_database()
+    await require_admin(request, db)
+
+    deal = await db.transactions.find_one({"deal_id": deal_id}, {"_id": 0})
+    if not deal:
+        raise HTTPException(status_code=404, detail=f"No deal with deal_id={deal_id!r}")
+
+    from tradesafe_service import get_transaction_by_reference, get_tradesafe_transaction
+
+    def _alloc_view(txn):
+        if not txn:
+            return None
+        return {
+            "tradesafe_id": txn.get("id"),
+            "reference": txn.get("reference"),
+            "state": txn.get("state"),
+            "allocations": [
+                {"id": a.get("id"), "state": a.get("state"), "value": a.get("value"), "title": a.get("title")}
+                for a in (txn.get("allocations") or [])
+            ],
+        }
+
+    # 1) Parent milestones[] as stored on the deal.
+    stored_milestones = [
+        {k: m.get(k) for k in (
+            "seq", "milestone_id", "status", "tradesafe_id", "tradesafe_allocation_id",
+            "tradesafe_seller_token_id", "child_transaction_id", "net_amount",
+            "payout_failed", "payout_error",
+        )}
+        for m in sorted(deal.get("milestones", []), key=lambda x: x.get("seq", 0))
+    ]
+
+    # 2) The per-milestone child transaction docs in Mongo.
+    children = await db.transactions.find(
+        {"parent_deal_id": deal_id, "deal_type": "DIGITAL_WORK_MILESTONE_ITEM"}, {"_id": 0}
+    ).to_list(50)
+    child_docs = [
+        {k: c.get(k) for k in (
+            "deal_id", "seq", "milestone_id", "status", "tradesafe_id",
+            "tradesafe_allocation_id", "tradesafe_state", "withdrawal_status",
+            "payout_failed", "payout_error",
+        )}
+        for c in sorted(children, key=lambda x: x.get("seq", 0))
+    ]
+
+    # 3) What TradeSafe actually has — looked up two ways per milestone:
+    #    by the child's reference (deal_id-Mn) and by the stored tradesafe_id.
+    tradesafe = []
+    seen = set()
+    candidates = []
+    for m in deal.get("milestones", []):
+        candidates.append((
+            m.get("child_transaction_id") or f"{deal_id}-{m.get('milestone_id')}",
+            m.get("tradesafe_id"),
+        ))
+    for c in children:
+        candidates.append((c.get("deal_id"), c.get("tradesafe_id")))
+
+    for ref, ts_id in candidates:
+        key = (ref, ts_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        entry = {"reference": ref, "stored_tradesafe_id": ts_id}
+        try:
+            by_ref = await get_transaction_by_reference(ref) if ref else None
+            entry["by_reference"] = _alloc_view(by_ref) or {"found": False}
+        except Exception as e:
+            entry["by_reference"] = {"error": str(e)}
+        try:
+            by_id = await get_tradesafe_transaction(ts_id) if ts_id else None
+            entry["by_stored_id"] = _alloc_view(by_id) or {"found": False}
+        except Exception as e:
+            entry["by_stored_id"] = {"error": str(e)}
+        tradesafe.append(entry)
+
+    return {
+        "deal_id": deal_id,
+        "deal_type": deal.get("deal_type"),
+        "status": deal.get("status"),
+        "stored_milestones": stored_milestones,
+        "child_docs": child_docs,
+        "tradesafe": tradesafe,
+    }
+
+
 @router.get("/tokens/balances")
 async def get_token_balances(request: Request):
     """

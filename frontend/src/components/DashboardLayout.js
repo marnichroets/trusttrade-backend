@@ -88,7 +88,7 @@ function DashboardLayout({ children, user: userProp, loading = false, darkMain =
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard',       path: '/dashboard' },
     { icon: Plus,            label: 'New Transaction', path: '/transactions/new', highlight: true },
-    { icon: FileText,        label: 'My Transactions', path: '/transactions' },
+    { icon: FileText,        label: 'My Transactions', path: '/transactions', end: true },
     { icon: AlertCircle,     label: 'Disputes',        path: '/disputes-dashboard' },
     { icon: Briefcase,       label: 'Smart Deals',     path: '/smart-deals', desc: 'Projects paid in stages — pay as work is done' },
     { icon: Activity,        label: 'Live Activity',   path: '/activity' },
@@ -250,6 +250,7 @@ function DashboardLayout({ children, user: userProp, loading = false, darkMain =
               <li key={item.path}>
                 <NavLink
                   to={item.path}
+                  end={item.end}
                   data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                   style={({ isActive }) => ({
                     display: 'flex', alignItems: 'center', gap: 9,
@@ -464,6 +465,7 @@ function DashboardLayout({ children, user: userProp, loading = false, darkMain =
           <NavLink
             key={item.path}
             to={item.path}
+            end={item.end}
             className="vault-mobile-link"
             data-testid={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
             style={({ isActive }) => ({

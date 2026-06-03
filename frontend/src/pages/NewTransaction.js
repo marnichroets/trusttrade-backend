@@ -187,7 +187,7 @@ function NewTransaction() {
     known_issues: '',
     item_price: '',
     fee_allocation: 'BUYER',
-    delivery_method: 'courier',
+    delivery_method: 'bank_deposit',  // courier is "coming soon" (disabled), so default to in-person
   });
   const [confirmations, setConfirmations] = useState({
     buyer_details: false,
@@ -319,13 +319,17 @@ function NewTransaction() {
   const courierTotal = courierFee;
   const platformFee = roundMoney(Math.max(itemPrice * 0.02, 5));
   const trusttradeFee = platformFee; // alias kept for any legacy references
+  // TradeSafe charges a payment-processing fee on the buyer's deposit (~2.5%, the same
+  // estimate the backend fee model uses). The buyer always bears it at checkout, so it's
+  // shown on top regardless of who pays the TrustTrade platform fee — no surprises.
+  const processingFee = roundMoney((itemPrice + courierTotal) * 0.025);
   const { buyerFee: buyerFeeContrib, sellerFee: sellerFeeContrib } = splitTrustTradeFee(platformFee, feeAlloc);
-  const buyerPaysTotal = roundMoney(itemPrice + courierTotal + buyerFeeContrib);
+  const buyerPaysTotal = roundMoney(itemPrice + courierTotal + buyerFeeContrib + processingFee);
   const sellerPayout = roundMoney(itemPrice - sellerFeeContrib);
   const feePreview = (allocation) => {
     const { buyerFee, sellerFee } = splitTrustTradeFee(platformFee, allocation);
     return {
-      buyerPays: roundMoney(itemPrice + courierTotal + buyerFee),
+      buyerPays: roundMoney(itemPrice + courierTotal + buyerFee + processingFee),
       sellerReceives: roundMoney(itemPrice - sellerFee),
     };
   };
@@ -778,11 +782,12 @@ function NewTransaction() {
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC', margin: '0 0 14px' }}>How will the item be delivered?</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    { value: 'courier', icon: Truck, label: 'Courier Guy — we book delivery for you', desc: 'Buyer confirms receipt before payment is released.' },
+                    { value: 'courier', icon: Truck, label: 'Courier Guy — we book delivery for you', desc: "Coming soon — we're setting up automated courier booking.", comingSoon: true },
                     { value: 'bank_deposit', icon: Banknote, label: 'In-Person Meeting — meet to exchange', desc: 'Payment is released once the handover is confirmed.' },
                     { value: 'digital', icon: Zap, label: 'Digital Delivery — files, codes or online services', desc: 'e.g. graphic design, software, documents. Payment is released once the digital delivery is confirmed.' },
                   ].map(opt => {
                     const active = formData.delivery_method === opt.value;
+                    const disabled = !!opt.comingSoon;
                     return (
                       <label
                         key={opt.value}
@@ -791,7 +796,8 @@ function NewTransaction() {
                           padding: '11px 14px', borderRadius: 10,
                           border: `1.5px solid ${active ? '#3b82f6' : '#334155'}`,
                           background: active ? 'rgba(59,130,246,0.14)' : '#0F172A',
-                          cursor: 'pointer',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          opacity: disabled ? 0.55 : 1,
                           transition: 'all 0.15s',
                         }}
                       >
@@ -801,6 +807,7 @@ function NewTransaction() {
                           value={opt.value}
                           checked={active}
                           onChange={handleChange}
+                          disabled={disabled}
                           style={{ display: 'none' }}
                         />
                         <div style={{
@@ -815,6 +822,9 @@ function NewTransaction() {
                         <opt.icon size={15} color={active ? '#3b82f6' : '#94a3b8'} />
                         <div style={{ flex: 1 }}>
                           <span style={{ fontSize: 13, fontWeight: 500, color: '#F8FAFC' }}>{opt.label}</span>
+                          {disabled && (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#F59E0B', background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 20, padding: '2px 8px', marginLeft: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Coming Soon</span>
+                          )}
                           <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>{opt.desc}</span>
                         </div>
                       </label>
@@ -1059,6 +1069,12 @@ function NewTransaction() {
                       </span>
                     </div>
                   )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Payment processing fee (est.)</span>
+                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: 'rgba(255,255,255,0.7)' }}>
+                      + R {processingFee.toFixed(2)}
+                    </span>
+                  </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: 10 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>Buyer Pays Total</span>
                     <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#60a5fa' }}>

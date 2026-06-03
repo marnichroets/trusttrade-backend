@@ -55,10 +55,10 @@ const ITEM_CATEGORIES = [
 const S = {
   page: { maxWidth: 640, margin: '0 auto' },
   card: {
-    background: '#1E293B',
+    background: '#243147',
     borderRadius: 14,
     border: '1px solid #334155',
-    boxShadow: '0 1px 4px rgba(15,23,42,0.06)',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
     padding: '22px 24px',
     marginBottom: 14,
   },
@@ -611,17 +611,10 @@ function NewTransaction() {
                   </span>
                 </div>
 
-                {/* Other party prompt */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  background: 'rgba(59,130,246,0.14)', border: '1.5px solid #93c5fd',
-                  borderRadius: 10, padding: '11px 14px', marginBottom: 16,
-                }}>
-                  <span style={{ fontSize: 18 }}>👇</span>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: '#60A5FA' }}>
-                    Now enter your {role === 'buyer' ? 'seller' : 'buyer'}'s details below
-                  </p>
-                </div>
+                {/* Other party prompt — plain helper text */}
+                <p style={{ margin: '0 0 12px', fontSize: 13, color: '#94A3B8' }}>
+                  Now enter your {role === 'buyer' ? 'seller' : 'buyer'}'s details below.
+                </p>
 
                 {/* Other party */}
                 <h3 style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC', margin: '0 0 12px' }}>

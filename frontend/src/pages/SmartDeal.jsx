@@ -21,7 +21,7 @@ const DELIVERY_DAYS_MESSAGE = `Delivery days must be between ${MIN_DELIVERY_DAYS
 // Shared dark theme — matches the app palette (V) used across all pages.
 const D = {
   bg:           "#0F172A",  // canvas / inset panels & input fields (darker than cards)
-  surface:      "#1E293B",  // card background, elevated from canvas
+  surface:      "#243147",  // card background, elevated from canvas
   surfaceHi:    "#334155",  // raised rows / inbound chat bubbles / inactive toggles
   border:       "#334155",
   borderLight:  "#475569",
@@ -42,14 +42,14 @@ const STATUS = {
   ACCEPTED:        { label: "Awaiting payment",                        color: "#3B82F6", bg: "rgba(59,130,246,0.14)", dot: "#3B82F6" },
   PAYMENT_PENDING: { label: "Awaiting payment",                        color: "#3B82F6", bg: "rgba(59,130,246,0.14)", dot: "#60A5FA" },
   FUNDED:          { label: "Money held safely",                       color: "#10B981", bg: "rgba(16,185,129,0.14)", dot: "#10B981" },
-  DELIVERED:       { label: "Awaiting buyer confirmation",             color: "#8B5CF6", bg: "rgba(139,92,246,0.14)", dot: "#8B5CF6" },
+  DELIVERED:       { label: "Awaiting client confirmation",            color: "#8B5CF6", bg: "rgba(139,92,246,0.14)", dot: "#8B5CF6" },
   APPROVED:        { label: "Payout processing · up to 2 business days",    color: "#10B981", bg: "rgba(16,185,129,0.14)", dot: "#10B981" },
   COMPLETE:        { label: "Completed",                               color: "#10B981", bg: "rgba(16,185,129,0.14)", dot: "#10B981" },
   DISPUTED:        { label: "Disputed / protection hold",              color: "#EF4444", bg: "rgba(239,68,68,0.14)", dot: "#EF4444" },
   // Milestone-deal (parent) statuses:
   PROPOSED:          { label: "Awaiting approval",        color: "#FBBF24", bg: "rgba(245,158,11,0.14)", dot: "#F59E0B" },
   STRUCTURE_APPROVED:{ label: "Approved — pay first stage", color: "#3B82F6", bg: "rgba(59,130,246,0.14)", dot: "#3B82F6" },
-  IN_PROGRESS:       { label: "In progress",              color: "#3B82F6", bg: "rgba(59,130,246,0.14)", dot: "#60A5FA" },
+  IN_PROGRESS:       { label: "In progress",              color: "#7E9BC9", bg: "rgba(126,155,201,0.12)", dot: "#7E9BC9" },
 };
 
 // Per-milestone status chips (milestone deals).
@@ -101,6 +101,7 @@ const card = (extra = {}) => ({
   borderRadius: 14,
   padding: "20px 22px",
   marginBottom: 14,
+  boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
   ...extra,
 });
 
@@ -1220,7 +1221,7 @@ export function SmartDealList() {
             <div
               key={d.deal_id}
               onClick={() => navigate(`/smart-deals/${d.deal_id}`)}
-              style={{ ...card({ marginBottom: 0, cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s" }) }}
+              style={{ ...card({ marginBottom: 0, padding: "24px 26px", cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s" }) }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = D.borderLight; e.currentTarget.style.boxShadow = `0 4px 16px rgba(15,23,42,0.10)`; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = D.border; e.currentTarget.style.boxShadow = "none"; }}
             >

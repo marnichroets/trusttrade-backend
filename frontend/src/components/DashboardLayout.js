@@ -11,7 +11,7 @@ import FeedbackButton from './FeedbackButton';
 
 export const V = {
   bg:      '#0F172A',  // deep navy app background
-  surface: '#1E293B',  // cards, elevated from background
+  surface: '#243147',  // cards, elevated from background
   border:  '#334155',  // subtle card border
   accent:  '#3B82F6',  // primary / CTA blue
   success: '#10B981',

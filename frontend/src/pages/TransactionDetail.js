@@ -244,7 +244,7 @@ function PayoutTimeline({ transaction, payoutSchedule }) {
   ];
 
   return (
-    <div style={{ background: '#1E293B', border: '1px solid #334155', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+    <div style={{ background: '#243147', border: '1px solid #334155', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
         <div>
           <p style={{ fontSize: 11, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 4px' }}>Payout timeline</p>
@@ -389,7 +389,7 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, rgba(16,185,129,0.14) 0%, #1E293B 100%)',
+      background: 'linear-gradient(135deg, rgba(16,185,129,0.14) 0%, #243147 100%)',
       border: '1px solid rgba(16,185,129,0.30)',
       borderLeft: '3px solid #10b981',
       borderRadius: 14,
@@ -557,7 +557,7 @@ function SellerExpectedPayoutCard({ transaction, platformConfig }) {
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, rgba(16,185,129,0.14) 0%, #1E293B 100%)',
+      background: 'linear-gradient(135deg, rgba(16,185,129,0.14) 0%, #243147 100%)',
       border: '1px solid rgba(16,185,129,0.30)',
       borderLeft: '3px solid #10b981',
       borderRadius: 14,
@@ -1216,7 +1216,7 @@ function TransactionDetail() {
 
   // ── Shared styles ──────────────────────────────────────────────────
   const S = {
-    card: { background: '#1E293B', borderRadius: 14, border: '1px solid #334155', boxShadow: '0 1px 4px rgba(15,23,42,0.06)', overflow: 'hidden' },
+    card: { background: '#243147', borderRadius: 14, border: '1px solid #334155', boxShadow: '0 1px 3px rgba(0,0,0,0.4)', overflow: 'hidden' },
     label: { fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' },
     sectionTitle: { fontSize: 15, fontWeight: 600, color: '#F8FAFC', margin: 0 },
     divider: { height: 1, background: '#334155', margin: '12px 0' },

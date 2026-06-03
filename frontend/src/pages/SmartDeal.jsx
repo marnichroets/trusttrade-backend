@@ -313,6 +313,12 @@ function FundPanel({ deal }) {
       // The deal stays PAYMENT_PENDING and only becomes FUNDED on the FUNDS_DEPOSITED
       // webhook — we must NEVER advance it here without confirmed payment.
       if (res.payment_link) {
+        // Show the EXACT amount TradeSafe will charge (from the deposit) before paying.
+        if (res.total_value != null) {
+          const pf = res.processing_fee;
+          const feeNote = (pf != null && Number(pf) > 0) ? ` (includes R${Number(pf).toFixed(2)} bank processing fee)` : "";
+          if (!window.confirm(`You'll be charged R${Number(res.total_value).toFixed(2)}${feeNote}. Continue to the secure payment page?`)) { setLoading(false); return; }
+        }
         window.location.href = res.payment_link;
         return;
       }
@@ -1292,7 +1298,14 @@ function MilestoneFundPanel({ deal, milestone, reload }) {
         method: "POST",
         body: JSON.stringify({ payment_method: method }),
       });
-      if (res.payment_link) { window.location.href = res.payment_link; return; }
+      if (res.payment_link) {
+        if (res.total_value != null) {
+          const pf = res.processing_fee;
+          const feeNote = (pf != null && Number(pf) > 0) ? ` (includes R${Number(pf).toFixed(2)} bank processing fee)` : "";
+          if (!window.confirm(`You'll be charged R${Number(res.total_value).toFixed(2)}${feeNote}. Continue to the secure payment page?`)) { setLoading(false); return; }
+        }
+        window.location.href = res.payment_link; return;
+      }
       if (res.eft_details) { setEftDetails(res.eft_details); reload && reload(); return; }
       setErr(res.message || "Couldn't start the payment. Please try again or pick another method.");
     } catch (e) {

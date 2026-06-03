@@ -298,12 +298,16 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
 
     payment_link = None
     payment_method_used = body.payment_method.upper()
+    deposit_total_value = None   # exact amount TradeSafe will charge (incl. bank fee)
+    deposit_processing_fee = None
     if tradesafe_id:
         try:
             pay_result = await get_payment_link(tradesafe_id, redirect_urls, method=body.payment_method)
             if pay_result:
                 payment_link = pay_result.get("payment_link")
                 payment_method_used = pay_result.get("method", payment_method_used)
+                deposit_total_value = pay_result.get("total_value")
+                deposit_processing_fee = pay_result.get("processing_fee")
         except Exception as exc:
             logger.error(f"[SMART_DEAL] get_payment_link failed for {deal_id}: {exc}")
 
@@ -376,6 +380,8 @@ async def fund_deal(deal_id: str, body: FundRequest, request: Request):
         "eft_details": eft_details,
         "payment_method": payment_method_used,
         "tradesafe_id": tradesafe_id,
+        "total_value": deposit_total_value,
+        "processing_fee": deposit_processing_fee,
     }
 
 
@@ -1068,12 +1074,16 @@ async def fund_milestone(deal_id: str, milestone_id: str, body: FundRequest, req
 
     payment_link = None
     payment_method_used = body.payment_method.upper()
+    deposit_total_value = None   # exact amount TradeSafe will charge (incl. bank fee)
+    deposit_processing_fee = None
     if tradesafe_id:
         try:
             pay_result = await get_payment_link(tradesafe_id, redirect_urls, method=body.payment_method)
             if pay_result:
                 payment_link = pay_result.get("payment_link")
                 payment_method_used = pay_result.get("method", payment_method_used)
+                deposit_total_value = pay_result.get("total_value")
+                deposit_processing_fee = pay_result.get("processing_fee")
         except Exception as exc:
             logger.error(f"[MILESTONE_DEAL] get_payment_link failed for {child_deal_id}: {exc}")
 
@@ -1178,6 +1188,8 @@ async def fund_milestone(deal_id: str, milestone_id: str, body: FundRequest, req
         "eft_details": eft_details,
         "payment_method": payment_method_used,
         "tradesafe_id": tradesafe_id,
+        "total_value": deposit_total_value,
+        "processing_fee": deposit_processing_fee,
     }
 
 

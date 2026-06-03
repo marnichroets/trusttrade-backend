@@ -750,6 +750,10 @@ async def get_tradesafe_payment_url(request: Request, transaction_id: str, payme
         "eft_details": eft_details,
         "deposit_id": payment_info.get("deposit_id"),
         "method": payment_info.get("method"),
+        # Exact figures from the TradeSafe deposit so the UI shows what the gateway
+        # actually charges (value = total the buyer pays; processing_fee = the bank fee).
+        "total_value": payment_info.get("total_value"),
+        "processing_fee": payment_info.get("processing_fee"),
         "message": payment_info.get("message")
     }
 

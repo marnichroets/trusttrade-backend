@@ -1040,11 +1040,21 @@ function TransactionDetail() {
       const response = await api.get(`${API}/tradesafe/payment-url/${transactionId}?payment_method=${selectedPaymentMethod}`, { withCredentials: true });
       setPaymentInfo(response.data);
       if (response.data.already_paid) { toast.success('This transaction has already been paid.'); setTransaction(prev => ({ ...prev, tradesafe_state: response.data.state, status: 'paid' })); return; }
-      // Mark that the buyer has started paying so we can show a "Payment processing"
-      // state and actively poll for confirmation when they return to this page.
-      localStorage.setItem(`tt_payment_initiated_${transactionId}`, String(Date.now()));
-      setPaymentProcessing(true);
-      if (response.data.payment_link) { const newWindow = window.open(response.data.payment_link, '_blank'); if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') window.location.href = response.data.payment_link; toast.success('Secure payment page opened.'); }
+      if (response.data.payment_link) {
+        // Show the EXACT amount TradeSafe will charge (deposit value + bank fee) before
+        // sending the buyer to the gateway, so what they see matches what they pay.
+        const tv = response.data.total_value;
+        const pf = response.data.processing_fee;
+        if (tv != null) {
+          const feeNote = (pf != null && Number(pf) > 0) ? ` (includes R${Number(pf).toFixed(2)} bank processing fee)` : '';
+          if (!window.confirm(`You'll be charged R${Number(tv).toFixed(2)}${feeNote}. Continue to the secure payment page?`)) return;
+        }
+        // Mark that the buyer has started paying so we can show a "Payment processing"
+        // state and actively poll for confirmation when they return to this page.
+        localStorage.setItem(`tt_payment_initiated_${transactionId}`, String(Date.now()));
+        setPaymentProcessing(true);
+        const newWindow = window.open(response.data.payment_link, '_blank'); if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') window.location.href = response.data.payment_link; toast.success('Secure payment page opened.');
+      }
       else if (response.data.eft_details) { setPaymentInfo(response.data); toast.info('EFT bank details ready — see below.'); }
       else { setPaymentInfo(response.data); toast.info('Payment deposit created.'); }
     } catch (error) { const errorMessage = error.response?.data?.detail ? parseErrorMessage(error) : 'Unable to process payment. Please try again.'; toast.error(errorMessage); }
@@ -2030,8 +2040,6 @@ function TransactionDetail() {
                     { id: 'card', emoji: '💳', label: 'Credit / Debit Card', desc: 'Pay instantly with Visa or Mastercard', feePercent: 2.5 },
                     { id: 'ozow', emoji: '⚡', label: 'Ozow Instant EFT', desc: 'Fast instant payment from your bank app', feePercent: 1.5 },
                   ].map(pm => {
-                    const pmTotal = totalSecurePayment * (1 + pm.feePercent / 100);
-                    const fmtTotal = `R ${pmTotal.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                     return (
                     <div key={pm.id} onClick={() => setSelectedPaymentMethod(pm.id)} data-testid={`payment-method-${pm.id}`} className={`pm-opt${selectedPaymentMethod === pm.id ? ' selected' : ''}`} style={{ border: `1.5px solid ${selectedPaymentMethod === pm.id ? '#3b82f6' : '#334155'}`, borderRadius: 12, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.15s', background: selectedPaymentMethod === pm.id ? 'rgba(59,130,246,0.14)' : '#0F172A' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -2044,14 +2052,7 @@ function TransactionDetail() {
                             <span style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC' }}>{pm.label}</span>
                             {pm.badge && <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(16,185,129,0.14)', color: '#34D399', padding: '1px 7px', borderRadius: 20 }}>{pm.badge}</span>}
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 12, color: '#94A3B8' }}>
-                              {pm.feePercent === 0 ? 'No extra fee' : `+${pm.feePercent}% processing fee (charged by provider)`}
-                            </span>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: selectedPaymentMethod === pm.id ? '#60A5FA' : '#F8FAFC', fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap' }}>
-                              Total: {fmtTotal}
-                            </span>
-                          </div>
+                          <span style={{ fontSize: 12, color: '#94A3B8' }}>{pm.desc}</span>
                         </div>
                       </div>
                     </div>
@@ -2059,12 +2060,9 @@ function TransactionDetail() {
                   })}
                 </div>
 
-                {/* Price summary showing TrustTrade fee + selected payment provider processing fee */}
+                {/* Price summary — item + TrustTrade fee (+ courier). The exact bank
+                    processing fee is shown from TradeSafe right before you pay. */}
                 {(() => {
-                  const pmFeeMap = { eft: 0, card: 2.5, ozow: 1.5 };
-                  const pmFeePercent = selectedPaymentMethod ? (pmFeeMap[selectedPaymentMethod] ?? 0) : 0;
-                  const processingFee = totalSecurePayment * (pmFeePercent / 100);
-                  const grandTotal = totalSecurePayment + processingFee;
                   return (
                     <div style={{ background: '#0F172A', border: '1px solid #334155', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
                       <p style={{ ...S.label, marginBottom: 12 }}>Payment Breakdown</p>
@@ -2084,18 +2082,13 @@ function TransactionDetail() {
                           <span style={{ fontWeight: 500, color: '#F8FAFC' }}>R {_courierTotal.toFixed(2)}</span>
                         </div>
                       )}
-                      {selectedPaymentMethod && processingFee > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                          <span style={{ color: '#94A3B8' }}>Processing Fee ({pmFeePercent}% — charged by provider)</span>
-                          <span style={{ fontWeight: 500, color: '#F8FAFC' }}>R {processingFee.toFixed(2)}</span>
-                        </div>
-                      )}
                       <div style={{ borderTop: '1px solid #334155', paddingTop: 10, marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC' }}>Total</span>
-                        <span style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>R {grandTotal.toFixed(2)}</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>R {totalSecurePayment.toFixed(2)}</span>
                       </div>
                       <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
-                        {['SELLER_AGENT','SELLER'].includes(_fa) ? 'TrustTrade 2% fee is deducted from seller\'s payout.' : ['BUYER_SELLER','SPLIT_AGENT','BUYER_SELLER_AGENT','SPLIT'].includes(_fa) ? 'TrustTrade 2% fee is split — half from buyer, half from seller.' : 'TrustTrade 2% platform fee is included in your total. Seller receives the full item value.'}
+                        A small bank processing fee will be added at checkout — you'll see the exact amount before you pay.
+                        {' '}{['SELLER_AGENT','SELLER'].includes(_fa) ? 'TrustTrade 2% fee is deducted from the seller\'s payout.' : ['BUYER_SELLER','SPLIT_AGENT','BUYER_SELLER_AGENT','SPLIT'].includes(_fa) ? 'TrustTrade 2% fee is split — half from buyer, half from seller.' : 'TrustTrade 2% platform fee is included. Seller receives the full item value.'}
                       </p>
                     </div>
                   );

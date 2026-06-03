@@ -1280,6 +1280,92 @@ async def deliver_milestone(deal_id: str, milestone_id: str, request: Request):
     return {"deal_id": deal_id, "milestone_id": milestone_id, "status": "DELIVERED"}
 
 
+async def _release_milestone_escrow(db, deal: dict, m: dict, actor: str):
+    """Release one milestone's escrow, run the bank withdrawal, advance the parent
+    deal and notify. Returns (ok: bool, error: Optional[str]).
+
+    Shared by the buyer approve flow and the admin force-release so both behave
+    identically. The TradeSafe release is idempotent + self-healing (accept_delivery
+    re-checks the real allocation by reference), so a retry after a partial release,
+    or a stale stored allocation_id, no longer dead-ends.
+    """
+    deal_id = deal["deal_id"]
+    milestone_id = m["milestone_id"]
+    child_deal_id = m.get("child_transaction_id") or f"{deal_id}-{milestone_id}"
+    allocation_id = m.get("tradesafe_allocation_id")
+    seller_token_id = m.get("tradesafe_seller_token_id")
+    net_amount = m.get("net_amount") or m.get("amount")
+    now = utcnow()
+
+    logger.info(
+        f"[MILESTONE_DEAL] release requested ({actor}) deal={deal_id} milestone={milestone_id} "
+        f"child={child_deal_id} allocation={allocation_id!r} seller_token={seller_token_id!r} amount={net_amount}"
+    )
+    if not allocation_id:
+        msg = "tradesafe_allocation_id missing — milestone not linked to escrow"
+        logger.error(f"[MILESTONE_DEAL] {child_deal_id} cannot release: {msg}")
+        await db.transactions.update_one({"deal_id": child_deal_id}, {"$set": {"payout_failed": True, "payout_error": msg, "updated_at": now}})
+        return False, msg
+
+    try:
+        import tradesafe_service as _ts
+        payout_result = await _ts.accept_delivery(
+            allocation_id, seller_token_id=seller_token_id,
+            amount=float(net_amount) if net_amount else None,
+            reference=child_deal_id,
+        )
+        if not payout_result:
+            # Surface the EXACT TradeSafe rejection captured by accept_delivery.
+            raise ValueError(_ts.LAST_ACCEPT_DELIVERY_ERROR or "TradeSafe declined the release (no result)")
+        logger.info(
+            f"[MILESTONE_DEAL] {child_deal_id} released — allocation="
+            f"{payout_result.get('id', allocation_id)} state={payout_result.get('state')!r}"
+        )
+
+        # Mark the child released (same fields a normal txn gets) then run the
+        # idempotent withdrawal — keyed on the child's unique transaction_id.
+        await db.transactions.update_one(
+            {"deal_id": child_deal_id},
+            {"$set": {
+                "status": "COMPLETE", "completed_at": now, "updated_at": now,
+                "tradesafe_state": "FUNDS_RELEASED", "release_status": "Released",
+                "payout_status": "awaiting_bank_payout", "withdrawal_status": "pending",
+                "funds_released_at": now, "released_at": now,
+                "expected_settlement_window": "up to 2 business days",
+                "payout_sla_status": "on_track", "net_amount": net_amount,
+                "payout_failed": False, "payout_error": None,
+            }},
+        )
+        child = await db.transactions.find_one({"deal_id": child_deal_id})
+        from routes.webhooks import attempt_transaction_withdrawal, notify_seller_funds_released
+        withdrawal_result = await attempt_transaction_withdrawal(db, child, source=f"milestone_{actor}")
+        logger.info(f"[MILESTONE_DEAL] withdrawal result for {child_deal_id}: {withdrawal_result}")
+        asyncio.create_task(_fire_email(notify_seller_funds_released(db, child)))
+    except Exception as exc:
+        err = str(exc)
+        logger.error(f"[MILESTONE_DEAL] Payout failed for {child_deal_id} ({actor}): {err}", exc_info=True)
+        await db.transactions.update_one(
+            {"deal_id": child_deal_id},
+            {"$set": {"payout_failed": True, "payout_error": err, "updated_at": now}},
+        )
+        return False, err
+
+    # Advance the parent: milestone RELEASED, open the next, recompute overall status.
+    await _set_milestone_fields(db, deal_id, milestone_id, {"status": "RELEASED", "released_at": now})
+    await _open_next_milestone(db, deal, m.get("seq", 0))
+    await _recompute_parent_status(db, deal_id)
+    logger.info(f"[MILESTONE_DEAL] {child_deal_id} released & parent advanced ({actor})")
+
+    fresh = await db.transactions.find_one({"deal_id": deal_id})
+    import email_service
+    asyncio.create_task(_fire_email(email_service.send_milestone_released(
+        fresh or deal, _find_milestone(fresh or deal, milestone_id) or m,
+        (fresh or deal).get("client_name") or deal["client_email"],
+        (fresh or deal).get("freelancer_name") or deal["freelancer_email"],
+    )))
+    return True, None
+
+
 @router.post("/{deal_id}/milestones/{milestone_id}/approve")
 async def approve_milestone(deal_id: str, milestone_id: str, request: Request):
     """Buyer approves a delivered milestone — releases that milestone's escrow and
@@ -1299,64 +1385,36 @@ async def approve_milestone(deal_id: str, milestone_id: str, request: Request):
     if m["status"] != "DELIVERED":
         raise HTTPException(status_code=400, detail=f"Nothing to approve — milestone is {m['status']}")
 
-    child_deal_id = m.get("child_transaction_id") or f"{deal_id}-{milestone_id}"
-    now = utcnow()
-
-    try:
-        from tradesafe_service import accept_delivery
-        allocation_id = m.get("tradesafe_allocation_id")
-        if not allocation_id:
-            raise ValueError("tradesafe_allocation_id missing — milestone not linked to escrow")
-        seller_token_id = m.get("tradesafe_seller_token_id")
-        net_amount = m.get("net_amount") or m["amount"]
-        payout_result = await accept_delivery(
-            allocation_id, seller_token_id=seller_token_id,
-            amount=float(net_amount) if net_amount else None,
-        )
-        if not payout_result:
-            raise ValueError("TradeSafe accept_delivery returned no result")
-        logger.info(f"[MILESTONE_DEAL] Payout released for {child_deal_id}, allocation={allocation_id}")
-
-        # Mark the child released (same fields a normal txn gets) then run the
-        # idempotent withdrawal — keyed on the child's unique transaction_id.
-        await db.transactions.update_one(
-            {"deal_id": child_deal_id},
-            {"$set": {
-                "status": "COMPLETE", "completed_at": now, "updated_at": now,
-                "tradesafe_state": "FUNDS_RELEASED", "release_status": "Released",
-                "payout_status": "awaiting_bank_payout", "withdrawal_status": "pending",
-                "funds_released_at": now, "released_at": now,
-                "expected_settlement_window": "up to 2 business days",
-                "payout_sla_status": "on_track", "net_amount": net_amount,
-            }},
-        )
-        child = await db.transactions.find_one({"deal_id": child_deal_id})
-        from routes.webhooks import attempt_transaction_withdrawal, notify_seller_funds_released
-        withdrawal_result = await attempt_transaction_withdrawal(db, child, source="milestone_approve")
-        logger.info(f"[MILESTONE_DEAL] withdrawal result for {child_deal_id}: {withdrawal_result}")
-        asyncio.create_task(_fire_email(notify_seller_funds_released(db, child)))
-    except Exception as exc:
-        logger.error(f"[MILESTONE_DEAL] Payout failed for {child_deal_id}: {exc}")
-        await db.transactions.update_one(
-            {"deal_id": child_deal_id},
-            {"$set": {"payout_failed": True, "payout_error": str(exc), "updated_at": now}},
-        )
+    logger.info(f"[MILESTONE_DEAL] approve POST received deal={deal_id} milestone={milestone_id} by {current_user.email}")
+    ok, error = await _release_milestone_escrow(db, deal, m, actor="approve")
+    if not ok:
         raise HTTPException(status_code=500, detail="Could not release this milestone. Please try again or contact support.")
+    return {"deal_id": deal_id, "milestone_id": milestone_id, "status": "RELEASED"}
 
-    # Advance the parent: milestone RELEASED, open the next, recompute overall status.
-    await _set_milestone_fields(db, deal_id, milestone_id, {"status": "RELEASED", "released_at": now})
-    await _open_next_milestone(db, deal, m.get("seq", 0))
-    await _recompute_parent_status(db, deal_id)
-    logger.info(f"[MILESTONE_DEAL] {child_deal_id} approved/released by {current_user.email}")
 
-    fresh = await db.transactions.find_one({"deal_id": deal_id})
-    import email_service
-    asyncio.create_task(_fire_email(email_service.send_milestone_released(
-        fresh or deal, _find_milestone(fresh or deal, milestone_id) or m,
-        (fresh or deal).get("client_name") or deal["client_email"],
-        (fresh or deal).get("freelancer_name") or deal["freelancer_email"],
-    )))
+@router.post("/{deal_id}/milestones/{milestone_id}/admin-release")
+async def admin_release_milestone(deal_id: str, milestone_id: str, request: Request):
+    """Admin force-release a single milestone's escrow when the buyer's approve has
+    failed. Returns the EXACT TradeSafe error on failure so it's visible in the admin
+    panel without needing log access."""
+    db = get_database()
+    current_user = await get_user_from_token(request, db)
+    if not current_user or not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
 
+    deal = await get_deal_or_404(deal_id, db)
+    if not _is_milestone_deal(deal):
+        raise HTTPException(status_code=400, detail="This is not a milestone deal")
+    m = _find_milestone(deal, milestone_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    if m.get("status") == "RELEASED":
+        return {"deal_id": deal_id, "milestone_id": milestone_id, "status": "RELEASED", "note": "already released"}
+
+    logger.info(f"[MILESTONE_DEAL] ADMIN force-release deal={deal_id} milestone={milestone_id} by {current_user.email}")
+    ok, error = await _release_milestone_escrow(db, deal, m, actor="admin")
+    if not ok:
+        raise HTTPException(status_code=502, detail=f"Release failed: {error}")
     return {"deal_id": deal_id, "milestone_id": milestone_id, "status": "RELEASED"}
 
 

@@ -1424,26 +1424,24 @@ async def complete_delivery(allocation_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-async def accept_delivery(allocation_id: str, seller_token_id: Optional[str] = None, amount: Optional[float] = None) -> Optional[Dict[str, Any]]:
-    """
-    Buyer confirms receipt — releases funds immediately.
+# Allocation states that mean "funds already released / on their way to the seller".
+# If an allocation is in one of these, a release attempt is a no-op success, not a failure.
+ALLOCATION_RELEASED_STATES = {
+    "DELIVERY_ACCEPTED", "FUNDS_RELEASED", "RELEASED", "COMPLETE", "COMPLETED",
+    "FUNDS_DISBURSED", "DISBURSED",
+}
 
-    Calls allocationStartDelivery then allocationAcceptDelivery back-to-back
-    in the same request. The sequential pairing is required: TradeSafe needs
-    the allocation in DELIVERY_REQUESTED state (set by allocationStartDelivery)
-    before allocationAcceptDelivery can release the funds.
+# Set by accept_delivery on a hard failure so callers can log/surface the exact
+# TradeSafe rejection instead of a generic "no result".
+LAST_ACCEPT_DELIVERY_ERROR: Optional[str] = None
 
-    If allocationStartDelivery returns an error the allocation may already be
-    in the right state (e.g. seller dispatched earlier), so we still attempt
-    allocationAcceptDelivery regardless.
 
-    If allocationAcceptDelivery is rejected (TradeSafe blocks it in some allocation
-    states), we fall back to allocationCompleteDelivery — the documented post-payment
-    release mutation — so a valid release never dead-ends on the wrong mutation.
-    """
-    logger.info(f"[ACCEPT_DELIVERY] Back-to-back sequence start — allocation={allocation_id!r}")
+async def _attempt_release(allocation_id: str) -> Optional[Dict[str, Any]]:
+    """One release attempt on a single allocation: start -> accept, falling back to
+    complete. Returns the allocation dict on success, else None. Records the precise
+    TradeSafe error in LAST_ACCEPT_DELIVERY_ERROR."""
+    global LAST_ACCEPT_DELIVERY_ERROR
 
-    # Step 1 — allocationStartDelivery
     start_result = await start_delivery(allocation_id)
     if start_result:
         logger.info(f"[ACCEPT_DELIVERY] allocationStartDelivery OK: state={start_result.get('state')!r}")
@@ -1453,15 +1451,9 @@ async def accept_delivery(allocation_id: str, seller_token_id: Optional[str] = N
             "(may already be started) — proceeding to allocationAcceptDelivery anyway"
         )
 
-    # Step 2 — allocationAcceptDelivery (immediate fund release)
     mutation = """
     mutation allocationAcceptDelivery($id: ID!) {
-        allocationAcceptDelivery(id: $id) {
-            id
-            title
-            state
-            value
-        }
+        allocationAcceptDelivery(id: $id) { id title state value }
     }
     """
     result = await execute_graphql(mutation, {"id": allocation_id})
@@ -1472,34 +1464,76 @@ async def accept_delivery(allocation_id: str, seller_token_id: Optional[str] = N
         logger.info(f"[ACCEPT_DELIVERY] Success: allocation={allocation_id!r} state={delivery_result.get('state')!r}")
         return delivery_result
 
-    # allocationAcceptDelivery failed. TradeSafe rejects it in several allocation
-    # states (e.g. "You cannot accept this allocation"). The documented post-payment
-    # release path is allocationCompleteDelivery — fall back to it so the release
-    # (and the admin force-release) still completes instead of dead-ending.
     if result and "errors" in result:
         err = result["errors"][0].get("message", "unknown") if result["errors"] else "unknown"
         debug = (result["errors"][0].get("extensions") or {}).get("debugMessage", "") if result["errors"] else ""
-        logger.error(
-            f"[ACCEPT_DELIVERY] allocationAcceptDelivery error for {allocation_id!r}: {err} | debug: {debug} "
-            f"— falling back to allocationCompleteDelivery"
-        )
+        LAST_ACCEPT_DELIVERY_ERROR = f"allocationAcceptDelivery: {err}{(' — ' + debug) if debug else ''}"
+        logger.error(f"[ACCEPT_DELIVERY] {LAST_ACCEPT_DELIVERY_ERROR} (allocation {allocation_id!r}) — trying allocationCompleteDelivery")
     else:
-        logger.error(
-            f"[ACCEPT_DELIVERY] Unexpected allocationAcceptDelivery response for {allocation_id!r}: {result} "
-            f"— falling back to allocationCompleteDelivery"
-        )
+        LAST_ACCEPT_DELIVERY_ERROR = f"allocationAcceptDelivery: unexpected response {result}"
+        logger.error(f"[ACCEPT_DELIVERY] {LAST_ACCEPT_DELIVERY_ERROR} (allocation {allocation_id!r}) — trying allocationCompleteDelivery")
 
     complete_result = await complete_delivery(allocation_id)
     if complete_result:
-        logger.info(
-            f"[ACCEPT_DELIVERY] Fallback allocationCompleteDelivery succeeded: "
-            f"allocation={allocation_id!r} state={complete_result.get('state')!r}"
-        )
+        logger.info(f"[ACCEPT_DELIVERY] Fallback allocationCompleteDelivery OK: allocation={allocation_id!r} state={complete_result.get('state')!r}")
         return complete_result
+    return None
+
+
+async def accept_delivery(
+    allocation_id: str,
+    seller_token_id: Optional[str] = None,
+    amount: Optional[float] = None,
+    reference: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Release escrow funds for an allocation (buyer confirm / approve / admin force).
+
+    Runs allocationStartDelivery -> allocationAcceptDelivery, falling back to
+    allocationCompleteDelivery. If `reference` (the transaction's internal reference,
+    e.g. a milestone child deal_id) is given, the call also SELF-HEALS on failure:
+
+      * if the allocation is already in a released state, it's treated as success
+        (idempotent — fixes a retry after a partial release); and
+      * if the stored allocation_id is wrong/stale, the real allocation is looked up
+        from the reference and the release retried on it.
+
+    On a genuine failure, LAST_ACCEPT_DELIVERY_ERROR holds the exact TradeSafe reason.
+    """
+    global LAST_ACCEPT_DELIVERY_ERROR
+    LAST_ACCEPT_DELIVERY_ERROR = None
+    logger.info(f"[ACCEPT_DELIVERY] start — allocation={allocation_id!r} reference={reference!r}")
+
+    result = await _attempt_release(allocation_id)
+    if result:
+        return result
+
+    # Self-heal / idempotency using the transaction's real allocation state.
+    if reference:
+        try:
+            txn = await get_transaction_by_reference(reference)
+            allocs = (txn or {}).get("allocations") or []
+            real = next((a for a in allocs if str(a.get("id")) == str(allocation_id)), None) or (allocs[0] if allocs else None)
+            if real:
+                real_id = real.get("id")
+                state = str(real.get("state") or "").upper()
+                logger.info(f"[ACCEPT_DELIVERY] reference={reference!r} real allocation={real_id!r} state={state!r}")
+                if state in ALLOCATION_RELEASED_STATES:
+                    logger.info(f"[ACCEPT_DELIVERY] allocation {real_id!r} already released ({state}) — idempotent success")
+                    return {"id": real_id or allocation_id, "state": state, "already_released": True}
+                if real_id and str(real_id) != str(allocation_id):
+                    logger.warning(f"[ACCEPT_DELIVERY] stored allocation {allocation_id!r} failed; retrying real allocation {real_id!r}")
+                    result = await _attempt_release(real_id)
+                    if result:
+                        return result
+            else:
+                logger.error(f"[ACCEPT_DELIVERY] no allocations found on transaction reference={reference!r}")
+        except Exception as exc:
+            logger.error(f"[ACCEPT_DELIVERY] self-heal lookup failed for reference={reference!r}: {exc}")
 
     logger.error(
-        f"[ACCEPT_DELIVERY] Both allocationAcceptDelivery and allocationCompleteDelivery "
-        f"failed for allocation {allocation_id!r}"
+        f"[ACCEPT_DELIVERY] release failed for allocation {allocation_id!r} "
+        f"(reference={reference!r}): {LAST_ACCEPT_DELIVERY_ERROR or 'unknown'}"
     )
     return None
 

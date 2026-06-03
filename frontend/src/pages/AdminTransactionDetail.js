@@ -103,6 +103,24 @@ function AdminTransactionDetail() {
     setConfirmModal({ open: true, action, title, message });
   };
 
+  // Force-release a single Smart Deal milestone's escrow when the buyer's approve
+  // failed. Shows the EXACT TradeSafe error returned by the backend, right here.
+  const forceReleaseMilestone = async (milestoneId, seq) => {
+    const dealId = transaction.deal_id || transaction.transaction_id;
+    if (!window.confirm(`Force-release Stage ${seq} (${milestoneId}) for ${dealId}? Funds will be sent to the seller.`)) return;
+    setActionLoading(true);
+    try {
+      await api.post(`/smart-deals/${dealId}/milestones/${milestoneId}/admin-release`, {});
+      toast.success(`Stage ${seq} released`);
+      await fetchData();
+    } catch (error) {
+      // backend returns "Release failed: <exact TradeSafe reason>"
+      toast.error(error.response?.data?.detail || 'Release failed', { duration: 10000 });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleAction = async () => {
     const action = confirmModal.action;
     setConfirmModal({ ...confirmModal, open: false });
@@ -786,6 +804,43 @@ function AdminTransactionDetail() {
                 </Button>
               </div>
             </Card>
+
+            {/* Smart Deal milestones — per-stage force release when an approve fails */}
+            {transaction.deal_type === 'DIGITAL_WORK_MILESTONE' && Array.isArray(transaction.milestones) && (
+              <Card className="p-6" style={{ backgroundColor: COLORS.background }} data-testid="milestone-release-panel">
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: COLORS.primary }}>
+                  <DollarSign className="w-4 h-4" /> Milestone Force-Release
+                </h3>
+                <p className="text-xs mb-3" style={{ color: COLORS.subtext }}>
+                  Use this if a buyer's "Approve" failed. The exact TradeSafe reason is shown if it fails again.
+                </p>
+                <div className="space-y-2">
+                  {[...transaction.milestones].sort((a, b) => (a.seq || 0) - (b.seq || 0)).map((ms) => {
+                    const released = ms.status === 'RELEASED';
+                    return (
+                      <div key={ms.milestone_id} className="flex items-center justify-between gap-3 p-2 rounded" style={{ backgroundColor: COLORS.section }}>
+                        <div className="text-sm min-w-0">
+                          <span className="font-medium" style={{ color: COLORS.text }}>Stage {ms.seq}</span>
+                          <span className="ml-2" style={{ color: COLORS.subtext }}>{ms.status}</span>
+                          {ms.payout_error && (
+                            <span className="ml-2 text-xs" style={{ color: COLORS.error }}>· {ms.payout_error}</span>
+                          )}
+                        </div>
+                        <Button
+                          onClick={() => forceReleaseMilestone(ms.milestone_id, ms.seq)}
+                          disabled={actionLoading || released}
+                          className="text-white justify-center shrink-0"
+                          style={{ backgroundColor: released ? COLORS.border : COLORS.green, opacity: released ? 0.6 : 1 }}
+                          data-testid={`force-release-milestone-${ms.milestone_id}`}
+                        >
+                          {released ? 'Released' : 'Force Release'}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            )}
 
             {/* Courier Booking — only for courier deliveries */}
             {transaction.delivery_method === 'courier' && (

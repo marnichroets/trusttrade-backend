@@ -326,10 +326,26 @@ async def send_funds_released_sms(
         arrival_date = format_payout_arrival_date()
 
     bank_phrase = f"your {bank_name} account" if bank_name else "your bank account"
+    ref_phrase = f" for {reference}" if reference else ""
     message = (
-        f"TrustTrade: Your {_format_rand(amount)} payout is being processed to "
+        f"TrustTrade: Your {_format_rand(amount)} payout{ref_phrase} is being processed to "
         f"{bank_phrase}. Expected arrival {arrival_date}. "
         f"Questions? trusttrade.register@gmail.com"
+    )
+    return await send_sms(to_phone, message)
+
+
+async def send_payment_released_buyer_sms(
+    to_phone: str,
+    reference: str = "",
+    counterparty_name: str = "",
+) -> Dict[str, Any]:
+    """Tell the buyer/client their payment has been released and the deal is complete."""
+    ref_phrase = f" for {reference}" if reference else ""
+    who = counterparty_name or "the other party"
+    message = (
+        f"TrustTrade: Your payment{ref_phrase} has been released to {who}. "
+        f"The transaction is complete. Questions? trusttrade.register@gmail.com"
     )
     return await send_sms(to_phone, message)
 

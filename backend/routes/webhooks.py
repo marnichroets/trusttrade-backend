@@ -635,6 +635,7 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
     # Tell the buyer their payment has been released and the deal is complete.
     buyer_email = txn.get("buyer_email") or txn.get("client_email") or ""
     buyer_name = txn.get("buyer_name") or txn.get("client_name") or "there"
+    buyer_phone = txn.get("buyer_phone") or txn.get("client_phone")
     if buyer_email:
         await send_email_with_tracking(
             db, txn_id, EmailEvent.FUNDS_RELEASED_BUYER,
@@ -646,6 +647,24 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
             item_description=item_description,
             amount=amount,
         )
+        # Smart Deal child docs don't store the buyer phone — resolve from the user.
+        if not buyer_phone:
+            buyer_user = await db.users.find_one({"email": buyer_email}, {"phone": 1, "mobile": 1})
+            if buyer_user:
+                buyer_phone = buyer_user.get("phone") or buyer_user.get("mobile")
+
+    # Buyer SMS too — deduped per transaction, so one SMS per (milestone) release.
+    if buyer_phone and not await has_email_been_sent(db, txn_id, "funds_released_buyer_sms"):
+        sent = await send_sms_with_tracking(
+            db, txn_id, "funds_released_buyer_sms",
+            buyer_phone,
+            sms_service.send_payment_released_buyer_sms,
+            to_phone=buyer_phone,
+            reference=reference,
+            counterparty_name=seller_name,
+        )
+        if sent:
+            await mark_email_sent(db, txn_id, "funds_released_buyer_sms")
 
     logger.info(f"[WITHDRAWAL] buyer+seller notified funds-released txn={txn_id}")
 

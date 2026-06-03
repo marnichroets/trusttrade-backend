@@ -1307,6 +1307,7 @@ async def _release_milestone_escrow(db, deal: dict, m: dict, actor: str):
         await db.transactions.update_one({"deal_id": child_deal_id}, {"$set": {"payout_failed": True, "payout_error": msg, "updated_at": now}})
         return False, msg
 
+    # Critical step: release the escrow at TradeSafe. ONLY this can fail the release.
     try:
         import tradesafe_service as _ts
         payout_result = await _ts.accept_delivery(
@@ -1317,43 +1318,6 @@ async def _release_milestone_escrow(db, deal: dict, m: dict, actor: str):
         if not payout_result:
             # Surface the EXACT TradeSafe rejection captured by accept_delivery.
             raise ValueError(_ts.LAST_ACCEPT_DELIVERY_ERROR or "TradeSafe declined the release (no result)")
-        logger.info(
-            f"[MILESTONE_DEAL] {child_deal_id} released — allocation="
-            f"{payout_result.get('id', allocation_id)} state={payout_result.get('state')!r}"
-        )
-
-        # If the release self-healed onto a different (correct) allocation than the one
-        # stored, persist the correction so the DB stops pointing at the wrong allocation.
-        released_alloc = payout_result.get("id")
-        if released_alloc and str(released_alloc) != str(allocation_id):
-            logger.warning(
-                f"[MILESTONE_DEAL] correcting stored allocation for {child_deal_id}: "
-                f"{allocation_id!r} -> {released_alloc!r}"
-            )
-            await _set_milestone_fields(db, deal_id, milestone_id, {"tradesafe_allocation_id": released_alloc})
-            await db.transactions.update_one(
-                {"deal_id": child_deal_id}, {"$set": {"tradesafe_allocation_id": released_alloc}}
-            )
-
-        # Mark the child released (same fields a normal txn gets) then run the
-        # idempotent withdrawal — keyed on the child's unique transaction_id.
-        await db.transactions.update_one(
-            {"deal_id": child_deal_id},
-            {"$set": {
-                "status": "COMPLETE", "completed_at": now, "updated_at": now,
-                "tradesafe_state": "FUNDS_RELEASED", "release_status": "Released",
-                "payout_status": "awaiting_bank_payout", "withdrawal_status": "pending",
-                "funds_released_at": now, "released_at": now,
-                "expected_settlement_window": "up to 2 business days",
-                "payout_sla_status": "on_track", "net_amount": net_amount,
-                "payout_failed": False, "payout_error": None,
-            }},
-        )
-        child = await db.transactions.find_one({"deal_id": child_deal_id})
-        from routes.webhooks import attempt_transaction_withdrawal, notify_seller_funds_released
-        withdrawal_result = await attempt_transaction_withdrawal(db, child, source=f"milestone_{actor}")
-        logger.info(f"[MILESTONE_DEAL] withdrawal result for {child_deal_id}: {withdrawal_result}")
-        asyncio.create_task(_fire_email(notify_seller_funds_released(db, child)))
     except Exception as exc:
         err = str(exc)
         logger.error(f"[MILESTONE_DEAL] Payout failed for {child_deal_id} ({actor}): {err}", exc_info=True)
@@ -1363,11 +1327,54 @@ async def _release_milestone_escrow(db, deal: dict, m: dict, actor: str):
         )
         return False, err
 
+    # ── Funds are released at TradeSafe. Everything below is best-effort: a hiccup in
+    #    the withdrawal must NEVER fail the release or skip the payout notifications
+    #    (that was the bug where milestone 2+ released but never notified). ──
+    logger.info(
+        f"[MILESTONE_DEAL] {child_deal_id} released — allocation="
+        f"{payout_result.get('id', allocation_id)} state={payout_result.get('state')!r}"
+    )
+
+    # If the release self-healed onto a different (correct) allocation than the one
+    # stored, persist the correction so the DB stops pointing at the wrong allocation.
+    released_alloc = payout_result.get("id")
+    if released_alloc and str(released_alloc) != str(allocation_id):
+        logger.warning(f"[MILESTONE_DEAL] correcting stored allocation for {child_deal_id}: {allocation_id!r} -> {released_alloc!r}")
+        await _set_milestone_fields(db, deal_id, milestone_id, {"tradesafe_allocation_id": released_alloc})
+        await db.transactions.update_one({"deal_id": child_deal_id}, {"$set": {"tradesafe_allocation_id": released_alloc}})
+
+    # Mark the child released (same fields a normal txn gets).
+    await db.transactions.update_one(
+        {"deal_id": child_deal_id},
+        {"$set": {
+            "status": "COMPLETE", "completed_at": now, "updated_at": now,
+            "tradesafe_state": "FUNDS_RELEASED", "release_status": "Released",
+            "payout_status": "awaiting_bank_payout", "withdrawal_status": "pending",
+            "funds_released_at": now, "released_at": now,
+            "expected_settlement_window": "up to 2 business days",
+            "payout_sla_status": "on_track", "net_amount": net_amount,
+            "payout_failed": False, "payout_error": None,
+        }},
+    )
+    child = await db.transactions.find_one({"deal_id": child_deal_id})
+
+    from routes.webhooks import attempt_transaction_withdrawal, notify_seller_funds_released
+    # Bank withdrawal — best-effort (idempotent); never let it block notifications.
+    try:
+        withdrawal_result = await attempt_transaction_withdrawal(db, child, source=f"milestone_{actor}")
+        logger.info(f"[MILESTONE_DEAL] withdrawal result for {child_deal_id}: {withdrawal_result}")
+    except Exception as exc:
+        logger.error(f"[MILESTONE_DEAL] withdrawal error for {child_deal_id} (non-fatal): {exc}")
+
     # Advance the parent: milestone RELEASED, open the next, recompute overall status.
     await _set_milestone_fields(db, deal_id, milestone_id, {"status": "RELEASED", "released_at": now})
     await _open_next_milestone(db, deal, m.get("seq", 0))
     await _recompute_parent_status(db, deal_id)
     logger.info(f"[MILESTONE_DEAL] {child_deal_id} released & parent advanced ({actor})")
+
+    # Payout notifications — BOTH client and freelancer get email + SMS, for EVERY
+    # milestone (deduped per child transaction_id). Runs regardless of withdrawal outcome.
+    asyncio.create_task(_fire_email(notify_seller_funds_released(db, child)))
 
     fresh = await db.transactions.find_one({"deal_id": deal_id})
     import email_service

@@ -1480,7 +1480,7 @@ function TransactionDetail() {
       return { ...base, bg: 'rgba(16,185,129,0.14)', border: 'rgba(16,185,129,0.30)', color: '#34D399', titleColor: '#6EE7B7', textColor: '#34D399', title: 'Funds released', description: payoutSchedule.shortCopy || 'Next payout release' };
     }
     if (isBuyer && (canFundEscrowSetup || canMakePayment)) {
-      return { ...base, title: 'Your next step: Fund escrow', description: isDeliveryFlow ? 'Your payment is held securely until delivery is confirmed.' : 'Your payment is held securely until release conditions are met.' };
+      return { ...base, title: 'Your next step: Make payment', description: isDeliveryFlow ? 'Your payment is held securely until delivery is confirmed.' : 'Your payment is held securely until release conditions are met.' };
     }
     if (isSeller && (sellerWaitingForBuyerFunding || isAwaitingBuyerPayment)) {
       return { ...base, bg: 'rgba(245,158,11,0.14)', border: 'rgba(245,158,11,0.30)', color: '#FBBF24', titleColor: '#FBBF24', textColor: '#FBBF24', title: 'Waiting for buyer payment', description: 'Share this link with the buyer. You will be notified when funds are secured.' };
@@ -1567,6 +1567,9 @@ function TransactionDetail() {
           .transaction-mobile-summary, .transaction-mobile-breakdown, .transaction-mobile-share { display: block; }
           .transaction-desktop-summary-card, .transaction-desktop-share-card, .transaction-desktop-parties-card { display: none !important; }
           .td-tab { padding: 9px 10px; font-size: 12px; white-space: nowrap; }
+          /* Action buttons go full-width on mobile so they're always visible and tappable
+             (an inline-flex/nowrap button could otherwise be clipped by overflow-x:hidden). */
+          .action-btn { width: 100% !important; justify-content: center !important; white-space: normal !important; }
         }
         @media (max-width: 480px) {
           .transaction-detail-grid { gap: 14px; }
@@ -2054,9 +2057,9 @@ function TransactionDetail() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                   {[
-                    { id: 'eft', emoji: '🏦', label: 'EFT Bank Transfer', desc: 'Direct bank transfer', badge: 'Recommended', badgeColor: '#10b981', feePercent: 0 },
-                    { id: 'card', emoji: '💳', label: 'Credit / Debit Card', desc: 'Pay instantly with Visa or Mastercard', feePercent: 2.5 },
-                    { id: 'ozow', emoji: '⚡', label: 'Ozow Instant EFT', desc: 'Fast instant payment from your bank app', feePercent: 1.5 },
+                    { id: 'eft', emoji: '🏦', label: 'EFT Bank Transfer', desc: 'Direct bank transfer', badge: 'Recommended', badgeColor: '#10b981', feeNote: 'No extra bank fee' },
+                    { id: 'card', emoji: '💳', label: 'Credit / Debit Card', desc: 'Pay instantly with Visa or Mastercard', feeNote: '+2.5% bank processing fee' },
+                    { id: 'ozow', emoji: '⚡', label: 'Ozow Instant EFT', desc: 'Fast instant payment from your bank app', feeNote: '+1.7% bank processing fee' },
                   ].map(pm => {
                     return (
                     <div key={pm.id} onClick={() => setSelectedPaymentMethod(pm.id)} data-testid={`payment-method-${pm.id}`} className={`pm-opt${selectedPaymentMethod === pm.id ? ' selected' : ''}`} style={{ border: `1.5px solid ${selectedPaymentMethod === pm.id ? '#3b82f6' : '#334155'}`, borderRadius: 12, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.15s', background: selectedPaymentMethod === pm.id ? 'rgba(59,130,246,0.14)' : '#0F172A' }}>
@@ -2070,7 +2073,8 @@ function TransactionDetail() {
                             <span style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC' }}>{pm.label}</span>
                             {pm.badge && <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(16,185,129,0.14)', color: '#34D399', padding: '1px 7px', borderRadius: 20 }}>{pm.badge}</span>}
                           </div>
-                          <span style={{ fontSize: 12, color: '#94A3B8' }}>{pm.desc}</span>
+                          <span style={{ fontSize: 12, color: '#94A3B8', display: 'block' }}>{pm.desc}</span>
+                          {pm.feeNote && <span style={{ fontSize: 11, color: '#64748B', display: 'block', marginTop: 2 }}>{pm.feeNote}</span>}
                         </div>
                       </div>
                     </div>

@@ -111,43 +111,17 @@ async def main():
               "so there's nothing to release. Investigate the funding webhook for this stage.")
         sys.exit(3)
 
-    print(f"\n[RELEASE] Re-attempting accept_delivery for allocation={allocation_id} …")
-    from tradesafe_service import accept_delivery
-    from routes.webhooks import attempt_transaction_withdrawal, notify_seller_funds_released
-    from routes.smart_deals import advance_parent_milestone_released
+    print(f"\n[RELEASE] Re-attempting via the app's shared release path "
+          f"(self-heals onto the real allocation for reference {child_deal_id}) …")
+    # Reuse the exact code the Approve button / admin force-release run, so the release,
+    # the allocation-id correction, the bank withdrawal and the parent-advance all happen
+    # identically and the stored allocation id is fixed in the DB.
+    from routes.smart_deals import _release_milestone_escrow
 
-    result = await accept_delivery(
-        allocation_id, seller_token_id=seller_token_id,
-        amount=float(net_amount) if net_amount else None,
-    )
-    if not result:
-        print("[RELEASE] FAILED: TradeSafe accept_delivery/completeDelivery returned no result. "
-              "See the [ACCEPT_DELIVERY] log lines for the exact rejection.")
+    ok, error = await _release_milestone_escrow(db, deal, target, actor="cli_recovery")
+    if not ok:
+        print(f"[RELEASE] FAILED: {error}")
         sys.exit(4)
-    print(f"[RELEASE] TradeSafe OK — allocation state={result.get('state')!r}")
-
-    now = datetime.now(timezone.utc)
-    await db.transactions.update_one(
-        {"deal_id": child_deal_id},
-        {"$set": {
-            "status": "COMPLETE", "completed_at": now, "updated_at": now,
-            "tradesafe_state": "FUNDS_RELEASED", "release_status": "Released",
-            "payout_status": "awaiting_bank_payout", "withdrawal_status": "pending",
-            "funds_released_at": now, "released_at": now,
-            "expected_settlement_window": "up to 2 business days",
-            "payout_sla_status": "on_track", "net_amount": net_amount,
-            "payout_failed": False, "payout_error": None,
-        }},
-    )
-    fresh_child = await db.transactions.find_one({"deal_id": child_deal_id})
-    withdrawal_result = await attempt_transaction_withdrawal(db, fresh_child, source="milestone_manual_recovery")
-    print(f"[RELEASE] withdrawal result: {withdrawal_result}")
-
-    await advance_parent_milestone_released(db, args.deal_id, mid)
-    try:
-        await notify_seller_funds_released(db, fresh_child)
-    except Exception as exc:
-        print(f"[RELEASE] (non-fatal) seller notification failed: {exc}")
 
     print(f"\n[RELEASE] DONE — stage {target.get('seq')} ({mid}) released for {args.deal_id}.")
 

@@ -169,6 +169,30 @@ async def _handle_milestone_funded(child: dict, db, state: str = "FUNDS_DEPOSITE
             {"$set": {"status": "IN_PROGRESS", "updated_at": now}},
         )
 
+    # Authoritatively reconcile the stored allocation id against the allocation TradeSafe
+    # actually created for THIS milestone's reference (child_id). This is the durable fix
+    # for a wrong/stale allocation id being stored — without it, a later release can target
+    # another stage's allocation. We look it up fresh from TradeSafe on every funding clear
+    # and correct the child + parent milestone if they disagree.
+    try:
+        from tradesafe_service import get_transaction_by_reference
+        ts_txn = await get_transaction_by_reference(child_id)
+        allocs = (ts_txn or {}).get("allocations") or []
+        real_alloc = (allocs[0] or {}).get("id") if allocs else None
+        if real_alloc and str(real_alloc) != str(child.get("tradesafe_allocation_id")):
+            logger.warning(
+                f"[WEBHOOK] Milestone {child_id} allocation reconcile: "
+                f"stored={child.get('tradesafe_allocation_id')!r} -> real={real_alloc!r}"
+            )
+            await db.transactions.update_one(
+                {"deal_id": child_id}, {"$set": {"tradesafe_allocation_id": real_alloc}}
+            )
+            if parent_id and milestone_id:
+                from routes.smart_deals import _set_milestone_fields as _smf
+                await _smf(db, parent_id, milestone_id, {"tradesafe_allocation_id": real_alloc})
+    except Exception as exc:
+        logger.error(f"[WEBHOOK] Milestone {child_id} allocation reconcile failed (non-fatal): {exc}")
+
     logger.info(f"[WEBHOOK] Milestone {child_id} → FUNDED (state={state})")
 
     if already_funded:

@@ -1322,6 +1322,19 @@ async def _release_milestone_escrow(db, deal: dict, m: dict, actor: str):
             f"{payout_result.get('id', allocation_id)} state={payout_result.get('state')!r}"
         )
 
+        # If the release self-healed onto a different (correct) allocation than the one
+        # stored, persist the correction so the DB stops pointing at the wrong allocation.
+        released_alloc = payout_result.get("id")
+        if released_alloc and str(released_alloc) != str(allocation_id):
+            logger.warning(
+                f"[MILESTONE_DEAL] correcting stored allocation for {child_deal_id}: "
+                f"{allocation_id!r} -> {released_alloc!r}"
+            )
+            await _set_milestone_fields(db, deal_id, milestone_id, {"tradesafe_allocation_id": released_alloc})
+            await db.transactions.update_one(
+                {"deal_id": child_deal_id}, {"$set": {"tradesafe_allocation_id": released_alloc}}
+            )
+
         # Mark the child released (same fields a normal txn gets) then run the
         # idempotent withdrawal — keyed on the child's unique transaction_id.
         await db.transactions.update_one(

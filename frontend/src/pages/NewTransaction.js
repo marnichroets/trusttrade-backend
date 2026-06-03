@@ -28,6 +28,16 @@ function roundMoney(value) {
   return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 }
 
+// Plain-English descriptions for each Courier Guy service level, so users can pick
+// the right one. Keyed by the lowercased service-level name returned by ShipLogic.
+const COURIER_LEVEL_DESCRIPTIONS = {
+  'local sameday flyer': 'Small items — same day delivery (envelope/bag sized)',
+  'local overnight flyer': 'Small items — next day delivery (envelope/bag sized)',
+  'economy': 'Standard parcels — delivered in 2-3 days',
+  'local same day economy': 'Standard parcels — same day delivery',
+  'local sameday express': 'Any parcel — delivered within 90 minutes (premium)',
+};
+
 function splitTrustTradeFee(totalFee, feeAllocation) {
   const fee = roundMoney(totalFee);
   const alloc = (feeAllocation || 'BUYER').toUpperCase();
@@ -984,6 +994,7 @@ function NewTransaction() {
                               const price = q?.price ?? q?.rate ?? 0;
                               const name = q?.service_level?.name ?? q?.name ?? `Option ${i + 1}`;
                               const days = q?.service_level?.delivery_days ?? q?.delivery_days;
+                              const levelDesc = COURIER_LEVEL_DESCRIPTIONS[String(name).trim().toLowerCase()];
                               const isSelected = selectedQuote === q;
                               const chargedWeight = q?.charged_weight;
                               const actualWeight = q?.actual_weight;
@@ -1003,7 +1014,9 @@ function NewTransaction() {
                                     </div>
                                     <div style={{ minWidth: 0 }}>
                                       <span style={{ fontSize: 13, fontWeight: 500, color: '#F8FAFC', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-                                      {days && <span style={{ fontSize: 11, color: '#94a3b8' }}>{days} business day{days !== 1 ? 's' : ''}</span>}
+                                      {levelDesc
+                                        ? <span style={{ fontSize: 11, color: '#94a3b8', display: 'block', lineHeight: 1.4 }}>{levelDesc}</span>
+                                        : (days && <span style={{ fontSize: 11, color: '#94a3b8' }}>{days} business day{days !== 1 ? 's' : ''}</span>)}
                                     </div>
                                   </div>
                                   <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>

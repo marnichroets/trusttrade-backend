@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import DashboardLayout from '../components/DashboardLayout';
+import PaymentConfirmModal from '../components/PaymentConfirmModal';
 import EmailVerificationPrompt from '../components/EmailVerificationPrompt';
 import Timeline from '../components/Timeline';
 import TransactionActivityFeed from '../components/TransactionActivityFeed';
@@ -700,6 +701,7 @@ function TransactionDetail() {
   const [payoutReadiness, setPayoutReadiness] = useState(null);
   const [checkingPayoutReadiness, setCheckingPayoutReadiness] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
+  const [payConfirm, setPayConfirm] = useState(null);  // { link, total_value, processing_fee }
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [needsPhoneVerification, setNeedsPhoneVerification] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -1041,16 +1043,13 @@ function TransactionDetail() {
       setPaymentInfo(response.data);
       if (response.data.already_paid) { toast.success('This transaction has already been paid.'); setTransaction(prev => ({ ...prev, tradesafe_state: response.data.state, status: 'paid' })); return; }
       if (response.data.payment_link) {
-        // Show the EXACT amount TradeSafe will charge (deposit value + bank fee) before
-        // sending the buyer to the gateway, so what they see matches what they pay.
-        const tv = response.data.total_value;
-        const pf = response.data.processing_fee;
-        if (tv != null) {
-          const feeNote = (pf != null && Number(pf) > 0) ? ` (includes R${Number(pf).toFixed(2)} bank processing fee)` : '';
-          if (!window.confirm(`You'll be charged R${Number(tv).toFixed(2)}${feeNote}. Continue to the secure payment page?`)) return;
+        // Show the EXACT amount TradeSafe will charge (deposit value + bank fee) in a
+        // styled confirmation before sending the buyer to the gateway.
+        if (response.data.total_value != null) {
+          setPayConfirm({ link: response.data.payment_link, total_value: response.data.total_value, processing_fee: response.data.processing_fee });
+          return;
         }
-        // Mark that the buyer has started paying so we can show a "Payment processing"
-        // state and actively poll for confirmation when they return to this page.
+        // No exact figure available — go straight to the gateway.
         localStorage.setItem(`tt_payment_initiated_${transactionId}`, String(Date.now()));
         setPaymentProcessing(true);
         const newWindow = window.open(response.data.payment_link, '_blank'); if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') window.location.href = response.data.payment_link; toast.success('Secure payment page opened.');
@@ -1059,6 +1058,18 @@ function TransactionDetail() {
       else { setPaymentInfo(response.data); toast.info('Payment deposit created.'); }
     } catch (error) { const errorMessage = error.response?.data?.detail ? parseErrorMessage(error) : 'Unable to process payment. Please try again.'; toast.error(errorMessage); }
     finally { setLoadingPaymentLink(false); }
+  };
+
+  // Confirmed in the payment modal — redirect to the secure gateway.
+  const confirmAndPay = () => {
+    const pc = payConfirm;
+    if (!pc) return;
+    setPayConfirm(null);
+    localStorage.setItem(`tt_payment_initiated_${transactionId}`, String(Date.now()));
+    setPaymentProcessing(true);
+    const w = window.open(pc.link, '_blank');
+    if (!w || w.closed || typeof w.closed === 'undefined') window.location.href = pc.link;
+    toast.success('Secure payment page opened.');
   };
 
   const handleStartDelivery = async () => {
@@ -1519,6 +1530,13 @@ function TransactionDetail() {
   // ── Render ──────────────────────────────────────────────────────────
   return (
     <DashboardLayout user={user}>
+      <PaymentConfirmModal
+        open={!!payConfirm}
+        amount={payConfirm?.total_value}
+        processingFee={payConfirm?.processing_fee}
+        onConfirm={confirmAndPay}
+        onCancel={() => setPayConfirm(null)}
+      />
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}

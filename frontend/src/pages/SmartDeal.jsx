@@ -6,6 +6,7 @@ import {
   MessageSquare, Lock, CreditCard, Landmark, Bolt,
   Plus, Trash2, Layers, X,
 } from "lucide-react";
+import PaymentConfirmModal from "../components/PaymentConfirmModal";
 
 const API = process.env.REACT_APP_API_URL || "https://trusttrade-backend-production-3efa.up.railway.app";
 
@@ -291,6 +292,7 @@ function EftDetailsCard({ details, fallbackAmount }) {
 function FundPanel({ deal }) {
   const [method, setMethod] = useState("eft");
   const [loading, setLoading] = useState(false);
+  const [payConfirm, setPayConfirm] = useState(null);  // { link, total_value, processing_fee }
   const [err, setErr] = useState(null);
   const [eftDetails, setEftDetails] = useState(null);
 
@@ -313,11 +315,12 @@ function FundPanel({ deal }) {
       // The deal stays PAYMENT_PENDING and only becomes FUNDED on the FUNDS_DEPOSITED
       // webhook — we must NEVER advance it here without confirmed payment.
       if (res.payment_link) {
-        // Show the EXACT amount TradeSafe will charge (from the deposit) before paying.
+        // Show the EXACT amount TradeSafe will charge (from the deposit) in a styled
+        // modal before paying.
         if (res.total_value != null) {
-          const pf = res.processing_fee;
-          const feeNote = (pf != null && Number(pf) > 0) ? ` (includes R${Number(pf).toFixed(2)} bank processing fee)` : "";
-          if (!window.confirm(`You'll be charged R${Number(res.total_value).toFixed(2)}${feeNote}. Continue to the secure payment page?`)) { setLoading(false); return; }
+          setPayConfirm({ link: res.payment_link, total_value: res.total_value, processing_fee: res.processing_fee });
+          setLoading(false);
+          return;
         }
         window.location.href = res.payment_link;
         return;
@@ -338,11 +341,15 @@ function FundPanel({ deal }) {
     }
   }
 
+  const confirmAndPay = () => { const pc = payConfirm; if (!pc) return; setPayConfirm(null); window.location.href = pc.link; };
+
   if (eftDetails) {
     return <EftDetailsCard details={eftDetails} fallbackAmount={total} />;
   }
 
   return (
+    <>
+    <PaymentConfirmModal open={!!payConfirm} amount={payConfirm?.total_value} processingFee={payConfirm?.processing_fee} onConfirm={confirmAndPay} onCancel={() => setPayConfirm(null)} />
     <ActionCard accent={D.blue}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
         <Lock size={15} color={D.blue} />
@@ -417,6 +424,7 @@ function FundPanel({ deal }) {
         {loading ? <><Spinner /> Setting up payment…</> : <><Lock size={14} /> Continue to payment · {fmt(total)}</>}
       </button>
     </ActionCard>
+    </>
   );
 }
 
@@ -1282,6 +1290,7 @@ function milestoneMoney(amount, feePaidBy) {
 function MilestoneFundPanel({ deal, milestone, reload }) {
   const [method, setMethod] = useState("eft");
   const [loading, setLoading] = useState(false);
+  const [payConfirm, setPayConfirm] = useState(null);  // { link, total_value, processing_fee }
   const [err, setErr] = useState(null);
   const [eftDetails, setEftDetails] = useState(null);
 
@@ -1300,9 +1309,9 @@ function MilestoneFundPanel({ deal, milestone, reload }) {
       });
       if (res.payment_link) {
         if (res.total_value != null) {
-          const pf = res.processing_fee;
-          const feeNote = (pf != null && Number(pf) > 0) ? ` (includes R${Number(pf).toFixed(2)} bank processing fee)` : "";
-          if (!window.confirm(`You'll be charged R${Number(res.total_value).toFixed(2)}${feeNote}. Continue to the secure payment page?`)) { setLoading(false); return; }
+          setPayConfirm({ link: res.payment_link, total_value: res.total_value, processing_fee: res.processing_fee });
+          setLoading(false);
+          return;
         }
         window.location.href = res.payment_link; return;
       }
@@ -1315,10 +1324,13 @@ function MilestoneFundPanel({ deal, milestone, reload }) {
     }
   }
 
+  const confirmAndPay = () => { const pc = payConfirm; if (!pc) return; setPayConfirm(null); window.location.href = pc.link; };
+
   if (eftDetails) return <EftDetailsCard details={eftDetails} fallbackAmount={total} />;
 
   return (
     <div style={{ marginTop: 4 }}>
+      <PaymentConfirmModal open={!!payConfirm} amount={payConfirm?.total_value} processingFee={payConfirm?.processing_fee} onConfirm={confirmAndPay} onCancel={() => setPayConfirm(null)} />
       <p style={{ fontSize: 13, color: D.textMuted, margin: "0 0 12px", lineHeight: 1.5 }}>
         Pay for this stage now. <strong style={{ color: D.text }}>{deal.freelancer_name || "The freelancer"}</strong> only
         gets paid once <strong style={{ color: D.text }}>you approve</strong> the work. Payouts can take up to 2 business days.

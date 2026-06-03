@@ -65,9 +65,9 @@ const ITEM_CATEGORIES = [
 const S = {
   page: { maxWidth: 640, margin: '0 auto' },
   card: {
-    background: '#243147',
+    background: '#161B22',
     borderRadius: 14,
-    border: '1px solid #334155',
+    border: '1px solid #30363D',
     boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
     padding: '22px 24px',
     marginBottom: 14,
@@ -76,7 +76,7 @@ const S = {
     display: 'block',
     fontSize: 11,
     fontWeight: 600,
-    color: '#94A3B8',
+    color: '#8B949E',
     textTransform: 'uppercase',
     letterSpacing: '0.06em',
     marginBottom: 6,
@@ -86,10 +86,10 @@ const S = {
     height: 40,
     padding: '0 12px',
     borderRadius: 8,
-    border: '1px solid #334155',
+    border: '1px solid #30363D',
     fontSize: 13,
-    color: '#F8FAFC',
-    background: '#1E293B',
+    color: '#E6EDF3',
+    background: '#161B22',
     outline: 'none',
     boxSizing: 'border-box',
     fontFamily: 'inherit',
@@ -99,10 +99,10 @@ const S = {
     width: '100%',
     padding: '10px 12px',
     borderRadius: 8,
-    border: '1px solid #334155',
+    border: '1px solid #30363D',
     fontSize: 13,
-    color: '#F8FAFC',
-    background: '#1E293B',
+    color: '#E6EDF3',
+    background: '#161B22',
     outline: 'none',
     boxSizing: 'border-box',
     fontFamily: 'inherit',
@@ -115,10 +115,10 @@ const S = {
     height: 40,
     padding: '0 12px',
     borderRadius: 8,
-    border: '1px solid #334155',
+    border: '1px solid #30363D',
     fontSize: 13,
-    color: '#F8FAFC',
-    background: '#1E293B',
+    color: '#E6EDF3',
+    background: '#161B22',
     outline: 'none',
     boxSizing: 'border-box',
     fontFamily: 'inherit',
@@ -138,8 +138,8 @@ const S = {
     height: 44,
     borderRadius: 10,
     border: 'none',
-    background: '#3b82f6',
-    color: '#0F172A',
+    background: '#2F81F4',
+    color: '#0D1117',
     fontSize: 14,
     fontWeight: 600,
     cursor: 'pointer',
@@ -155,8 +155,8 @@ const S = {
     height: 44,
     borderRadius: 10,
     border: 'none',
-    background: '#10b981',
-    color: '#0F172A',
+    background: '#3FB950',
+    color: '#0D1117',
     fontSize: 14,
     fontWeight: 600,
     cursor: 'pointer',
@@ -171,7 +171,7 @@ const S = {
     borderRadius: 8,
     border: 'none',
     background: 'transparent',
-    color: '#94A3B8',
+    color: '#8B949E',
     fontSize: 13,
     fontWeight: 500,
     cursor: 'pointer',
@@ -444,7 +444,7 @@ function NewTransaction() {
   if (!user) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 32, height: 32, border: '3px solid #334155', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <div style={{ width: 32, height: 32, border: '3px solid #30363D', borderTopColor: '#2F81F4', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
       </div>
     );
   }
@@ -456,13 +456,13 @@ function NewTransaction() {
       <div style={S.page}>
 
         {!user.phone_verified && (
-          <div style={{ ...S.card, borderLeft: '3px solid #f59e0b', background: 'rgba(245,158,11,0.14)', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ ...S.card, borderLeft: '3px solid #D29922', background: 'rgba(245,158,11,0.14)', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <AlertCircle size={18} color="#FBBF24" style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ flex: 1 }}>
               <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#FBBF24' }}>Verify your phone number to continue.</p>
               <p style={{ margin: 0, fontSize: 13, color: '#FBBF24' }}>Phone verification is required before you can create a transaction or access payment actions.</p>
             </div>
-            <button type="button" onClick={() => navigate('/verify/phone')} style={{ ...S.btnPrimary, width: 'auto', height: 38, padding: '0 14px', background: '#f59e0b' }}>
+            <button type="button" onClick={() => navigate('/verify/phone')} style={{ ...S.btnPrimary, width: 'auto', height: 38, padding: '0 14px', background: '#D29922' }}>
               Verify phone
             </button>
           </div>
@@ -505,8 +505,8 @@ function NewTransaction() {
                     width: 30, height: 30, borderRadius: '50%',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 12, fontWeight: 700,
-                    background: done ? '#10b981' : active ? '#3b82f6' : '#334155',
-                    color: done || active ? '#fff' : '#94a3b8',
+                    background: done ? '#3FB950' : active ? '#2F81F4' : '#30363D',
+                    color: done || active ? '#fff' : '#8B949E',
                     flexShrink: 0,
                     transition: 'all 0.2s',
                   }}>
@@ -515,7 +515,7 @@ function NewTransaction() {
                   <span style={{
                     fontSize: 12,
                     fontWeight: active ? 600 : 400,
-                    color: active ? '#F8FAFC' : '#94a3b8',
+                    color: active ? '#E6EDF3' : '#8B949E',
                     whiteSpace: 'nowrap',
                   }} className="hidden sm:inline">
                     {label}
@@ -524,7 +524,7 @@ function NewTransaction() {
                 {idx < STEPS.length - 1 && (
                   <div style={{
                     flex: 1, height: 2, margin: '0 10px',
-                    background: step > num ? '#10b981' : '#334155',
+                    background: step > num ? '#3FB950' : '#30363D',
                     transition: 'background 0.3s',
                     minWidth: 16,
                   }} />
@@ -540,10 +540,10 @@ function NewTransaction() {
           {step === 1 && (
             <div>
               <div style={S.card}>
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#F8FAFC', margin: '0 0 4px' }}>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#E6EDF3', margin: '0 0 4px' }}>
                   Who are you in this transaction?
                 </h2>
-                <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 18px' }}>
+                <p style={{ fontSize: 13, color: '#8B949E', margin: '0 0 18px' }}>
                   Select your role. We'll auto-fill your details.
                 </p>
 
@@ -553,7 +553,7 @@ function NewTransaction() {
                     {
                       value: 'seller',
                       icon: Banknote,
-                      iconColor: '#10b981',
+                      iconColor: '#3FB950',
                       title: "I'm the Seller",
                       desc: "I'm selling an item and want to get paid securely",
                       testId: 'role-seller',
@@ -561,7 +561,7 @@ function NewTransaction() {
                     {
                       value: 'buyer',
                       icon: Shield,
-                      iconColor: '#3b82f6',
+                      iconColor: '#2F81F4',
                       title: "I'm the Buyer",
                       desc: "I'm buying and want my payment protected",
                       testId: 'role-buyer',
@@ -575,8 +575,8 @@ function NewTransaction() {
                       style={{
                         padding: '14px 14px',
                         borderRadius: 10,
-                        border: `2px solid ${role === opt.value ? '#3b82f6' : '#334155'}`,
-                        background: role === opt.value ? 'rgba(59,130,246,0.14)' : '#0F172A',
+                        border: `2px solid ${role === opt.value ? '#2F81F4' : '#30363D'}`,
+                        background: role === opt.value ? 'rgba(59,130,246,0.14)' : '#0D1117',
                         cursor: 'pointer',
                         textAlign: 'left',
                         transition: 'all 0.15s',
@@ -585,9 +585,9 @@ function NewTransaction() {
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
                         <opt.icon size={15} color={opt.iconColor} />
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC' }}>{opt.title}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#E6EDF3' }}>{opt.title}</span>
                       </div>
-                      <p style={{ fontSize: 11, color: '#94A3B8', margin: 0, lineHeight: 1.4 }}>{opt.desc}</p>
+                      <p style={{ fontSize: 11, color: '#8B949E', margin: 0, lineHeight: 1.4 }}>{opt.desc}</p>
                     </button>
                   ))}
                 </div>
@@ -596,20 +596,20 @@ function NewTransaction() {
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '11px 14px', borderRadius: 10,
-                  background: '#0F172A', border: '1px solid #334155',
+                  background: '#0D1117', border: '1px solid #30363D',
                   marginBottom: 20,
                 }}>
                   <div style={{
                     width: 32, height: 32, borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #3b82f6, #60A5FA)',
+                    background: 'linear-gradient(135deg, #2F81F4, #60A5FA)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     flexShrink: 0,
                   }}>
                     <User size={14} color="#fff" />
                   </div>
                   <div>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: '#F8FAFC', margin: 0 }}>{user.name}</p>
-                    <p style={{ fontSize: 11, color: '#94A3B8', margin: 0 }}>{user.email}</p>
+                    <p style={{ fontSize: 12, fontWeight: 600, color: '#E6EDF3', margin: 0 }}>{user.name}</p>
+                    <p style={{ fontSize: 11, color: '#8B949E', margin: 0 }}>{user.email}</p>
                   </div>
                   <span style={{
                     marginLeft: 'auto', fontSize: 10, fontWeight: 700,
@@ -623,12 +623,12 @@ function NewTransaction() {
                 </div>
 
                 {/* Other party prompt — plain helper text */}
-                <p style={{ margin: '0 0 12px', fontSize: 13, color: '#94A3B8' }}>
+                <p style={{ margin: '0 0 12px', fontSize: 13, color: '#8B949E' }}>
                   Now enter your {role === 'buyer' ? 'seller' : 'buyer'}'s details below.
                 </p>
 
                 {/* Other party */}
-                <h3 style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC', margin: '0 0 12px' }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, color: '#E6EDF3', margin: '0 0 12px' }}>
                   {role === 'buyer' ? 'Seller' : 'Buyer'} Details
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -653,7 +653,7 @@ function NewTransaction() {
                       placeholder="email@example.com or +27..."
                       data-testid="other-email-input"
                     />
-                    <p style={{ fontSize: 11, color: '#94a3b8', margin: '5px 0 0' }}>
+                    <p style={{ fontSize: 11, color: '#8B949E', margin: '5px 0 0' }}>
                       They'll receive a secure link to join
                     </p>
                   </div>
@@ -676,7 +676,7 @@ function NewTransaction() {
             <div>
               {/* Item basics */}
               <div style={S.card}>
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#F8FAFC', margin: '0 0 18px' }}>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#E6EDF3', margin: '0 0 18px' }}>
                   What's being sold?
                 </h2>
 
@@ -769,7 +769,7 @@ function NewTransaction() {
                       aria-invalid={Boolean(amountError)}
                       data-testid="item-price-input"
                     />
-                    <p style={{ fontSize: 11, color: amountError ? '#F87171' : '#94a3b8', margin: '5px 0 0' }}>
+                    <p style={{ fontSize: 11, color: amountError ? '#F87171' : '#8B949E', margin: '5px 0 0' }}>
                       Minimum transaction amount is R{minimumTransactionAmount.toFixed(0)}. No maximum limit.
                     </p>
                     {amountError && (
@@ -783,7 +783,7 @@ function NewTransaction() {
 
               {/* Delivery Method */}
               <div style={S.card}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC', margin: '0 0 14px' }}>How will the item be delivered?</h3>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#E6EDF3', margin: '0 0 14px' }}>How will the item be delivered?</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
                     { value: 'courier', icon: Truck, label: 'Courier Guy — we book delivery for you', desc: 'Buyer confirms receipt before payment is released.' },
@@ -798,8 +798,8 @@ function NewTransaction() {
                         style={{
                           display: 'flex', alignItems: 'center', gap: 12,
                           padding: '11px 14px', borderRadius: 10,
-                          border: `1.5px solid ${active ? '#3b82f6' : '#334155'}`,
-                          background: active ? 'rgba(59,130,246,0.14)' : '#0F172A',
+                          border: `1.5px solid ${active ? '#2F81F4' : '#30363D'}`,
+                          background: active ? 'rgba(59,130,246,0.14)' : '#0D1117',
                           cursor: disabled ? 'not-allowed' : 'pointer',
                           opacity: disabled ? 0.55 : 1,
                           transition: 'all 0.15s',
@@ -816,20 +816,20 @@ function NewTransaction() {
                         />
                         <div style={{
                           width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
-                          border: `2px solid ${active ? '#3b82f6' : '#475569'}`,
-                          background: active ? '#3b82f6' : '#0F172A',
+                          border: `2px solid ${active ? '#2F81F4' : '#30363D'}`,
+                          background: active ? '#2F81F4' : '#0D1117',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           transition: 'all 0.15s',
                         }}>
-                          {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1E293B' }} />}
+                          {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#161B22' }} />}
                         </div>
-                        <opt.icon size={15} color={active ? '#3b82f6' : '#94a3b8'} />
+                        <opt.icon size={15} color={active ? '#2F81F4' : '#8B949E'} />
                         <div style={{ flex: 1 }}>
-                          <span style={{ fontSize: 13, fontWeight: 500, color: '#F8FAFC' }}>{opt.label}</span>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: '#E6EDF3' }}>{opt.label}</span>
                           {disabled && (
-                            <span style={{ fontSize: 10, fontWeight: 700, color: '#F59E0B', background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 20, padding: '2px 8px', marginLeft: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Coming Soon</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#D29922', background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 20, padding: '2px 8px', marginLeft: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Coming Soon</span>
                           )}
-                          <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 8 }}>{opt.desc}</span>
+                          <span style={{ fontSize: 11, color: '#8B949E', marginLeft: 8 }}>{opt.desc}</span>
                         </div>
                       </label>
                     );
@@ -839,8 +839,8 @@ function NewTransaction() {
 
               {/* Fee Allocation */}
               <div style={S.card}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC', margin: '0 0 6px' }}>Who pays the TrustTrade platform fee?</h3>
-                <p style={{ fontSize: 12, color: '#94A3B8', margin: '0 0 14px' }}>TrustTrade charges a 2% fee (min R5) to protect both parties.</p>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#E6EDF3', margin: '0 0 6px' }}>Who pays the TrustTrade platform fee?</h3>
+                <p style={{ fontSize: 12, color: '#8B949E', margin: '0 0 14px' }}>TrustTrade charges a 2% fee (min R5) to protect both parties.</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
                     {
@@ -861,14 +861,14 @@ function NewTransaction() {
                   ].map(opt => {
                     const active = feeAlloc === opt.value;
                     return (
-                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${active ? '#3b82f6' : '#334155'}`, background: active ? 'rgba(59,130,246,0.14)' : '#0F172A', cursor: 'pointer', transition: 'all 0.15s' }}>
+                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${active ? '#2F81F4' : '#30363D'}`, background: active ? 'rgba(59,130,246,0.14)' : '#0D1117', cursor: 'pointer', transition: 'all 0.15s' }}>
                         <input type="radio" name="fee_allocation" value={opt.value} checked={active} onChange={handleChange} style={{ display: 'none' }} />
-                        <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${active ? '#3b82f6' : '#475569'}`, background: active ? '#3b82f6' : '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
-                          {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1E293B' }} />}
+                        <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${active ? '#2F81F4' : '#30363D'}`, background: active ? '#2F81F4' : '#0D1117', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
+                          {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#161B22' }} />}
                         </div>
                         <div style={{ flex: 1 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC' }}>{opt.label}</span>
-                          <span style={{ fontSize: 11, color: '#94A3B8', marginLeft: 8 }}>{opt.desc}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#E6EDF3' }}>{opt.label}</span>
+                          <span style={{ fontSize: 11, color: '#8B949E', marginLeft: 8 }}>{opt.desc}</span>
                         </div>
                       </label>
                     );
@@ -880,7 +880,7 @@ function NewTransaction() {
               {COURIER_ENABLED && isCourierDelivery && (
                 <div style={S.card}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 20, padding: '12px 14px', background: 'rgba(59,130,246,0.14)', border: '1px solid rgba(59,130,246,0.30)', borderRadius: 10 }}>
-                    <Truck size={16} color="#3b82f6" style={{ flexShrink: 0, marginTop: 1 }} />
+                    <Truck size={16} color="#2F81F4" style={{ flexShrink: 0, marginTop: 1 }} />
                     <div>
                       <span style={{ fontSize: 13, fontWeight: 600, color: '#60A5FA', display: 'block', marginBottom: 2 }}>TrustTrade books the courier for you</span>
                       <span style={{ fontSize: 12, color: '#60A5FA', lineHeight: 1.5 }}>
@@ -902,14 +902,14 @@ function NewTransaction() {
                           ].map(opt => {
                             const active = courierForm.collection_preference === opt.value;
                             return (
-                              <label key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${active ? '#3b82f6' : '#334155'}`, background: active ? 'rgba(59,130,246,0.14)' : '#0F172A', cursor: 'pointer', transition: 'all 0.15s' }}>
+                              <label key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '11px 14px', borderRadius: 10, border: `1.5px solid ${active ? '#2F81F4' : '#30363D'}`, background: active ? 'rgba(59,130,246,0.14)' : '#0D1117', cursor: 'pointer', transition: 'all 0.15s' }}>
                                 <input type="radio" name="collection_preference" value={opt.value} checked={active} onChange={e => setCourierForm(p => ({ ...p, collection_preference: e.target.value }))} style={{ display: 'none' }} />
-                                <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, marginTop: 1, border: `2px solid ${active ? '#3b82f6' : '#475569'}`, background: active ? '#3b82f6' : '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                  {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1E293B' }} />}
+                                <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, marginTop: 1, border: `2px solid ${active ? '#2F81F4' : '#30363D'}`, background: active ? '#2F81F4' : '#0D1117', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {active && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#161B22' }} />}
                                 </div>
                                 <div>
-                                  <span style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC', display: 'block' }}>{opt.label}</span>
-                                  <span style={{ fontSize: 11, color: '#94A3B8' }}>{opt.desc}</span>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: '#E6EDF3', display: 'block' }}>{opt.label}</span>
+                                  <span style={{ fontSize: 11, color: '#8B949E' }}>{opt.desc}</span>
                                 </div>
                               </label>
                             );
@@ -921,7 +921,7 @@ function NewTransaction() {
                       <div>
                         <label style={S.label}>{isDropoff ? 'Seller’s Area (for pricing the drop-off)' : 'Pickup Address (Seller)'}</label>
                         {isDropoff && (
-                          <p style={{ fontSize: 11, color: '#94a3b8', margin: '0 0 8px' }}>
+                          <p style={{ fontSize: 11, color: '#8B949E', margin: '0 0 8px' }}>
                             No street address needed — the seller takes the parcel to a Courier Guy point. We just need the area and postal code to price the route.
                           </p>
                         )}
@@ -975,7 +975,7 @@ function NewTransaction() {
                         disabled={courierLoading || (!isDropoff && !courierForm.pickup_street) || !courierForm.pickup_city || !courierForm.pickup_code || !courierForm.delivery_street || !courierForm.delivery_city || !courierForm.delivery_code}
                         style={{
                           alignSelf: 'flex-start', padding: '9px 18px', borderRadius: 8, border: 'none',
-                          background: '#3b82f6', color: '#0F172A', fontSize: 13, fontWeight: 600,
+                          background: '#2F81F4', color: '#0D1117', fontSize: 13, fontWeight: 600,
                           cursor: courierLoading ? 'not-allowed' : 'pointer',
                           opacity: (courierLoading || (!isDropoff && !courierForm.pickup_street) || !courierForm.pickup_city || !courierForm.pickup_code || !courierForm.delivery_street || !courierForm.delivery_city || !courierForm.delivery_code) ? 0.5 : 1,
                           display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: 'inherit',
@@ -1004,28 +1004,28 @@ function NewTransaction() {
                                 <label key={i} style={{
                                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                   padding: '11px 14px', borderRadius: 10, cursor: 'pointer',
-                                  border: `1.5px solid ${isSelected ? '#3b82f6' : '#334155'}`,
-                                  background: isSelected ? 'rgba(59,130,246,0.14)' : '#0F172A',
+                                  border: `1.5px solid ${isSelected ? '#2F81F4' : '#30363D'}`,
+                                  background: isSelected ? 'rgba(59,130,246,0.14)' : '#0D1117',
                                   transition: 'all 0.15s',
                                 }}>
                                   <input type="radio" checked={isSelected} onChange={() => setSelectedQuote(q)} style={{ display: 'none' }} />
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
-                                    <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${isSelected ? '#3b82f6' : '#475569'}`, background: isSelected ? '#3b82f6' : '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                      {isSelected && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#1E293B' }} />}
+                                    <div style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, border: `2px solid ${isSelected ? '#2F81F4' : '#30363D'}`, background: isSelected ? '#2F81F4' : '#0D1117', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                      {isSelected && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#161B22' }} />}
                                     </div>
                                     <div style={{ minWidth: 0 }}>
-                                      <span style={{ fontSize: 13, fontWeight: 500, color: '#F8FAFC', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                                      <span style={{ fontSize: 13, fontWeight: 500, color: '#E6EDF3', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
                                       {levelDesc
-                                        ? <span style={{ fontSize: 11, color: '#94a3b8', display: 'block', lineHeight: 1.4 }}>{levelDesc}</span>
-                                        : (days && <span style={{ fontSize: 11, color: '#94a3b8' }}>{days} business day{days !== 1 ? 's' : ''}</span>)}
+                                        ? <span style={{ fontSize: 11, color: '#8B949E', display: 'block', lineHeight: 1.4 }}>{levelDesc}</span>
+                                        : (days && <span style={{ fontSize: 11, color: '#8B949E' }}>{days} business day{days !== 1 ? 's' : ''}</span>)}
                                     </div>
                                   </div>
                                   <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: 8 }}>
-                                    <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', fontFamily: 'ui-monospace, monospace', display: 'block' }}>
+                                    <span style={{ fontSize: 14, fontWeight: 700, color: '#3FB950', fontFamily: 'ui-monospace, monospace', display: 'block' }}>
                                       R {Number(price).toFixed(2)}
                                     </span>
                                     {isVolumetric && (
-                                      <span style={{ fontSize: 10, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                      <span style={{ fontSize: 10, color: '#8B949E', whiteSpace: 'nowrap' }}>
                                         Volumetric: {chargedWeight}kg
                                       </span>
                                     )}
@@ -1043,12 +1043,12 @@ function NewTransaction() {
               {/* Price breakdown */}
               {itemPrice >= 100 && (
                 <div style={{
-                  background: 'linear-gradient(135deg, #3B82F6 0%, #1e293b 100%)',
+                  background: 'linear-gradient(135deg, #2F81F4 0%, #161B22 100%)',
                   borderRadius: 12, padding: '16px 20px', marginBottom: 14,
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                     <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Item Value (held safely)</span>
-                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: '#0F172A' }}>
+                    <span style={{ fontSize: 12, fontFamily: 'ui-monospace, monospace', color: '#0D1117' }}>
                       R {itemPrice.toFixed(2)}
                     </span>
                   </div>
@@ -1077,7 +1077,7 @@ function NewTransaction() {
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.1)', marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#0F172A' }}>Buyer Pays Total</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#0D1117' }}>Buyer Pays Total</span>
                     <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#60a5fa' }}>
                       R {buyerPaysTotal.toFixed(2)}
                     </span>
@@ -1087,7 +1087,7 @@ function NewTransaction() {
                   </p>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>Seller Receives</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#10b981' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'ui-monospace, monospace', color: '#3FB950' }}>
                       R {sellerPayout.toFixed(2)}
                     </span>
                   </div>
@@ -1116,11 +1116,11 @@ function NewTransaction() {
               <div style={S.card}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                   <div style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(59,130,246,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Camera size={16} color="#3b82f6" />
+                    <Camera size={16} color="#2F81F4" />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: 17, fontWeight: 700, color: '#F8FAFC', margin: 0 }}>Add Photos</h2>
-                    <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>Good photos build trust and prevent disputes</p>
+                    <h2 style={{ fontSize: 17, fontWeight: 700, color: '#E6EDF3', margin: 0 }}>Add Photos</h2>
+                    <p style={{ fontSize: 12, color: '#8B949E', margin: 0 }}>Good photos build trust and prevent disputes</p>
                   </div>
                 </div>
 
@@ -1153,21 +1153,21 @@ function NewTransaction() {
               {emailVerificationRequired && <EmailVerificationPrompt />}
               {/* Summary */}
               <div style={S.card}>
-                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#F8FAFC', margin: '0 0 18px' }}>Review & Confirm</h2>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: '#E6EDF3', margin: '0 0 18px' }}>Review & Confirm</h2>
 
                 {/* Parties side by side */}
                 <div className="tt-party-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
                   {[
-                    { roleLabel: 'Buyer', name: role === 'buyer' ? user.name : formData.buyer_name, email: role === 'buyer' ? user.email : formData.buyer_email, accent: '#3b82f6', bg: 'rgba(59,130,246,0.14)', isYou: role === 'buyer' },
-                    { roleLabel: 'Seller', name: role === 'seller' ? user.name : formData.seller_name, email: role === 'seller' ? user.email : formData.seller_email, accent: '#10b981', bg: 'rgba(16,185,129,0.14)', isYou: role === 'seller' },
+                    { roleLabel: 'Buyer', name: role === 'buyer' ? user.name : formData.buyer_name, email: role === 'buyer' ? user.email : formData.buyer_email, accent: '#2F81F4', bg: 'rgba(59,130,246,0.14)', isYou: role === 'buyer' },
+                    { roleLabel: 'Seller', name: role === 'seller' ? user.name : formData.seller_name, email: role === 'seller' ? user.email : formData.seller_email, accent: '#3FB950', bg: 'rgba(16,185,129,0.14)', isYou: role === 'seller' },
                   ].map(p => (
                     <div key={p.roleLabel} style={{ background: p.bg, border: `1px solid ${p.accent}33`, borderRadius: 10, padding: '12px 14px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                         <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: p.accent }}>{p.roleLabel}</span>
-                        {p.isYou && <span style={{ fontSize: 9, fontWeight: 600, background: p.accent, color: '#0F172A', padding: '1px 5px', borderRadius: 20 }}>You</span>}
+                        {p.isYou && <span style={{ fontSize: 9, fontWeight: 600, background: p.accent, color: '#0D1117', padding: '1px 5px', borderRadius: 20 }}>You</span>}
                       </div>
-                      <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 600, color: '#F8FAFC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name || '—'}</p>
-                      <p style={{ margin: 0, fontSize: 11, color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email || '—'}</p>
+                      <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 600, color: '#E6EDF3', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name || '—'}</p>
+                      <p style={{ margin: 0, fontSize: 11, color: '#8B949E', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email || '—'}</p>
                     </div>
                   ))}
                 </div>
@@ -1182,20 +1182,20 @@ function NewTransaction() {
                     { label: 'Buyer TrustTrade Fee', value: `R ${buyerFeeContrib.toFixed(2)}`, mono: true },
                     { label: 'Seller TrustTrade Fee', value: `R ${sellerFeeContrib.toFixed(2)}`, mono: true },
                     { label: 'Buyer Pays Total', value: `R ${buyerPaysTotal.toFixed(2)}`, mono: true, accent: '#60A5FA' },
-                    { label: 'Seller Receives', value: `R ${sellerPayout.toFixed(2)}`, mono: true, accent: '#10b981' },
+                    { label: 'Seller Receives', value: `R ${sellerPayout.toFixed(2)}`, mono: true, accent: '#3FB950' },
                     { label: 'Photos', value: `${photos.length} uploaded` },
                     { label: 'Delivery', value: formData.delivery_method.replace('_', ' ') },
                   ].map((row, i, arr) => (
                     <div key={row.label} style={{
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       padding: '10px 0',
-                      borderBottom: i < arr.length - 1 ? '1px solid #0F172A' : 'none',
+                      borderBottom: i < arr.length - 1 ? '1px solid #0D1117' : 'none',
                     }}>
-                      <span style={{ fontSize: 13, color: '#94A3B8' }}>{row.label}</span>
+                      <span style={{ fontSize: 13, color: '#8B949E' }}>{row.label}</span>
                       <span style={{
                         fontSize: 13,
                         fontWeight: 600,
-                        color: row.accent || '#F8FAFC',
+                        color: row.accent || '#E6EDF3',
                         fontFamily: row.mono ? 'ui-monospace, monospace' : 'inherit',
                         maxWidth: 220,
                         overflow: 'hidden',
@@ -1208,14 +1208,14 @@ function NewTransaction() {
                     </div>
                   ))}
                 </div>
-                <p style={{ fontSize: 12, color: '#94A3B8', margin: '12px 0 0' }}>
+                <p style={{ fontSize: 12, color: '#8B949E', margin: '12px 0 0' }}>
                   A small bank processing fee will be added at checkout.
                 </p>
               </div>
 
               {/* Confirmations */}
               <div style={S.card}>
-                <h3 style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC', margin: '0 0 14px' }}>
+                <h3 style={{ fontSize: 13, fontWeight: 600, color: '#E6EDF3', margin: '0 0 14px' }}>
                   Please confirm all of the following:
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1234,8 +1234,8 @@ function NewTransaction() {
                       >
                         <div style={{
                           width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-                          border: `2px solid ${checked ? '#10b981' : '#475569'}`,
-                          background: checked ? '#10b981' : '#0F172A',
+                          border: `2px solid ${checked ? '#3FB950' : '#30363D'}`,
+                          background: checked ? '#3FB950' : '#0D1117',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           transition: 'all 0.15s',
                         }}>
@@ -1260,7 +1260,7 @@ function NewTransaction() {
               >
                 {loading ? (
                   <>
-                    <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#0F172A', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                    <div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#0D1117', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
                     Creating...
                   </>
                 ) : (
@@ -1277,7 +1277,7 @@ function NewTransaction() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        input:focus, textarea:focus, select:focus { border-color: #3b82f6 !important; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        input:focus, textarea:focus, select:focus { border-color: #2F81F4 !important; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
         @media (max-width: 480px) { .tt-party-grid { grid-template-columns: 1fr !important; } }
       `}</style>
     </DashboardLayout>

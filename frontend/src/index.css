@@ -7,38 +7,38 @@
 /* TrustTrade Premium Design System */
 :root {
     /* Primary - Deep Navy (Trust + Authority) */
-    --tt-primary: #0f172a;
-    --tt-primary-light: #1e293b;
+    --tt-primary: #0D1117;
+    --tt-primary-light: #161B22;
     
     /* Accent - Confident Blue */
-    --tt-blue: #2563eb;
-    --tt-blue-light: #3b82f6;
+    --tt-blue: #1F6FEB;
+    --tt-blue-light: #2F81F4;
     --tt-blue-dark: #1d4ed8;
     
     /* Success - Money Green */
-    --tt-green: #059669;
-    --tt-green-light: #10b981;
+    --tt-green: #2EA043;
+    --tt-green-light: #3FB950;
     
     /* Neutrals - Clean Gray Scale */
-    --tt-gray-50: #f8fafc;
+    --tt-gray-50: #E6EDF3;
     --tt-gray-100: #f1f5f9;
     --tt-gray-200: #e2e8f0;
     --tt-gray-300: #cbd5e1;
-    --tt-gray-400: #94a3b8;
-    --tt-gray-500: #64748b;
-    --tt-gray-600: #475569;
-    --tt-gray-700: #334155;
-    --tt-gray-800: #1e293b;
-    --tt-gray-900: #0f172a;
+    --tt-gray-400: #8B949E;
+    --tt-gray-500: #6E7681;
+    --tt-gray-600: #30363D;
+    --tt-gray-700: #30363D;
+    --tt-gray-800: #161B22;
+    --tt-gray-900: #0D1117;
     
     /* Status Colors */
-    --tt-error: #dc2626;
-    --tt-warning: #d97706;
+    --tt-error: #DA3633;
+    --tt-warning: #BB8009;
     --tt-info: #0284c7;
     
     /* Backgrounds */
     --tt-background: #ffffff;
-    --tt-section: #f8fafc;
+    --tt-section: #E6EDF3;
 }
 
 body {
@@ -89,7 +89,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Escrow Status Indicator */
 .escrow-secured {
-    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    background: linear-gradient(135deg, #2EA043 0%, #3FB950 100%);
     color: white;
 }
 

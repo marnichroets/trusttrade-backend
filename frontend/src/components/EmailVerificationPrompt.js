@@ -40,7 +40,7 @@ export default function EmailVerificationPrompt() {
       padding: '14px 16px',
       marginBottom: 20,
     }}>
-      <Mail size={18} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
+      <Mail size={18} color="#BB8009" style={{ flexShrink: 0, marginTop: 1 }} />
       <div style={{ flex: 1 }}>
         <p style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: '#78350f' }}>
           Verify your email to continue
@@ -63,7 +63,7 @@ export default function EmailVerificationPrompt() {
               alignItems: 'center',
               gap: 6,
               background: 'none',
-              border: '1px solid #d97706',
+              border: '1px solid #BB8009',
               borderRadius: 6,
               padding: '5px 12px',
               fontSize: 13,

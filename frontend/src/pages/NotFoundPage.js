@@ -53,21 +53,21 @@ export default function NotFoundPage() {
           width="36" height="36"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#EF4444"
+          stroke="#F85149"
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
           <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
           <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          <circle cx="12" cy="16" r="1" fill="#EF4444" />
+          <circle cx="12" cy="16" r="1" fill="#F85149" />
         </svg>
       </div>
 
       {/* 404 */}
       <p style={{
         fontSize: 11, fontWeight: 700,
-        color: '#EF4444',
+        color: '#F85149',
         fontFamily: V.mono, letterSpacing: '0.2em',
         margin: '0 0 8px',
       }}>

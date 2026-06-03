@@ -12,11 +12,11 @@ import {
 import { V } from './DashboardLayout';
 
 const toneMap = {
-  green: { color: '#10b981', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.32)' },
+  green: { color: '#3FB950', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.32)' },
   blue: { color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.32)' },
-  amber: { color: '#f59e0b', bg: 'rgba(245,158,11,0.13)', border: 'rgba(245,158,11,0.34)' },
-  red: { color: '#ef4444', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.34)' },
-  slate: { color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.24)' },
+  amber: { color: '#D29922', bg: 'rgba(245,158,11,0.13)', border: 'rgba(245,158,11,0.34)' },
+  red: { color: '#F85149', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.34)' },
+  slate: { color: '#8B949E', bg: 'rgba(148,163,184,0.1)', border: 'rgba(148,163,184,0.24)' },
 };
 
 const icons = {

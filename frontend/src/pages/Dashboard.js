@@ -341,10 +341,10 @@ function Dashboard() {
         }
         .tt-command-panel {
           position: relative;
-          border: 1px solid #334155;
-          /* Solid card (V.surface), elevated from the #0F172A canvas so cards
+          border: 1px solid #30363D;
+          /* Solid card (V.surface), elevated from the #0D1117 canvas so cards
              (incl. the 'Your next step' hero) stand clearly apart from the background. */
-          background: #243147;
+          background: #161B22;
           box-shadow: 0 1px 3px rgba(0,0,0,0.4);
         }
         .tt-command-panel::after {

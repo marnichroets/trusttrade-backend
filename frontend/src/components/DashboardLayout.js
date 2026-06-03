@@ -10,16 +10,17 @@ import SupportChat from './SupportChat';
 import FeedbackButton from './FeedbackButton';
 
 export const V = {
-  bg:      '#0F172A',  // deep navy app background
-  surface: '#243147',  // cards, elevated from background
-  border:  '#334155',  // subtle card border
-  accent:  '#3B82F6',  // primary / CTA blue
-  success: '#10B981',
-  error:   '#EF4444',
-  warn:    '#F59E0B',
-  text:    '#F8FAFC',  // primary near-white text
-  sub:     '#94A3B8',  // secondary muted grey-blue
-  dim:     '#64748B',
+  bg:      '#0D1117',  // page background — very dark, almost black (GitHub dark)
+  surface: '#161B22',  // cards, clearly elevated from background
+  hover:   '#1C2128',  // card hover
+  border:  '#30363D',  // visible card border
+  accent:  '#2F81F4',  // primary / CTA blue (GitHub-style clean blue)
+  success: '#3FB950',
+  error:   '#F85149',
+  warn:    '#D29922',
+  text:    '#E6EDF3',  // primary bright text
+  sub:     '#8B949E',  // secondary muted grey
+  dim:     '#6E7681',
   mono:    "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
   sans:    "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
 };

@@ -70,14 +70,14 @@ export default function AutoReleaseCountdown({ transaction, isBuyer, isSeller })
     }
   };
 
-  const accent = urgent ? '#dc2626' : soon ? '#f59e0b' : '#10b981';
+  const accent = urgent ? '#DA3633' : soon ? '#D29922' : '#3FB950';
   const bg = urgent ? '#fef2f2' : soon ? '#fffbeb' : '#f0fdf4';
   const border = urgent ? '#fecaca' : soon ? '#fde68a' : '#bbf7d0';
 
   return (
     <div style={{ background: bg, border: `1px solid ${border}`, borderLeft: `3px solid ${accent}`, borderRadius: 14, padding: '18px 20px', marginBottom: 14 }} data-testid="auto-release-countdown">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12 }}>
-        <p style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <p style={{ fontSize: 15, fontWeight: 800, color: '#0D1117', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
           {urgent ? <AlertTriangle size={16} color={accent} /> : isSeller ? <ShieldCheck size={16} color={accent} /> : <Clock size={16} color={accent} />}
           {isSeller ? 'Your payment is protected' : countdownText}
         </p>
@@ -89,16 +89,16 @@ export default function AutoReleaseCountdown({ transaction, isBuyer, isSeller })
       </div>
 
       {isSeller ? (
-        <p style={{ fontSize: 14, color: '#334155', margin: 0, lineHeight: 1.5 }}>
+        <p style={{ fontSize: 14, color: '#30363D', margin: 0, lineHeight: 1.5 }}>
           If the buyer does nothing, you will be paid automatically on <strong>{dateLabel}</strong>.
           {relDay === 'tomorrow' && <> Payment releasing tomorrow at {timeLabel}.</>}
         </p>
       ) : urgent ? (
-        <p style={{ fontSize: 14, color: '#334155', margin: 0, lineHeight: 1.5 }}>
+        <p style={{ fontSize: 14, color: '#30363D', margin: 0, lineHeight: 1.5 }}>
           ⚠️ Payment releases in {minutes >= 1 ? `${minutes} minute${minutes === 1 ? '' : 's'}` : 'less than a minute'} — tap below if there is a problem.
         </p>
       ) : (
-        <p style={{ fontSize: 14, color: '#334155', margin: 0, lineHeight: 1.5 }}>
+        <p style={{ fontSize: 14, color: '#30363D', margin: 0, lineHeight: 1.5 }}>
           Your seller has shipped your order. You have time to report a problem. If you do nothing,
           payment is automatically sent to the seller on <strong>{dateLabel}</strong>.
         </p>
@@ -108,7 +108,7 @@ export default function AutoReleaseCountdown({ transaction, isBuyer, isSeller })
         <button
           onClick={reportProblem}
           disabled={reporting}
-          style={{ marginTop: 12, background: '#fff', border: `1px solid ${urgent ? '#fca5a5' : '#cbd5e1'}`, color: urgent ? '#dc2626' : '#475569', borderRadius: 9, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+          style={{ marginTop: 12, background: '#fff', border: `1px solid ${urgent ? '#fca5a5' : '#cbd5e1'}`, color: urgent ? '#DA3633' : '#30363D', borderRadius: 9, padding: '8px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
         >
           {reporting ? 'Reporting…' : 'There is a problem with my order'}
         </button>

@@ -40,7 +40,7 @@ export default function FeedbackButton() {
         style={{
           position: 'fixed', right: 23, bottom: 128, zIndex: 1001,
           width: 40, height: 40, borderRadius: '50%', cursor: 'pointer',
-          background: '#fff', border: '1px solid #e2e8f0', color: '#475569',
+          background: '#fff', border: '1px solid #e2e8f0', color: '#30363D',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: '0 2px 10px rgba(15,23,42,0.12)',
         }}
@@ -56,12 +56,12 @@ export default function FeedbackButton() {
           boxShadow: '0 12px 32px rgba(15,23,42,0.18)', padding: 16,
         }}>
           {sent ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', color: '#059669', fontSize: 14, fontWeight: 600 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', color: '#2EA043', fontSize: 14, fontWeight: 600 }}>
               <Check size={18} /> Thanks for the feedback!
             </div>
           ) : (
             <>
-              <p style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: '0 0 8px' }}>What can we improve?</p>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#0D1117', margin: '0 0 8px' }}>What can we improve?</p>
               <textarea
                 value={message}
                 onChange={e => setMessage(e.target.value)}
@@ -70,13 +70,13 @@ export default function FeedbackButton() {
                 style={{
                   width: '100%', boxSizing: 'border-box', resize: 'vertical', minHeight: 84,
                   border: '1px solid #e2e8f0', borderRadius: 10, padding: '9px 11px',
-                  fontSize: 13, fontFamily: 'inherit', color: '#0f172a', outline: 'none',
+                  fontSize: 13, fontFamily: 'inherit', color: '#0D1117', outline: 'none',
                 }}
               />
-              {error && <p style={{ fontSize: 12, color: '#dc2626', margin: '6px 0 0' }}>{error}</p>}
+              {error && <p style={{ fontSize: 12, color: '#DA3633', margin: '6px 0 0' }}>{error}</p>}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
                 <button onClick={() => setOpen(false)}
-                  style={{ background: 'transparent', border: '1px solid #e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 13, color: '#64748b', cursor: 'pointer' }}>
+                  style={{ background: 'transparent', border: '1px solid #e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 13, color: '#6E7681', cursor: 'pointer' }}>
                   Cancel
                 </button>
                 <button onClick={submit} disabled={sending || !message.trim()}

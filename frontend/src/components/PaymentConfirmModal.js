@@ -31,19 +31,19 @@ export default function PaymentConfirmModal({ open, amount, processingFee, onCon
         role="dialog"
         aria-modal="true"
         style={{
-          width: '100%', maxWidth: 380, background: '#243147', border: '1px solid #334155',
+          width: '100%', maxWidth: 380, background: '#161B22', border: '1px solid #30363D',
           borderRadius: 16, padding: '26px 22px', boxShadow: '0 16px 48px rgba(0,0,0,0.55)',
           textAlign: 'center',
         }}
       >
-        <p style={{ fontSize: 12, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 16px' }}>
+        <p style={{ fontSize: 12, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 16px' }}>
           Confirm Payment
         </p>
 
-        <p style={{ fontSize: 36, fontWeight: 800, color: '#F8FAFC', margin: 0, fontFamily: 'ui-monospace, monospace', letterSpacing: '-0.02em' }}>
+        <p style={{ fontSize: 36, fontWeight: 800, color: '#E6EDF3', margin: 0, fontFamily: 'ui-monospace, monospace', letterSpacing: '-0.02em' }}>
           {fmt(amount)}
         </p>
-        <p style={{ fontSize: 13, color: '#94A3B8', margin: '6px 0 22px', minHeight: 18 }}>
+        <p style={{ fontSize: 13, color: '#8B949E', margin: '6px 0 22px', minHeight: 18 }}>
           {hasFee ? `Includes ${fmt(fee)} bank processing fee` : ''}
         </p>
 
@@ -52,7 +52,7 @@ export default function PaymentConfirmModal({ open, amount, processingFee, onCon
           data-testid="confirm-pay-btn"
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            width: '100%', background: '#10B981', color: '#ffffff', border: 'none',
+            width: '100%', background: '#3FB950', color: '#ffffff', border: 'none',
             borderRadius: 10, padding: '13px 18px', fontSize: 15, fontWeight: 700,
             cursor: 'pointer', fontFamily: 'inherit',
           }}
@@ -63,15 +63,15 @@ export default function PaymentConfirmModal({ open, amount, processingFee, onCon
         <button
           onClick={onCancel}
           style={{
-            width: '100%', marginTop: 10, background: 'transparent', color: '#94A3B8',
-            border: '1px solid #334155', borderRadius: 10, padding: '11px 18px',
+            width: '100%', marginTop: 10, background: 'transparent', color: '#8B949E',
+            border: '1px solid #30363D', borderRadius: 10, padding: '11px 18px',
             fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
           }}
         >
           Cancel
         </button>
 
-        <p style={{ fontSize: 11, color: '#64748B', margin: '14px 0 0', lineHeight: 1.5 }}>
+        <p style={{ fontSize: 11, color: '#6E7681', margin: '14px 0 0', lineHeight: 1.5 }}>
           You will be redirected to our secure payment partner.
         </p>
       </div>

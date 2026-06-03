@@ -45,7 +45,7 @@ export default function ConfirmReceipt() {
     }
   };
 
-  const wrap = { minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: 'system-ui, sans-serif' };
+  const wrap = { minHeight: '100vh', background: '#E6EDF3', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: 'system-ui, sans-serif' };
   const card = { background: '#fff', borderRadius: 16, boxShadow: '0 4px 24px rgba(15,23,42,0.08)', padding: 26, maxWidth: 440, width: '100%' };
   const btn = (bg, color = '#fff') => ({ width: '100%', padding: '14px 16px', borderRadius: 12, border: 'none', background: bg, color, fontSize: 16, fontWeight: 700, cursor: 'pointer', marginTop: 12 });
 
@@ -53,45 +53,45 @@ export default function ConfirmReceipt() {
     ? new Date(txn.auto_release_at).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hour12: false })
     : null;
 
-  if (loading) return <div style={wrap}><div style={card}><p style={{ textAlign: 'center', color: '#64748b' }}>Loading your order…</p></div></div>;
+  if (loading) return <div style={wrap}><div style={card}><p style={{ textAlign: 'center', color: '#6E7681' }}>Loading your order…</p></div></div>;
 
   if (error) return (
     <div style={wrap}><div style={card}>
-      <h2 style={{ margin: '0 0 8px', color: '#0f172a' }}>TrustTrade</h2>
-      <p style={{ color: '#475569', lineHeight: 1.5 }}>{error}</p>
+      <h2 style={{ margin: '0 0 8px', color: '#0D1117' }}>TrustTrade</h2>
+      <p style={{ color: '#30363D', lineHeight: 1.5 }}>{error}</p>
     </div></div>
   );
 
   if (done === 'confirmed') return (
     <div style={wrap}><div style={{ ...card, textAlign: 'center' }}>
       <div style={{ fontSize: 44 }}>✅</div>
-      <h2 style={{ margin: '8px 0', color: '#0f172a' }}>Thank you!</h2>
-      <p style={{ color: '#475569', lineHeight: 1.5 }}>Your payment has been released to {txn?.seller_name || 'the seller'}. You can close this page.</p>
+      <h2 style={{ margin: '8px 0', color: '#0D1117' }}>Thank you!</h2>
+      <p style={{ color: '#30363D', lineHeight: 1.5 }}>Your payment has been released to {txn?.seller_name || 'the seller'}. You can close this page.</p>
     </div></div>
   );
 
   if (done === 'reported') return (
     <div style={wrap}><div style={{ ...card, textAlign: 'center' }}>
       <div style={{ fontSize: 44 }}>🛟</div>
-      <h2 style={{ margin: '8px 0', color: '#0f172a' }}>We're on it</h2>
-      <p style={{ color: '#475569', lineHeight: 1.5 }}>Your payment is on hold and our team will help you sort this out. Check your email for the next steps.</p>
+      <h2 style={{ margin: '8px 0', color: '#0D1117' }}>We're on it</h2>
+      <p style={{ color: '#30363D', lineHeight: 1.5 }}>Your payment is on hold and our team will help you sort this out. Check your email for the next steps.</p>
     </div></div>
   );
 
   if (txn?.released) return (
     <div style={wrap}><div style={{ ...card, textAlign: 'center' }}>
       <div style={{ fontSize: 44 }}>✅</div>
-      <h2 style={{ margin: '8px 0', color: '#0f172a' }}>All done</h2>
-      <p style={{ color: '#475569', lineHeight: 1.5 }}>This payment has already been released. Nothing more to do — you can close this page.</p>
+      <h2 style={{ margin: '8px 0', color: '#0D1117' }}>All done</h2>
+      <p style={{ color: '#30363D', lineHeight: 1.5 }}>This payment has already been released. Nothing more to do — you can close this page.</p>
     </div></div>
   );
 
   return (
     <div style={wrap}>
       <div style={card}>
-        <p style={{ fontSize: 12, fontWeight: 800, color: '#2563eb', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 6px' }}>TrustTrade</p>
-        <h2 style={{ margin: '0 0 4px', color: '#0f172a' }}>Did you receive your order?</h2>
-        <p style={{ color: '#475569', lineHeight: 1.5, margin: '0 0 16px' }}>
+        <p style={{ fontSize: 12, fontWeight: 800, color: '#1F6FEB', letterSpacing: '0.08em', textTransform: 'uppercase', margin: '0 0 6px' }}>TrustTrade</p>
+        <h2 style={{ margin: '0 0 4px', color: '#0D1117' }}>Did you receive your order?</h2>
+        <p style={{ color: '#30363D', lineHeight: 1.5, margin: '0 0 16px' }}>
           {txn?.item_description ? <strong>{txn.item_description}</strong> : 'Your order'} from {txn?.seller_name || 'the seller'}.
         </p>
 
@@ -103,13 +103,13 @@ export default function ConfirmReceipt() {
           </div>
         )}
 
-        <button style={btn('#10b981')} disabled={busy} onClick={() => post('', 'confirmed')}>
+        <button style={btn('#3FB950')} disabled={busy} onClick={() => post('', 'confirmed')}>
           {busy ? 'Please wait…' : '✓ Yes, I received it — release payment'}
         </button>
-        <button style={btn('#fff', '#dc2626')} disabled={busy} onClick={() => post('/report', 'reported')}>
+        <button style={btn('#fff', '#DA3633')} disabled={busy} onClick={() => post('/report', 'reported')}>
           ⚠ There is a problem with my order
         </button>
-        <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 14 }}>
+        <p style={{ fontSize: 12, color: '#8B949E', textAlign: 'center', marginTop: 14 }}>
           Only confirm once you actually have your order in hand.
         </p>
       </div>

@@ -308,7 +308,7 @@ function BankingSettings() {
     border: `1px solid ${V.border}`, background: 'transparent',
     color: V.text, fontFamily: V.sans, fontSize: 13, cursor: 'pointer',
   };
-  const btnDanger = { ...btnGhost, color: '#ef4444', borderColor: '#ef4444' };
+  const btnDanger = { ...btnGhost, color: '#F85149', borderColor: '#F85149' };
 
   function BackBtn({ onClick, label = 'Back' }) {
     return (
@@ -818,9 +818,9 @@ function BankingSettings() {
           background: '#2d0a0a', border: '1px solid #ef444460',
           borderRadius: 4, padding: '14px 18px', marginBottom: 20,
         }}>
-          <AlertCircle size={16} color="#ef4444" style={{ flexShrink: 0, marginTop: 2 }} />
+          <AlertCircle size={16} color="#F85149" style={{ flexShrink: 0, marginTop: 2 }} />
           <div>
-            <p style={{ fontWeight: 700, color: '#ef4444', fontSize: 13, margin: '0 0 4px' }}>Banking details required</p>
+            <p style={{ fontWeight: 700, color: '#F85149', fontSize: 13, margin: '0 0 4px' }}>Banking details required</p>
             <p style={{ color: V.sub, fontSize: 12, margin: 0 }}>
               You cannot create or accept deals as a seller until your banking details are saved.
               Details are sent directly to our secure payment processor — TrustTrade does not store your full account number.

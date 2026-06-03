@@ -63,13 +63,13 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, background: '#f8fafc' }}>
+        <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, background: '#E6EDF3' }}>
           <div style={{ fontSize: 32 }}>⚠️</div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>Something went wrong</h2>
-          <p style={{ fontSize: 14, color: '#64748b', margin: 0 }}>Please refresh the page. If the problem persists, contact support.</p>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#0D1117', margin: 0 }}>Something went wrong</h2>
+          <p style={{ fontSize: 14, color: '#6E7681', margin: 0 }}>Please refresh the page. If the problem persists, contact support.</p>
           <button
             onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/'; }}
-            style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#3b82f6', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+            style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#2F81F4', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
           >
             Go to Dashboard
           </button>

@@ -21,47 +21,47 @@ const DELIVERY_DAYS_MESSAGE = `Delivery days must be between ${MIN_DELIVERY_DAYS
 
 // Shared dark theme — matches the app palette (V) used across all pages.
 const D = {
-  bg:           "#0F172A",  // canvas / inset panels & input fields (darker than cards)
-  surface:      "#243147",  // card background, elevated from canvas
-  surfaceHi:    "#334155",  // raised rows / inbound chat bubbles / inactive toggles
-  border:       "#334155",
-  borderLight:  "#475569",
-  text:         "#F8FAFC",
-  textMuted:    "#94A3B8",
-  textSoft:     "#64748B",
-  accent:       "#3B82F6",  // primary CTA blue (white text)
-  blue:         "#3B82F6",
-  success:      "#10B981",
-  warning:      "#F59E0B",
-  danger:       "#EF4444",
+  bg:           "#0D1117",  // canvas / inset panels & input fields (darker than cards)
+  surface:      "#161B22",  // card background, elevated from canvas
+  surfaceHi:    "#30363D",  // raised rows / inbound chat bubbles / inactive toggles
+  border:       "#30363D",
+  borderLight:  "#30363D",
+  text:         "#E6EDF3",
+  textMuted:    "#8B949E",
+  textSoft:     "#6E7681",
+  accent:       "#2F81F4",  // primary CTA blue (white text)
+  blue:         "#2F81F4",
+  success:      "#3FB950",
+  warning:      "#D29922",
+  danger:       "#F85149",
   orange:       "#F97316",
   purple:       "#8B5CF6",
 };
 
 const STATUS = {
-  PENDING:         { label: "Awaiting agreement",                      color: "#FBBF24", bg: "rgba(245,158,11,0.14)", dot: "#F59E0B" },
-  ACCEPTED:        { label: "Awaiting payment",                        color: "#3B82F6", bg: "rgba(59,130,246,0.14)", dot: "#3B82F6" },
-  PAYMENT_PENDING: { label: "Awaiting payment",                        color: "#3B82F6", bg: "rgba(59,130,246,0.14)", dot: "#60A5FA" },
-  FUNDED:          { label: "Money held safely",                       color: "#10B981", bg: "rgba(16,185,129,0.14)", dot: "#10B981" },
+  PENDING:         { label: "Awaiting agreement",                      color: "#FBBF24", bg: "rgba(245,158,11,0.14)", dot: "#D29922" },
+  ACCEPTED:        { label: "Awaiting payment",                        color: "#2F81F4", bg: "rgba(59,130,246,0.14)", dot: "#2F81F4" },
+  PAYMENT_PENDING: { label: "Awaiting payment",                        color: "#2F81F4", bg: "rgba(59,130,246,0.14)", dot: "#60A5FA" },
+  FUNDED:          { label: "Money held safely",                       color: "#3FB950", bg: "rgba(16,185,129,0.14)", dot: "#3FB950" },
   DELIVERED:       { label: "Awaiting client confirmation",            color: "#8B5CF6", bg: "rgba(139,92,246,0.14)", dot: "#8B5CF6" },
-  APPROVED:        { label: "Payout processing · up to 2 business days",    color: "#10B981", bg: "rgba(16,185,129,0.14)", dot: "#10B981" },
-  COMPLETE:        { label: "Completed",                               color: "#10B981", bg: "rgba(16,185,129,0.14)", dot: "#10B981" },
-  DISPUTED:        { label: "Disputed / protection hold",              color: "#EF4444", bg: "rgba(239,68,68,0.14)", dot: "#EF4444" },
+  APPROVED:        { label: "Payout processing · up to 2 business days",    color: "#3FB950", bg: "rgba(16,185,129,0.14)", dot: "#3FB950" },
+  COMPLETE:        { label: "Completed",                               color: "#3FB950", bg: "rgba(16,185,129,0.14)", dot: "#3FB950" },
+  DISPUTED:        { label: "Disputed / protection hold",              color: "#F85149", bg: "rgba(239,68,68,0.14)", dot: "#F85149" },
   // Milestone-deal (parent) statuses:
-  PROPOSED:          { label: "Awaiting approval",        color: "#FBBF24", bg: "rgba(245,158,11,0.14)", dot: "#F59E0B" },
-  STRUCTURE_APPROVED:{ label: "Approved — pay first stage", color: "#3B82F6", bg: "rgba(59,130,246,0.14)", dot: "#3B82F6" },
-  IN_PROGRESS:       { label: "In progress",              color: "#7E9BC9", bg: "rgba(126,155,201,0.12)", dot: "#7E9BC9" },
+  PROPOSED:          { label: "Awaiting approval",        color: "#FBBF24", bg: "rgba(245,158,11,0.14)", dot: "#D29922" },
+  STRUCTURE_APPROVED:{ label: "Approved — pay first stage", color: "#2F81F4", bg: "rgba(59,130,246,0.14)", dot: "#2F81F4" },
+  IN_PROGRESS:       { label: "In progress",              color: "#2F81F4", bg: "rgba(126,155,201,0.12)", dot: "#2F81F4" },
 };
 
 // Per-milestone status chips (milestone deals).
 const MS_STATUS = {
-  PROPOSED:        { label: "Not started yet",          color: "#64748B", bg: "rgba(148,163,184,0.14)", dot: "#94A3B8" },
-  AWAITING_PAYMENT:{ label: "Ready to pay",             color: "#3B82F6", bg: "rgba(59,130,246,0.14)", dot: "#3B82F6" },
-  PAYMENT_PENDING: { label: "Awaiting payment",         color: "#3B82F6", bg: "rgba(59,130,246,0.14)", dot: "#60A5FA" },
-  FUNDED:          { label: "Paid — work in progress",  color: "#10B981", bg: "rgba(16,185,129,0.14)", dot: "#10B981" },
+  PROPOSED:        { label: "Not started yet",          color: "#6E7681", bg: "rgba(148,163,184,0.14)", dot: "#8B949E" },
+  AWAITING_PAYMENT:{ label: "Ready to pay",             color: "#2F81F4", bg: "rgba(59,130,246,0.14)", dot: "#2F81F4" },
+  PAYMENT_PENDING: { label: "Awaiting payment",         color: "#2F81F4", bg: "rgba(59,130,246,0.14)", dot: "#60A5FA" },
+  FUNDED:          { label: "Paid — work in progress",  color: "#3FB950", bg: "rgba(16,185,129,0.14)", dot: "#3FB950" },
   DELIVERED:       { label: "Delivered — please review",color: "#8B5CF6", bg: "rgba(139,92,246,0.14)", dot: "#8B5CF6" },
-  RELEASED:        { label: "Approved & paid",          color: "#10B981", bg: "rgba(16,185,129,0.14)", dot: "#10B981" },
-  DISPUTED:        { label: "On hold — disputed",       color: "#EF4444", bg: "rgba(239,68,68,0.14)", dot: "#EF4444" },
+  RELEASED:        { label: "Approved & paid",          color: "#3FB950", bg: "rgba(16,185,129,0.14)", dot: "#3FB950" },
+  DISPUTED:        { label: "On hold — disputed",       color: "#F85149", bg: "rgba(239,68,68,0.14)", dot: "#F85149" },
 };
 
 const PAYMENT_METHODS = [
@@ -586,7 +586,7 @@ export function CreateSmartDeal() {
 
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #3b82f6, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #2F81F4, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Briefcase size={17} color="#fff" />
           </div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>New Smart Deal</h1>
@@ -1109,7 +1109,7 @@ export function SmartDealList() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: "linear-gradient(135deg, #3b82f6, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: "linear-gradient(135deg, #2F81F4, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Lock size={16} color="#fff" />
             </div>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>Smart Deals</h1>
@@ -1763,7 +1763,7 @@ export function CreateMilestoneDeal() {
 
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #3b82f6, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #2F81F4, #1d4ed8)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <Layers size={17} color="#fff" />
           </div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: D.text, margin: 0 }}>New Project Deal</h1>

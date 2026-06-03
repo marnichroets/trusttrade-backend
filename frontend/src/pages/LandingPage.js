@@ -33,7 +33,7 @@ import { useAuth } from '../context/AuthContext';
 import TrustTradeLogo from '../components/TrustTradeLogo';
 
 const DARK_BG = '#020611';
-const INK = '#f8fafc';
+const INK = '#E6EDF3';
 const MUTED = '#9fb3c8';
 const BLUE = '#38bdf8';
 const GREEN = '#22c55e';

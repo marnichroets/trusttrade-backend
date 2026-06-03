@@ -153,7 +153,7 @@ function PayoutStatusBadge({ status }) {
     green: { bg: 'rgba(16,185,129,0.14)', text: '#6EE7B7', border: 'rgba(16,185,129,0.30)' },
     blue: { bg: 'rgba(59,130,246,0.14)', text: '#60A5FA', border: 'rgba(59,130,246,0.30)' },
     amber: { bg: 'rgba(245,158,11,0.14)', text: '#FBBF24', border: 'rgba(245,158,11,0.30)' },
-    slate: { bg: '#334155', text: '#94A3B8', border: '#334155' },
+    slate: { bg: '#30363D', text: '#8B949E', border: '#30363D' },
   };
   const tone = tones[status.tone] || tones.slate;
 
@@ -186,9 +186,9 @@ function FinalizedEscrowState({ transaction, uiState, payoutSchedule }) {
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg,rgba(16,185,129,0.14),#0F172A)',
+      background: 'linear-gradient(135deg,rgba(16,185,129,0.14),#0D1117)',
       border: '1px solid rgba(16,185,129,0.30)',
-      borderLeft: '3px solid #10b981',
+      borderLeft: '3px solid #3FB950',
       borderRadius: 14,
       padding: '20px 22px',
       boxShadow: '0 12px 34px rgba(16,185,129,0.1)',
@@ -245,11 +245,11 @@ function PayoutTimeline({ transaction, payoutSchedule }) {
   ];
 
   return (
-    <div style={{ background: '#243147', border: '1px solid #334155', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
+    <div style={{ background: '#161B22', border: '1px solid #30363D', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.4)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
         <div>
-          <p style={{ fontSize: 11, color: '#94A3B8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 4px' }}>Payout timeline</p>
-          <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>
+          <p style={{ fontSize: 11, color: '#8B949E', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 4px' }}>Payout timeline</p>
+          <p style={{ fontSize: 13, color: '#8B949E', margin: 0 }}>
             {payoutSchedule.copy}
           </p>
         </div>
@@ -258,23 +258,23 @@ function PayoutTimeline({ transaction, payoutSchedule }) {
       <div style={{ display: 'grid', gap: 10 }}>
         {steps.map((step) => (
           <div key={step.label} style={{ display: 'grid', gridTemplateColumns: '18px 1fr', gap: 10, alignItems: 'start' }}>
-            <div style={{ width: 14, height: 14, borderRadius: '50%', marginTop: 2, background: step.state === 'complete' ? '#10b981' : step.state === 'active' ? '#60A5FA' : '#334155', boxShadow: step.state === 'complete' ? '0 0 0 4px rgba(16,185,129,0.12)' : step.state === 'active' ? '0 0 0 4px rgba(37,99,235,0.12)' : 'none' }} />
+            <div style={{ width: 14, height: 14, borderRadius: '50%', marginTop: 2, background: step.state === 'complete' ? '#3FB950' : step.state === 'active' ? '#60A5FA' : '#30363D', boxShadow: step.state === 'complete' ? '0 0 0 4px rgba(16,185,129,0.12)' : step.state === 'active' ? '0 0 0 4px rgba(37,99,235,0.12)' : 'none' }} />
             <div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: '#F8FAFC', margin: 0 }}>{step.label}</p>
-              <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0' }}>{step.value}</p>
+              <p style={{ fontSize: 13, fontWeight: 700, color: '#E6EDF3', margin: 0 }}>{step.label}</p>
+              <p style={{ fontSize: 12, color: '#8B949E', margin: '2px 0 0' }}>{step.value}</p>
             </div>
           </div>
         ))}
       </div>
-      <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #334155' }}>
-        <p style={{ fontSize: 11, color: '#94A3B8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>
+      <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #30363D' }}>
+        <p style={{ fontSize: 11, color: '#8B949E', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>
           Payout activity timestamps
         </p>
         <div style={{ display: 'grid', gap: 7 }}>
           {activityRows.map(([label, value]) => (
             <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12 }}>
-              <span style={{ color: '#94A3B8', fontFamily: 'monospace' }}>{label}</span>
-              <span style={{ color: value ? '#F8FAFC' : '#94a3b8', fontWeight: 600, textAlign: 'right' }}>
+              <span style={{ color: '#8B949E', fontFamily: 'monospace' }}>{label}</span>
+              <span style={{ color: value ? '#E6EDF3' : '#8B949E', fontWeight: 600, textAlign: 'right' }}>
                 {value ? formatDetailDate(value) : 'Not recorded yet'}
               </span>
             </div>
@@ -390,9 +390,9 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, rgba(16,185,129,0.14) 0%, #243147 100%)',
+      background: 'linear-gradient(135deg, rgba(16,185,129,0.14) 0%, #161B22 100%)',
       border: '1px solid rgba(16,185,129,0.30)',
-      borderLeft: '3px solid #10b981',
+      borderLeft: '3px solid #3FB950',
       borderRadius: 14,
       padding: '20px 22px',
       boxShadow: '0 4px 20px rgba(16,185,129,0.08)',
@@ -405,7 +405,7 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
           <p style={{ fontSize: 11, color: '#34D399', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 3px' }}>
             Payout Timeline
           </p>
-          <p style={{ fontSize: 15, fontWeight: 700, color: '#F8FAFC', margin: 0 }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: '#E6EDF3', margin: 0 }}>
             {countdownText}
           </p>
         </div>
@@ -435,17 +435,17 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
               <span style={{ fontSize: 13, fontWeight: 800, color: '#6EE7B7' }}>{payoutBoldLabel}</span>
             </div>
           </div>
-          <p style={{ fontSize: 11, color: '#94a3b8', margin: '6px 2px 0', lineHeight: 1.4 }}>
+          <p style={{ fontSize: 11, color: '#8B949E', margin: '6px 2px 0', lineHeight: 1.4 }}>
             Estimates based on standard processing. Actual timing may vary by 1–2 hours.
           </p>
         </div>
       )}
 
       {/* Progress bar */}
-      <div style={{ background: '#334155', borderRadius: 99, height: 5, marginBottom: 18, overflow: 'hidden' }}>
+      <div style={{ background: '#30363D', borderRadius: 99, height: 5, marginBottom: 18, overflow: 'hidden' }}>
         <div style={{
           height: '100%',
-          background: completed ? '#10b981' : 'linear-gradient(90deg, #10b981, #34d399)',
+          background: completed ? '#3FB950' : 'linear-gradient(90deg, #3FB950, #34d399)',
           borderRadius: 99,
           width: `${progress}%`,
           transition: 'width 1s ease',
@@ -460,7 +460,7 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
               <div style={{
                 width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: step.state === 'complete' ? '#10b981' : step.state === 'active' ? '#60A5FA' : '#334155',
+                background: step.state === 'complete' ? '#3FB950' : step.state === 'active' ? '#60A5FA' : '#30363D',
                 boxShadow: step.state === 'active' ? '0 0 0 4px rgba(37,99,235,0.12)' : 'none',
               }}>
                 {step.state === 'complete' && <Check size={10} color="#fff" />}
@@ -471,7 +471,7 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
               {i < steps.length - 1 && (
                 <div style={{
                   width: 2, flex: 1, minHeight: 14,
-                  background: step.state === 'complete' ? 'rgba(16,185,129,0.30)' : '#334155',
+                  background: step.state === 'complete' ? 'rgba(16,185,129,0.30)' : '#30363D',
                   margin: '3px 0',
                 }} />
               )}
@@ -481,7 +481,7 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
               <p style={{
                 fontSize: 13,
                 fontWeight: step.state !== 'pending' ? 700 : 500,
-                color: step.state === 'pending' ? '#94a3b8' : '#F8FAFC',
+                color: step.state === 'pending' ? '#8B949E' : '#E6EDF3',
                 margin: '0 0 2px',
                 lineHeight: 1.3,
               }}>
@@ -498,7 +498,7 @@ function PayoutTimelineTracker({ transaction, platformConfig }) {
               ) : (
                 <p style={{
                   fontSize: 12,
-                  color: step.state === 'pending' ? '#475569' : '#94A3B8',
+                  color: step.state === 'pending' ? '#30363D' : '#8B949E',
                   margin: 0, lineHeight: 1.4,
                 }}>
                   {step.detail}
@@ -558,9 +558,9 @@ function SellerExpectedPayoutCard({ transaction, platformConfig }) {
 
   return (
     <div style={{
-      background: 'linear-gradient(135deg, rgba(16,185,129,0.14) 0%, #243147 100%)',
+      background: 'linear-gradient(135deg, rgba(16,185,129,0.14) 0%, #161B22 100%)',
       border: '1px solid rgba(16,185,129,0.30)',
-      borderLeft: '3px solid #10b981',
+      borderLeft: '3px solid #3FB950',
       borderRadius: 14,
       padding: '18px 20px',
       boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
@@ -570,7 +570,7 @@ function SellerExpectedPayoutCard({ transaction, platformConfig }) {
           <p style={{ fontSize: 11, color: '#34D399', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', margin: '0 0 3px' }}>
             Payout Timeline
           </p>
-          <p style={{ fontSize: 15, fontWeight: 700, color: '#F8FAFC', margin: 0 }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: '#E6EDF3', margin: 0 }}>
             Funds secured in escrow — here's when to expect your money
           </p>
         </div>
@@ -589,7 +589,7 @@ function SellerExpectedPayoutCard({ transaction, platformConfig }) {
               <span style={{ fontSize: 13, fontWeight: 800, color: '#6EE7B7' }}>{earliestReleaseLabel}</span>
             </div>
           </div>
-          <p style={{ fontSize: 11, color: '#94A3B8', margin: '4px 0 0 22px', lineHeight: 1.4 }}>
+          <p style={{ fontSize: 11, color: '#8B949E', margin: '4px 0 0 22px', lineHeight: 1.4 }}>
             Funds release {releasePlainEnglish}.
           </p>
         </div>
@@ -602,13 +602,13 @@ function SellerExpectedPayoutCard({ transaction, platformConfig }) {
               <span style={{ fontSize: 13, fontWeight: 800, color: '#6EE7B7' }}>{payoutLandsLabel}</span>
             </div>
           </div>
-          <p style={{ fontSize: 11, color: '#94A3B8', margin: '4px 0 0 22px', lineHeight: 1.4 }}>
+          <p style={{ fontSize: 11, color: '#8B949E', margin: '4px 0 0 22px', lineHeight: 1.4 }}>
             Next bank run after release: {bankRunLabel}.
           </p>
         </div>
       </div>
 
-      <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, lineHeight: 1.4 }}>
+      <p style={{ fontSize: 11, color: '#8B949E', margin: 0, lineHeight: 1.4 }}>
         Why two dates? The <strong>release date</strong> is when funds leave escrow once the buyer
         confirms (or auto-release fires). They're then paid out on the next scheduled bank run, and
         the EFT clears into your account the following business day — that's the <strong>bank date</strong>.
@@ -656,8 +656,8 @@ function CurrentStateHeader({ uiState, flowType, userRole, paymentProcessing }) 
 
   return (
     <div style={{
-      background: '#3B82F6',
-      border: `1px solid ${uiState.color || '#334155'}55`,
+      background: '#2F81F4',
+      border: `1px solid ${uiState.color || '#30363D'}55`,
       borderRadius: 16,
       padding: '18px 20px',
       boxShadow: '0 18px 42px rgba(15,23,42,0.16)',
@@ -1197,15 +1197,15 @@ function TransactionDetail() {
           data-testid={`star-${star}`}
           style={{ background: 'none', border: 'none', cursor: readOnly ? 'default' : 'pointer', padding: 2, transition: 'transform 0.1s', transform: 'scale(1)' }}
         >
-          <Star style={{ width: 24, height: 24, fill: star <= (readOnly ? value : (hoverRating || value)) ? '#fbbf24' : 'none', color: star <= (readOnly ? value : (hoverRating || value)) ? '#fbbf24' : '#475569' }} />
+          <Star style={{ width: 24, height: 24, fill: star <= (readOnly ? value : (hoverRating || value)) ? '#fbbf24' : 'none', color: star <= (readOnly ? value : (hoverRating || value)) ? '#fbbf24' : '#30363D' }} />
         </button>
       ))}
     </div>
   );
 
   const getEscrowStateBadge = (state) => {
-    const variants = { 'CREATED': { bg: '#334155', text: '#94A3B8', label: 'Created' }, 'PENDING': { bg: 'rgba(245,158,11,0.14)', text: '#FBBF24', label: 'Pending' }, 'FUNDS_RECEIVED': { bg: 'rgba(16,185,129,0.14)', text: '#6EE7B7', label: 'Funds Secured' }, 'INITIATED': { bg: 'rgba(139,92,246,0.14)', text: '#C4B5FD', label: 'Delivery Started' }, 'SENT': { bg: 'rgba(59,130,246,0.14)', text: '#60A5FA', label: 'Item Sent' }, 'DELIVERED': { bg: 'rgba(245,158,11,0.14)', text: '#FBBF24', label: 'Awaiting Confirmation' }, 'FUNDS_RELEASED': { bg: 'rgba(16,185,129,0.14)', text: '#6EE7B7', label: 'Funds Released' }, 'EXPIRED': { bg: '#334155', text: '#94A3B8', label: 'Expired' }, 'DISPUTED': { bg: 'rgba(239,68,68,0.14)', text: '#F87171', label: 'Disputed' }, 'CANCELLED': { bg: 'rgba(239,68,68,0.14)', text: '#F87171', label: 'Cancelled' } };
-    return variants[state] || { bg: '#334155', text: '#94A3B8', label: state };
+    const variants = { 'CREATED': { bg: '#30363D', text: '#8B949E', label: 'Created' }, 'PENDING': { bg: 'rgba(245,158,11,0.14)', text: '#FBBF24', label: 'Pending' }, 'FUNDS_RECEIVED': { bg: 'rgba(16,185,129,0.14)', text: '#6EE7B7', label: 'Funds Secured' }, 'INITIATED': { bg: 'rgba(139,92,246,0.14)', text: '#C4B5FD', label: 'Delivery Started' }, 'SENT': { bg: 'rgba(59,130,246,0.14)', text: '#60A5FA', label: 'Item Sent' }, 'DELIVERED': { bg: 'rgba(245,158,11,0.14)', text: '#FBBF24', label: 'Awaiting Confirmation' }, 'FUNDS_RELEASED': { bg: 'rgba(16,185,129,0.14)', text: '#6EE7B7', label: 'Funds Released' }, 'EXPIRED': { bg: '#30363D', text: '#8B949E', label: 'Expired' }, 'DISPUTED': { bg: 'rgba(239,68,68,0.14)', text: '#F87171', label: 'Disputed' }, 'CANCELLED': { bg: 'rgba(239,68,68,0.14)', text: '#F87171', label: 'Cancelled' } };
+    return variants[state] || { bg: '#30363D', text: '#8B949E', label: state };
   };
 
   const mapPaymentStatusToState = (paymentStatus, tradesafeState) => {
@@ -1235,10 +1235,10 @@ function TransactionDetail() {
 
   // ── Shared styles ──────────────────────────────────────────────────
   const S = {
-    card: { background: '#243147', borderRadius: 14, border: '1px solid #334155', boxShadow: '0 1px 3px rgba(0,0,0,0.4)', overflow: 'hidden' },
-    label: { fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' },
-    sectionTitle: { fontSize: 15, fontWeight: 600, color: '#F8FAFC', margin: 0 },
-    divider: { height: 1, background: '#334155', margin: '12px 0' },
+    card: { background: '#161B22', borderRadius: 14, border: '1px solid #30363D', boxShadow: '0 1px 3px rgba(0,0,0,0.4)', overflow: 'hidden' },
+    label: { fontSize: 11, fontWeight: 600, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.06em' },
+    sectionTitle: { fontSize: 15, fontWeight: 600, color: '#E6EDF3', margin: 0 },
+    divider: { height: 1, background: '#30363D', margin: '12px 0' },
     pill: (bg, color) => ({ display: 'inline-block', fontSize: 11, fontWeight: 500, padding: '2px 9px', borderRadius: 20, background: bg, color }),
     actionCard: (accent, bg) => ({
       background: bg, border: `1px solid ${accent}33`, borderLeft: `3px solid ${accent}`,
@@ -1250,17 +1250,17 @@ function TransactionDetail() {
       borderRadius: 9, border: 'none', background: bg, color, fontSize: 13, fontWeight: 600,
       cursor: 'pointer', transition: 'opacity 0.15s', whiteSpace: 'nowrap',
     }),
-    btnOutline: { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: '1px solid #334155', background: '#1E293B', color: '#94A3B8', fontSize: 13, fontWeight: 500, cursor: 'pointer' },
-    infoRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid #0F172A' },
+    btnOutline: { display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 9, border: '1px solid #30363D', background: '#161B22', color: '#8B949E', fontSize: 13, fontWeight: 500, cursor: 'pointer' },
+    infoRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid #0D1117' },
   };
 
   // ── Loading ─────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0F172A' }}>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0D1117' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 36, height: 36, border: '3px solid #10b981', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
-          <p style={{ fontSize: 13, color: '#94A3B8' }}>Loading transaction…</p>
+          <div style={{ width: 36, height: 36, border: '3px solid #3FB950', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+          <p style={{ fontSize: 13, color: '#8B949E' }}>Loading transaction…</p>
           <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </div>
       </div>
@@ -1276,31 +1276,31 @@ function TransactionDetail() {
           <div style={{ ...S.card, padding: '36px 32px' }}>
             <div style={{ textAlign: 'center', marginBottom: 24 }}>
               <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(59,130,246,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-                <Phone size={24} color="#3b82f6" />
+                <Phone size={24} color="#2F81F4" />
               </div>
-              <h1 style={{ fontSize: 20, fontWeight: 700, color: '#F8FAFC', margin: '0 0 8px' }}>Verify Your Phone</h1>
-              <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>This transaction was sent to a phone number. Verify to access it.</p>
+              <h1 style={{ fontSize: 20, fontWeight: 700, color: '#E6EDF3', margin: '0 0 8px' }}>Verify Your Phone</h1>
+              <p style={{ fontSize: 13, color: '#8B949E', margin: 0 }}>This transaction was sent to a phone number. Verify to access it.</p>
             </div>
 
             {phoneVerificationContext && (
-              <div style={{ background: '#0F172A', border: '1px solid #334155', borderRadius: 10, padding: '14px 16px', marginBottom: 20 }}>
-                {phoneVerificationContext.itemDescription && <div style={S.infoRow}><span style={{ fontSize: 12, color: '#94a3b8' }}>Item</span><span style={{ fontSize: 13, fontWeight: 500, color: '#F8FAFC' }}>{phoneVerificationContext.itemDescription}</span></div>}
-                {phoneVerificationContext.itemPrice > 0 && <div style={{ ...S.infoRow, borderBottom: 'none' }}><span style={{ fontSize: 12, color: '#94a3b8' }}>Amount</span><span style={{ fontSize: 14, fontWeight: 700, color: '#10b981' }}>R {phoneVerificationContext.itemPrice.toFixed(2)}</span></div>}
-                {phoneVerificationContext.maskedPhone && <div style={{ paddingTop: 10, borderTop: '1px solid #334155', display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 12, color: '#94a3b8' }}>Sent to</span><span style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 600, color: '#3b82f6' }}>{phoneVerificationContext.maskedPhone}</span></div>}
+              <div style={{ background: '#0D1117', border: '1px solid #30363D', borderRadius: 10, padding: '14px 16px', marginBottom: 20 }}>
+                {phoneVerificationContext.itemDescription && <div style={S.infoRow}><span style={{ fontSize: 12, color: '#8B949E' }}>Item</span><span style={{ fontSize: 13, fontWeight: 500, color: '#E6EDF3' }}>{phoneVerificationContext.itemDescription}</span></div>}
+                {phoneVerificationContext.itemPrice > 0 && <div style={{ ...S.infoRow, borderBottom: 'none' }}><span style={{ fontSize: 12, color: '#8B949E' }}>Amount</span><span style={{ fontSize: 14, fontWeight: 700, color: '#3FB950' }}>R {phoneVerificationContext.itemPrice.toFixed(2)}</span></div>}
+                {phoneVerificationContext.maskedPhone && <div style={{ paddingTop: 10, borderTop: '1px solid #30363D', display: 'flex', justifyContent: 'space-between' }}><span style={{ fontSize: 12, color: '#8B949E' }}>Sent to</span><span style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 600, color: '#2F81F4' }}>{phoneVerificationContext.maskedPhone}</span></div>}
               </div>
             )}
 
             {verificationError && (
               <div style={{ background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.30)', borderRadius: 10, padding: '12px 14px', marginBottom: 16, display: 'flex', gap: 10 }}>
-                <AlertTriangle size={15} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
+                <AlertTriangle size={15} color="#F85149" style={{ flexShrink: 0, marginTop: 1 }} />
                 <p style={{ fontSize: 13, color: '#F87171', margin: 0 }}>{verificationError}</p>
               </div>
             )}
             {isLockedOut && (
               <div style={{ background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.30)', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <Lock size={15} color="#ef4444" style={{ flexShrink: 0, marginTop: 1 }} />
-                  <div><p style={{ fontSize: 13, fontWeight: 600, color: '#F87171', margin: '0 0 3px' }}>Account Temporarily Locked</p><p style={{ fontSize: 12, color: '#ef4444', margin: 0 }}>Try again in {lockoutMinutes} minutes.</p></div>
+                  <Lock size={15} color="#F85149" style={{ flexShrink: 0, marginTop: 1 }} />
+                  <div><p style={{ fontSize: 13, fontWeight: 600, color: '#F87171', margin: '0 0 3px' }}>Account Temporarily Locked</p><p style={{ fontSize: 12, color: '#F85149', margin: 0 }}>Try again in {lockoutMinutes} minutes.</p></div>
                 </div>
               </div>
             )}
@@ -1309,35 +1309,35 @@ function TransactionDetail() {
               <div>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#E2E8F0', marginBottom: 8 }}>Phone Number</label>
                 <div style={{ position: 'relative', marginBottom: 16 }}>
-                  <Phone size={15} color="#94a3b8" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+                  <Phone size={15} color="#8B949E" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
                   <Input type="tel" placeholder="+27 82 123 4567" value={phoneNumber} onChange={(e) => { setPhoneNumber(e.target.value); if (verificationError?.includes("doesn't match")) setVerificationError(null); }} style={{ paddingLeft: 36 }} data-testid="phone-input" disabled={isLockedOut} />
                 </div>
-                {phoneVerificationContext?.maskedPhone && <p style={{ fontSize: 12, color: '#3b82f6', marginBottom: 16 }}>Enter the number matching: {phoneVerificationContext.maskedPhone}</p>}
-                <button onClick={handleSendOtp} disabled={sendingOtp || !phoneNumber || isLockedOut} data-testid="send-otp-btn" style={{ ...S.btn('#3b82f6'), width: '100%', justifyContent: 'center', opacity: (sendingOtp || !phoneNumber || isLockedOut) ? 0.5 : 1 }}>
+                {phoneVerificationContext?.maskedPhone && <p style={{ fontSize: 12, color: '#2F81F4', marginBottom: 16 }}>Enter the number matching: {phoneVerificationContext.maskedPhone}</p>}
+                <button onClick={handleSendOtp} disabled={sendingOtp || !phoneNumber || isLockedOut} data-testid="send-otp-btn" style={{ ...S.btn('#2F81F4'), width: '100%', justifyContent: 'center', opacity: (sendingOtp || !phoneNumber || isLockedOut) ? 0.5 : 1 }}>
                   {sendingOtp ? <><Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> Sending…</> : isLockedOut ? `Locked — Try in ${lockoutMinutes}m` : 'Send Verification Code'}
                 </button>
               </div>
             ) : (
               <div>
                 <div style={{ background: 'rgba(16,185,129,0.14)', border: '1px solid rgba(16,185,129,0.30)', borderRadius: 10, padding: '10px 14px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><CheckCircle2 size={14} color="#10b981" /><span style={{ fontSize: 13, color: '#6EE7B7' }}>Code sent to <strong>{phoneNumber}</strong></span></div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><CheckCircle2 size={14} color="#3FB950" /><span style={{ fontSize: 13, color: '#6EE7B7' }}>Code sent to <strong>{phoneNumber}</strong></span></div>
                   <span style={{ fontSize: 12, color: '#34D399' }}>Expires {otpExpiresIn}m</span>
                 </div>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#E2E8F0', marginBottom: 8 }}>Verification Code</label>
                 <Input type="text" placeholder="000000" value={otpCode} onChange={(e) => { setOtpCode(e.target.value.replace(/\D/g,'').slice(0,6)); if (verificationError?.includes('attempts')) setVerificationError(null); }} style={{ textAlign: 'center', fontSize: 22, letterSpacing: '0.3em', fontFamily: 'monospace', marginBottom: 4 }} maxLength={6} data-testid="otp-input" disabled={isLockedOut} />
-                <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginBottom: 16 }}>Code expires in {otpExpiresIn} minutes</p>
-                {remainingVerifyAttempts < 5 && <p style={{ fontSize: 12, color: '#f59e0b', textAlign: 'center', marginBottom: 12 }}>{remainingVerifyAttempts} attempts remaining</p>}
-                <button onClick={handleVerifyOtp} disabled={verifyingOtp || otpCode.length !== 6 || isLockedOut} data-testid="verify-otp-btn" style={{ ...S.btn('#10b981'), width: '100%', justifyContent: 'center', opacity: (verifyingOtp || otpCode.length !== 6 || isLockedOut) ? 0.5 : 1, marginBottom: 12 }}>
+                <p style={{ fontSize: 12, color: '#8B949E', textAlign: 'center', marginBottom: 16 }}>Code expires in {otpExpiresIn} minutes</p>
+                {remainingVerifyAttempts < 5 && <p style={{ fontSize: 12, color: '#D29922', textAlign: 'center', marginBottom: 12 }}>{remainingVerifyAttempts} attempts remaining</p>}
+                <button onClick={handleVerifyOtp} disabled={verifyingOtp || otpCode.length !== 6 || isLockedOut} data-testid="verify-otp-btn" style={{ ...S.btn('#3FB950'), width: '100%', justifyContent: 'center', opacity: (verifyingOtp || otpCode.length !== 6 || isLockedOut) ? 0.5 : 1, marginBottom: 12 }}>
                   {verifyingOtp ? <><Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> Verifying…</> : isLockedOut ? `Locked — Try in ${lockoutMinutes}m` : 'Verify & Join Transaction'}
                 </button>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <button onClick={() => { setOtpSent(false); setOtpCode(''); setVerificationError(null); }} disabled={isLockedOut} style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer' }}>Change number</button>
-                  {resendCooldown > 0 ? <span style={{ color: '#94a3b8' }}>Resend in {resendCooldown}s</span> : remainingOtpRequests > 0 && !isLockedOut ? <button onClick={handleSendOtp} disabled={sendingOtp} style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 600, cursor: 'pointer' }}>Resend ({remainingOtpRequests} left)</button> : <span style={{ color: '#94a3b8', fontSize: 12 }}>No more requests</span>}
+                  <button onClick={() => { setOtpSent(false); setOtpCode(''); setVerificationError(null); }} disabled={isLockedOut} style={{ background: 'none', border: 'none', color: '#8B949E', cursor: 'pointer' }}>Change number</button>
+                  {resendCooldown > 0 ? <span style={{ color: '#8B949E' }}>Resend in {resendCooldown}s</span> : remainingOtpRequests > 0 && !isLockedOut ? <button onClick={handleSendOtp} disabled={sendingOtp} style={{ background: 'none', border: 'none', color: '#2F81F4', fontWeight: 600, cursor: 'pointer' }}>Resend ({remainingOtpRequests} left)</button> : <span style={{ color: '#8B949E', fontSize: 12 }}>No more requests</span>}
                 </div>
               </div>
             )}
 
-            <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid #334155' }}>
+            <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid #30363D' }}>
               <button onClick={() => navigate('/transactions')} style={{ ...S.btnOutline, width: '100%', justifyContent: 'center' }}>
                 <ArrowLeft size={13} /> Back to My Transactions
               </button>
@@ -1359,17 +1359,17 @@ function TransactionDetail() {
         <div style={{ maxWidth: 440, margin: '40px auto', padding: '0 16px' }}>
           <div style={{ ...S.card, padding: '36px 32px', textAlign: 'center' }}>
             <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(245,158,11,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
-              <AlertTriangle size={24} color="#f59e0b" />
+              <AlertTriangle size={24} color="#D29922" />
             </div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#F8FAFC', margin: '0 0 8px' }}>Wrong Account</h1>
-            <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 24px' }}>This transaction was sent to a different account.</p>
-            <div style={{ background: '#0F172A', border: '1px solid #334155', borderRadius: 10, padding: '16px', textAlign: 'left', marginBottom: 20 }}>
-              <div style={{ marginBottom: 12 }}><p style={{ ...S.label, marginBottom: 4 }}>Transaction sent to</p><p style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC', margin: 0 }}>{wrongAccount.expected}</p></div>
-              <div style={{ paddingTop: 12, borderTop: '1px solid #334155' }}><p style={{ ...S.label, marginBottom: 4 }}>You are logged in as</p><p style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC', margin: 0 }}>{wrongAccount.current}</p></div>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#E6EDF3', margin: '0 0 8px' }}>Wrong Account</h1>
+            <p style={{ fontSize: 13, color: '#8B949E', margin: '0 0 24px' }}>This transaction was sent to a different account.</p>
+            <div style={{ background: '#0D1117', border: '1px solid #30363D', borderRadius: 10, padding: '16px', textAlign: 'left', marginBottom: 20 }}>
+              <div style={{ marginBottom: 12 }}><p style={{ ...S.label, marginBottom: 4 }}>Transaction sent to</p><p style={{ fontSize: 14, fontWeight: 600, color: '#E6EDF3', margin: 0 }}>{wrongAccount.expected}</p></div>
+              <div style={{ paddingTop: 12, borderTop: '1px solid #30363D' }}><p style={{ ...S.label, marginBottom: 4 }}>You are logged in as</p><p style={{ fontSize: 14, fontWeight: 600, color: '#E6EDF3', margin: 0 }}>{wrongAccount.current}</p></div>
             </div>
-            <button onClick={handleLogout} style={{ ...S.btn('#3B82F6'), width: '100%', justifyContent: 'center', marginBottom: 10 }}>Log Out and Switch Account</button>
+            <button onClick={handleLogout} style={{ ...S.btn('#2F81F4'), width: '100%', justifyContent: 'center', marginBottom: 10 }}>Log Out and Switch Account</button>
             <button onClick={() => navigate('/transactions')} style={{ ...S.btnOutline, width: '100%', justifyContent: 'center' }}>Continue as {wrongAccount.current?.split('@')[0]}</button>
-            <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 14 }}>Log out and sign in with {wrongAccount.expected} to view this transaction.</p>
+            <p style={{ fontSize: 12, color: '#8B949E', marginTop: 14 }}>Log out and sign in with {wrongAccount.expected} to view this transaction.</p>
           </div>
         </div>
       </DashboardLayout>
@@ -1455,8 +1455,8 @@ function TransactionDetail() {
   const sellerReceivesAmount = roundMoney(Number(transaction.item_price || 0) - _sellerFee);
   const escrowBadge = getEscrowStateBadge(escrowState);
   const currentStatusLabel = uiState.label || escrowBadge.label || transaction.payment_status || 'Status pending';
-  const currentStatusBg = uiState.bg || escrowBadge.bg || '#334155';
-  const currentStatusColor = uiState.color || escrowBadge.text || '#94A3B8';
+  const currentStatusBg = uiState.bg || escrowBadge.bg || '#30363D';
+  const currentStatusColor = uiState.color || escrowBadge.text || '#8B949E';
   const shareMessage = shareLink
     ? `I've created a secure TrustTrade protected payment for you. Click the link to view and confirm the transaction: ${shareLink}`
     : '';
@@ -1526,12 +1526,12 @@ function TransactionDetail() {
       <style>{`
         @keyframes spin{to{transform:rotate(360deg)}}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-        .td-tab{padding:9px 16px;border:none;background:transparent;font-size:13px;font-weight:500;color:#94A3B8;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s}
-        .td-tab.active{color:#F8FAFC;border-bottom-color:#F8FAFC;font-weight:600}
-        .td-tab:hover{color:#F8FAFC}
-        .pm-opt{border:1.5px solid #334155;borderRadius:12px;padding:14px 16px;cursor:pointer;transition:all 0.15s;background:#1E293B}
+        .td-tab{padding:9px 16px;border:none;background:transparent;font-size:13px;font-weight:500;color:#8B949E;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.15s}
+        .td-tab.active{color:#E6EDF3;border-bottom-color:#E6EDF3;font-weight:600}
+        .td-tab:hover{color:#E6EDF3}
+        .pm-opt{border:1.5px solid #30363D;borderRadius:12px;padding:14px 16px;cursor:pointer;transition:all 0.15s;background:#161B22}
         .pm-opt:hover{border-color:#93c5fd}
-        .pm-opt.selected{border-color:#3b82f6;background:rgba(59,130,246,0.14);box-shadow:0 0 0 3px rgba(59,130,246,0.08)}
+        .pm-opt.selected{border-color:#2F81F4;background:rgba(59,130,246,0.14);box-shadow:0 0 0 3px rgba(59,130,246,0.08)}
         .action-btn:hover{opacity:0.88}
         .action-btn:active{opacity:0.75}
         html, body, #root { overflow-x: hidden; }
@@ -1541,9 +1541,9 @@ function TransactionDetail() {
         .transaction-detail-sidebar { position: sticky; top: 80px; display: flex; flex-direction: column; gap: 14px; }
         .transaction-mobile-summary, .transaction-mobile-breakdown, .transaction-mobile-share { display: none; }
         .mobile-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-        .mobile-summary-cell { min-width: 0; border: 1px solid #334155; background: #0F172A; border-radius: 9px; padding: 9px 10px; }
-        .mobile-summary-value { display: block; margin-top: 3px; font-family: monospace; font-size: 13px; font-weight: 700; color: #F8FAFC; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .mobile-breakdown-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid #334155; font-size: 13px; }
+        .mobile-summary-cell { min-width: 0; border: 1px solid #30363D; background: #0D1117; border-radius: 9px; padding: 9px 10px; }
+        .mobile-summary-value { display: block; margin-top: 3px; font-family: monospace; font-size: 13px; font-weight: 700; color: #E6EDF3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mobile-breakdown-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid #30363D; font-size: 13px; }
         .mobile-breakdown-total { margin-top: 10px; padding: 12px; border-radius: 10px; background: rgba(59,130,246,0.14); border: 1px solid rgba(59,130,246,0.30); display: flex; justify-content: space-between; gap: 12px; align-items: center; }
         .mobile-share-code-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
         @media (max-width: 768px) {
@@ -1581,9 +1581,14 @@ function TransactionDetail() {
           {/* ── Left column ─────────────────────────────── */}
           <div className="transaction-detail-main" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            <CurrentStateHeader uiState={uiState} flowType={flowType} userRole={isBuyer ? 'buyer' : isSeller ? 'seller' : 'viewer'} paymentProcessing={paymentProcessing} />
+            {/* Status header pinned to the very top (flex order). The primary-action
+                group below is given order -1 so it renders immediately under this
+                banner — before the summary, timeline and everything else. */}
+            <div style={{ order: -2 }}>
+              <CurrentStateHeader uiState={uiState} flowType={flowType} userRole={isBuyer ? 'buyer' : isSeller ? 'seller' : 'viewer'} paymentProcessing={paymentProcessing} />
+            </div>
 
-            <div className="transaction-mobile-summary" style={{ ...S.card, padding: '12px 14px', border: '1px solid #334155' }}>
+            <div className="transaction-mobile-summary" style={{ ...S.card, padding: '12px 14px', border: '1px solid #30363D' }}>
               <div className="mobile-summary-grid">
                 {[
                   { label: 'Item value', value: `R ${Number(transaction.item_price || 0).toFixed(2)}` },
@@ -1592,7 +1597,7 @@ function TransactionDetail() {
                 ].map((row) => (
                   <div key={row.label} className="mobile-summary-cell">
                     <span style={{ ...S.label, fontSize: 10 }}>{row.label}</span>
-                    <span className="mobile-summary-value" style={{ color: row.color || '#F8FAFC' }}>{row.value}</span>
+                    <span className="mobile-summary-value" style={{ color: row.color || '#E6EDF3' }}>{row.value}</span>
                   </div>
                 ))}
                 <div className="mobile-summary-cell">
@@ -1623,8 +1628,8 @@ function TransactionDetail() {
                   { label: 'Seller TrustTrade fee', value: `R ${_sellerFee.toFixed(2)}` },
                 ].map((row) => (
                   <div key={row.label} className="mobile-breakdown-row">
-                    <span style={{ color: '#94A3B8' }}>{row.label}</span>
-                    <span style={{ color: '#F8FAFC', fontWeight: 650, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{row.value}</span>
+                    <span style={{ color: '#8B949E' }}>{row.label}</span>
+                    <span style={{ color: '#E6EDF3', fontWeight: 650, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{row.value}</span>
                   </div>
                 ))}
               </div>
@@ -1634,8 +1639,8 @@ function TransactionDetail() {
                   R {totalSecurePayment.toFixed(2)}
                 </span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, paddingTop: 10, marginTop: 10, borderTop: '1px solid #334155', fontSize: 13 }}>
-                <span style={{ color: '#94A3B8' }}>Seller receives</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, paddingTop: 10, marginTop: 10, borderTop: '1px solid #30363D', fontSize: 13 }}>
+                <span style={{ color: '#8B949E' }}>Seller receives</span>
                 <span style={{ color: '#34D399', fontWeight: 800, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>R {sellerReceivesAmount.toFixed(2)}</span>
               </div>
               <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'flex-start', background: 'rgba(16,185,129,0.14)', border: '1px solid rgba(16,185,129,0.30)', borderRadius: 9, padding: '9px 10px' }}>
@@ -1650,14 +1655,14 @@ function TransactionDetail() {
               <div className="transaction-mobile-share" style={{ ...S.card, padding: '12px 14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
                   <span style={S.label}>Share Code</span>
-                  <Share2 size={12} color="#94a3b8" />
+                  <Share2 size={12} color="#8B949E" />
                 </div>
                 <div className="mobile-share-code-row">
-                  <code style={{ minWidth: 0, fontSize: 13, fontFamily: 'monospace', fontWeight: 700, color: '#60A5FA', background: '#0F172A', padding: '8px 10px', borderRadius: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <code style={{ minWidth: 0, fontSize: 13, fontFamily: 'monospace', fontWeight: 700, color: '#60A5FA', background: '#0D1117', padding: '8px 10px', borderRadius: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {transaction.share_code}
                   </code>
                   <button onClick={handleCopyLink} data-testid="copy-share-link-mobile-btn" style={{ ...S.btnOutline, padding: '8px 10px', flexShrink: 0 }}>
-                    {copied ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
+                    {copied ? <Check size={13} color="#3FB950" /> : <Copy size={13} />}
                   </button>
                 </div>
                 <a
@@ -1738,9 +1743,9 @@ function TransactionDetail() {
 
             {/* TrustTrade AI Check — quick warning banner for non-low risk */}
             {transaction.risk_level && transaction.risk_level !== 'low' && (
-              <div style={{ ...S.actionCard(transaction.risk_level === 'high' ? '#ef4444' : '#f59e0b', transaction.risk_level === 'high' ? 'rgba(239,68,68,0.14)' : 'rgba(245,158,11,0.14)') }}>
+              <div style={{ ...S.actionCard(transaction.risk_level === 'high' ? '#F85149' : '#D29922', transaction.risk_level === 'high' ? 'rgba(239,68,68,0.14)' : 'rgba(245,158,11,0.14)') }}>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <AlertTriangle size={16} color={transaction.risk_level === 'high' ? '#ef4444' : '#f59e0b'} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <AlertTriangle size={16} color={transaction.risk_level === 'high' ? '#F85149' : '#D29922'} style={{ flexShrink: 0, marginTop: 1 }} />
                   <div>
                     <p style={{ fontSize: 14, fontWeight: 600, color: transaction.risk_level === 'high' ? '#F87171' : '#FBBF24', margin: '0 0 4px' }}>{transaction.risk_level === 'high' ? 'Proceed carefully' : 'Some things to check'}</p>
                     <p style={{ fontSize: 13, color: transaction.risk_level === 'high' ? '#F87171' : '#FBBF24', margin: 0 }}>Our AI spotted something worth a look. Take a moment to verify the other party before continuing.</p>
@@ -1751,9 +1756,9 @@ function TransactionDetail() {
 
             {/* TrustTrade AI Check */}
             {!transaction.ai_fraud_analysis && !isFinalized && (
-              <div style={{ background: '#0F172A', border: '1px solid #334155', borderRadius: 14, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Loader2 size={14} color="#94a3b8" style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
-                <span style={{ fontSize: 13, color: '#94a3b8' }}>AI check in progress...</span>
+              <div style={{ background: '#0D1117', border: '1px solid #30363D', borderRadius: 14, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Loader2 size={14} color="#8B949E" style={{ animation: 'spin 0.8s linear infinite', flexShrink: 0 }} />
+                <span style={{ fontSize: 13, color: '#8B949E' }}>AI check in progress...</span>
               </div>
             )}
             {transaction.ai_fraud_analysis && (() => {
@@ -1785,7 +1790,7 @@ function TransactionDetail() {
                       ))}
                     </div>
                   )}
-                  <p style={{ fontSize: 11, color: '#94a3b8', margin: '10px 0 0', lineHeight: 1.4 }}>
+                  <p style={{ fontSize: 11, color: '#8B949E', margin: '10px 0 0', lineHeight: 1.4 }}>
                     This is a guide, not a guarantee. Always use your own judgement.
                   </p>
                 </div>
@@ -1797,16 +1802,16 @@ function TransactionDetail() {
               <div style={{ ...S.card, padding: '18px 20px' }}>
                 <p style={{ ...S.label, marginBottom: 12 }}>Confirmation Status</p>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  {[{ name: transaction.buyer_name, role: 'Buyer', confirmed: buyerConfirmed, accent: '#3b82f6', bg: 'rgba(59,130,246,0.14)' }, { name: transaction.seller_name, role: 'Seller', confirmed: sellerConfirmed, accent: '#f97316', bg: 'rgba(245,158,11,0.14)' }].map(p => (
-                    <div key={p.role} style={{ padding: '12px 14px', borderRadius: 10, background: p.confirmed ? 'rgba(16,185,129,0.14)' : '#0F172A', border: `1px solid ${p.confirmed ? 'rgba(16,185,129,0.30)' : '#334155'}` }}>
+                  {[{ name: transaction.buyer_name, role: 'Buyer', confirmed: buyerConfirmed, accent: '#2F81F4', bg: 'rgba(59,130,246,0.14)' }, { name: transaction.seller_name, role: 'Seller', confirmed: sellerConfirmed, accent: '#f97316', bg: 'rgba(245,158,11,0.14)' }].map(p => (
+                    <div key={p.role} style={{ padding: '12px 14px', borderRadius: 10, background: p.confirmed ? 'rgba(16,185,129,0.14)' : '#0D1117', border: `1px solid ${p.confirmed ? 'rgba(16,185,129,0.30)' : '#30363D'}` }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                         <div style={{ width: 26, height: 26, borderRadius: '50%', background: p.confirmed ? 'rgba(16,185,129,0.14)' : p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <User size={12} color={p.confirmed ? '#10b981' : p.accent} />
+                          <User size={12} color={p.confirmed ? '#3FB950' : p.accent} />
                         </div>
-                        <span style={{ fontSize: 12, fontWeight: 500, color: '#94A3B8' }}>{p.role}</span>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: '#8B949E' }}>{p.role}</span>
                       </div>
-                      <p style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC', margin: '0 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
-                      <span style={{ ...S.pill(p.confirmed ? 'rgba(16,185,129,0.14)' : '#0F172A', p.confirmed ? '#34D399' : '#f59e0b'), fontSize: 10 }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#E6EDF3', margin: '0 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
+                      <span style={{ ...S.pill(p.confirmed ? 'rgba(16,185,129,0.14)' : '#0D1117', p.confirmed ? '#34D399' : '#D29922'), fontSize: 10 }}>
                         {p.confirmed ? '✓ Confirmed' : 'Pending'}
                       </span>
                     </div>
@@ -1841,19 +1846,24 @@ function TransactionDetail() {
               <SellerExpectedPayoutCard transaction={transaction} platformConfig={platformConfig} />
             )}
 
+            {/* ── PRIMARY ACTIONS ──────────────────────────────────────────────
+                Pulled to the top of the page (just under the status banner) via flex
+                order:-1, so the user never has to scroll to find what to do next.
+                Only one of these state-driven blocks is active at a time. ───────── */}
+            <div className="td-primary-actions" style={{ order: -1, display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Buyer confirm — hidden when the merged "Confirm & Release Payment"
                 button is available (that single action confirms AND releases), so the
                 buyer never sees two separate confirm buttons. */}
             {canBuyerConfirm && !canConfirmInstantRelease && (
-              <div style={S.actionCard('#3b82f6', 'rgba(59,130,246,0.14)')}>
+              <div style={S.actionCard('#2F81F4', 'rgba(59,130,246,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(59,130,246,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <CheckCircle2 size={18} color="#3b82f6" />
+                    <CheckCircle2 size={18} color="#2F81F4" />
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#60A5FA', margin: '0 0 4px' }}>Action Required: Confirm Details</p>
-                    <p style={{ fontSize: 13, color: '#3b82f6', margin: '0 0 14px' }}>Review the transaction details and confirm to proceed with protected payment.</p>
-                    <button onClick={handleBuyerConfirm} disabled={confirming} data-testid="buyer-confirm-btn" className="action-btn" style={{ ...S.btn('#3b82f6'), opacity: confirming ? 0.6 : 1 }}>
+                    <p style={{ fontSize: 13, color: '#2F81F4', margin: '0 0 14px' }}>Review the transaction details and confirm to proceed with protected payment.</p>
+                    <button onClick={handleBuyerConfirm} disabled={confirming} data-testid="buyer-confirm-btn" className="action-btn" style={{ ...S.btn('#2F81F4'), opacity: confirming ? 0.6 : 1 }}>
                       {confirming ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Confirming…</> : <><CheckCircle2 size={13} /> Confirm Transaction</>}
                     </button>
                   </div>
@@ -1862,15 +1872,15 @@ function TransactionDetail() {
             )}
 
             {isBuyer && !user?.phone_verified && (canFundEscrowSetup || canMakePayment || canAcceptDeliveryTS || canManualAcceptDelivery || canConfirmInstantRelease) && (
-              <div style={S.actionCard('#3b82f6', 'rgba(59,130,246,0.14)')}>
+              <div style={S.actionCard('#2F81F4', 'rgba(59,130,246,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(59,130,246,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Shield size={18} color="#3b82f6" />
+                    <Shield size={18} color="#2F81F4" />
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#60A5FA', margin: '0 0 4px' }}>{PHONE_VERIFICATION_PROMPT}</p>
                     <p style={{ fontSize: 13, color: '#60A5FA', margin: '0 0 14px' }}>Phone verification is required to continue with this transaction.</p>
-                    <button onClick={() => navigate('/verify/phone')} className="action-btn" style={{ ...S.btn('#3b82f6') }}>
+                    <button onClick={() => navigate('/verify/phone')} className="action-btn" style={{ ...S.btn('#2F81F4') }}>
                       <Shield size={13} /> Verify Phone
                     </button>
                   </div>
@@ -1879,7 +1889,7 @@ function TransactionDetail() {
             )}
 
             {isSeller && !sellerHasBankingDetails && (isFinalized || canStartDelivery || canManualStartDelivery || canAcceptDeliveryTS || canManualAcceptDelivery || canConfirmInstantRelease) && (
-              <div style={S.actionCard('#f59e0b', 'rgba(245,158,11,0.14)')}>
+              <div style={S.actionCard('#D29922', 'rgba(245,158,11,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(245,158,11,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Banknote size={18} color="#FBBF24" />
@@ -1887,7 +1897,7 @@ function TransactionDetail() {
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#FBBF24', margin: '0 0 4px' }}>{BANKING_DETAILS_PROMPT}</p>
                     <p style={{ fontSize: 13, color: '#FBBF24', margin: '0 0 14px' }}>Add your banking details before funds are released so payouts can complete cleanly.</p>
-                    <button onClick={() => navigate('/settings/banking')} className="action-btn" style={{ ...S.btn('#f59e0b') }}>
+                    <button onClick={() => navigate('/settings/banking')} className="action-btn" style={{ ...S.btn('#D29922') }}>
                       <Banknote size={13} /> Add banking details
                     </button>
                   </div>
@@ -1911,7 +1921,7 @@ function TransactionDetail() {
                     {profileIncompleteError && (
                       <div style={{ background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.30)', borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
                         <p style={{ fontSize: 13, fontWeight: 600, color: '#F87171', margin: '0 0 4px' }}>Complete your profile first</p>
-                        <p style={{ fontSize: 12, color: '#ef4444', margin: '0 0 8px' }}>{profileIncompleteError}</p>
+                        <p style={{ fontSize: 12, color: '#F85149', margin: '0 0 8px' }}>{profileIncompleteError}</p>
                         <div style={{ display: 'flex', gap: 10 }}>
                           <Link to="/verify/phone" style={{ fontSize: 12, color: '#F87171', fontWeight: 600 }}>Verify phone</Link>
                           <Link to="/settings/banking" style={{ fontSize: 12, color: '#F87171', fontWeight: 600 }}>Add banking details</Link>
@@ -1928,7 +1938,7 @@ function TransactionDetail() {
 
             {/* Buyer fund escrow setup */}
             {canFundEscrowSetup && (
-              <div style={S.actionCard('#10b981', 'rgba(16,185,129,0.14)')}>
+              <div style={S.actionCard('#3FB950', 'rgba(16,185,129,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(16,185,129,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Shield size={18} color="#34D399" />
@@ -1936,7 +1946,7 @@ function TransactionDetail() {
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#6EE7B7', margin: '0 0 4px' }}>Your next step: Secure the payment</p>
                     <p style={{ fontSize: 13, color: '#34D399', margin: '0 0 14px' }}>{isDeliveryFlow ? 'Your payment is held safely and only released to the seller once you confirm delivery.' : 'Your payment is held safely and only released once all conditions are met.'}</p>
-                    <button type="button" onClick={handleCreateEscrow} onTouchEnd={handleCreateEscrow} disabled={creatingEscrow} data-testid="create-escrow-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: creatingEscrow ? 0.6 : 1 }}>
+                    <button type="button" onClick={handleCreateEscrow} onTouchEnd={handleCreateEscrow} disabled={creatingEscrow} data-testid="create-escrow-btn" className="action-btn" style={{ ...S.btn('#3FB950'), opacity: creatingEscrow ? 0.6 : 1 }}>
                       {creatingEscrow ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Setting up protection...</> : <><Shield size={13} /> Set Up Protected Payment</>}
                     </button>
                   </div>
@@ -1946,7 +1956,7 @@ function TransactionDetail() {
 
             {/* Seller waiting for buyer funding setup */}
             {sellerWaitingForBuyerFunding && (
-              <div style={S.actionCard('#f59e0b', 'rgba(245,158,11,0.14)')}>
+              <div style={S.actionCard('#D29922', 'rgba(245,158,11,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(245,158,11,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <CreditCard size={18} color="#FBBF24" />
@@ -1954,7 +1964,7 @@ function TransactionDetail() {
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#FBBF24', margin: '0 0 4px' }}>Waiting for buyer to pay</p>
                     <p style={{ fontSize: 13, color: '#FBBF24', margin: '0 0 14px' }}>Share this link with the buyer. Your payout is guaranteed once payment is secured.</p>
-                    <button type="button" onClick={handleCopyLink} className="action-btn" style={{ ...S.btn('#f59e0b'), opacity: 1 }}>
+                    <button type="button" onClick={handleCopyLink} className="action-btn" style={{ ...S.btn('#D29922'), opacity: 1 }}>
                       {copied ? <><Check size={13} /> Link copied</> : <><Copy size={13} /> Copy buyer link</>}
                     </button>
                   </div>
@@ -1966,8 +1976,8 @@ function TransactionDetail() {
             {/* Bug 2: buyer just paid — show processing state with active polling + manual refresh */}
             {paymentInfo?.eft_details && !fundsSecured && (
               <div style={{ ...S.card, padding: '22px 24px', marginBottom: 16, border: '1px solid rgba(59,130,246,0.30)' }} data-testid="eft-details-card">
-                <p style={{ fontSize: 16, fontWeight: 700, color: '#F8FAFC', margin: '0 0 4px' }}>🏦 Pay via EFT bank transfer</p>
-                <p style={{ fontSize: 13, color: '#94A3B8', margin: '0 0 16px' }}>{paymentInfo.eft_details.instructions}</p>
+                <p style={{ fontSize: 16, fontWeight: 700, color: '#E6EDF3', margin: '0 0 4px' }}>🏦 Pay via EFT bank transfer</p>
+                <p style={{ fontSize: 13, color: '#8B949E', margin: '0 0 16px' }}>{paymentInfo.eft_details.instructions}</p>
                 {[
                   ['Bank', paymentInfo.eft_details.bank],
                   ['Account name', paymentInfo.eft_details.account_name],
@@ -1976,11 +1986,11 @@ function TransactionDetail() {
                   ['Reference', paymentInfo.eft_details.reference],
                   ['Amount to pay', `R ${Number(paymentInfo.eft_details.amount ?? totalSecurePayment).toFixed(2)}`],
                 ].map(([label, value]) => (
-                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #334155' }}>
-                    <span style={{ fontSize: 12, color: '#94A3B8' }}>{label}</span>
+                  <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #30363D' }}>
+                    <span style={{ fontSize: 12, color: '#8B949E' }}>{label}</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC', fontFamily: 'ui-monospace, monospace' }}>{value || '—'}</span>
-                      {value && <button type="button" onClick={() => { navigator.clipboard.writeText(String(value)); toast.success('Copied'); }} style={{ fontSize: 11, color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Copy</button>}
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#E6EDF3', fontFamily: 'ui-monospace, monospace' }}>{value || '—'}</span>
+                      {value && <button type="button" onClick={() => { navigator.clipboard.writeText(String(value)); toast.success('Copied'); }} style={{ fontSize: 11, color: '#2F81F4', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Copy</button>}
                     </span>
                   </div>
                 ))}
@@ -1991,15 +2001,15 @@ function TransactionDetail() {
             )}
 
             {paymentProcessing && (
-              <div style={S.actionCard('#3b82f6', 'rgba(59,130,246,0.14)')}>
+              <div style={S.actionCard('#2F81F4', 'rgba(59,130,246,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(59,130,246,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Loader2 size={18} color="#3b82f6" style={{ animation: 'spin 0.8s linear infinite' }} />
+                    <Loader2 size={18} color="#2F81F4" style={{ animation: 'spin 0.8s linear infinite' }} />
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#60A5FA', margin: '0 0 4px' }}>Payment processing…</p>
                     <p style={{ fontSize: 13, color: '#60A5FA', margin: '0 0 14px' }}>Your payment is being confirmed, this usually takes less than a minute.</p>
-                    <button type="button" onClick={handleSyncStatus} disabled={syncing} data-testid="refresh-status-btn" className="action-btn" style={{ ...S.btn('#3b82f6'), opacity: syncing ? 0.6 : 1 }}>
+                    <button type="button" onClick={handleSyncStatus} disabled={syncing} data-testid="refresh-status-btn" className="action-btn" style={{ ...S.btn('#2F81F4'), opacity: syncing ? 0.6 : 1 }}>
                       {syncing ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Refreshing…</> : <><RefreshCw size={13} /> Refresh Status</>}
                     </button>
                   </div>
@@ -2011,34 +2021,34 @@ function TransactionDetail() {
               <div style={{ ...S.card, padding: '22px 24px' }}>
                 <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(59,130,246,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <CreditCard size={18} color="#3b82f6" />
+                    <CreditCard size={18} color="#2F81F4" />
                   </div>
                   <div>
-                    <p style={{ fontSize: 16, fontWeight: 700, color: '#F8FAFC', margin: '0 0 3px' }}>Secure Payment</p>
-                    <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>{isDeliveryFlow ? 'Your payment is protected — seller receives funds only after you confirm delivery.' : 'Your payment is protected — seller receives funds only after release conditions are met.'}</p>
+                    <p style={{ fontSize: 16, fontWeight: 700, color: '#E6EDF3', margin: '0 0 3px' }}>Secure Payment</p>
+                    <p style={{ fontSize: 13, color: '#8B949E', margin: 0 }}>{isDeliveryFlow ? 'Your payment is protected — seller receives funds only after you confirm delivery.' : 'Your payment is protected — seller receives funds only after release conditions are met.'}</p>
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                   {[
-                    { id: 'eft', emoji: '🏦', label: 'EFT Bank Transfer', desc: 'Direct bank transfer', badge: 'Recommended', badgeColor: '#10b981', feeNote: 'No extra bank fee' },
+                    { id: 'eft', emoji: '🏦', label: 'EFT Bank Transfer', desc: 'Direct bank transfer', badge: 'Recommended', badgeColor: '#3FB950', feeNote: 'No extra bank fee' },
                     { id: 'card', emoji: '💳', label: 'Credit / Debit Card', desc: 'Pay instantly with Visa or Mastercard', feeNote: '+2.5% bank processing fee' },
                     { id: 'ozow', emoji: '⚡', label: 'Ozow Instant EFT', desc: 'Fast instant payment from your bank app', feeNote: '+1.7% bank processing fee' },
                   ].map(pm => {
                     return (
-                    <div key={pm.id} onClick={() => setSelectedPaymentMethod(pm.id)} data-testid={`payment-method-${pm.id}`} className={`pm-opt${selectedPaymentMethod === pm.id ? ' selected' : ''}`} style={{ border: `1.5px solid ${selectedPaymentMethod === pm.id ? '#3b82f6' : '#334155'}`, borderRadius: 12, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.15s', background: selectedPaymentMethod === pm.id ? 'rgba(59,130,246,0.14)' : '#0F172A' }}>
+                    <div key={pm.id} onClick={() => setSelectedPaymentMethod(pm.id)} data-testid={`payment-method-${pm.id}`} className={`pm-opt${selectedPaymentMethod === pm.id ? ' selected' : ''}`} style={{ border: `1.5px solid ${selectedPaymentMethod === pm.id ? '#2F81F4' : '#30363D'}`, borderRadius: 12, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.15s', background: selectedPaymentMethod === pm.id ? 'rgba(59,130,246,0.14)' : '#0D1117' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selectedPaymentMethod === pm.id ? '#3b82f6' : '#475569'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          {selectedPaymentMethod === pm.id && <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#3b82f6' }} />}
+                        <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selectedPaymentMethod === pm.id ? '#2F81F4' : '#30363D'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {selectedPaymentMethod === pm.id && <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#2F81F4' }} />}
                         </div>
                         <span style={{ fontSize: 20 }}>{pm.emoji}</span>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                            <span style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC' }}>{pm.label}</span>
+                            <span style={{ fontSize: 14, fontWeight: 600, color: '#E6EDF3' }}>{pm.label}</span>
                             {pm.badge && <span style={{ fontSize: 10, fontWeight: 700, background: 'rgba(16,185,129,0.14)', color: '#34D399', padding: '1px 7px', borderRadius: 20 }}>{pm.badge}</span>}
                           </div>
-                          <span style={{ fontSize: 12, color: '#94A3B8', display: 'block' }}>{pm.desc}</span>
-                          {pm.feeNote && <span style={{ fontSize: 11, color: '#64748B', display: 'block', marginTop: 2 }}>{pm.feeNote}</span>}
+                          <span style={{ fontSize: 12, color: '#8B949E', display: 'block' }}>{pm.desc}</span>
+                          {pm.feeNote && <span style={{ fontSize: 11, color: '#6E7681', display: 'block', marginTop: 2 }}>{pm.feeNote}</span>}
                         </div>
                       </div>
                     </div>
@@ -2056,35 +2066,35 @@ function TransactionDetail() {
                   const estFee = Math.round(totalSecurePayment * (feePct / 100) * 100) / 100;
                   const estTotal = Math.round((totalSecurePayment + estFee) * 100) / 100;
                   return (
-                    <div style={{ background: '#0F172A', border: '1px solid #334155', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
+                    <div style={{ background: '#0D1117', border: '1px solid #30363D', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
                       <p style={{ ...S.label, marginBottom: 12 }}>Payment Breakdown</p>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                        <span style={{ color: '#94A3B8' }}>Item Value (held securely)</span>
-                        <span style={{ fontWeight: 500, color: '#F8FAFC' }}>R {transaction.item_price?.toFixed(2)}</span>
+                        <span style={{ color: '#8B949E' }}>Item Value (held securely)</span>
+                        <span style={{ fontWeight: 500, color: '#E6EDF3' }}>R {transaction.item_price?.toFixed(2)}</span>
                       </div>
                       {_buyerFee > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                          <span style={{ color: '#94A3B8' }}>TrustTrade Platform Fee{['BUYER_SELLER','SPLIT_AGENT','BUYER_SELLER_AGENT','SPLIT'].includes(_fa) ? ' (2% split — your half)' : ' (2%)'}</span>
-                          <span style={{ fontWeight: 500, color: '#F8FAFC' }}>R {_buyerFee?.toFixed(2)}</span>
+                          <span style={{ color: '#8B949E' }}>TrustTrade Platform Fee{['BUYER_SELLER','SPLIT_AGENT','BUYER_SELLER_AGENT','SPLIT'].includes(_fa) ? ' (2% split — your half)' : ' (2%)'}</span>
+                          <span style={{ fontWeight: 500, color: '#E6EDF3' }}>R {_buyerFee?.toFixed(2)}</span>
                         </div>
                       )}
                       {_courierTotal > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                          <span style={{ color: '#94A3B8' }}>Courier Delivery</span>
-                          <span style={{ fontWeight: 500, color: '#F8FAFC' }}>R {_courierTotal.toFixed(2)}</span>
+                          <span style={{ color: '#8B949E' }}>Courier Delivery</span>
+                          <span style={{ fontWeight: 500, color: '#E6EDF3' }}>R {_courierTotal.toFixed(2)}</span>
                         </div>
                       )}
                       {feePct > 0 && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                          <span style={{ color: '#94A3B8' }}>Bank processing fee ({feePct}% est.)</span>
-                          <span style={{ fontWeight: 500, color: '#F8FAFC' }}>R {estFee.toFixed(2)}</span>
+                          <span style={{ color: '#8B949E' }}>Bank processing fee ({feePct}% est.)</span>
+                          <span style={{ fontWeight: 500, color: '#E6EDF3' }}>R {estFee.toFixed(2)}</span>
                         </div>
                       )}
-                      <div style={{ borderTop: '1px solid #334155', paddingTop: 10, marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC' }}>Total{feePct > 0 ? ' (est.)' : ''}</span>
-                        <span style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>R {estTotal.toFixed(2)}</span>
+                      <div style={{ borderTop: '1px solid #30363D', paddingTop: 10, marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: '#E6EDF3' }}>Total{feePct > 0 ? ' (est.)' : ''}</span>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: '#3FB950' }}>R {estTotal.toFixed(2)}</span>
                       </div>
-                      <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
+                      <p style={{ fontSize: 11, color: '#8B949E', marginTop: 8, lineHeight: 1.5 }}>
                         {feePct > 0
                           ? 'Estimated total — the exact bank fee is confirmed before you pay.'
                           : 'No extra bank fee for EFT.'}
@@ -2094,10 +2104,10 @@ function TransactionDetail() {
                   );
                 })()}
 
-                <button type="button" onClick={handleGetPaymentLink} onTouchEnd={(e) => { e.preventDefault(); handleGetPaymentLink(e); }} disabled={loadingPaymentLink || !selectedPaymentMethod} data-testid="make-payment-btn" className="action-btn" style={{ ...S.btn(selectedPaymentMethod ? '#3b82f6' : '#94a3b8'), width: '100%', justifyContent: 'center', fontSize: 15, padding: '13px 20px', opacity: (loadingPaymentLink || !selectedPaymentMethod) ? 0.7 : 1 }}>
+                <button type="button" onClick={handleGetPaymentLink} onTouchEnd={(e) => { e.preventDefault(); handleGetPaymentLink(e); }} disabled={loadingPaymentLink || !selectedPaymentMethod} data-testid="make-payment-btn" className="action-btn" style={{ ...S.btn(selectedPaymentMethod ? '#2F81F4' : '#8B949E'), width: '100%', justifyContent: 'center', fontSize: 15, padding: '13px 20px', opacity: (loadingPaymentLink || !selectedPaymentMethod) ? 0.7 : 1 }}>
                   {loadingPaymentLink ? <><Loader2 size={15} style={{ animation: 'spin 0.8s linear infinite' }} /> Loading Payment Page...</> : selectedPaymentMethod ? <><CreditCard size={15} /> Pay Securely</> : <><CreditCard size={15} style={{ opacity: 0.5 }} /> Select a payment method</>}
                 </button>
-                <p style={{ fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                <p style={{ fontSize: 12, color: '#8B949E', textAlign: 'center', marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                   <Shield size={11} /> Your payment is protected by TrustTrade
                 </p>
               </div>
@@ -2111,7 +2121,7 @@ function TransactionDetail() {
                 ? transaction.buyer_name
                 : 'the buyer';
               return (
-                <div style={S.actionCard('#f59e0b', 'rgba(245,158,11,0.14)')}>
+                <div style={S.actionCard('#D29922', 'rgba(245,158,11,0.14)')}>
                   <div style={{ display: 'flex', gap: 12 }}>
                     <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(245,158,11,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <CreditCard size={18} color="#FBBF24" />
@@ -2136,7 +2146,7 @@ function TransactionDetail() {
               const sellerAmount = sellerReceivesAmount;
               const fmtAmount = `R ${Number(sellerAmount).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
               return (
-                <div style={{ ...S.actionCard('#10b981', 'rgba(16,185,129,0.14)'), padding: '20px 20px' }}>
+                <div style={{ ...S.actionCard('#3FB950', 'rgba(16,185,129,0.14)'), padding: '20px 20px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 10 }}>
                     <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(16,185,129,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <CheckCircle2 size={28} color="#34D399" />
@@ -2151,7 +2161,7 @@ function TransactionDetail() {
 
             {/* Seller delivery success state */}
             {!isFinalized && !deliveryConfirmedLocally && (deliveryMarkedStarted || dispatchedLocally) && (
-              <div style={S.actionCard('#10b981', 'rgba(16,185,129,0.14)')}>
+              <div style={S.actionCard('#3FB950', 'rgba(16,185,129,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(16,185,129,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <CheckCircle2 size={18} color="#34D399" />
@@ -2186,7 +2196,7 @@ function TransactionDetail() {
 
             {/* Manual start delivery */}
             {!canStartDelivery && canManualStartDelivery && !transaction.delivery_started_at && !dispatchedLocally && (
-              <div style={S.actionCard('#f59e0b', 'rgba(245,158,11,0.14)')}>
+              <div style={S.actionCard('#D29922', 'rgba(245,158,11,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(245,158,11,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Truck size={18} color="#FBBF24" />
@@ -2195,7 +2205,7 @@ function TransactionDetail() {
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#FBBF24', margin: '0 0 4px' }}>Mark as Dispatched</p>
                     <p style={{ fontSize: 13, color: '#FBBF24', margin: '0 0 4px' }}>Payment appears received. Click to mark as dispatched.</p>
                     <p style={{ fontSize: 12, color: '#FBBF24', background: 'rgba(245,158,11,0.14)', padding: '6px 10px', borderRadius: 6, margin: '0 0 14px' }}><strong>Note:</strong> Use this if the normal flow isn't showing buttons correctly.</p>
-                    <button onClick={handleManualStartDelivery} disabled={startingDelivery} data-testid="manual-start-delivery-btn" className="action-btn" style={{ ...S.btn('#f59e0b'), opacity: startingDelivery ? 0.6 : 1 }}>
+                    <button onClick={handleManualStartDelivery} disabled={startingDelivery} data-testid="manual-start-delivery-btn" className="action-btn" style={{ ...S.btn('#D29922'), opacity: startingDelivery ? 0.6 : 1 }}>
                       {startingDelivery ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : <><Truck size={13} /> Mark as Dispatched</>}
                     </button>
                   </div>
@@ -2222,7 +2232,7 @@ function TransactionDetail() {
                   ? 'Awaiting digital delivery...'
                   : 'Awaiting seller dispatch...';
               return (
-              <div style={S.actionCard('#f59e0b', 'rgba(245,158,11,0.14)')}>
+              <div style={S.actionCard('#D29922', 'rgba(245,158,11,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(245,158,11,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Truck size={18} color="#FBBF24" />
@@ -2241,7 +2251,7 @@ function TransactionDetail() {
 
             {/* Buyer accept delivery */}
             {canAcceptDeliveryTS && (
-              <div style={S.actionCard('#10b981', 'rgba(16,185,129,0.14)')}>
+              <div style={S.actionCard('#3FB950', 'rgba(16,185,129,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(16,185,129,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <CheckCircle2 size={18} color="#34D399" />
@@ -2257,8 +2267,8 @@ function TransactionDetail() {
                         {payoutReadiness.can_auto_sync && <p style={{ fontSize: 12, color: '#FBBF24', margin: '4px 0 0' }}>The system will attempt to sync automatically when you confirm.</p>}
                       </div>
                     )}
-                    {checkingPayoutReadiness && <p style={{ fontSize: 12, color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}><Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> Checking payout readiness…</p>}
-                    <button onClick={handleAcceptDelivery} disabled={acceptingDelivery || checkingPayoutReadiness} data-testid="accept-delivery-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: (acceptingDelivery || checkingPayoutReadiness) ? 0.6 : 1 }}>
+                    {checkingPayoutReadiness && <p style={{ fontSize: 12, color: '#8B949E', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}><Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> Checking payout readiness…</p>}
+                    <button onClick={handleAcceptDelivery} disabled={acceptingDelivery || checkingPayoutReadiness} data-testid="accept-delivery-btn" className="action-btn" style={{ ...S.btn('#3FB950'), opacity: (acceptingDelivery || checkingPayoutReadiness) ? 0.6 : 1 }}>
                       {acceptingDelivery ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : <><CheckCircle2 size={13} /> Confirm receipt</>}
                     </button>
                   </div>
@@ -2268,7 +2278,7 @@ function TransactionDetail() {
 
             {/* Manual accept delivery */}
             {!canAcceptDeliveryTS && canManualAcceptDelivery && !transaction.delivery_confirmed && (
-              <div style={S.actionCard('#10b981', 'rgba(16,185,129,0.14)')}>
+              <div style={S.actionCard('#3FB950', 'rgba(16,185,129,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(16,185,129,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <CheckCircle2 size={18} color="#34D399" />
@@ -2281,7 +2291,7 @@ function TransactionDetail() {
                         <p style={{ fontSize: 12, color: '#FBBF24', margin: 0 }}>{payoutReadiness.issues?.join('. ') || 'Seller must complete payout setup.'}</p>
                       </div>
                     )}
-                    <button onClick={handleManualAcceptDelivery} disabled={acceptingDelivery || checkingPayoutReadiness} data-testid="manual-accept-delivery-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: (acceptingDelivery || checkingPayoutReadiness) ? 0.6 : 1 }}>
+                    <button onClick={handleManualAcceptDelivery} disabled={acceptingDelivery || checkingPayoutReadiness} data-testid="manual-accept-delivery-btn" className="action-btn" style={{ ...S.btn('#3FB950'), opacity: (acceptingDelivery || checkingPayoutReadiness) ? 0.6 : 1 }}>
                       {acceptingDelivery ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : <><CheckCircle2 size={13} /> Confirm receipt</>}
                     </button>
                   </div>
@@ -2291,7 +2301,7 @@ function TransactionDetail() {
 
             {/* Instant release — buyer confirms satisfaction and releases funds */}
             {canConfirmInstantRelease && (
-              <div style={S.actionCard('#10b981', 'rgba(16,185,129,0.14)')}>
+              <div style={S.actionCard('#3FB950', 'rgba(16,185,129,0.14)')}>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(16,185,129,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <CheckCircle2 size={18} color="#34D399" />
@@ -2307,8 +2317,8 @@ function TransactionDetail() {
                         {payoutReadiness.can_auto_sync && <p style={{ fontSize: 12, color: '#FBBF24', margin: '4px 0 0' }}>The system will attempt to sync automatically when you confirm.</p>}
                       </div>
                     )}
-                    {checkingPayoutReadiness && <p style={{ fontSize: 12, color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}><Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> Checking payout readiness…</p>}
-                    <button onClick={handleConfirmInstantRelease} disabled={acceptingDelivery || checkingPayoutReadiness} data-testid="confirm-instant-release-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: (acceptingDelivery || checkingPayoutReadiness) ? 0.6 : 1 }}>
+                    {checkingPayoutReadiness && <p style={{ fontSize: 12, color: '#8B949E', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}><Loader2 size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> Checking payout readiness…</p>}
+                    <button onClick={handleConfirmInstantRelease} disabled={acceptingDelivery || checkingPayoutReadiness} data-testid="confirm-instant-release-btn" className="action-btn" style={{ ...S.btn('#3FB950'), opacity: (acceptingDelivery || checkingPayoutReadiness) ? 0.6 : 1 }}>
                       {acceptingDelivery ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : <><CheckCircle2 size={13} /> Confirm & Release Payment</>}
                     </button>
                   </div>
@@ -2318,21 +2328,23 @@ function TransactionDetail() {
 
             {/* Legacy status hints */}
             {isActionable && !hasEscrow && sellerConfirmed && transaction.payment_status === 'Ready for Payment' && (
-              <div style={S.actionCard('#3b82f6', 'rgba(59,130,246,0.14)')}>
+              <div style={S.actionCard('#2F81F4', 'rgba(59,130,246,0.14)')}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: '#60A5FA', margin: '0 0 4px' }}>Awaiting Payment</p>
-                <p style={{ fontSize: 13, color: '#3b82f6', margin: 0 }}>{isBuyer ? 'Make payment to the escrow account.' : 'Waiting for buyer payment.'}</p>
+                <p style={{ fontSize: 13, color: '#2F81F4', margin: 0 }}>{isBuyer ? 'Make payment to the escrow account.' : 'Waiting for buyer payment.'}</p>
               </div>
             )}
             {isActionable && !hasEscrow && transaction.payment_status === 'Paid' && !transaction.delivery_confirmed && (
-              <div style={S.actionCard('#f59e0b', 'rgba(245,158,11,0.14)')}>
+              <div style={S.actionCard('#D29922', 'rgba(245,158,11,0.14)')}>
                 <p style={{ fontSize: 14, fontWeight: 600, color: '#FBBF24', margin: '0 0 4px' }}>Payment Received — Awaiting Delivery</p>
                 <p style={{ fontSize: 13, color: '#FBBF24', margin: 0 }}>{isSeller ? 'Deliver the item. Funds release from escrow after buyer confirmation.' : 'Payment held in escrow. Confirm delivery once received.'}</p>
               </div>
             )}
+            </div>
+            {/* ── end PRIMARY ACTIONS ── */}
 
             {/* Tabs */}
             <div style={S.card}>
-              <div style={{ display: 'flex', borderBottom: '1px solid #334155', padding: '0 8px' }}>
+              <div style={{ display: 'flex', borderBottom: '1px solid #30363D', padding: '0 8px' }}>
                 {['overview', 'agreement', 'timeline', 'photos'].map(tab => (
                   <button key={tab} className={`td-tab${activeTab === tab ? ' active' : ''}`} onClick={() => setActiveTab(tab)}>
                     {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -2346,36 +2358,36 @@ function TransactionDetail() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <div className="td-parties-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                       {[
-                        { title: 'Buyer', icon: User, color: '#3b82f6', bg: 'rgba(59,130,246,0.14)', name: transaction.buyer_name, email: transaction.buyer_email, phone: transaction.buyer_phone, confirmed: buyerConfirmed, trust: transaction.buyer_trust },
+                        { title: 'Buyer', icon: User, color: '#2F81F4', bg: 'rgba(59,130,246,0.14)', name: transaction.buyer_name, email: transaction.buyer_email, phone: transaction.buyer_phone, confirmed: buyerConfirmed, trust: transaction.buyer_trust },
                         { title: 'Seller', icon: User, color: '#f97316', bg: 'rgba(245,158,11,0.14)', name: transaction.seller_name, email: transaction.seller_email, phone: transaction.seller_phone, confirmed: sellerConfirmed, trust: transaction.seller_trust },
                       ].map(p => (
-                        <div key={p.title} style={{ background: '#0F172A', borderRadius: 10, padding: '14px 16px', border: '1px solid #334155' }}>
+                        <div key={p.title} style={{ background: '#0D1117', borderRadius: 10, padding: '14px 16px', border: '1px solid #30363D' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                             <div style={{ width: 28, height: 28, borderRadius: '50%', background: p.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <p.icon size={13} color={p.color} />
                             </div>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC' }}>{p.title}</span>
-                            {p.confirmed && <CheckCircle2 size={13} color="#10b981" style={{ marginLeft: 'auto' }} />}
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#E6EDF3' }}>{p.title}</span>
+                            {p.confirmed && <CheckCircle2 size={13} color="#3FB950" style={{ marginLeft: 'auto' }} />}
                           </div>
-                          <p style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC', margin: '0 0 4px' }}>{p.name}</p>
+                          <p style={{ fontSize: 14, fontWeight: 600, color: '#E6EDF3', margin: '0 0 4px' }}>{p.name}</p>
                           {p.trust && (
-                            <p style={{ fontSize: 12, fontWeight: 600, color: '#F8FAFC', margin: '0 0 4px' }}
+                            <p style={{ fontSize: 12, fontWeight: 600, color: '#E6EDF3', margin: '0 0 4px' }}
                                title="Trust score · completed trades · valid disputes">
                               {p.trust.trust_score} trust · {p.trust.total_trades} {p.trust.total_trades === 1 ? 'trade' : 'trades'} · {p.trust.disputes} {p.trust.disputes === 1 ? 'dispute' : 'disputes'}
                             </p>
                           )}
-                          {p.email && <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>{p.email}</p>}
-                          {p.phone && <p style={{ fontSize: 12, color: '#94A3B8', margin: '2px 0 0', fontFamily: 'monospace' }}>{p.phone}</p>}
-                          {transaction.invite_type === 'phone' && !p.email && !p.phone && <p style={{ fontSize: 12, color: '#3b82f6', margin: '2px 0 0' }}>Invited via phone</p>}
+                          {p.email && <p style={{ fontSize: 12, color: '#8B949E', margin: 0 }}>{p.email}</p>}
+                          {p.phone && <p style={{ fontSize: 12, color: '#8B949E', margin: '2px 0 0', fontFamily: 'monospace' }}>{p.phone}</p>}
+                          {transaction.invite_type === 'phone' && !p.email && !p.phone && <p style={{ fontSize: 12, color: '#2F81F4', margin: '2px 0 0' }}>Invited via phone</p>}
                         </div>
                       ))}
                     </div>
 
-                    <div style={{ background: '#0F172A', borderRadius: 10, padding: '14px 16px', border: '1px solid #334155' }}>
+                    <div style={{ background: '#0D1117', borderRadius: 10, padding: '14px 16px', border: '1px solid #30363D' }}>
                       <p style={{ ...S.label, marginBottom: 12 }}>Item Details</p>
                       <p style={{ fontSize: 14, color: '#E2E8F0', margin: '0 0 10px', lineHeight: 1.6 }}>{transaction.item_description}</p>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                        {transaction.item_condition && <span style={S.pill('#334155', '#94A3B8')}>{transaction.item_condition}</span>}
+                        {transaction.item_condition && <span style={S.pill('#30363D', '#8B949E')}>{transaction.item_condition}</span>}
                         {transaction.delivery_method && (
                           <span style={S.pill('rgba(59,130,246,0.14)', '#60A5FA')}>
                             {transaction.delivery_method === 'courier' ? 'Courier' : transaction.delivery_method === 'bank_deposit' ? 'Bank Deposit' : 'Digital'}
@@ -2383,15 +2395,15 @@ function TransactionDetail() {
                         )}
                       </div>
                       {transaction.days_to_deliver != null && transaction.days_to_deliver !== '' && (
-                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 13, color: '#94A3B8' }}>Days to deliver</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC' }}>{transaction.days_to_deliver} {Number(transaction.days_to_deliver) === 1 ? 'day' : 'days'}</span>
+                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #30363D', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 13, color: '#8B949E' }}>Days to deliver</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#E6EDF3' }}>{transaction.days_to_deliver} {Number(transaction.days_to_deliver) === 1 ? 'day' : 'days'}</span>
                         </div>
                       )}
                       {transaction.known_issues && transaction.known_issues !== 'None' && (
-                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #334155' }}>
+                        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #30363D' }}>
                           <p style={{ ...S.label, marginBottom: 4 }}>Known Issues</p>
-                          <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>{transaction.known_issues}</p>
+                          <p style={{ fontSize: 13, color: '#8B949E', margin: 0 }}>{transaction.known_issues}</p>
                         </div>
                       )}
                     </div>
@@ -2404,13 +2416,13 @@ function TransactionDetail() {
                     <p style={{ ...S.sectionTitle, marginBottom: 14 }}>Escrow Agreement</p>
                     {sellerConfirmed ? (
                       <div>
-                        <p style={{ fontSize: 13, color: '#94A3B8', marginBottom: 14 }}>The escrow agreement has been generated and is available for download.</p>
-                        <button onClick={handleDownloadPDF} data-testid="download-agreement-btn" style={{ ...S.btn('#3B82F6'), display: 'inline-flex' }}>
+                        <p style={{ fontSize: 13, color: '#8B949E', marginBottom: 14 }}>The escrow agreement has been generated and is available for download.</p>
+                        <button onClick={handleDownloadPDF} data-testid="download-agreement-btn" style={{ ...S.btn('#2F81F4'), display: 'inline-flex' }}>
                           <Download size={13} /> Download Agreement (PDF)
                         </button>
                       </div>
                     ) : (
-                      <p style={{ fontSize: 13, color: '#94a3b8' }}>Agreement will be available once the seller confirms the transaction details.</p>
+                      <p style={{ fontSize: 13, color: '#8B949E' }}>Agreement will be available once the seller confirms the transaction details.</p>
                     )}
                   </div>
                 )}
@@ -2433,7 +2445,7 @@ function TransactionDetail() {
                         </p>
                       </div>
                     )}
-                    <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #334155' }}>
+                    <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #30363D' }}>
                       <p style={{ ...S.label, marginBottom: 12 }}>Event History</p>
                       <Timeline transaction={transaction} />
                     </div>
@@ -2453,14 +2465,14 @@ function TransactionDetail() {
                           // instead of a broken image.
                           if (!isUrl) {
                             return (
-                              <div key={index} style={{ borderRadius: 10, aspectRatio: '1', background: '#0F172A', border: '1px solid #334155', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8, textAlign: 'center' }}>
-                                <ImageIcon size={22} color="#475569" />
-                                <span style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>Photo no longer available</span>
+                              <div key={index} style={{ borderRadius: 10, aspectRatio: '1', background: '#0D1117', border: '1px solid #30363D', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8, textAlign: 'center' }}>
+                                <ImageIcon size={22} color="#30363D" />
+                                <span style={{ fontSize: 11, color: '#8B949E', lineHeight: 1.4 }}>Photo no longer available</span>
                               </div>
                             );
                           }
                           return (
-                            <div key={index} onClick={() => window.open(photo, '_blank')} style={{ borderRadius: 10, overflow: 'hidden', cursor: 'pointer', position: 'relative', aspectRatio: '1', background: '#334155' }}>
+                            <div key={index} onClick={() => window.open(photo, '_blank')} style={{ borderRadius: 10, overflow: 'hidden', cursor: 'pointer', position: 'relative', aspectRatio: '1', background: '#30363D' }}>
                               <img src={photo} alt={`Photo ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                 onError={(e) => { e.target.onerror = null; e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="%23243147" width="200" height="200"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%2394a3b8" font-size="13">Photo unavailable</text></svg>'; }} />
                             </div>
@@ -2469,8 +2481,8 @@ function TransactionDetail() {
                       </div>
                     ) : (
                       <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                        <ImageIcon size={36} color="#475569" style={{ marginBottom: 10 }} />
-                        <p style={{ fontSize: 14, color: '#94a3b8' }}>No photos uploaded</p>
+                        <ImageIcon size={36} color="#30363D" style={{ marginBottom: 10 }} />
+                        <p style={{ fontSize: 14, color: '#8B949E' }}>No photos uploaded</p>
                       </div>
                     )}
                   </div>
@@ -2480,10 +2492,10 @@ function TransactionDetail() {
 
             {/* Legacy confirm delivery */}
             {canConfirmDelivery && (
-              <div style={S.actionCard('#10b981', 'rgba(16,185,129,0.14)')}>
+              <div style={S.actionCard('#3FB950', 'rgba(16,185,129,0.14)')}>
                 <p style={{ fontSize: 15, fontWeight: 700, color: '#6EE7B7', margin: '0 0 6px' }}>Final Step: Confirm Delivery</p>
                 <p style={{ fontSize: 13, color: '#34D399', margin: '0 0 14px' }}>{`Have you received the item and are satisfied? Confirming releases funds from escrow. ${payoutSchedule.copy} This cannot be undone.`}</p>
-                <button onClick={handleConfirmDelivery} disabled={confirming} data-testid="confirm-delivery-btn" className="action-btn" style={{ ...S.btn('#10b981'), opacity: confirming ? 0.6 : 1 }}>
+                <button onClick={handleConfirmDelivery} disabled={confirming} data-testid="confirm-delivery-btn" className="action-btn" style={{ ...S.btn('#3FB950'), opacity: confirming ? 0.6 : 1 }}>
                   {confirming ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Processing…</> : 'Confirm Delivery'}
                 </button>
               </div>
@@ -2497,27 +2509,27 @@ function TransactionDetail() {
                   <p style={S.sectionTitle}>Rate This Transaction</p>
                 </div>
                 {isBuyer && transaction.buyer_rating ? (
-                  <div><p style={{ fontSize: 13, color: '#94A3B8', marginBottom: 8 }}>Your rating for the seller:</p><StarRating value={transaction.buyer_rating} readOnly size="w-6 h-6" />{transaction.buyer_review && <p style={{ fontSize: 13, color: '#94A3B8', fontStyle: 'italic', marginTop: 8 }}>"{transaction.buyer_review}"</p>}</div>
+                  <div><p style={{ fontSize: 13, color: '#8B949E', marginBottom: 8 }}>Your rating for the seller:</p><StarRating value={transaction.buyer_rating} readOnly size="w-6 h-6" />{transaction.buyer_review && <p style={{ fontSize: 13, color: '#8B949E', fontStyle: 'italic', marginTop: 8 }}>"{transaction.buyer_review}"</p>}</div>
                 ) : isSeller && transaction.seller_rating ? (
-                  <div><p style={{ fontSize: 13, color: '#94A3B8', marginBottom: 8 }}>Your rating for the buyer:</p><StarRating value={transaction.seller_rating} readOnly size="w-6 h-6" />{transaction.seller_review && <p style={{ fontSize: 13, color: '#94A3B8', fontStyle: 'italic', marginTop: 8 }}>"{transaction.seller_review}"</p>}</div>
+                  <div><p style={{ fontSize: 13, color: '#8B949E', marginBottom: 8 }}>Your rating for the buyer:</p><StarRating value={transaction.seller_rating} readOnly size="w-6 h-6" />{transaction.seller_review && <p style={{ fontSize: 13, color: '#8B949E', fontStyle: 'italic', marginTop: 8 }}>"{transaction.seller_review}"</p>}</div>
                 ) : showReviewForm ? (
                   <div>
-                    <p style={{ fontSize: 13, color: '#94A3B8', marginBottom: 12 }}>{isBuyer ? 'Rate your experience with the seller:' : 'Rate your experience with the buyer:'}</p>
+                    <p style={{ fontSize: 13, color: '#8B949E', marginBottom: 12 }}>{isBuyer ? 'Rate your experience with the seller:' : 'Rate your experience with the buyer:'}</p>
                     <div style={{ marginBottom: 14 }}><StarRating value={rating} onSelect={setRating} onHover={setHoverRating} /></div>
-                    <label style={{ display: 'block', fontSize: 13, color: '#94A3B8', marginBottom: 6 }}>Review (optional)</label>
+                    <label style={{ display: 'block', fontSize: 13, color: '#8B949E', marginBottom: 6 }}>Review (optional)</label>
                     <Textarea placeholder="Share your experience…" value={review} onChange={(e) => setReview(e.target.value)} rows={3} data-testid="review-textarea" style={{ marginBottom: 12 }} />
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <button onClick={handleSubmitRating} disabled={submittingRating || rating === 0} data-testid="submit-rating-btn" className="action-btn" style={{ ...S.btn('#3B82F6'), opacity: (submittingRating || rating === 0) ? 0.5 : 1 }}>
+                      <button onClick={handleSubmitRating} disabled={submittingRating || rating === 0} data-testid="submit-rating-btn" className="action-btn" style={{ ...S.btn('#2F81F4'), opacity: (submittingRating || rating === 0) ? 0.5 : 1 }}>
                         {submittingRating ? 'Submitting…' : 'Submit Rating'}
                       </button>
-                      <button onClick={handleSkipReview} data-testid="skip-rating-btn" style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: 13, fontWeight: 500, cursor: 'pointer', padding: '8px 4px' }}>
+                      <button onClick={handleSkipReview} data-testid="skip-rating-btn" style={{ background: 'transparent', border: 'none', color: '#8B949E', fontSize: 13, fontWeight: 500, cursor: 'pointer', padding: '8px 4px' }}>
                         Skip
                       </button>
                     </div>
                   </div>
                 ) : null}
-                {isBuyer && transaction.seller_rating && <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #334155' }}><p style={{ fontSize: 13, color: '#94A3B8', marginBottom: 8 }}>Seller's rating for you:</p><StarRating value={transaction.seller_rating} readOnly size="w-5 h-5" />{transaction.seller_review && <p style={{ fontSize: 13, color: '#94A3B8', fontStyle: 'italic', marginTop: 6 }}>"{transaction.seller_review}"</p>}</div>}
-                {isSeller && transaction.buyer_rating && <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #334155' }}><p style={{ fontSize: 13, color: '#94A3B8', marginBottom: 8 }}>Buyer's rating for you:</p><StarRating value={transaction.buyer_rating} readOnly size="w-5 h-5" />{transaction.buyer_review && <p style={{ fontSize: 13, color: '#94A3B8', fontStyle: 'italic', marginTop: 6 }}>"{transaction.buyer_review}"</p>}</div>}
+                {isBuyer && transaction.seller_rating && <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #30363D' }}><p style={{ fontSize: 13, color: '#8B949E', marginBottom: 8 }}>Seller's rating for you:</p><StarRating value={transaction.seller_rating} readOnly size="w-5 h-5" />{transaction.seller_review && <p style={{ fontSize: 13, color: '#8B949E', fontStyle: 'italic', marginTop: 6 }}>"{transaction.seller_review}"</p>}</div>}
+                {isSeller && transaction.buyer_rating && <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #30363D' }}><p style={{ fontSize: 13, color: '#8B949E', marginBottom: 8 }}>Buyer's rating for you:</p><StarRating value={transaction.buyer_rating} readOnly size="w-5 h-5" />{transaction.buyer_review && <p style={{ fontSize: 13, color: '#8B949E', fontStyle: 'italic', marginTop: 6 }}>"{transaction.buyer_review}"</p>}</div>}
               </div>
             )}
 
@@ -2526,7 +2538,7 @@ function TransactionDetail() {
               <div style={{ ...S.card, padding: '18px 20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Truck size={15} color="#3b82f6" />
+                    <Truck size={15} color="#2F81F4" />
                     <p style={S.sectionTitle}>Courier Tracking</p>
                   </div>
                   <button
@@ -2541,9 +2553,9 @@ function TransactionDetail() {
                   </button>
                 </div>
 
-                <div style={{ background: '#0F172A', borderRadius: 8, padding: '8px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ background: '#0D1117', borderRadius: 8, padding: '8px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={S.label}>Waybill</span>
-                  <code style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 600, color: '#3b82f6' }}>{transaction.courier_waybill}</code>
+                  <code style={{ fontSize: 13, fontFamily: 'monospace', fontWeight: 600, color: '#2F81F4' }}>{transaction.courier_waybill}</code>
                 </div>
 
                 {transaction.courier_tracking_url && (
@@ -2551,7 +2563,7 @@ function TransactionDetail() {
                     href={transaction.courier_tracking_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#3b82f6', textDecoration: 'none', marginBottom: 14 }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#2F81F4', textDecoration: 'none', marginBottom: 14 }}
                   >
                     <Truck size={12} /> Track on Courier Guy &rarr;
                   </a>
@@ -2565,7 +2577,7 @@ function TransactionDetail() {
                         {trackingData.status || 'In transit'}
                       </span>
                       {trackingData.timestamp && (
-                        <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6 }}>
+                        <p style={{ fontSize: 11, color: '#8B949E', marginTop: 6 }}>
                           Last update: {new Date(trackingData.timestamp).toLocaleString()}
                         </p>
                       )}
@@ -2578,14 +2590,14 @@ function TransactionDetail() {
                           {trackingData.events.slice(0, 6).map((evt, i, arr) => (
                             <div key={i} style={{ display: 'flex', gap: 12 }}>
                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 3 }}>
-                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: i === 0 ? '#3b82f6' : '#475569', flexShrink: 0 }} />
-                                {i < arr.length - 1 && <div style={{ width: 2, flex: 1, minHeight: 18, background: '#334155', margin: '3px 0' }} />}
+                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: i === 0 ? '#2F81F4' : '#30363D', flexShrink: 0 }} />
+                                {i < arr.length - 1 && <div style={{ width: 2, flex: 1, minHeight: 18, background: '#30363D', margin: '3px 0' }} />}
                               </div>
                               <div style={{ paddingBottom: 10 }}>
-                                <p style={{ fontSize: 13, color: '#F8FAFC', margin: '0 0 2px', fontWeight: i === 0 ? 600 : 400 }}>
+                                <p style={{ fontSize: 13, color: '#E6EDF3', margin: '0 0 2px', fontWeight: i === 0 ? 600 : 400 }}>
                                   {evt.status || evt.description || 'Update'}
                                 </p>
-                                <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>
+                                <p style={{ fontSize: 11, color: '#8B949E', margin: 0 }}>
                                   {evt.created_at || evt.timestamp ? new Date(evt.created_at || evt.timestamp).toLocaleString() : ''}
                                 </p>
                               </div>
@@ -2596,7 +2608,7 @@ function TransactionDetail() {
                     )}
                   </>
                 ) : (
-                  <p style={{ fontSize: 13, color: '#94a3b8', textAlign: 'center', padding: '10px 0 2px' }}>
+                  <p style={{ fontSize: 13, color: '#8B949E', textAlign: 'center', padding: '10px 0 2px' }}>
                     Click Refresh to load tracking information.
                   </p>
                 )}
@@ -2606,7 +2618,7 @@ function TransactionDetail() {
             {/* Raise dispute */}
             {isActionable && !transaction.delivery_confirmed && sellerConfirmed && (
               <div style={{ ...S.card, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <p style={{ fontSize: 13, color: '#94A3B8', margin: 0 }}>Having issues with this transaction?</p>
+                <p style={{ fontSize: 13, color: '#8B949E', margin: 0 }}>Having issues with this transaction?</p>
                 <button onClick={() => navigate('/disputes-dashboard', { state: { transactionId: transaction.transaction_id } })} style={{ ...S.btnOutline, fontSize: 12 }}>
                   <FileText size={12} /> Raise Dispute
                 </button>
@@ -2621,24 +2633,24 @@ function TransactionDetail() {
             {/* Deal summary */}
             <div className="transaction-desktop-summary-card" style={{ ...S.card, padding: '18px 20px' }}>
               <p style={{ ...S.label, marginBottom: 14 }}>Deal Summary</p>
-              <p style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC', margin: '0 0 4px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{transaction.item_description}</p>
-              {transaction.item_condition && <span style={{ ...S.pill('#334155', '#94A3B8'), fontSize: 10, marginBottom: 14, display: 'inline-block' }}>{transaction.item_condition}</span>}
-              <div style={{ borderTop: '1px solid #334155', paddingTop: 12, marginTop: 12 }}>
+              <p style={{ fontSize: 14, fontWeight: 600, color: '#E6EDF3', margin: '0 0 4px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{transaction.item_description}</p>
+              {transaction.item_condition && <span style={{ ...S.pill('#30363D', '#8B949E'), fontSize: 10, marginBottom: 14, display: 'inline-block' }}>{transaction.item_condition}</span>}
+              <div style={{ borderTop: '1px solid #30363D', paddingTop: 12, marginTop: 12 }}>
                 {[
                   { label: 'Item Value', value: `R ${transaction.item_price.toFixed(2)}` },
-                  ...(courierDeliveryFee > 0 ? [{ label: 'Courier Delivery', value: `R ${courierDeliveryFee.toFixed(2)}`, color: '#94A3B8' }] : []),
-                  { label: 'Buyer TrustTrade Fee', value: `R ${_buyerFee.toFixed(2)}`, color: '#94A3B8' },
-                  { label: 'Seller TrustTrade Fee', value: `R ${_sellerFee.toFixed(2)}`, color: '#94A3B8' },
+                  ...(courierDeliveryFee > 0 ? [{ label: 'Courier Delivery', value: `R ${courierDeliveryFee.toFixed(2)}`, color: '#8B949E' }] : []),
+                  { label: 'Buyer TrustTrade Fee', value: `R ${_buyerFee.toFixed(2)}`, color: '#8B949E' },
+                  { label: 'Seller TrustTrade Fee', value: `R ${_sellerFee.toFixed(2)}`, color: '#8B949E' },
                   { label: 'Buyer Pays Total', value: `R ${totalSecurePayment.toFixed(2)}`, color: '#60A5FA' },
                 ].map(r => (
                   <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6 }}>
-                    <span style={{ color: '#94a3b8' }}>{r.label}</span>
-                    <span style={{ fontFamily: 'monospace', fontWeight: 500, color: r.color || '#F8FAFC' }}>{r.value}</span>
+                    <span style={{ color: '#8B949E' }}>{r.label}</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 500, color: r.color || '#E6EDF3' }}>{r.value}</span>
                   </div>
                 ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid #334155' }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC' }}>Seller Receives</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#10b981', fontFamily: 'monospace' }}>R {sellerReceivesAmount.toFixed(2)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, borderTop: '1px solid #30363D' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#E6EDF3' }}>Seller Receives</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#3FB950', fontFamily: 'monospace' }}>R {sellerReceivesAmount.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -2648,12 +2660,12 @@ function TransactionDetail() {
               <div className="transaction-desktop-share-card" style={{ ...S.card, padding: '14px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <span style={S.label}>Share Code</span>
-                  <Share2 size={12} color="#94a3b8" />
+                  <Share2 size={12} color="#8B949E" />
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <code style={{ flex: 1, fontSize: 13, fontFamily: 'monospace', fontWeight: 600, color: '#3b82f6', background: '#0F172A', padding: '6px 10px', borderRadius: 7, overflow: 'hidden', textOverflow: 'ellipsis' }}>{transaction.share_code}</code>
+                  <code style={{ flex: 1, fontSize: 13, fontFamily: 'monospace', fontWeight: 600, color: '#2F81F4', background: '#0D1117', padding: '6px 10px', borderRadius: 7, overflow: 'hidden', textOverflow: 'ellipsis' }}>{transaction.share_code}</code>
                   <button onClick={handleCopyLink} data-testid="copy-share-link-btn" style={{ ...S.btnOutline, padding: '6px 10px', flexShrink: 0 }}>
-                    {copied ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
+                    {copied ? <Check size={13} color="#3FB950" /> : <Copy size={13} />}
                   </button>
                   <a
                     href={whatsappShareHref}
@@ -2672,7 +2684,7 @@ function TransactionDetail() {
             <div className="transaction-desktop-parties-card" style={{ ...S.card, padding: '14px 16px' }}>
               <p style={{ ...S.label, marginBottom: 12 }}>Parties</p>
               {[
-                { name: transaction.buyer_name, role: 'Buyer', phone: transaction.buyer_phone, confirmed: buyerConfirmed, color: '#3b82f6', bg: 'rgba(59,130,246,0.14)', trust: transaction.buyer_trust },
+                { name: transaction.buyer_name, role: 'Buyer', phone: transaction.buyer_phone, confirmed: buyerConfirmed, color: '#2F81F4', bg: 'rgba(59,130,246,0.14)', trust: transaction.buyer_trust },
                 { name: transaction.seller_name, role: 'Seller', phone: transaction.seller_phone, confirmed: sellerConfirmed, color: '#f97316', bg: 'rgba(245,158,11,0.14)', trust: transaction.seller_trust },
               ].map((p, i) => (
                 <div key={p.role} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i === 0 ? 10 : 0 }}>
@@ -2680,16 +2692,16 @@ function TransactionDetail() {
                     <User size={14} color={p.color} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#F8FAFC', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
-                    <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>{p.role}{p.phone && ' · via phone'}</p>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: '#E6EDF3', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
+                    <p style={{ fontSize: 11, color: '#8B949E', margin: 0 }}>{p.role}{p.phone && ' · via phone'}</p>
                     {p.trust && (
-                      <p style={{ fontSize: 11, fontWeight: 600, color: '#94A3B8', margin: '2px 0 0' }}
+                      <p style={{ fontSize: 11, fontWeight: 600, color: '#8B949E', margin: '2px 0 0' }}
                          title="Trust score · completed trades · valid disputes">
                         {p.trust.trust_score} trust · {p.trust.total_trades} {p.trust.total_trades === 1 ? 'trade' : 'trades'} · {p.trust.disputes} {p.trust.disputes === 1 ? 'dispute' : 'disputes'}
                       </p>
                     )}
                   </div>
-                  {p.confirmed && <CheckCircle2 size={14} color="#10b981" />}
+                  {p.confirmed && <CheckCircle2 size={14} color="#3FB950" />}
                 </div>
               ))}
             </div>
@@ -2715,16 +2727,16 @@ function TransactionDetail() {
 
             {/* Trust signal strip */}
             {!isFinalized && (
-              <div style={{ borderRadius: 10, border: '1px solid #334155', padding: '12px 14px', background: '#0F172A' }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>How you're protected</p>
+              <div style={{ borderRadius: 10, border: '1px solid #30363D', padding: '12px 14px', background: '#0D1117' }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: '#8B949E', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 8px' }}>How you're protected</p>
                 {[
                   { icon: Shield, text: 'Funds held securely until both parties confirm' },
                   { icon: CheckCircle2, text: 'Seller paid only after you confirm receipt' },
                   { icon: Lock, text: '256-bit encrypted payments' },
                 ].map(({ icon: Icon, text }) => (
                   <div key={text} style={{ display: 'flex', alignItems: 'flex-start', gap: 7, marginBottom: 6 }}>
-                    <Icon size={11} color="#10b981" style={{ marginTop: 1, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.4 }}>{text}</span>
+                    <Icon size={11} color="#3FB950" style={{ marginTop: 1, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: '#8B949E', lineHeight: 1.4 }}>{text}</span>
                   </div>
                 ))}
               </div>

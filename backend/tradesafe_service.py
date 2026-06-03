@@ -1490,6 +1490,44 @@ async def _attempt_release(allocation_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+async def _verify_allocation_released(
+    reference: str, allocation_id: str, attempts: int = 4, delay: float = 2.0
+) -> Optional[Dict[str, Any]]:
+    """Poll TradeSafe for the allocation's REAL state and return a success dict if it
+    reached a released/accepted state.
+
+    This is the safety net that stops us reporting a failure when the money actually
+    moved: TradeSafe can return a null mutation payload yet still release the funds, or
+    flip to the released state a moment later. We check BOTH the allocation state and the
+    transaction state, retrying a few times for async propagation. Works for any
+    milestone in any deal (2, 5, 10 stages — all release the same way).
+    """
+    import asyncio
+    for i in range(attempts):
+        try:
+            txn = await get_transaction_by_reference(reference)
+            allocs = (txn or {}).get("allocations") or []
+            real = next((a for a in allocs if str(a.get("id")) == str(allocation_id)), None) or (allocs[0] if allocs else None)
+            alloc_state = str((real or {}).get("state") or "").upper()
+            txn_state = str((txn or {}).get("state") or "").upper()
+            if alloc_state in ALLOCATION_RELEASED_STATES or txn_state in ALLOCATION_RELEASED_STATES:
+                released_id = (real or {}).get("id") or allocation_id
+                logger.info(
+                    f"[ACCEPT_DELIVERY] VERIFIED RELEASED — reference={reference!r} allocation={released_id!r} "
+                    f"alloc_state={alloc_state!r} txn_state={txn_state!r}"
+                )
+                return {"id": released_id, "state": alloc_state or txn_state, "already_released": True}
+            logger.info(
+                f"[ACCEPT_DELIVERY] not released yet (attempt {i + 1}/{attempts}) reference={reference!r} "
+                f"alloc_state={alloc_state!r} txn_state={txn_state!r}"
+            )
+        except Exception as exc:
+            logger.error(f"[ACCEPT_DELIVERY] verify poll failed for reference={reference!r}: {exc}")
+        if i < attempts - 1:
+            await asyncio.sleep(delay)
+    return None
+
+
 async def accept_delivery(
     allocation_id: str,
     seller_token_id: Optional[str] = None,
@@ -1518,26 +1556,29 @@ async def accept_delivery(
     if result:
         return result
 
-    # Self-heal / idempotency using the transaction's real allocation state.
+    # The mutations can return a null/empty payload even when TradeSafe DID release the
+    # funds (or releases them a moment later). NEVER trust a bare failure — verify the
+    # allocation's real state and treat a released/accepted allocation as success.
     if reference:
+        verified = await _verify_allocation_released(reference, allocation_id)
+        if verified:
+            return verified
+
+        # Stored allocation id wrong/stale: find the real allocation for this reference,
+        # retry the full sequence on it, then verify again. Covers any stage of any deal.
         try:
             txn = await get_transaction_by_reference(reference)
             allocs = (txn or {}).get("allocations") or []
             real = next((a for a in allocs if str(a.get("id")) == str(allocation_id)), None) or (allocs[0] if allocs else None)
-            if real:
-                real_id = real.get("id")
-                state = str(real.get("state") or "").upper()
-                logger.info(f"[ACCEPT_DELIVERY] reference={reference!r} real allocation={real_id!r} state={state!r}")
-                if state in ALLOCATION_RELEASED_STATES:
-                    logger.info(f"[ACCEPT_DELIVERY] allocation {real_id!r} already released ({state}) — idempotent success")
-                    return {"id": real_id or allocation_id, "state": state, "already_released": True}
-                if real_id and str(real_id) != str(allocation_id):
-                    logger.warning(f"[ACCEPT_DELIVERY] stored allocation {allocation_id!r} failed; retrying real allocation {real_id!r}")
-                    result = await _attempt_release(real_id)
-                    if result:
-                        return result
-            else:
-                logger.error(f"[ACCEPT_DELIVERY] no allocations found on transaction reference={reference!r}")
+            real_id = (real or {}).get("id")
+            if real_id and str(real_id) != str(allocation_id):
+                logger.warning(f"[ACCEPT_DELIVERY] stored allocation {allocation_id!r} failed; retrying real allocation {real_id!r}")
+                result = await _attempt_release(real_id)
+                if result:
+                    return result
+                verified = await _verify_allocation_released(reference, real_id)
+                if verified:
+                    return verified
         except Exception as exc:
             logger.error(f"[ACCEPT_DELIVERY] self-heal lookup failed for reference={reference!r}: {exc}")
 

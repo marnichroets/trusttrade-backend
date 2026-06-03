@@ -19,7 +19,7 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, FileText, User, Download, CheckCircle2, Image as ImageIcon,
   Star, Copy, Share2, Check, AlertTriangle, CreditCard, Truck, Shield,
-  Loader2, Phone, Lock, RefreshCw, Clock, Banknote, MessageSquare
+  Loader2, Phone, Lock, RefreshCw, Clock, Banknote
 } from 'lucide-react';
 
 const BASE_URL = process.env.REACT_APP_API_URL || 'https://trusttrade-backend-production-3efa.up.railway.app';
@@ -717,8 +717,6 @@ function TransactionDetail() {
   const [isLockedOut, setIsLockedOut] = useState(false);
   const [lockoutMinutes, setLockoutMinutes] = useState(0);
   const [syncing, setSyncing] = useState(false);
-  const [smsSent, setSmsSent] = useState(false);
-  const [sendingSms, setSendingSms] = useState(false);
   const [wrongAccount, setWrongAccount] = useState(null);
   const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
   const [phoneVerificationContext, setPhoneVerificationContext] = useState(null);
@@ -1494,18 +1492,6 @@ function TransactionDetail() {
     return null;
   })();
 
-  const handleSendInviteSms = async () => {
-    setSendingSms(true);
-    try {
-      const { data } = await api.post(`/transactions/${transaction.transaction_id}/send-invite-sms`);
-      setSmsSent(true);
-      toast.success(`SMS sent to ${data.phone}`);
-    } catch (err) {
-      toast.error(parseErrorMessage(err));
-    } finally {
-      setSendingSms(false);
-    }
-  };
 
   const handleCopyLink = async () => {
     if (!shareLink) return;
@@ -1683,28 +1669,6 @@ function TransactionDetail() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
                   WhatsApp
                 </a>
-                {(isBuyer ? transaction.seller_phone : isSeller ? transaction.buyer_phone : null) && (
-                  <button
-                    onClick={handleSendInviteSms}
-                    disabled={smsSent || sendingSms}
-                    data-testid="send-invite-sms-mobile-btn"
-                    style={{
-                      ...S.btnOutline,
-                      marginTop: 8,
-                      width: '100%',
-                      justifyContent: 'center',
-                      opacity: (smsSent || sendingSms) ? 0.6 : 1,
-                      color: smsSent ? '#10b981' : undefined,
-                      borderColor: smsSent ? 'rgba(16,185,129,0.30)' : undefined,
-                    }}
-                  >
-                    {sendingSms
-                      ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Sending...</>
-                      : smsSent
-                        ? <><Check size={13} /> SMS sent</>
-                        : <><MessageSquare size={13} /> Send SMS</>}
-                  </button>
-                )}
               </div>
             )}
 
@@ -2469,11 +2433,22 @@ function TransactionDetail() {
                     {transaction.item_photos && transaction.item_photos.length > 0 ? (
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
                         {transaction.item_photos.map((photo, index) => {
-                          const photoUrl = photo.startsWith('http') ? photo : `${BASE_URL}/uploads/photos/${photo}`;
+                          const isUrl = typeof photo === 'string' && photo.startsWith('http');
+                          // Legacy photos saved as a bare filename live on Railway's
+                          // ephemeral disk and no longer exist — show a clear placeholder
+                          // instead of a broken image.
+                          if (!isUrl) {
+                            return (
+                              <div key={index} style={{ borderRadius: 10, aspectRatio: '1', background: '#0F172A', border: '1px solid #334155', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8, textAlign: 'center' }}>
+                                <ImageIcon size={22} color="#475569" />
+                                <span style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.4 }}>Photo no longer available</span>
+                              </div>
+                            );
+                          }
                           return (
-                            <div key={index} onClick={() => window.open(photoUrl, '_blank')} style={{ borderRadius: 10, overflow: 'hidden', cursor: 'pointer', position: 'relative', aspectRatio: '1', background: '#334155' }}>
-                              <img src={photoUrl} alt={`Photo ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                onError={(e) => { e.target.onerror = null; e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="%23f1f5f9" width="200" height="200"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%2394a3b8" font-size="14">No Image</text></svg>'; }} />
+                            <div key={index} onClick={() => window.open(photo, '_blank')} style={{ borderRadius: 10, overflow: 'hidden', cursor: 'pointer', position: 'relative', aspectRatio: '1', background: '#334155' }}>
+                              <img src={photo} alt={`Photo ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                onError={(e) => { e.target.onerror = null; e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect fill="%23243147" width="200" height="200"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="%2394a3b8" font-size="13">Photo unavailable</text></svg>'; }} />
                             </div>
                           );
                         })}
@@ -2676,30 +2651,6 @@ function TransactionDetail() {
                     WhatsApp
                   </a>
                 </div>
-                {(isBuyer ? transaction.seller_phone : isSeller ? transaction.buyer_phone : null) && (
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #334155' }}>
-                    <button
-                      onClick={handleSendInviteSms}
-                      disabled={smsSent || sendingSms}
-                      data-testid="send-invite-sms-btn"
-                      style={{
-                        ...S.btnOutline,
-                        width: '100%',
-                        justifyContent: 'center',
-                        gap: 6,
-                        opacity: (smsSent || sendingSms) ? 0.6 : 1,
-                        color: smsSent ? '#10b981' : undefined,
-                        borderColor: smsSent ? 'rgba(16,185,129,0.30)' : undefined,
-                      }}
-                    >
-                      {sendingSms
-                        ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Sending…</>
-                        : smsSent
-                          ? <><Check size={13} /> SMS sent ✓</>
-                          : <><MessageSquare size={13} /> Send SMS</>}
-                    </button>
-                  </div>
-                )}
               </div>
             )}
 

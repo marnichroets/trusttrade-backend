@@ -347,24 +347,11 @@ async def upload_photo(request: Request, file: UploadFile = File(...)):
         logger.info(f"[UPLOAD] Stored on Cloudinary: {cloud_url}")
         return {"filename": cloud_url, "url": cloud_url, "storage": "cloudinary"}
 
-    # Fallback: local disk (legacy; ephemeral on Railway).
-    unique_filename = f"{uuid.uuid4().hex}{file_ext}"
-    file_path = Path(settings.PHOTOS_PATH) / unique_filename
-
-    # Ensure directory exists
-    Path(settings.PHOTOS_PATH).mkdir(parents=True, exist_ok=True)
-
-    # Save file
-    try:
-        file.file.seek(0)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        logger.info(f"[UPLOAD] Success: {unique_filename} saved to {file_path}")
-    except Exception as e:
-        logger.error(f"[UPLOAD] Failed to save file: {e}")
-        raise HTTPException(status_code=500, detail="Failed to save file")
-
-    return {"filename": unique_filename, "path": str(file_path), "storage": "local"}
+    # NO local-disk fallback: Railway's disk is ephemeral, so a bare filename would
+    # 404 after the next deploy. Fail loudly so item_photos only ever holds durable
+    # Cloudinary URLs and a photo is never silently lost.
+    logger.error("[UPLOAD] Cloudinary returned no URL — rejecting (no ephemeral local fallback)")
+    raise HTTPException(status_code=503, detail="Photo storage is temporarily unavailable. Please try again in a moment.")
 
 
 @router.post("/upload/dispute-evidence")
@@ -410,16 +397,10 @@ async def upload_dispute_evidence(request: Request, file: UploadFile = File(...)
     if cloud_url:
         return {"filename": cloud_url, "url": cloud_url, "storage": "cloudinary"}
 
-    # Fallback: local disk (legacy; ephemeral on Railway).
-    unique_filename = f"{uuid.uuid4().hex}{file_ext}"
-    file_path = Path(settings.DISPUTES_PATH) / unique_filename
-
-    # Save file
-    file.file.seek(0)
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    return {"filename": unique_filename, "path": str(file_path), "storage": "local"}
+    # NO local-disk fallback (ephemeral on Railway) — fail loudly so dispute evidence
+    # is only ever stored as a durable Cloudinary URL.
+    logger.error("[UPLOAD] Cloudinary returned no URL for dispute evidence — rejecting")
+    raise HTTPException(status_code=503, detail="Photo storage is temporarily unavailable. Please try again in a moment.")
 
 
 # ============ TRANSACTION CRUD ============

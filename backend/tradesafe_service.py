@@ -1437,46 +1437,56 @@ LAST_ACCEPT_DELIVERY_ERROR: Optional[str] = None
 
 
 async def _attempt_release(allocation_id: str) -> Optional[Dict[str, Any]]:
-    """One release attempt on a single allocation: start -> accept, falling back to
-    complete. Returns the allocation dict on success, else None. Records the precise
-    TradeSafe error in LAST_ACCEPT_DELIVERY_ERROR."""
-    global LAST_ACCEPT_DELIVERY_ERROR
+    """Run the FULL delivery sequence on one allocation:
+        allocationStartDelivery -> allocationAcceptDelivery -> allocationCompleteDelivery.
 
+    Each step is best-effort because the allocation may already be partway through
+    (e.g. the seller's "mark delivered" already ran allocationStartDelivery, leaving
+    it in DELIVERED). Returns the allocation dict from the first step that yields a
+    real released result, else None. Precise per-step reasons -> LAST_ACCEPT_DELIVERY_ERROR.
+    """
+    global LAST_ACCEPT_DELIVERY_ERROR
+    reasons = []
+
+    # 1 — allocationStartDelivery (no-op / error if already started; never fatal).
     start_result = await start_delivery(allocation_id)
     if start_result:
-        logger.info(f"[ACCEPT_DELIVERY] allocationStartDelivery OK: state={start_result.get('state')!r}")
+        logger.info(f"[ACCEPT_DELIVERY] startDelivery OK allocation={allocation_id!r} state={start_result.get('state')!r}")
     else:
-        logger.warning(
-            f"[ACCEPT_DELIVERY] allocationStartDelivery returned None for {allocation_id!r} "
-            "(may already be started) — proceeding to allocationAcceptDelivery anyway"
-        )
+        logger.info(f"[ACCEPT_DELIVERY] startDelivery no result for {allocation_id!r} (likely already started) — continuing")
 
+    # 2 — allocationAcceptDelivery. CRITICAL: only treat as success when it returns a
+    #     REAL allocation. A null payload with no 'errors' must fall through to
+    #     completeDelivery — returning it as success was the silent-failure bug that
+    #     left DELIVERED milestone allocations stuck.
     mutation = """
     mutation allocationAcceptDelivery($id: ID!) {
         allocationAcceptDelivery(id: $id) { id title state value }
     }
     """
     result = await execute_graphql(mutation, {"id": allocation_id})
-    logger.info(f"[ACCEPT_DELIVERY] allocationAcceptDelivery raw response: {result}")
-
-    if result and "allocationAcceptDelivery" in result and "errors" not in result:
-        delivery_result = result["allocationAcceptDelivery"]
-        logger.info(f"[ACCEPT_DELIVERY] Success: allocation={allocation_id!r} state={delivery_result.get('state')!r}")
-        return delivery_result
-
-    if result and "errors" in result:
-        err = result["errors"][0].get("message", "unknown") if result["errors"] else "unknown"
-        debug = (result["errors"][0].get("extensions") or {}).get("debugMessage", "") if result["errors"] else ""
-        LAST_ACCEPT_DELIVERY_ERROR = f"allocationAcceptDelivery: {err}{(' — ' + debug) if debug else ''}"
-        logger.error(f"[ACCEPT_DELIVERY] {LAST_ACCEPT_DELIVERY_ERROR} (allocation {allocation_id!r}) — trying allocationCompleteDelivery")
+    logger.info(f"[ACCEPT_DELIVERY] acceptDelivery raw response: {result}")
+    accept_payload = (result or {}).get("allocationAcceptDelivery") if (result and "errors" not in result) else None
+    if accept_payload:
+        logger.info(f"[ACCEPT_DELIVERY] acceptDelivery OK allocation={allocation_id!r} state={accept_payload.get('state')!r}")
+        return accept_payload
+    if result and result.get("errors"):
+        e = result["errors"][0] or {}
+        debug = (e.get("extensions") or {}).get("debugMessage", "")
+        reasons.append(f"acceptDelivery: {e.get('message', 'unknown')}{(' — ' + debug) if debug else ''}")
     else:
-        LAST_ACCEPT_DELIVERY_ERROR = f"allocationAcceptDelivery: unexpected response {result}"
-        logger.error(f"[ACCEPT_DELIVERY] {LAST_ACCEPT_DELIVERY_ERROR} (allocation {allocation_id!r}) — trying allocationCompleteDelivery")
+        reasons.append(f"acceptDelivery: no allocation returned (response={result})")
 
+    # 3 — allocationCompleteDelivery: the documented post-startDelivery release path,
+    #     and the correct one for an allocation already in DELIVERED.
     complete_result = await complete_delivery(allocation_id)
     if complete_result:
-        logger.info(f"[ACCEPT_DELIVERY] Fallback allocationCompleteDelivery OK: allocation={allocation_id!r} state={complete_result.get('state')!r}")
+        logger.info(f"[ACCEPT_DELIVERY] completeDelivery OK allocation={allocation_id!r} state={complete_result.get('state')!r}")
         return complete_result
+    reasons.append("completeDelivery: no result (see [COMPLETE_DELIVERY] log for the exact reason)")
+
+    LAST_ACCEPT_DELIVERY_ERROR = " | ".join(reasons)
+    logger.error(f"[ACCEPT_DELIVERY] full delivery sequence failed allocation={allocation_id!r}: {LAST_ACCEPT_DELIVERY_ERROR}")
     return None
 
 

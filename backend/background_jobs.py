@@ -115,7 +115,15 @@ async def verify_single_transaction(
 
             # Only update if not already in a more advanced state
             if current_state in ["AWAITING_PAYMENT", "CREATED", "PENDING_CONFIRMATION", None]:
-                logger.info(f"FALLBACK: Payment detected for {transaction_id}, updating state to PAYMENT_SECURED")
+                # Prominent, greppable marker so we can see the fallback catching a
+                # payment the live webhook missed (e.g. card payments where the
+                # FUNDS_DEPOSITED webhook never reached us).
+                logger.info(
+                    f"[FALLBACK_FUNDED] Newly funded transaction detected by fallback job: "
+                    f"{transaction_id} (share={txn.get('share_code')}, tradesafe={tradesafe_id}, "
+                    f"method={txn.get('delivery_method')}, ts_state={ts_state}) — "
+                    f"webhook was missed/delayed; advancing to PAYMENT_SECURED"
+                )
 
                 now = datetime.now(timezone.utc).isoformat()
 

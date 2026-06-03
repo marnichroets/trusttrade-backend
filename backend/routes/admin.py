@@ -1985,8 +1985,45 @@ async def get_transaction_tradesafe_details(request: Request, transaction_id: st
     tradesafe_id = transaction.get("tradesafe_id")
     if tradesafe_id:
         result["tradesafe_transaction"] = await get_tradesafe_transaction(tradesafe_id)
-    
+
     return result
+
+
+@router.post("/transactions/{transaction_id}/verify-payment")
+async def admin_verify_payment(request: Request, transaction_id: str):
+    """
+    ADMIN ONLY: Run the payment-verification fallback for a single transaction NOW.
+
+    This is the same code path the background fallback job runs every ~3 minutes —
+    it queries TradeSafe directly for the current state and, if funds have cleared
+    (FUNDS_DEPOSITED), advances the transaction to PAYMENT_SECURED, sends the payment
+    notifications, and backstop-books the courier. Use this to immediately recover a
+    transaction whose live webhook was missed (e.g. card payments) instead of waiting
+    for the next fallback cycle.
+    """
+    import tradesafe_service
+    from background_jobs import verify_single_transaction
+
+    db = get_database()
+    admin = await require_admin(request, db)
+
+    txn = await db.transactions.find_one({"transaction_id": transaction_id})
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    logger.info(f"[ADMIN] Manual payment verification for {transaction_id} triggered by {admin.email}")
+    result = await verify_single_transaction(db, txn, tradesafe_service)
+    logger.info(f"[ADMIN] Manual payment verification for {transaction_id} result: {result}")
+
+    return {
+        "transaction_id": transaction_id,
+        "before": {
+            "transaction_state": txn.get("transaction_state"),
+            "payment_status": txn.get("payment_status"),
+            "tradesafe_state": txn.get("tradesafe_state"),
+        },
+        "result": result,
+    }
 
 
 @router.patch("/transactions/{transaction_id}/payout-status")

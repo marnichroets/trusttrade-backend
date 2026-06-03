@@ -570,7 +570,10 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
     )
 
     txn_id = txn.get("transaction_id") or txn.get("deal_id")
-    reference = txn.get("share_code") or txn_id
+    # For milestone child docs, show the PARENT deal id (e.g. SD-9113A7B0) rather than
+    # the per-stage id (SD-9113A7B0-M2) — users just need to know which deal. Dedup is
+    # still keyed on txn_id (the unique child id), so each milestone notifies once.
+    reference = txn.get("parent_deal_id") or txn.get("share_code") or txn_id
     item_description = txn.get("item_description") or txn.get("title", "")
     amount = float(txn.get("item_price") or txn.get("amount") or 0)
 

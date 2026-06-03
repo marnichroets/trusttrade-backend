@@ -187,7 +187,7 @@ function NewTransaction() {
     known_issues: '',
     item_price: '',
     fee_allocation: 'BUYER',
-    delivery_method: 'bank_deposit',  // courier is "coming soon" (disabled), so default to in-person
+    delivery_method: 'courier',
   });
   const [confirmations, setConfirmations] = useState({
     buyer_details: false,
@@ -775,7 +775,7 @@ function NewTransaction() {
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: '#F8FAFC', margin: '0 0 14px' }}>How will the item be delivered?</h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    { value: 'courier', icon: Truck, label: 'Courier Guy — we book delivery for you', desc: "Coming soon — we're setting up automated courier booking.", comingSoon: true },
+                    { value: 'courier', icon: Truck, label: 'Courier Guy — we book delivery for you', desc: 'Buyer confirms receipt before payment is released.' },
                     { value: 'bank_deposit', icon: Banknote, label: 'In-Person Meeting — meet to exchange', desc: 'Payment is released once the handover is confirmed.' },
                     { value: 'digital', icon: Zap, label: 'Digital Delivery — files, codes or online services', desc: 'e.g. graphic design, software, documents. Payment is released once the digital delivery is confirmed.' },
                   ].map(opt => {

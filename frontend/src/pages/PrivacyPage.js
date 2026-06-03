@@ -103,6 +103,7 @@ export default function PrivacyPage() {
             <ul className="list-disc list-inside text-slate-600 leading-relaxed space-y-2">
               <li><strong>Transaction counterparty:</strong> Your name and contact details are shared with the other party to a transaction to the extent necessary to complete it.</li>
               <li><strong>TradeSafe (Pty) Ltd:</strong> Our payment processing partner. Your banking details are securely transmitted to TradeSafe for payout processing. TradeSafe is a regulated operator subject to its own privacy and FICA obligations.</li>
+              <li><strong>The Courier Guy / ShipLogic:</strong> When you choose courier delivery, the pickup and delivery contact details and addresses you provide are shared with our courier partner (ShipLogic, operating as The Courier Guy) to book and track your shipment.</li>
               <li><strong>Communication providers:</strong> We use Postmark for transactional email and a third-party SMS provider for OTP delivery. These providers process your contact details solely to send communications on our behalf.</li>
               <li><strong>Google LLC:</strong> If you use Google Sign-In, Google processes your authentication data under Google's Privacy Policy.</li>
               <li><strong>Regulatory authorities:</strong> We may disclose information to the Financial Intelligence Centre (FIC), SAPS, or other competent authorities where required by law.</li>

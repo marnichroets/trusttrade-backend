@@ -261,6 +261,7 @@ async def book_shipment(
     contact: Dict[str, Any],
     collection_preference: str = None,
     service_level_id: Optional[Any] = None,
+    declared_value: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Book a shipment with ShipLogic and return the waybill details.
@@ -370,18 +371,17 @@ async def book_shipment(
         "reference1": contact.get("reference", ""),
     }
 
-    # ShipLogic's opt_in_rates is an array of service_level ids (int64) — NOT objects.
-    # e.g. [212572]. Passing {"service_level": {...}} is rejected with
-    # "invalid type received for field opt_in_rates: expected ... int64 ... received object".
-    opt_in_rates = []
-    if service_level_id is not None:
-        try:
-            opt_in_rates = [int(service_level_id)]
-        except (TypeError, ValueError):
-            logger.error(
-                f"[COURIER] Invalid service_level_id={service_level_id!r} "
-                f"(code={quote_id!r}) — cannot build opt_in_rates"
-            )
+    # ShipLogic rates a booking against (service_level + declared_value + addresses).
+    # A missing/zero declared_value caused HTTP 400 "there are no rates for the
+    # specified service level, declared value and addresses". Use the explicit value
+    # passed in (the transaction's item price), falling back to the parcel's.
+    resolved_declared_value = declared_value
+    if resolved_declared_value is None:
+        resolved_declared_value = parcel.get("declared_value")
+    try:
+        resolved_declared_value = float(resolved_declared_value or 0)
+    except (TypeError, ValueError):
+        resolved_declared_value = 0.0
 
     payload = {
         "collection_address": pickup["address"],
@@ -389,14 +389,13 @@ async def book_shipment(
         "collection_contact": pickup.get("contact", {}),
         "delivery_contact": delivery.get("contact", {}),
         "parcels": [parcel_payload],
-        # Select the service explicitly by CODE. Some ShipLogic accounts (notably the
-        # live multi-provider one) reject a booking that only carries opt_in_rates ids
-        # with "cannot get rates: no service level specified" — service_level_code is
-        # the unambiguous selector. We still send opt_in_rates for accounts that key
-        # off the id (e.g. the sandbox), so both selectors are present.
+        # Select the service unambiguously by CODE (opt_in_rates ids are dropped — the
+        # live account rejected bookings that carried both, and the code alone is the
+        # selector ShipLogic rates against).
         "service_level_code": code or None,
-        "opt_in_rates": opt_in_rates,
-        "opt_in_time_based_rates": [],
+        # Required for rating — ShipLogic returns "no rates for the specified service
+        # level, declared value and addresses" when this is missing/zero.
+        "declared_value": resolved_declared_value,
         # Tell Courier Guy whether the sender wants a collection or is dropping the parcel
         # off themselves. special_instructions_collection is a standard ShipLogic field.
         "special_instructions_collection": (
@@ -429,8 +428,8 @@ async def book_shipment(
 
     logger.info(
         f"[COURIER] Booking — collection_preference={'dropoff' if is_dropoff else 'collection'} "
-        f"service_level_id={service_level_id!r} service_level_code={quote_id!r} "
-        f"opt_in_rates={opt_in_rates!r} provider_id={provider_id!r} provider_id_set={provider_id is not None}"
+        f"service_level_code={quote_id!r} declared_value={resolved_declared_value!r} "
+        f"provider_id={provider_id!r} provider_id_set={provider_id is not None}"
     )
     # Full request body so we can see EXACTLY what ShipLogic receives when a booking fails.
     logger.info(f"[COURIER] FULL /shipments request payload: {json.dumps(payload, default=str)}")

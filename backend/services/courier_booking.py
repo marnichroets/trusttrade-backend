@@ -137,6 +137,14 @@ async def book_courier_for_transaction(
             f"[COURIER_BOOK] {transaction_id} booking shipment — quote={quote_id!r} "
             f"service_level_id={service_level_id!r} override={service_level_id_override!r} ref={share_code}"
         )
+        # ShipLogic rates against the declared value — pass the transaction's item
+        # price so a booking isn't rejected with "no rates for the specified service
+        # level, declared value and addresses".
+        declared_value = (
+            transaction.get("item_price")
+            or (parcel.get("declared_value") if isinstance(parcel, dict) else None)
+            or 0
+        )
         result = await book_shipment(
             quote_id=quote_id,
             pickup={"address": pickup_address, "contact": pickup_contact},
@@ -145,6 +153,7 @@ async def book_courier_for_transaction(
             contact={"reference": share_code},
             collection_preference=transaction.get("courier_collection_preference"),
             service_level_id=service_level_id,
+            declared_value=declared_value,
         )
 
         waybill = (result or {}).get("waybill") or ""

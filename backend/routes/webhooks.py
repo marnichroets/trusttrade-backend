@@ -900,6 +900,10 @@ async def tradesafe_webhook(request: Request):
             )
             logger.info(f"[WEBHOOK] Regular txn {txn_id} → payment_status=Funds Secured, tradesafe_state={state}, auto_release_at={auto_release_at}")
 
+            import asyncio
+            import email_service
+            delivery_method = txn.get("delivery_method", "courier")
+
             if state not in EMAIL_TRIGGER_STATES:
                 # FUNDS_RECEIVED only — hold the Payment Secured email until the
                 # follow-up FUNDS_DEPOSITED webhook confirms the money actually cleared.
@@ -912,10 +916,7 @@ async def tradesafe_webhook(request: Request):
                 # emails_sent[] deduplication array is populated.  The fallback job
                 # (background_jobs.py) also uses the same mechanism, which prevents the
                 # seller from ever receiving a duplicate "Payment Secured" email.
-                import asyncio
-                import email_service
                 from webhook_handler import send_email_with_tracking, EmailEvent
-                delivery_method = txn.get("delivery_method", "courier")
                 share_code = txn.get("share_code", txn_id)
 
                 # Buyer confirmation — "your payment is secured, seller will now dispatch"
@@ -946,17 +947,20 @@ async def tradesafe_webhook(request: Request):
                     delivery_method=delivery_method,
                 )))
 
-                # Funds have cleared (FUNDS_DEPOSITED) → auto-book the Courier Guy
-                # shipment for courier deliveries. book_courier_for_transaction is
-                # idempotent (guards on an existing waybill) and never raises, so it's
-                # safe to fire on every FUNDS_DEPOSITED webhook. This is the PRIMARY
-                # booking trigger — the fallback job and manual force-sync only exist
-                # as backstops if this webhook is delayed or missed.
-                if (delivery_method or "").strip().lower() == "courier":
-                    from services.courier_booking import book_courier_for_transaction
-                    asyncio.create_task(_bg(
-                        book_courier_for_transaction(db, txn, email_service=email_service)
-                    ))
+            # Auto-book the Courier Guy shipment for courier deliveries on EITHER
+            # funded state. Card payments arrive as FUNDS_RECEIVED (money is already
+            # secured) and never emit FUNDS_DEPOSITED, so waiting for DEPOSITED meant
+            # courier was never booked for cards. book_courier_for_transaction is
+            # idempotent (guards on an existing waybill / atomic claim) and never
+            # raises, so firing on FUNDS_RECEIVED *and* FUNDS_DEPOSITED can't
+            # double-book. This is the PRIMARY booking trigger; the fallback job and
+            # manual force-sync are backstops if this webhook is delayed or missed.
+            if (delivery_method or "").strip().lower() == "courier":
+                from services.courier_booking import book_courier_for_transaction
+                logger.info(f"[WEBHOOK] {txn_id} state={state!r} courier delivery — triggering courier booking")
+                asyncio.create_task(_bg(
+                    book_courier_for_transaction(db, txn, email_service=email_service)
+                ))
 
         elif state in RELEASED_STATES and txn.get("withdrawal_status") not in ("in_progress", "succeeded"):
             # Funds settled in seller token wallet — trigger bank payout now.

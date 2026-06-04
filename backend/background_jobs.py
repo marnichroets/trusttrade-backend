@@ -125,11 +125,15 @@ async def verify_single_transaction(
             if current_state in ["AWAITING_PAYMENT", "CREATED", "PENDING_CONFIRMATION", None]:
                 now = datetime.now(timezone.utc).isoformat()
 
-                # FUNDS_RECEIVED only — deposit attempted but not yet cleared. Advance
-                # local fields so the UI shows "in escrow", but DO NOT set
-                # payment_verified and DO NOT send the Payment Secured email or book the
-                # courier — those wait for FUNDS_DEPOSITED. Leaving payment_verified
-                # unset keeps this txn in the fallback list so the next run re-checks it.
+                # FUNDS_RECEIVED only — deposit attempted but not yet cleared for EFT.
+                # Advance local fields so the UI shows "in escrow", but DO NOT set
+                # payment_verified and DO NOT send the Payment Secured email — that waits
+                # for FUNDS_DEPOSITED. Leaving payment_verified unset keeps this txn in
+                # the fallback list so the next run re-checks it.
+                # EXCEPTION: courier booking IS triggered here. Card payments arrive as
+                # FUNDS_RECEIVED (money already secured) and never emit FUNDS_DEPOSITED,
+                # so the parcel must be booked now. book_courier_for_transaction is
+                # idempotent (atomic claim / waybill guard) so it can't double-book.
                 if ts_state == "FUNDS_RECEIVED":
                     await db.transactions.update_one(
                         {"transaction_id": transaction_id},
@@ -140,12 +144,25 @@ async def verify_single_transaction(
                             "funds_received_at": txn.get("funds_received_at") or now,
                         }}
                     )
+
+                    if (txn.get("delivery_method") or "").strip().lower() == "courier":
+                        try:
+                            import email_service
+                            from services.courier_booking import book_courier_for_transaction
+                            logger.info(
+                                f"FALLBACK: {transaction_id} FUNDS_RECEIVED courier delivery — "
+                                f"triggering courier booking (card payment path)"
+                            )
+                            await book_courier_for_transaction(db, txn, email_service=email_service)
+                        except Exception as e:
+                            logger.error(f"FALLBACK: courier auto-book failed (non-fatal) for {transaction_id}: {e}")
+
                     logger.info(
                         f"FALLBACK: {transaction_id} at FUNDS_RECEIVED — fields advanced, "
-                        f"Payment Secured email/courier withheld until FUNDS_DEPOSITED; "
+                        f"Payment Secured email withheld until FUNDS_DEPOSITED; "
                         f"will re-check next cycle"
                     )
-                    return {"updated": True, "action": "state_advanced_FUNDS_RECEIVED_no_email"}
+                    return {"updated": True, "action": "state_advanced_FUNDS_RECEIVED_courier_booked"}
 
                 # FUNDS_DEPOSITED — funds have actually cleared into escrow.
                 # Prominent, greppable marker so we can see the fallback catching a

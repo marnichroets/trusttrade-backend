@@ -918,6 +918,84 @@ async def start_tradesafe_delivery(request: Request, transaction_id: str):
     }
 
 
+# Terminal TradeSafe states beyond "released": refunded, and rejected/cancelled.
+_TS_REFUNDED_STATES = {"REFUNDED", "FUNDS_REFUNDED", "FUNDS_RETURNED"}
+_TS_REJECTED_STATES = {"RJCT", "REJECTED", "CANCELLED", "CANCELED", "DECLINED", "EXPIRED", "FAILED"}
+
+
+async def _settle_if_terminal(db, transaction, live):
+    """If the TradeSafe allocation/transaction is already in a terminal state
+    (released / refunded / rejected-cancelled), sync our DB to match and return a
+    success response dict. Returns None when the allocation is still actionable, so
+    the caller proceeds with the normal accept_delivery flow.
+
+    This makes Force Release / Confirm Receipt idempotent: it never calls TradeSafe
+    again for an allocation TradeSafe has already settled (e.g. RJCT, RELEASED,
+    COMPLETE) — it just records the matching final status and reports success.
+    """
+    from tradesafe_service import ALLOCATION_RELEASED_STATES
+
+    transaction_id = transaction.get("transaction_id")
+    alloc_id = str(transaction.get("tradesafe_allocation_id") or "")
+    txn_state = (live.get("state") or "").upper()
+    alloc_state = ""
+    for a in (live.get("allocations") or []):
+        if str(a.get("id")) == alloc_id:
+            alloc_state = (a.get("state") or "").upper()
+            break
+    if not alloc_state and live.get("allocations"):
+        alloc_state = (live["allocations"][0].get("state") or "").upper()
+
+    states = {s for s in (txn_state, alloc_state) if s}
+    if not states:
+        return None
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    effective = alloc_state or txn_state
+
+    if states & ALLOCATION_RELEASED_STATES:
+        kind = "released"
+        set_fields = {
+            "payment_status": "Completed", "release_status": "Released",
+            "delivery_confirmed": True, "delivery_confirmed_at": now_iso,
+            "released_at": transaction.get("released_at") or now_iso,
+        }
+    elif states & _TS_REFUNDED_STATES:
+        kind = "refunded"
+        set_fields = {
+            "payment_status": "Refunded", "release_status": "Refunded",
+            "refund_status": "succeeded", "refunded_at": transaction.get("refunded_at") or now_iso,
+        }
+    elif states & _TS_REJECTED_STATES:
+        kind = "rejected/cancelled"
+        set_fields = {"payment_status": "Cancelled", "release_status": "Not Released"}
+    else:
+        return None  # still actionable (INITIATED / SENT / DELIVERED / FUNDS_RECEIVED …)
+
+    set_fields["tradesafe_state"] = effective
+    timeline = transaction.get("timeline", [])
+    timeline.append({
+        "status": f"Synced from TradeSafe ({effective})",
+        "timestamp": now_iso,
+        "by": "System",
+        "details": f"Allocation already {kind} on TradeSafe — local status updated to match.",
+    })
+    set_fields["timeline"] = timeline
+    await db.transactions.update_one({"transaction_id": transaction_id}, {"$set": set_fields})
+    logger.info(
+        f"[ACCEPT_DELIVERY] {transaction_id} already {kind} on TradeSafe "
+        f"(state={effective}) — DB synced, skipped accept_delivery"
+    )
+    return {
+        "success": True,
+        "already_settled": True,
+        "kind": kind,
+        "state": effective,
+        "transaction_id": transaction_id,
+        "message": f"Allocation was already {kind} on TradeSafe — status synced.",
+    }
+
+
 @router.post("/accept-delivery/{transaction_id}")
 async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     """Buyer confirms receipt of item/service. Triggers fund release."""
@@ -956,6 +1034,24 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     if is_buyer and not user.is_admin:
         buyer_user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
         require_verified_buyer_profile(buyer_user_doc)
+
+    # ── Already-settled short-circuit ────────────────────────────────────────
+    # Check the LIVE TradeSafe state first. If the allocation is already in a
+    # terminal state (released / refunded / rejected-cancelled, e.g. RJCT,
+    # RELEASED, COMPLETE), don't call accept_delivery again — just sync our DB to
+    # match and return success. This stops Force Release from erroring on
+    # allocations TradeSafe has already settled.
+    tradesafe_id = transaction.get("tradesafe_id")
+    if tradesafe_id:
+        try:
+            live = await get_tradesafe_transaction(tradesafe_id)
+        except Exception as exc:
+            live = None
+            logger.warning(f"[ACCEPT_DELIVERY] could not fetch live TradeSafe state for {transaction_id}: {exc}")
+        if live:
+            settled = await _settle_if_terminal(db, transaction, live)
+            if settled:
+                return settled
 
     # Check TradeSafe state
     if transaction.get("tradesafe_state") not in ["INITIATED", "SENT", "DELIVERED"]:
@@ -1133,6 +1229,19 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
     )
 
     if not result:
+        # accept_delivery may have failed because the allocation is ALREADY settled
+        # on TradeSafe (terminal state). Re-check the live state and, if terminal,
+        # sync our DB and return success instead of surfacing an error.
+        fresh = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0}) or transaction
+        if tradesafe_id:
+            try:
+                live2 = await get_tradesafe_transaction(tradesafe_id)
+            except Exception:
+                live2 = None
+            if live2:
+                settled = await _settle_if_terminal(db, fresh, live2)
+                if settled:
+                    return settled
         raise HTTPException(
             status_code=500,
             detail=f"Failed to accept delivery on TradeSafe — allocation_id={allocation_id!r}. Check server logs."

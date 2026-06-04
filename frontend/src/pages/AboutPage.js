@@ -1,48 +1,185 @@
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Shield } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Lock, Truck, Scale, ShieldCheck, BadgeCheck, MapPin } from 'lucide-react';
+import TrustTradeLogo from '../components/TrustTradeLogo';
+
+// Dark theme palette (matches the app)
+const C = {
+  bg: '#0D1117',
+  card: '#161B22',
+  cardHover: '#1C2128',
+  border: '#30363D',
+  text: '#E6EDF3',
+  muted: '#8B949E',
+  dim: '#6E7681',
+  accent: '#2F81F4',
+  success: '#3FB950',
+};
+
+const MISSION = [
+  {
+    icon: Lock,
+    emoji: '🔒',
+    title: 'Secure Escrow',
+    body: 'Your money is held safely until you confirm receipt — never released to the other party before you are happy.',
+  },
+  {
+    icon: Truck,
+    emoji: '🚚',
+    title: 'Integrated Courier',
+    body: 'We book Courier Guy automatically on your behalf, with live tracking from collection to your door.',
+  },
+  {
+    icon: Scale,
+    emoji: '⚖️',
+    title: 'Fair Disputes',
+    body: 'AI-powered dispute resolution with human oversight, so every case is handled quickly and fairly.',
+  },
+];
+
+const STATS = [
+  { icon: ShieldCheck, title: 'Secured by TradeSafe', sub: 'Standard Bank oversight' },
+  { icon: BadgeCheck, title: '256-bit encryption', sub: 'Bank-grade protected payments' },
+  { icon: MapPin, title: 'Proudly South African', sub: 'Built and operated locally' },
+];
 
 export default function AboutPage() {
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <Link to="/" className="flex items-center gap-2 text-slate-600 hover:text-blue-600">
-            <ArrowLeft className="w-4 h-4" />
-            Back to Home
+    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
+      <style>{`
+        .about-wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
+        .about-mission-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+        .about-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .about-founder { display: grid; grid-template-columns: 120px 1fr; gap: 28px; align-items: start; }
+        .about-card { transition: border-color .15s ease, background .15s ease, transform .15s ease; }
+        .about-card:hover { border-color: #3d4757; background: ${C.cardHover}; transform: translateY(-2px); }
+        @media (max-width: 760px) {
+          .about-mission-grid { grid-template-columns: 1fr; }
+          .about-stats-grid { grid-template-columns: 1fr; }
+          .about-founder { grid-template-columns: 1fr; gap: 18px; justify-items: center; text-align: center; }
+          .about-hero-h1 { font-size: 34px !important; }
+        }
+      `}</style>
+
+      {/* Nav */}
+      <nav style={{ borderBottom: `1px solid ${C.border}`, background: 'rgba(13,17,23,0.85)', backdropFilter: 'blur(8px)', position: 'sticky', top: 0, zIndex: 50 }}>
+        <div className="about-wrap" style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Link to="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: C.muted, textDecoration: 'none', fontSize: 14, fontWeight: 600 }}>
+            <ArrowLeft size={16} /> Back to Home
           </Link>
+          <TrustTradeLogo size="small" showText dark />
         </div>
       </nav>
 
-      <main className="max-w-3xl mx-auto px-4 py-12">
-        <div className="flex items-center gap-3 mb-8">
-          <Shield className="w-8 h-8 text-blue-600" />
-          <h1 className="text-3xl font-bold text-slate-900">About TrustTrade</h1>
-        </div>
+      {/* Hero */}
+      <section className="about-wrap" style={{ paddingTop: 72, paddingBottom: 48, textAlign: 'center' }}>
+        <span style={{ display: 'inline-block', fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.accent, background: 'rgba(47,129,244,0.12)', border: '1px solid rgba(47,129,244,0.25)', borderRadius: 999, padding: '6px 14px', marginBottom: 24 }}>
+          Our Story
+        </span>
+        <h1 className="about-hero-h1" style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.02em', margin: '0 auto 18px', maxWidth: 760 }}>
+          Built to protect South African buyers and sellers
+        </h1>
+        <p style={{ fontSize: 19, color: C.muted, lineHeight: 1.6, margin: '0 auto', maxWidth: 560 }}>
+          A personal mission to end marketplace scams.
+        </p>
+      </section>
 
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 space-y-5">
-          <p className="text-slate-700 leading-relaxed text-lg">
-            I started TrustTrade after getting scammed buying a phone on Facebook
-            Marketplace. I paid R3000 and never received the item.
-          </p>
-          <p className="text-slate-700 leading-relaxed text-lg">
-            I looked for a safe way to buy and sell online in South Africa but couldn't
-            find anything simple and affordable. So I built TrustTrade — a platform that
-            holds your money safely until you receive what you paid for.
-          </p>
-          <p className="text-slate-900 font-semibold leading-relaxed text-lg">
-            No more scams. No more trust issues.
-          </p>
-        </div>
+      {/* Founder story */}
+      <section className="about-wrap" style={{ paddingBottom: 56 }}>
+        <div className="about-card about-founder" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 18, padding: '34px 32px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 104, height: 104, borderRadius: '50%', flexShrink: 0,
+              background: 'linear-gradient(135deg, #2F81F4 0%, #1F6FEB 100%)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 36, fontWeight: 800, color: '#fff', letterSpacing: '0.02em',
+              boxShadow: '0 8px 28px rgba(47,129,244,0.35)',
+            }}>
+              MR
+            </div>
+          </div>
+          <div>
+            <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 2px' }}>Marnich Roets</h2>
+            <p style={{ fontSize: 14, fontWeight: 600, color: C.accent, margin: '0 0 20px' }}>Founder, TrustTrade</p>
 
-        <div className="mt-8 text-center">
+            <div style={{ fontSize: 15.5, lineHeight: 1.75, color: '#C9D4E0' }}>
+              <p style={{ margin: '0 0 16px' }}>
+                In 2024, I paid R3000 for a phone on Facebook Marketplace. The seller disappeared.
+                The money was gone. I was angry — not just because of the money, but because there
+                was nothing I could do about it.
+              </p>
+              <p style={{ margin: '0 0 16px' }}>
+                I searched for a solution. Something simple that South Africans could use to protect
+                themselves when buying and selling online. I couldn't find anything affordable and
+                easy enough for everyday people.
+              </p>
+              <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: C.text }}>
+                So I built TrustTrade.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Mission */}
+      <section className="about-wrap" style={{ paddingBottom: 56 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, textAlign: 'center', margin: '0 0 24px' }}>
+          What we do
+        </h2>
+        <div className="about-mission-grid">
+          {MISSION.map(({ icon: Icon, emoji, title, body }) => (
+            <div key={title} className="about-card" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '26px 22px' }}>
+              <div style={{ width: 46, height: 46, borderRadius: 12, background: 'rgba(47,129,244,0.12)', border: '1px solid rgba(47,129,244,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Icon size={22} color={C.accent} />
+              </div>
+              <h3 style={{ fontSize: 17, fontWeight: 700, margin: '0 0 8px' }}>
+                <span style={{ marginRight: 7 }}>{emoji}</span>{title}
+              </h3>
+              <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6, margin: 0 }}>{body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Stats / trust */}
+      <section className="about-wrap" style={{ paddingBottom: 56 }}>
+        <div className="about-stats-grid">
+          {STATS.map(({ icon: Icon, title, sub }) => (
+            <div key={title} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '22px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(63,185,80,0.12)', border: '1px solid rgba(63,185,80,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Icon size={20} color={C.success} />
+              </div>
+              <div>
+                <p style={{ fontSize: 15, fontWeight: 700, margin: '0 0 2px' }}>{title}</p>
+                <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>{sub}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="about-wrap" style={{ paddingBottom: 80 }}>
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(47,129,244,0.14) 0%, rgba(63,185,80,0.10) 100%)',
+          border: `1px solid ${C.border}`, borderRadius: 20, padding: '44px 28px', textAlign: 'center',
+        }}>
+          <h2 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.01em', margin: '0 0 10px' }}>
+            Start your first secure transaction
+          </h2>
+          <p style={{ fontSize: 16, color: C.muted, margin: '0 0 26px' }}>It takes 2 minutes.</p>
           <Link
             to="/login"
-            className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-6 py-3 text-white font-semibold hover:bg-blue-700 transition-colors"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 9,
+              background: C.accent, color: '#fff', textDecoration: 'none',
+              fontSize: 15, fontWeight: 700, padding: '14px 28px', borderRadius: 11,
+              boxShadow: '0 10px 30px rgba(47,129,244,0.35)',
+            }}
           >
-            Get Started
+            Get Started Free <ArrowRight size={17} />
           </Link>
         </div>
-      </main>
+      </section>
     </div>
   );
 }

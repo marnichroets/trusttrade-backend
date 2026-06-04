@@ -22,16 +22,16 @@ const WORDMARK_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, He
 // wordmark, sized so the lockup fits the navbar/sidebar/landing without looking oversized.
 const SIZES = {
   small: {
-    mark: { width: 26, height: 26 },
-    font: 17, gap: 7,
+    mark: { width: 24, height: 24 },
+    font: 15.5, gap: 7,
   },
   medium: {
-    mark: { width: 32, height: 32 },
-    font: 21, gap: 8,
+    mark: { width: 29, height: 29 },
+    font: 19, gap: 7,
   },
   large: {
-    mark: { width: 42, height: 42 },
-    font: 27, gap: 9,
+    mark: { width: 38, height: 38 },
+    font: 24, gap: 8,
   },
 };
 

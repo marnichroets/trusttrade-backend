@@ -122,10 +122,14 @@ async def send_email(
 
 # Logo URL for emails — served from backend static files
 EMAIL_LOGO_URL = "https://trusttrade-backend-production-3efa.up.railway.app/static/trusttrade-logo.png"
+# Render the wordmark as styled text so the colours are exact and always legible on
+# the dark navy email header: "Trust" blue (#2F81F4), "Trade" white (#FFFFFF).
+# (A baked PNG made "Trade" black/invisible on the dark header.)
 EMAIL_LOGO_HTML = (
-    f'<img src="{EMAIL_LOGO_URL}" alt="TrustTrade" width="220" '
-    'style="display:block;width:220px;max-width:100%;height:auto;'
-    'margin:0 auto 10px;object-fit:contain;">'
+    '<div style="margin:0 auto 8px;font-size:30px;font-weight:800;letter-spacing:-0.5px;'
+    "line-height:1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;\">"
+    '<span style="color:#2F81F4;">Trust</span><span style="color:#FFFFFF;">Trade</span>'
+    '</div>'
 )
 
 # ============ BASE EMAIL TEMPLATE ============

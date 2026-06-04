@@ -7,18 +7,28 @@ export const TRUSTTRADE_LOGO_MARK_SRC = '/assets/trusttrade-logo-mark.png';
 export const TRUSTTRADE_LOGO_DARK_SRC = '/assets/trusttrade-logo-dark.png';
 export const TRUSTTRADE_LOGO_MARK_DARK_SRC = '/assets/trusttrade-logo-mark-dark.png';
 
+// Brand colours for the wordmark text. "Trust" is always blue; "Trade" is white on
+// dark surfaces (sidebar / landing / emails — where black text was invisible) and
+// dark navy on light surfaces (login / admin / share) so it's always legible.
+const TRUST_BLUE = '#2F81F4';
+const TRADE_WHITE = '#FFFFFF';
+const TRADE_NAVY = '#0F1E35';
+
 const SIZES = {
   small: {
     wordmark: { width: 118, height: 44 },
     mark: { width: 32, height: 32 },
+    font: 22, gap: 8,
   },
   medium: {
     wordmark: { width: 154, height: 58 },
     mark: { width: 44, height: 44 },
+    font: 28, gap: 9,
   },
   large: {
     wordmark: { width: 202, height: 76 },
     mark: { width: 58, height: 58 },
+    font: 36, gap: 11,
   },
 };
 
@@ -40,12 +50,14 @@ export function TrustTradeLogo({
   linkTo,
   clickable = false,
   dark = false,
+  tradeColor,
 }) {
   const normalizedSize = SIZES[size] ? size : LEGACY_SIZE_MAP[size] || 'medium';
-  const dimensions = showText ? SIZES[normalizedSize].wordmark : SIZES[normalizedSize].mark;
-  const src = dark
-    ? (showText ? TRUSTTRADE_LOGO_DARK_SRC : TRUSTTRADE_LOGO_MARK_DARK_SRC)
-    : (showText ? TRUSTTRADE_LOGO_SRC : TRUSTTRADE_LOGO_MARK_SRC);
+  const dim = SIZES[normalizedSize];
+  // Shield mark stays an image (blue shield); the wordmark is rendered as text so the
+  // "Trust" (blue) / "Trade" (white|navy) colours are exact on every background.
+  const markSrc = dark ? TRUSTTRADE_LOGO_MARK_DARK_SRC : TRUSTTRADE_LOGO_MARK_SRC;
+  const tradeC = tradeColor || (dark ? TRADE_WHITE : TRADE_NAVY);
 
   const logo = (
     <span
@@ -54,21 +66,37 @@ export function TrustTradeLogo({
       style={{
         display: 'inline-flex',
         alignItems: 'center',
+        gap: showText ? dim.gap : 0,
         flexShrink: 0,
         lineHeight: 0,
       }}
     >
       <img
-        src={src}
+        src={markSrc}
         alt="TrustTrade"
         style={{
-          width: dimensions.width,
-          height: dimensions.height,
-          maxWidth: '100%',
+          width: dim.mark.width,
+          height: dim.mark.height,
           objectFit: 'contain',
           display: 'block',
+          flexShrink: 0,
         }}
       />
+      {showText && (
+        <span
+          style={{
+            fontFamily: "'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+            fontWeight: 800,
+            fontSize: dim.font,
+            letterSpacing: '-0.02em',
+            lineHeight: 1,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <span style={{ color: TRUST_BLUE }}>Trust</span>
+          <span style={{ color: tradeC }}>Trade</span>
+        </span>
+      )}
     </span>
   );
 

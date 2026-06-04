@@ -23,6 +23,12 @@ function getSafeRedirect(search) {
   if (!destination || !destination.startsWith('/') || destination.startsWith('//') || destination.startsWith('/login') || destination.startsWith('/auth/callback')) {
     return '/dashboard';
   }
+  // The admin panel is never the default landing — ALL users (admins included) land
+  // on /dashboard and reach the admin panel via the nav link. So /admin (and any
+  // /admin/* deep link) is excluded from the post-login redirect.
+  if (destination === '/admin' || destination.startsWith('/admin/') || destination.startsWith('/admin?')) {
+    return '/dashboard';
+  }
   return destination;
 }
 

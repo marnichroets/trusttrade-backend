@@ -25,6 +25,12 @@ function consumeAuthRedirect() {
   localStorage.removeItem('intendedRoute');
   sessionStorage.removeItem('pendingShareCode');
   sessionStorage.removeItem('redirectAfterLogin');
+
+  // The admin panel is never the default post-login landing — everyone (admins
+  // included) lands on /dashboard and opens the admin panel via the nav link.
+  if (destination === '/admin' || destination.startsWith('/admin/') || destination.startsWith('/admin?')) {
+    return '/dashboard';
+  }
   return destination;
 }
 

@@ -1017,16 +1017,26 @@ async def submit_feedback(request: Request, body: FeedbackRequest):
     if not message:
         raise HTTPException(status_code=400, detail="Please enter a message")
 
-    now = datetime.now(timezone.utc).isoformat()
-    await db.feedback.insert_one({
-        "user_id": user.user_id,
-        "name": user.name,
-        "email": user.email,
-        "message": message[:2000],
-        "page": (body.page or "")[:300],
-        "created_at": now,
-    })
+    logger.info(
+        f"[FEEDBACK] received from {user.email} (user_id={user.user_id}) "
+        f"page={body.page or '-'} length={len(message)} chars"
+    )
 
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        await db.feedback.insert_one({
+            "user_id": user.user_id,
+            "name": user.name,
+            "email": user.email,
+            "message": message[:2000],
+            "page": (body.page or "")[:300],
+            "created_at": now,
+        })
+        logger.info(f"[FEEDBACK] saved to db for {user.email}")
+    except Exception as e:
+        logger.error(f"[FEEDBACK] DB save failed for {user.email}: {e}")
+
+    email_sent = False
     try:
         import email_service
         safe = message[:2000].replace("<", "&lt;").replace(">", "&gt;")
@@ -1035,14 +1045,23 @@ async def submit_feedback(request: Request, body: FeedbackRequest):
             f"<p style='color:#64748b'>Page: {body.page or '—'} · {now}</p>"
             f"<p style='white-space:pre-wrap'>{safe}</p>"
         )
-        await email_service.send_email(
+        # send_email returns False (without raising) when Postmark is unconfigured or
+        # the recipient is rejected — capture it so a silent failure is visible in logs.
+        email_sent = await email_service.send_email(
             FEEDBACK_EMAIL, "TrustTrade Support",
             f"TrustTrade feedback from {user.email}", html, text_content=message[:2000],
         )
+        if email_sent:
+            logger.info(f"[FEEDBACK] email sent to {FEEDBACK_EMAIL} (from {user.email})")
+        else:
+            logger.error(
+                f"[FEEDBACK] email NOT sent to {FEEDBACK_EMAIL} — send_email returned False "
+                f"(check Postmark config / sender signature / recipient). Feedback is saved in db.feedback."
+            )
     except Exception as e:
-        logger.error(f"[FEEDBACK] email failed (saved to db anyway): {e}")
+        logger.error(f"[FEEDBACK] email send raised for {user.email}: {e}", exc_info=True)
 
-    return {"ok": True}
+    return {"ok": True, "email_sent": email_sent}
 
 
 @router.post("/transactions/{transaction_id}/review")

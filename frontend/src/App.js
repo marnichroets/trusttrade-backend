@@ -43,6 +43,7 @@ import EscrowPage from './pages/EscrowPage';
 import DisputesPage from './pages/DisputesPage';
 import RefundPage from './pages/RefundPage';
 import AboutPage from './pages/AboutPage';
+import DemoPage from './pages/DemoPage';
 import ResetPassword from './pages/ResetPassword';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
@@ -104,6 +105,7 @@ function AppRouter() {
       <Route path="/disputes" element={<DisputesPage />} />
       <Route path="/refund" element={<RefundPage />} />
       <Route path="/about" element={<AboutPage />} />
+      <Route path="/demo" element={<DemoPage />} />
       <Route path="/t/:shareCode" element={<ShareTransaction />} />
       <Route path="/confirm/:token" element={<ConfirmReceipt />} />
       <Route path="/payment-success" element={<PaymentSuccess />} />

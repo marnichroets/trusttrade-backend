@@ -291,17 +291,30 @@ export default function AboutPage() {
             Start your first secure transaction
           </h2>
           <p style={{ fontSize: 16, color: C.muted, margin: '0 0 26px' }}>It takes 2 minutes.</p>
-          <Link
-            to="/login"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 9,
-              background: C.accent, color: '#fff', textDecoration: 'none',
-              fontSize: 15, fontWeight: 700, padding: '14px 28px', borderRadius: 11,
-              boxShadow: '0 10px 30px rgba(47,129,244,0.35)',
-            }}
-          >
-            Get Started Free <ArrowRight size={17} />
-          </Link>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
+            <Link
+              to="/login"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 9,
+                background: C.accent, color: '#fff', textDecoration: 'none',
+                fontSize: 15, fontWeight: 700, padding: '14px 28px', borderRadius: 11,
+                boxShadow: '0 10px 30px rgba(47,129,244,0.35)',
+              }}
+            >
+              Get Started Free <ArrowRight size={17} />
+            </Link>
+            <Link
+              to="/demo"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 9,
+                background: 'transparent', color: C.text, textDecoration: 'none',
+                fontSize: 15, fontWeight: 700, padding: '14px 28px', borderRadius: 11,
+                border: `1px solid ${C.border}`,
+              }}
+            >
+              Try the demo <ArrowRight size={17} />
+            </Link>
+          </div>
         </div>
       </section>
     </div>

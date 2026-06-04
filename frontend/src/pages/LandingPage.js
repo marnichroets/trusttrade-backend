@@ -344,6 +344,13 @@ function LandingPage() {
                   <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
                 </button>
                 <button
+                  onClick={() => navigate('/demo')}
+                  className="inline-flex min-h-[3.35rem] items-center justify-center gap-2 rounded-lg border border-white/14 bg-white/[0.055] px-7 text-base font-bold text-white backdrop-blur-2xl transition hover:-translate-y-0.5 hover:border-sky-300/50 hover:bg-sky-300/10 focus:outline-none focus:ring-2 focus:ring-sky-300/70"
+                  data-testid="hero-try-demo-btn"
+                >
+                  Try the demo
+                </button>
+                <button
                   onClick={scrollToHowItWorks}
                   className="inline-flex min-h-[3.35rem] items-center justify-center gap-2 rounded-lg border border-white/14 bg-white/[0.055] px-7 text-base font-bold text-white backdrop-blur-2xl transition hover:-translate-y-0.5 hover:border-sky-300/50 hover:bg-sky-300/10 focus:outline-none focus:ring-2 focus:ring-sky-300/70"
                   data-testid="hero-how-it-works-btn"

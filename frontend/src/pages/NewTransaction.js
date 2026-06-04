@@ -361,8 +361,6 @@ function NewTransaction() {
       ? `Maximum transaction amount is R${maximumTransactionAmount.toLocaleString('en-ZA')}.`
       : '';
 
-  const canProceedStep3 = photos.length >= 1;
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -422,10 +420,13 @@ function NewTransaction() {
       });
 
       const transactionId = transactionResponse.data.transaction_id;
+      // Photos are seller-only and optional — only attach them when some were added.
       const photoFilenames = photos.map(p => p.filename);
-      await api.patch(`/transactions/${transactionId}/photos`, photoFilenames, {
-        headers: { 'Content-Type': 'application/json' },
-      });
+      if (photoFilenames.length > 0) {
+        await api.patch(`/transactions/${transactionId}/photos`, photoFilenames, {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
 
       toast.success('Transaction created! Share the link with the other party.');
       navigate(`/transactions/${transactionId}`);
@@ -449,7 +450,22 @@ function NewTransaction() {
     );
   }
 
-  const STEPS = ['Parties', 'Item Details', 'Photos', 'Confirm'];
+  // Only sellers upload photos (buyers have nothing to photograph). The Photos step
+  // (internal step 3) is therefore skipped entirely for buyers. flowSteps lists the
+  // internal step numbers in order for the current role; the stepper and the
+  // Back/Next navigation are driven off it. Until a role is picked we show the full
+  // 4-step layout so it doesn't visually grow after selection.
+  const isSeller = role === 'seller';
+  const flowSteps = (!role || isSeller) ? [1, 2, 3, 4] : [1, 2, 4];
+  const stepLabels = (!role || isSeller)
+    ? ['Parties', 'Item Details', 'Photos', 'Confirm']
+    : ['Parties', 'Item Details', 'Confirm'];
+  const currentStepIndex = flowSteps.indexOf(step);
+  const goToNextStep = () => setStep(flowSteps[Math.min(currentStepIndex + 1, flowSteps.length - 1)]);
+  const goToPrevStep = () => {
+    if (currentStepIndex > 0) setStep(flowSteps[currentStepIndex - 1]);
+    else navigate('/dashboard');
+  };
 
   return (
     <DashboardLayout user={user}>
@@ -485,21 +501,21 @@ function NewTransaction() {
         <button
           type="button"
           style={S.btnGhost}
-          onClick={() => step > 1 ? setStep(step - 1) : navigate('/dashboard')}
+          onClick={goToPrevStep}
           data-testid="back-btn"
         >
           <ArrowLeft size={14} />
-          {step > 1 ? 'Back' : 'Dashboard'}
+          {currentStepIndex > 0 ? 'Back' : 'Dashboard'}
         </button>
 
         {/* Progress stepper */}
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
-          {STEPS.map((label, idx) => {
-            const num = idx + 1;
-            const done = step > num;
-            const active = step === num;
+          {stepLabels.map((label, idx) => {
+            const sNum = flowSteps[idx];
+            const done = currentStepIndex > idx;
+            const active = step === sNum;
             return (
-              <div key={label} style={{ display: 'flex', alignItems: 'center', flex: idx < STEPS.length - 1 ? 1 : 'none' }}>
+              <div key={label} style={{ display: 'flex', alignItems: 'center', flex: idx < stepLabels.length - 1 ? 1 : 'none' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                   <div style={{
                     width: 30, height: 30, borderRadius: '50%',
@@ -510,7 +526,7 @@ function NewTransaction() {
                     flexShrink: 0,
                     transition: 'all 0.2s',
                   }}>
-                    {done ? <CheckCircle size={14} /> : num}
+                    {done ? <CheckCircle size={14} /> : idx + 1}
                   </div>
                   <span style={{
                     fontSize: 12,
@@ -521,10 +537,10 @@ function NewTransaction() {
                     {label}
                   </span>
                 </div>
-                {idx < STEPS.length - 1 && (
+                {idx < stepLabels.length - 1 && (
                   <div style={{
                     flex: 1, height: 2, margin: '0 10px',
-                    background: step > num ? '#3FB950' : '#30363D',
+                    background: currentStepIndex > idx ? '#3FB950' : '#30363D',
                     transition: 'background 0.3s',
                     minWidth: 16,
                   }} />
@@ -1102,7 +1118,7 @@ function NewTransaction() {
               <button
                 type="button"
                 style={{ ...S.btnPrimary, opacity: canProceedStep2 ? 1 : 0.45, cursor: canProceedStep2 ? 'pointer' : 'not-allowed' }}
-                onClick={() => canProceedStep2 && setStep(3)}
+                onClick={() => canProceedStep2 && goToNextStep()}
                 disabled={!canProceedStep2}
               >
                 Continue <ArrowRight size={15} />
@@ -1110,8 +1126,8 @@ function NewTransaction() {
             </div>
           )}
 
-          {/* â"€â"€ Step 3: Photos â"€â"€ */}
-          {step === 3 && (
+          {/* â"€â"€ Step 3: Photos (sellers only — buyers have nothing to photograph) â"€â"€ */}
+          {step === 3 && isSeller && (
             <div>
               <div style={S.card}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
@@ -1119,30 +1135,29 @@ function NewTransaction() {
                     <Camera size={16} color="#2F81F4" />
                   </div>
                   <div>
-                    <h2 style={{ fontSize: 17, fontWeight: 700, color: '#E6EDF3', margin: 0 }}>Add Photos</h2>
+                    <h2 style={{ fontSize: 17, fontWeight: 700, color: '#E6EDF3', margin: 0 }}>Add Photos <span style={{ fontSize: 13, fontWeight: 500, color: '#8B949E' }}>(optional)</span></h2>
                     <p style={{ fontSize: 12, color: '#8B949E', margin: 0 }}>Good photos build trust and prevent disputes</p>
                   </div>
                 </div>
 
                 <div style={{
-                  background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.30)',
+                  background: 'rgba(59,130,246,0.14)', border: '1px solid rgba(59,130,246,0.30)',
                   borderRadius: 10, padding: '10px 14px', marginBottom: 16, marginTop: 14,
                 }}>
-                  <p style={{ fontSize: 12, color: '#FBBF24', margin: 0 }}>
-                    Upload <strong>1–5 clear photos</strong>. Include all angles and any defects.
+                  <p style={{ fontSize: 12, color: '#60A5FA', margin: 0 }}>
+                    Add up to <strong>5 clear photos</strong> of the item (all angles and any defects). This is optional — you can skip it and continue.
                   </p>
                 </div>
 
-                <PhotoUploader photos={photos} setPhotos={setPhotos} minPhotos={1} maxPhotos={5} required={true} />
+                <PhotoUploader photos={photos} setPhotos={setPhotos} minPhotos={0} maxPhotos={5} required={false} />
               </div>
 
               <button
                 type="button"
-                style={{ ...S.btnPrimary, opacity: canProceedStep3 ? 1 : 0.45, cursor: canProceedStep3 ? 'pointer' : 'not-allowed' }}
-                onClick={() => canProceedStep3 && setStep(4)}
-                disabled={!canProceedStep3}
+                style={S.btnPrimary}
+                onClick={() => goToNextStep()}
               >
-                Continue <ArrowRight size={15} />
+                {photos.length > 0 ? 'Continue' : 'Skip & Continue'} <ArrowRight size={15} />
               </button>
             </div>
           )}
@@ -1183,7 +1198,7 @@ function NewTransaction() {
                     { label: 'Seller TrustTrade Fee', value: `R ${sellerFeeContrib.toFixed(2)}`, mono: true },
                     { label: 'Buyer Pays Total', value: `R ${buyerPaysTotal.toFixed(2)}`, mono: true, accent: '#60A5FA' },
                     { label: 'Seller Receives', value: `R ${sellerPayout.toFixed(2)}`, mono: true, accent: '#3FB950' },
-                    { label: 'Photos', value: `${photos.length} uploaded` },
+                    ...(isSeller ? [{ label: 'Photos', value: photos.length > 0 ? `${photos.length} uploaded` : 'None (optional)' }] : []),
                     { label: 'Delivery', value: formData.delivery_method.replace('_', ' ') },
                   ].map((row, i, arr) => (
                     <div key={row.label} style={{

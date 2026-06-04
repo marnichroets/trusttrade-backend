@@ -280,6 +280,14 @@ function LandingPage() {
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
           <TrustTradeLogo size="small" showText dark />
           <div className="flex items-center gap-3">
+            <a
+              href="/about"
+              style={{ color: MUTED }}
+              className="hidden sm:inline-block rounded-lg px-4 py-2 text-sm font-semibold transition hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-300/70"
+              data-testid="nav-about-link"
+            >
+              About
+            </a>
             <button
               onClick={handleGetStarted}
               style={{ color: MUTED }}
@@ -991,6 +999,7 @@ function Footer({ scrollToHowItWorks }) {
               </li>
               <li><a href="/escrow" style={{ color: MUTED }} className="transition-colors hover:text-white">Payment Protection</a></li>
               <li><a href="/disputes" style={{ color: MUTED }} className="transition-colors hover:text-white">Dispute Resolution</a></li>
+              <li><a href="/about" style={{ color: MUTED }} className="transition-colors hover:text-white">About Us</a></li>
             </ul>
           </div>
 

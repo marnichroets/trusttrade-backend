@@ -529,7 +529,19 @@ async def send_phone_otp(request: Request, data: PhoneOtpRequest):
     if len(phone) < 9:
         await log_otp_request(db, user.user_id, phone, client_ip, "send", False, "invalid_phone_format")
         raise HTTPException(status_code=400, detail="Invalid phone number format")
-    
+
+    # Phone uniqueness — a number already verified on another account can't be
+    # attached to a second one. Match common stored formats to be robust.
+    phone_variants = [f"+27{phone}", f"27{phone}", f"0{phone}", phone]
+    existing_phone_user = await db.users.find_one({
+        "phone": {"$in": phone_variants},
+        "phone_verified": True,
+        "user_id": {"$ne": user.user_id},
+    })
+    if existing_phone_user:
+        await log_otp_request(db, user.user_id, phone, client_ip, "send", False, "phone_already_registered")
+        raise HTTPException(status_code=400, detail="This phone number is already registered. Please log in instead.")
+
     # Validate phone against expected masked format (if provided in request)
     expected_masked = getattr(data, 'expected_phone_masked', None)
     if expected_masked and not phone_matches_masked(phone, expected_masked):
@@ -696,6 +708,17 @@ async def verify_phone_otp_legacy(request: Request, data: PhoneOtpVerify):
     
     await log_otp_request(db, user.user_id, phone, client_ip, "verify", True, "verified")
     
+    # Phone uniqueness (defense, in case the number was claimed between send & verify):
+    # never attach a number already verified on another account.
+    phone_variants = [f"+27{phone}", f"27{phone}", f"0{phone}", phone]
+    existing_phone_user = await db.users.find_one({
+        "phone": {"$in": phone_variants},
+        "phone_verified": True,
+        "user_id": {"$ne": user.user_id},
+    })
+    if existing_phone_user:
+        raise HTTPException(status_code=400, detail="This phone number is already registered. Please log in instead.")
+
     # Check if all verification steps are complete
     user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
     verification = user_doc.get("verification", {})

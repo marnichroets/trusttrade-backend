@@ -2185,6 +2185,30 @@ function TransactionDetail() {
               );
             })()}
 
+            {/* Seller — digital/instant release: funds secured, nothing for the seller
+                to do. Clearly reassure them and tell them when auto-release happens. */}
+            {isSeller && isInstantFlow && fundsSecured && !isFinalized && !deliveryConfirmedLocally && (() => {
+              const autoReleaseDate = transaction.auto_release_at
+                ? new Date(transaction.auto_release_at).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })
+                : null;
+              return (
+                <div style={{ ...S.actionCard('#3FB950', 'rgba(16,185,129,0.14)'), padding: '20px 20px' }}>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(16,185,129,0.30)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Shield size={18} color="#34D399" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 15, fontWeight: 700, color: '#6EE7B7', margin: '0 0 6px' }}>Your payment is secured!</p>
+                      <p style={{ fontSize: 13, color: '#34D399', margin: '0 0 8px', lineHeight: 1.6 }}>
+                        The buyer will confirm receipt{autoReleaseDate ? <> or funds auto-release on <strong>{autoReleaseDate}</strong></> : ' or funds auto-release after the inspection window'}. You'll receive an SMS and email when your payout is processed.
+                      </p>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: '#6EE7B7', margin: 0 }}>No action needed from you.</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Seller transaction complete success screen */}
             {isSeller && (isFinalized || deliveryConfirmedLocally) && (() => {
               const sellerAmount = sellerReceivesAmount;

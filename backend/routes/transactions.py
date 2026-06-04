@@ -534,8 +534,42 @@ async def create_transaction(request: Request, transaction_data: TransactionCrea
                 detail=f"Please enter a valid email address or South African phone number for the {'seller' if transaction_data.creator_role == 'buyer' else 'buyer'}."
             )
     
+    # Auto-link the counterparty to an existing account when the invite phone number
+    # matches a registered, phone-verified user — so they see the transaction on their
+    # dashboard immediately (no re-verification) and get email notifications too.
+    if recipient_type == "phone" and recipient_phone:
+        local9 = ''.join(c for c in recipient_info if c.isdigit())
+        if local9.startswith("27"):
+            local9 = local9[2:]
+        elif local9.startswith("0"):
+            local9 = local9[1:]
+        if local9:
+            phone_variants = [f"+27{local9}", f"27{local9}", f"0{local9}", local9]
+            matched_user = await db.users.find_one(
+                {"phone": {"$in": phone_variants}, "phone_verified": True}, {"_id": 0}
+            )
+            if matched_user and matched_user.get("user_id") and matched_user["user_id"] != user.user_id:
+                matched_name = matched_user.get("name")
+                matched_email = normalize_email(matched_user["email"]) if matched_user.get("email") else ""
+                if transaction_data.creator_role == "buyer":
+                    seller_user_id = matched_user["user_id"]
+                    if not seller_name or seller_name == "Pending":
+                        seller_name = matched_name or seller_name
+                    if matched_email:
+                        seller_email = matched_email
+                else:
+                    buyer_user_id = matched_user["user_id"]
+                    if not buyer_name or buyer_name == "Pending":
+                        buyer_name = matched_name or buyer_name
+                    if matched_email:
+                        buyer_email = matched_email
+                logger.info(
+                    f"Auto-linked transaction recipient to existing user "
+                    f"{matched_user['user_id']} by phone match"
+                )
+
     logger.info(f"Transaction created by {user.email}: recipient={recipient_info}, type={recipient_type}")
-    
+
     # Initialize timeline
     timeline = [{
         "status": "Transaction Created",

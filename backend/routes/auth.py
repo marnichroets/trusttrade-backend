@@ -476,7 +476,7 @@ async def submit_phone_number(request: Request, data: PhoneSubmitRequest):
     })
     
     if existing_user:
-        raise HTTPException(status_code=400, detail="This number is already linked to another account")
+        raise HTTPException(status_code=400, detail="This phone number is already registered. Please log in instead.")
     
     # Check cooldown
     existing_otp = await db.phone_otps.find_one({"user_id": user.user_id})

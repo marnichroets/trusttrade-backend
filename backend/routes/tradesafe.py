@@ -1365,6 +1365,14 @@ async def accept_tradesafe_delivery(request: Request, transaction_id: str):
             f"[ACCEPT_DELIVERY] Funds-released notifications deferred txn={transaction_id} "
             f"state={ts_actual_state!r}"
         )
+        # Funds aren't in the seller token yet, but the buyer HAS confirmed receipt —
+        # tell the seller their payout is on the way (deduped per transaction).
+        try:
+            from routes.webhooks import notify_seller_buyer_confirmed
+            transaction["net_amount"] = net_amount
+            await notify_seller_buyer_confirmed(db, transaction)
+        except Exception as e:
+            logger.error(f"[ACCEPT_DELIVERY] buyer-confirmed notification EXCEPTION: {str(e)}")
 
     return {
         "status": "funds_released" if immediate_release else "delivery_confirmed",
@@ -1587,6 +1595,14 @@ async def manual_accept_delivery(request: Request, transaction_id: str):
             await notify_seller_funds_released(db, transaction)
         except Exception as e:
             logger.error(f"Failed to send funds released notifications: {e}")
+    else:
+        # Buyer confirmed receipt; payout deferred until TradeSafe releases funds.
+        try:
+            from routes.webhooks import notify_seller_buyer_confirmed
+            transaction["net_amount"] = net_amount
+            await notify_seller_buyer_confirmed(db, transaction)
+        except Exception as e:
+            logger.error(f"Failed to send buyer-confirmed notification: {e}")
 
     return {
         "status": "funds_released" if immediate_release else "delivery_confirmed",
@@ -1762,6 +1778,14 @@ async def release_instant_funds(request: Request, transaction_id: str):
             await notify_seller_funds_released(db, transaction)
         except Exception as e:
             logger.error(f"Failed to send instant-release notifications: {e}")
+    else:
+        # Buyer confirmed receipt; payout deferred until TradeSafe releases funds.
+        try:
+            from routes.webhooks import notify_seller_buyer_confirmed
+            transaction["net_amount"] = net_amount
+            await notify_seller_buyer_confirmed(db, transaction)
+        except Exception as e:
+            logger.error(f"Failed to send buyer-confirmed notification: {e}")
 
     return {
         "status": "funds_released" if immediate_release else "delivery_confirmed",

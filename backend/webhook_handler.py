@@ -30,6 +30,7 @@ class EmailEvent:
     PAYMENT_SECURED_SELLER = "payment_secured_seller"
     DELIVERY_STARTED_BUYER = "delivery_started_buyer"
     DELIVERY_STARTED_SELLER = "delivery_started_seller"
+    BUYER_CONFIRMED_RECEIPT_SELLER = "buyer_confirmed_receipt_seller"
     FUNDS_RELEASED_SELLER = "funds_released_seller"
     FUNDS_RELEASED_BUYER = "funds_released_buyer"
     DISPUTE_OPENED_BUYER = "dispute_opened_buyer"

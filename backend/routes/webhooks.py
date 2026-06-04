@@ -672,6 +672,55 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
     logger.info(f"[WITHDRAWAL] buyer+seller notified funds-released txn={txn_id}")
 
 
+async def notify_seller_buyer_confirmed(db, txn: dict) -> None:
+    """Email the seller that the buyer confirmed receipt and the payout is processing.
+
+    Fired at the moment the buyer confirms (release conditions met), which can
+    precede the actual bank payout by up to 2 business days. Deduped per
+    transaction so the seller gets exactly one 'buyer confirmed' email even
+    across the several confirm paths (app confirm, manual accept, instant
+    release). The later funds-released email is a separate, deduped event.
+    """
+    import email_service
+    from webhook_handler import EmailEvent, send_email_with_tracking
+
+    txn_id = txn.get("transaction_id") or txn.get("deal_id")
+    reference = txn.get("parent_deal_id") or txn.get("share_code") or txn_id
+    item_description = txn.get("item_description") or txn.get("title", "")
+
+    seller_email = txn.get("seller_email") or txn.get("freelancer_email") or ""
+    seller_name = txn.get("seller_name") or txn.get("freelancer_name") or "Seller"
+    buyer_name = txn.get("buyer_name") or txn.get("client_name") or "The buyer"
+
+    if not seller_email:
+        logger.warning(f"[BUYER_CONFIRMED] No seller email on txn={txn_id} — skipping notification")
+        return
+
+    # Net payout the seller will receive, plus their real bank name for the copy.
+    net_amount = float(txn.get("net_amount") or txn.get("seller_receives") or 0)
+    bank_name = ""
+    seller_user = await db.users.find_one(
+        {"email": seller_email}, {"banking_details": 1, "bank_name": 1}
+    )
+    if seller_user:
+        banking = seller_user.get("banking_details") or {}
+        bank_name = banking.get("bank_name") or seller_user.get("bank_name") or ""
+
+    await send_email_with_tracking(
+        db, txn_id, EmailEvent.BUYER_CONFIRMED_RECEIPT_SELLER,
+        seller_email,
+        email_service.send_buyer_confirmed_receipt_email,
+        to_email=seller_email,
+        to_name=seller_name,
+        buyer_name=buyer_name,
+        share_code=reference,
+        item_description=item_description,
+        net_amount=net_amount,
+        bank_name=bank_name,
+    )
+    logger.info(f"[BUYER_CONFIRMED] seller notified buyer-confirmed-receipt txn={txn_id}")
+
+
 @router.get("/webhook-test")
 async def webhook_test():
     return {"status": "ok"}

@@ -1090,6 +1090,80 @@ def get_funds_released_buyer_email(
     return subject, html_content
 
 
+def _format_rand_amount(value: float) -> str:
+    """Format a Rand amount, dropping the decimals when it's a whole number.
+
+    e.g. 500.0 -> 'R500', 1500.0 -> 'R1,500', 499.5 -> 'R499.50'.
+    """
+    v = round(float(value or 0), 2)
+    if abs(v - round(v)) < 0.005:
+        return f"R{v:,.0f}"
+    return f"R{v:,.2f}"
+
+
+def format_payout_arrival_short(released_at: Optional[datetime] = None) -> str:
+    """Arrival date in the form 'Tuesday 09 Jun 2026' (zero-padded day, short month).
+
+    Built without strftime('%-d') so it behaves identically on Windows and Linux.
+    """
+    dt = estimated_payout_arrival(released_at)
+    return f"{dt.strftime('%A')} {dt.strftime('%d %b %Y')}"
+
+
+def get_buyer_confirmed_receipt_email(
+    recipient_name: str,
+    buyer_name: str,
+    share_code: str,
+    item_description: str,
+    net_amount: float,
+    bank_name: Optional[str] = None,
+    released_at: Optional[datetime] = None,
+) -> tuple[str, str]:
+    """Seller email: the buyer has confirmed receipt and the payout is processing.
+
+    Sent at the moment the buyer confirms (release conditions met), before the
+    funds-released email that follows once TradeSafe completes the bank payout.
+    """
+
+    buyer = buyer_name or "The buyer"
+    amount_str = _format_rand_amount(net_amount)
+    arrival_date = format_payout_arrival_short(released_at)
+    bank_phrase = f"your {bank_name} account" if bank_name else "your bank account"
+
+    subject = f"{share_code} — {buyer} confirmed receipt, your payout is on the way"
+
+    intro_text = f"""<strong style="color: #10b981;">Good news! {buyer} has confirmed receipt of your item.</strong>
+
+    <p style="margin: 14px 0;">Your <strong>{amount_str}</strong> payout is being processed and will
+    arrive in <strong>{bank_phrase}</strong> by <strong>{arrival_date}</strong>.</p>
+
+    <p style="margin: 14px 0;">Bank transfers typically take up to 2 business days to reflect — there's
+    nothing more you need to do.</p>
+    """
+
+    details = {
+        "Reference": share_code,
+        "Item": item_description,
+        "You Receive": amount_str,
+        "Estimated Arrival": arrival_date,
+        "Status": "Payout processing",
+    }
+
+    html_content = get_base_email_template(
+        heading="Buyer confirmed receipt",
+        greeting_name=recipient_name,
+        intro_text=intro_text,
+        details=details,
+        cta_text="View Transaction",
+        cta_link=f"https://www.trusttradesa.co.za/t/{share_code}",
+        show_how_it_works=False,
+        status_badge="Payout processing",
+        status_color="#10b981",
+    )
+
+    return subject, html_content
+
+
 def get_dispute_opened_email(
     recipient_name: str,
     share_code: str,
@@ -1590,6 +1664,43 @@ async def send_delivery_confirmed_email(
         
         result = await send_email(to_email, to_name, subject, html)
         
+        logger.info(f"[TX_EMAIL] RESULT: {'SUCCESS' if result else 'FAILED'}")
+        return result
+    except Exception as e:
+        logger.error(f"[TX_EMAIL] EXCEPTION: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
+
+async def send_buyer_confirmed_receipt_email(
+    to_email: str,
+    to_name: str,
+    buyer_name: str,
+    share_code: str,
+    item_description: str,
+    net_amount: float,
+    bank_name: Optional[str] = None,
+) -> bool:
+    """Send the seller the 'buyer confirmed receipt — payout processing' email."""
+    logger.info("=" * 60)
+    logger.info("[TX_EMAIL] === BUYER CONFIRMED RECEIPT EMAIL (SELLER) ===")
+    logger.info(f"[TX_EMAIL] Event: buyer_confirmed_receipt")
+    logger.info(f"[TX_EMAIL] Recipient: {to_email}")
+    logger.info(f"[TX_EMAIL] Name: {to_name}, Buyer: {buyer_name}")
+    logger.info(f"[TX_EMAIL] Share Code: {share_code}")
+    logger.info(f"[TX_EMAIL] Net: R{net_amount}, Bank: {bank_name or 'unknown'}")
+    logger.info("=" * 60)
+
+    try:
+        subject, html = get_buyer_confirmed_receipt_email(
+            to_name, buyer_name, share_code, item_description, net_amount, bank_name
+        )
+        logger.info(f"[TX_EMAIL] Subject: {subject}")
+        logger.info(f"[TX_EMAIL] Calling send_email()...")
+
+        result = await send_email(to_email, to_name, subject, html)
+
         logger.info(f"[TX_EMAIL] RESULT: {'SUCCESS' if result else 'FAILED'}")
         return result
     except Exception as e:

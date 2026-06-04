@@ -4,9 +4,10 @@ Handles admin dashboard, user management, monitoring, and system actions
 """
 
 import os
+import math
 import asyncio
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, date, timezone, timedelta
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel
@@ -38,6 +39,32 @@ async def _bg(coro):
         await coro
     except Exception as exc:
         logger.error(f"[ADMIN_BG] {exc}")
+
+
+def _json_safe(value):
+    """Recursively make a value safe to serialise as JSON.
+
+    Guards the admin detail response against documents that would otherwise crash
+    serialisation (and surface to the UI as a generic load failure / "not found"):
+      - NaN / Infinity floats  -> None  (invalid JSON tokens that break the client)
+      - datetime / date        -> ISO string
+      - bytes                  -> decoded string
+    Anything else is returned unchanged.
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, bytes):
+        try:
+            return value.decode("utf-8", errors="replace")
+        except Exception:
+            return str(value)
+    return value
 
 
 # ============ USER MANAGEMENT ============
@@ -289,48 +316,70 @@ async def list_all_transactions_admin(request: Request):
 
 @router.get("/transaction/{transaction_id}")
 async def get_admin_transaction_detail(request: Request, transaction_id: str):
-    """Get full transaction details for admin"""
+    """Get full transaction details for admin.
+
+    Hardened so it NEVER fails for a record that exists: it resolves the id against
+    transaction_id, deal_id, share_code or tradesafe_id; serialises defensively (so a
+    document with NaN/Infinity/datetime values can't crash the response); and never
+    lets a side lookup (buyer/seller enrichment) turn into a 500.
+    """
     db = get_database()
     await require_admin(request, db)
-    
+
+    # Resolve by any identifier the admin UI might link with — a transaction that
+    # shows in a list must always open, regardless of which id field that list used.
     transaction = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
     if not transaction:
+        transaction = await db.transactions.find_one(
+            {"$or": [
+                {"deal_id": transaction_id},
+                {"share_code": transaction_id},
+                {"tradesafe_id": transaction_id},
+            ]},
+            {"_id": 0},
+        )
+    if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    
+
     buyer = None
     seller = None
-    
-    if transaction.get("buyer_email"):
-        buyer_doc = await db.users.find_one({"email": transaction["buyer_email"]}, {"_id": 0})
-        if buyer_doc:
-            buyer = {
-                "user_id": buyer_doc.get("user_id"),
-                "name": buyer_doc.get("name"),
-                "email": buyer_doc.get("email"),
-                "phone": buyer_doc.get("phone"),
-                "verified": buyer_doc.get("verified"),
-                "trust_score": buyer_doc.get("trust_score", 50),
-                "banking_details_added": buyer_doc.get("banking_details_added", False)
-            }
-    
-    if transaction.get("seller_email"):
-        seller_doc = await db.users.find_one({"email": transaction["seller_email"]}, {"_id": 0})
-        if seller_doc:
-            seller = {
-                "user_id": seller_doc.get("user_id"),
-                "name": seller_doc.get("name"),
-                "email": seller_doc.get("email"),
-                "phone": seller_doc.get("phone"),
-                "verified": seller_doc.get("verified"),
-                "trust_score": seller_doc.get("trust_score", 50),
-                "banking_details_added": seller_doc.get("banking_details_added", False)
-            }
-    
-    return {
+
+    # Enrichment must never break the page — wrap it so a bad/missing user record
+    # can't escalate into a 500 that hides the transaction from the admin.
+    try:
+        if transaction.get("buyer_email"):
+            buyer_doc = await db.users.find_one({"email": transaction["buyer_email"]}, {"_id": 0})
+            if buyer_doc:
+                buyer = {
+                    "user_id": buyer_doc.get("user_id"),
+                    "name": buyer_doc.get("name"),
+                    "email": buyer_doc.get("email"),
+                    "phone": buyer_doc.get("phone"),
+                    "verified": buyer_doc.get("verified"),
+                    "trust_score": buyer_doc.get("trust_score", 50),
+                    "banking_details_added": buyer_doc.get("banking_details_added", False)
+                }
+
+        if transaction.get("seller_email"):
+            seller_doc = await db.users.find_one({"email": transaction["seller_email"]}, {"_id": 0})
+            if seller_doc:
+                seller = {
+                    "user_id": seller_doc.get("user_id"),
+                    "name": seller_doc.get("name"),
+                    "email": seller_doc.get("email"),
+                    "phone": seller_doc.get("phone"),
+                    "verified": seller_doc.get("verified"),
+                    "trust_score": seller_doc.get("trust_score", 50),
+                    "banking_details_added": seller_doc.get("banking_details_added", False)
+                }
+    except Exception as exc:
+        logger.error(f"[ADMIN] party enrichment failed for {transaction_id}: {exc}")
+
+    return _json_safe({
         "transaction": transaction,
         "buyer": buyer,
-        "seller": seller
-    }
+        "seller": seller,
+    })
 
 
 @router.post("/transactions/{transaction_id}/refund")

@@ -120,15 +120,23 @@ async def send_email(
         return False
 
 
-# Logo URL for emails — served from backend static files
+# Logo assets — served from backend static files
 EMAIL_LOGO_URL = "https://trusttrade-backend-production-3efa.up.railway.app/static/trusttrade-logo.png"
-# Render the wordmark as styled text so the colours are exact and always legible on
-# the dark navy email header: "Trust" blue (#2F81F4), "Trade" white (#FFFFFF).
-# (A baked PNG made "Trade" black/invisible on the dark header.)
+# Shield mark (blue shield, white check + lock) — hosted PNG so it renders in every
+# email client (SVG is unreliable in email). Sits next to the wordmark.
+EMAIL_LOGO_MARK_URL = "https://trusttrade-backend-production-3efa.up.railway.app/static/trusttrade-logo-mark-dark.png"
+# Header lockup: [shield] TrustTrade — same as the app navbar. The wordmark is styled
+# text so the colours are exact on the dark navy header: "Trust" blue (#2F81F4),
+# "Trade" white (#FFFFFF). vertical-align:middle keeps the shield and text aligned
+# across email clients.
 EMAIL_LOGO_HTML = (
-    '<div style="margin:0 auto 8px;font-size:24px;font-weight:700;letter-spacing:-0.3px;'
-    "line-height:1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;\">"
+    '<div style="margin:0 auto 8px;line-height:1;">'
+    f'<img src="{EMAIL_LOGO_MARK_URL}" width="26" height="26" alt="" '
+    'style="vertical-align:middle;display:inline-block;margin-right:8px;border:0;outline:none;">'
+    '<span style="vertical-align:middle;display:inline-block;font-size:24px;font-weight:700;'
+    "letter-spacing:-0.3px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;\">"
     '<span style="color:#2F81F4;">Trust</span><span style="color:#FFFFFF;">Trade</span>'
+    '</span>'
     '</div>'
 )
 

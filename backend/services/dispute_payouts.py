@@ -149,8 +149,9 @@ async def refund_transaction(
 
     from tradesafe_service import refund_allocation, request_token_withdrawal
 
-    # 1. Return the held escrow to the buyer's token via allocationRefund.
-    refund_res = await refund_allocation(allocation_id)
+    # 1. Return the held escrow to the buyer by cancelling the transaction (TradeSafe
+    #    has no allocationRefund; refund_allocation self-discovers the right mutation).
+    refund_res = await refund_allocation(allocation_id, tradesafe_id=txn.get("tradesafe_id"))
     if not refund_res.get("success"):
         error = refund_res.get("error") or "allocationRefund failed"
         logger.error(f"[DISPUTE_PAYOUT] refund {transaction_id} failed: {error}")

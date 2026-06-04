@@ -1589,48 +1589,91 @@ async def accept_delivery(
     return None
 
 
-async def refund_allocation(allocation_id: str) -> Dict[str, Any]:
+def _is_schema_error(message: str) -> bool:
+    """True when a GraphQL error means the mutation/field doesn't exist in the schema
+    (so nothing executed and it's safe to try the next candidate)."""
+    m = (message or "").lower()
+    return (
+        "cannot query field" in m
+        or "unknown field" in m
+        or "unknown argument" in m
+        or "did you mean" in m
+        or "isn't defined" in m
+        or "is not defined" in m
+        or "no such" in m
+    )
+
+
+async def refund_allocation(allocation_id: str, tradesafe_id: str = None) -> Dict[str, Any]:
     """
-    Refund an allocation back to the buyer (dispute resolved in the buyer's favour,
-    or admin refund). This is the escrow-correct way to return funds: TradeSafe moves
-    the held value back to the buyer's token (per the token's refund interval, WALLET),
-    from where it can be withdrawn to the buyer's bank.
+    Refund/cancel held escrow back to the buyer (dispute resolved in the buyer's
+    favour, or admin refund). The escrow-correct way to return funds is to cancel the
+    transaction, which releases the held value back to the buyer's token, from where
+    it can be withdrawn to their bank.
 
-    Returns {"success": bool, "state"|"error": ...}. NEVER raises — callers decide
-    how to surface failures. Single mutation only (no blind cascade) so a refund can
-    never be double-executed.
+    Returns {"success": bool, "state"|"error": ...}. NEVER raises.
 
-    NOTE: the mutation name `allocationRefund` comes from the codebase's existing
-    refund TODO; verify it against TradeSafe's schema in the sandbox. If it's wrong,
-    the surfaced error ("Cannot query field …") names the correct one to swap in.
+    TradeSafe's schema does NOT expose `allocationRefund` (it returns
+    "Cannot query field allocationRefund on type Mutation"). Because the exact name
+    can't be queried from here, we try the known candidates in priority order and
+    SKIP any the schema rejects — a schema-validation error means nothing executed,
+    so this can never double-refund. We stop at the first candidate that actually
+    runs (a success, or a real business error worth surfacing). The candidate that
+    worked is logged + returned as `mutation` so we can pin it later.
     """
-    logger.info(f"[REFUND] Calling allocationRefund — allocation_id={allocation_id!r}")
+    # (mutation field name, id value). transactionCancel refunds the whole escrow and
+    # is the most likely correct one; the allocation-level names follow the same
+    # pattern as allocationStartDelivery/AcceptDelivery/CompleteDelivery.
+    candidates = []
+    if tradesafe_id:
+        candidates.append(("transactionCancel", tradesafe_id))
+    candidates.extend([
+        ("allocationCancel", allocation_id),
+        ("allocationCancelDelivery", allocation_id),
+        ("allocationRefund", allocation_id),
+    ])
 
-    mutation = """
-    mutation allocationRefund($id: ID!) {
-        allocationRefund(id: $id) {
-            id
-            state
-        }
-    }
-    """
+    last_error = "No refund mutation succeeded"
+    for field, id_value in candidates:
+        if not id_value:
+            continue
+        mutation = f"mutation {field}($id: ID!) {{ {field}(id: $id) {{ id state }} }}"
+        logger.info(f"[REFUND] Trying {field} id={id_value!r}")
+        result = await execute_graphql(mutation, {"id": id_value})
+        logger.info(f"[REFUND] {field} raw response: {result}")
 
-    result = await execute_graphql(mutation, {"id": allocation_id})
-    logger.info(f"[REFUND] Raw TradeSafe response: {result}")
+        # execute_graphql returns None on a non-200 (some servers 400 a bad field) —
+        # treat as "try the next candidate" rather than a hard stop.
+        if result is None:
+            last_error = f"{field}: no response (possible schema rejection or API error)"
+            continue
 
-    if result and "errors" in result:
-        err = result["errors"][0].get("message", "unknown") if result["errors"] else "unknown"
-        debug = (result["errors"][0].get("extensions") or {}).get("debugMessage", "") if result["errors"] else ""
-        logger.error(f"[REFUND] TradeSafe error for allocation {allocation_id!r}: {err} | debug: {debug}")
-        return {"success": False, "error": f"{err}{(' — ' + debug) if debug else ''}"}
+        if "errors" in result and result["errors"]:
+            msg = result["errors"][0].get("message", "unknown")
+            debug = (result["errors"][0].get("extensions") or {}).get("debugMessage", "")
+            full = f"{msg}{(' — ' + debug) if debug else ''}"
+            if _is_schema_error(msg):
+                logger.warning(f"[REFUND] {field} not in schema — trying next candidate")
+                last_error = full
+                continue
+            # A real business error (e.g. wrong state) — surface it, don't keep trying.
+            logger.error(f"[REFUND] {field} failed for {id_value!r}: {full}")
+            return {"success": False, "error": full, "mutation": field}
 
-    if result and "allocationRefund" in result:
-        refund_result = result["allocationRefund"] or {}
-        logger.info(f"[REFUND] Success allocation={allocation_id!r} state={refund_result.get('state')!r}")
-        return {"success": True, "state": refund_result.get("state"), "allocation_id": allocation_id}
+        if field in result:
+            payload = result[field] or {}
+            logger.info(f"[REFUND] Success via {field} id={id_value!r} state={payload.get('state')!r}")
+            return {
+                "success": True,
+                "state": payload.get("state"),
+                "allocation_id": allocation_id,
+                "mutation": field,
+            }
 
-    logger.error(f"[REFUND] Unexpected response allocation={allocation_id!r}: {result}")
-    return {"success": False, "error": "Unexpected response from TradeSafe allocationRefund"}
+        last_error = f"{field}: unexpected response shape"
+
+    logger.error(f"[REFUND] All refund mutation candidates exhausted for allocation={allocation_id!r} / tradesafe_id={tradesafe_id!r}: {last_error}")
+    return {"success": False, "error": last_error}
 
 
 async def get_transaction_by_reference(reference: str) -> Optional[Dict[str, Any]]:

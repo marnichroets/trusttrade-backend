@@ -7,6 +7,7 @@ import { fieldText, getFlowCopy, getTransactionFlowType, resolveEscrowUiState } 
 import { buildUserActivityFeed } from '../utils/transactionActivity';
 import { getPayoutScheduleMessage } from '../utils/payoutSchedule';
 import { usePlatformConfig } from '../context/PlatformConfigContext';
+import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import {
   Activity,
@@ -205,8 +206,16 @@ function Dashboard() {
   });
   const [now, setNow] = useState(() => new Date());
   const { config: platformConfig } = usePlatformConfig();
+  const { needsOnboarding } = useAuth();
   const navigate = useNavigate();
   const reduceMotion = useReducedMotion();
+
+  // Guide brand-new users through setup (verify phone, add banking if selling).
+  // needsOnboarding is set from /auth/onboarding-status after login; the Onboarding
+  // page lets them "Skip for now" (which clears the flag), so this won't loop.
+  useEffect(() => {
+    if (needsOnboarding) navigate('/onboarding', { replace: true });
+  }, [needsOnboarding, navigate]);
 
   useEffect(() => {
     const updateNow = () => setNow(new Date());

@@ -197,6 +197,21 @@ async def login(data: LoginRequest, response: Response):
         logger.warning(f"[LOGIN] Invalid password for: {email}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    # Require a verified email before sign-in (matches the message shown at sign-up).
+    # Legacy accounts created before email verification (no flag) are treated as
+    # verified; Google sign-ups are already verified. Only blocks new email/password
+    # accounts that haven't clicked their verification link.
+    if user_doc.get("email_verified", True) is False:
+        logger.info(f"[LOGIN] blocked — email not verified: {email}")
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "EMAIL_NOT_VERIFIED",
+                "message": "Please verify your email before signing in. Check your inbox for the verification link.",
+                "email": email,
+            },
+        )
+
     # Transparently migrate legacy SHA-256 hashes to bcrypt on successful login
     stored = user_doc["password_hash"]
     if stored and ":" in stored and len(stored) < 120:

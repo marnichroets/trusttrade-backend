@@ -52,6 +52,8 @@ export default function LoginPage() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
   const [registrationDone, setRegistrationDone] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState(null);
+  const [resendingVerification, setResendingVerification] = useState(false);
 
   const [form, setForm] = useState({
     email: '',
@@ -146,11 +148,31 @@ export default function LoginPage() {
       clearStoredRedirect();
       navigate(destination, { replace: true });
     } catch (error) {
-      const detail = error.response?.data?.detail || 'Authentication failed';
-      setAuthError(detail);
-      toast.error(detail);
+      const detail = error.response?.data?.detail;
+      // Email not verified — offer a resend instead of a dead-end error.
+      if (detail && typeof detail === 'object' && detail.code === 'EMAIL_NOT_VERIFIED') {
+        setUnverifiedEmail(detail.email || form.email);
+        setAuthError(detail.message || 'Please verify your email before signing in.');
+        return;
+      }
+      const msg = (typeof detail === 'string' ? detail : detail?.message) || 'Authentication failed';
+      setAuthError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!unverifiedEmail) return;
+    setResendingVerification(true);
+    try {
+      await api.post('/auth/resend-verification', { email: unverifiedEmail });
+      toast.success('Verification email sent — please check your inbox.');
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Could not resend. Please try again.');
+    } finally {
+      setResendingVerification(false);
     }
   };
 
@@ -339,7 +361,7 @@ export default function LoginPage() {
                 <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-green-800">Account created!</p>
-                  <p className="text-xs text-green-700 mt-0.5">A verification link was sent to your inbox. Sign in now to get started.</p>
+                  <p className="text-xs text-green-700 mt-0.5">Click the verification link we emailed you, then sign in to get started.</p>
                 </div>
               </div>
             )}
@@ -348,7 +370,19 @@ export default function LoginPage() {
             {authError && (
               <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                <p className="text-sm text-red-700">{authError}</p>
+                <div className="flex-1">
+                  <p className="text-sm text-red-700">{authError}</p>
+                  {unverifiedEmail && (
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      disabled={resendingVerification}
+                      className="mt-2 text-sm font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-60"
+                    >
+                      {resendingVerification ? 'Sending…' : 'Resend verification email'}
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             

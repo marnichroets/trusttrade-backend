@@ -186,13 +186,13 @@ function getStatusConfig(state, userRole, transaction, payoutSchedule = {}) {
     READY_FOR_PAYMENT: {
       icon: CreditCard,
       title: 'Ready for Payment',
-      badge: 'Escrow Required',
+      badge: 'Payment Required',
       description: isSeller
-        ? 'Both parties confirmed. Waiting for the buyer to fund escrow.'
-        : 'Both parties confirmed. You can now fund escrow securely.',
+        ? 'Both parties confirmed. Waiting for the buyer to make payment.'
+        : 'Both parties confirmed. You can now make your secure payment.',
       nextAction: isSeller
         ? 'Share the transaction link with the buyer'
-        : 'Pay into escrow securely',
+        : 'Make your secure payment',
       escrowNotice: 'Once escrow is created, buyer can pay via EFT, Card, or Instant EFT.',
       bgColor: '#dbeafe',
       borderClass: 'border-blue-300',

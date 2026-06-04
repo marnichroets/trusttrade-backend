@@ -1146,30 +1146,23 @@ function TransactionDetail() {
   };
 
   const handleAcceptDelivery = async () => {
-    console.log('[CONFIRM_RECEIPT] clicked', { transactionId, tradesafe_state: transaction?.tradesafe_state, payment_status: transaction?.payment_status, delivery_confirmed: transaction?.delivery_confirmed, phone_verified: user?.phone_verified });
     if (!user?.phone_verified) {
-      console.warn('[CONFIRM_RECEIPT] blocked: phone not verified — redirecting to /verify/phone');
       toast.info(PHONE_VERIFICATION_PROMPT);
       navigate('/verify/phone');
       return;
     }
     const readiness = payoutReadiness?.payout_ready ? payoutReadiness : await checkPayoutReadiness();
-    console.log('[CONFIRM_RECEIPT] payout readiness', readiness);
     if (readiness && !readiness.payout_ready) {
       const issues = readiness.issues?.join(', ') || 'Unknown issue';
-      console.warn('[CONFIRM_RECEIPT] blocked: payout not ready', issues);
       toast.warning(issues);
       return;
     }
     if (!window.confirm(`Confirm you have received the item? This will release funds to the seller. ${payoutSchedule.copy} This action cannot be undone.`)) {
-      console.log('[CONFIRM_RECEIPT] cancelled at confirm dialog');
       return;
     }
     setAcceptingDelivery(true);
     try {
-      console.log('[CONFIRM_RECEIPT] POST /tradesafe/accept-delivery', transactionId);
-      const res = await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true });
-      console.log('[CONFIRM_RECEIPT] accept-delivery OK', res?.data);
+      await api.post(`${API}/tradesafe/accept-delivery/${transactionId}`, {}, { withCredentials: true });
       setDeliveryConfirmedLocally(true);
       setTransaction(prev => prev ? { ...prev, delivery_confirmed: true, tradesafe_state: 'FUNDS_RELEASED', payment_status: 'Payment processing' } : prev);
       toast.success(payoutSchedule.copy);
@@ -1410,7 +1403,6 @@ function TransactionDetail() {
   // ── Computed flags ──────────────────────────────────────────────────
   const isBuyer = user?.user_id === transaction.buyer_user_id || (user?.email && transaction.buyer_email && user.email.toLowerCase() === transaction.buyer_email.toLowerCase());
   const isSeller = user?.user_id === transaction.seller_user_id || (user?.email && transaction.seller_email && user.email.toLowerCase() === transaction.seller_email.toLowerCase());
-  console.log('Role Detection:', { userEmail: user?.email, userId: user?.user_id, buyerEmail: transaction.buyer_email, buyerUserId: transaction.buyer_user_id, sellerEmail: transaction.seller_email, sellerUserId: transaction.seller_user_id, isBuyer, isSeller });
 
   // True when the seller can already receive payouts — don't nag them to "add banking
   // details". Accept any reliable signal: the backend's validated payout flag, the
@@ -1454,7 +1446,6 @@ function TransactionDetail() {
   const canFundEscrowSetup = isActionable && isBuyer && bothConfirmed && !hasEscrow && transaction.item_price >= 100;
   const sellerWaitingForBuyerFunding = isActionable && isSeller && bothConfirmed && !hasEscrow;
   const canMakePayment = isActionable && hasEscrow && isBuyer && !isSeller && bothConfirmed && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
-  console.log('Payment Button Debug:', { hasEscrow, isBuyer, isSeller, escrowState, paymentStatus: transaction.payment_status, canMakePayment });
   const isAwaitingBuyerPayment = isActionable && hasEscrow && isSeller && !isBuyer && (escrowState === 'CREATED' || escrowState === 'PENDING' || transaction.payment_status === 'Awaiting Payment');
   const canStartDelivery = isActionable && !isInstantFlow && hasEscrow && isSeller &&
     ['FUNDS_RECEIVED', 'FUNDS_DEPOSITED'].includes(escrowState) && !transaction.delivery_confirmed;

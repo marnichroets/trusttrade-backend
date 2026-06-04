@@ -247,11 +247,11 @@ function ShareTransaction() {
                 className="px-8"
                 data-testid="sign-in-to-join-btn"
               >
-                Review and Pay into Escrow
+                Review &amp; Pay Securely
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
               <p className="text-sm text-slate-500">
-                Sign in with the invited email to open this transaction and fund escrow securely.
+                Sign in with the invited email to open this transaction and pay securely.
               </p>
             </div>
           )}

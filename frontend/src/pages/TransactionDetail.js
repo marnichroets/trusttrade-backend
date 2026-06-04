@@ -703,6 +703,10 @@ function TransactionDetail() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null);
   const [payConfirm, setPayConfirm] = useState(null);  // { link, total_value, processing_fee }
   const [paymentProcessing, setPaymentProcessing] = useState(false);
+  // True when a payment attempt finished without confirmation (cancelled at the
+  // gateway, or 30s elapsed with no clearance) — we drop back to the payment
+  // options and show a "please try again" hint instead of spinning forever.
+  const [paymentNotConfirmed, setPaymentNotConfirmed] = useState(false);
   const [needsPhoneVerification, setNeedsPhoneVerification] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -795,19 +799,20 @@ function TransactionDetail() {
     setPaymentProcessing(true);
   }, [transactionId]);
 
-  // Bug 2: while processing, actively poll TradeSafe every 10s for up to 5 minutes.
-  // Stop (and clear the flag) as soon as the payment is confirmed or the window elapses.
+  // While processing, actively poll TradeSafe every ~8s so the status flips as soon
+  // as funds clear. CRITICAL: never spin forever — after 30s with no confirmation we
+  // drop back to the payment options with a "please try again" message, so a buyer
+  // who cancelled at the gateway can immediately retry.
   useEffect(() => {
     if (!paymentProcessing) return;
     // If the transaction is already past awaiting payment, we're done.
     if (transaction && !isAwaitingPayment(transaction)) {
       setPaymentProcessing(false);
+      setPaymentNotConfirmed(false);
       localStorage.removeItem(`tt_payment_initiated_${transactionId}`);
       return;
     }
     let cancelled = false;
-    const startedAt = Date.now();
-    const MAX_MS = 5 * 60 * 1000;
     const poll = async () => {
       if (cancelled) return;
       try {
@@ -818,16 +823,15 @@ function TransactionDetail() {
       if (!cancelled) await fetchData();
     };
     poll();
-    const interval = setInterval(() => {
-      if (Date.now() - startedAt > MAX_MS) {
-        clearInterval(interval);
-        setPaymentProcessing(false);
-        localStorage.removeItem(`tt_payment_initiated_${transactionId}`);
-        return;
-      }
-      poll();
-    }, 10000);
-    return () => { cancelled = true; clearInterval(interval); };
+    const interval = setInterval(poll, 8000);
+    const timeout = setTimeout(() => {
+      if (cancelled) return;
+      clearInterval(interval);
+      setPaymentProcessing(false);
+      setPaymentNotConfirmed(true);
+      localStorage.removeItem(`tt_payment_initiated_${transactionId}`);
+    }, 30000);
+    return () => { cancelled = true; clearInterval(interval); clearTimeout(timeout); };
   }, [paymentProcessing, transaction?.tradesafe_id, transaction?.payment_status, transaction?.tradesafe_state, transactionId]);
 
   // Refresh immediately when user returns to tab after completing payment
@@ -1015,7 +1019,19 @@ function TransactionDetail() {
     try {
       const response = await api.post(`${API}/tradesafe/sync/${transactionId}`, {}, { withCredentials: true });
       if (response.data.state_changed) toast.success(`Status updated: ${response.data.new_payment_status}`); else toast.info('Status is up to date');
-      fetchData();
+      // Re-fetch the latest record and decide whether payment is confirmed yet.
+      const txnRes = await api.get(`${API}/transactions/${transactionId}`, { withCredentials: true });
+      setTransaction(txnRes.data);
+      // Still awaiting payment (e.g. the buyer cancelled at the gateway, state is
+      // still CREATED) → stop the processing spinner and show the payment options
+      // again so they can retry immediately.
+      if (isAwaitingPayment(txnRes.data)) {
+        setPaymentProcessing(false);
+        setPaymentNotConfirmed(true);
+        localStorage.removeItem(`tt_payment_initiated_${transactionId}`);
+      } else {
+        setPaymentNotConfirmed(false);
+      }
     } catch (error) { toast.error(parseErrorMessage(error) || 'Failed to sync status'); fetchData(); }
     finally { setSyncing(false); }
   };
@@ -1044,6 +1060,7 @@ function TransactionDetail() {
       return;
     }
     if (!selectedPaymentMethod) { toast.error('Please select a payment method first'); return; }
+    setPaymentNotConfirmed(false);
     setLoadingPaymentLink(true); toast.info('Loading payment page...');
     try {
       localStorage.setItem('lastPaymentTransactionRoute', `/transactions/${transactionId}`);
@@ -1074,6 +1091,7 @@ function TransactionDetail() {
     const pc = payConfirm;
     if (!pc) return;
     setPayConfirm(null);
+    setPaymentNotConfirmed(false);
     localStorage.setItem(`tt_payment_initiated_${transactionId}`, String(Date.now()));
     setPaymentProcessing(true);
     const w = window.open(pc.link, '_blank');
@@ -2019,9 +2037,16 @@ function TransactionDetail() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <p style={{ fontSize: 14, fontWeight: 600, color: '#60A5FA', margin: '0 0 4px' }}>Payment processing…</p>
-                    <p style={{ fontSize: 13, color: '#60A5FA', margin: '0 0 14px' }}>Your payment is being confirmed, this usually takes less than a minute.</p>
+                    <p style={{ fontSize: 13, color: '#60A5FA', margin: '0 0 14px' }}>Your payment is being confirmed, this usually takes less than a minute. If you cancelled, refresh to choose a payment method again.</p>
                     <button type="button" onClick={handleSyncStatus} disabled={syncing} data-testid="refresh-status-btn" className="action-btn" style={{ ...S.btn('#2F81F4'), opacity: syncing ? 0.6 : 1 }}>
                       {syncing ? <><Loader2 size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> Refreshing…</> : <><RefreshCw size={13} /> Refresh Status</>}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setPaymentProcessing(false); setPaymentNotConfirmed(true); localStorage.removeItem(`tt_payment_initiated_${transactionId}`); }}
+                      style={{ display: 'block', marginTop: 10, background: 'none', border: 'none', color: '#8B949E', fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                    >
+                      Cancelled payment? Choose a payment method again
                     </button>
                   </div>
                 </div>
@@ -2030,6 +2055,14 @@ function TransactionDetail() {
 
             {canMakePayment && !paymentProcessing && (
               <div style={{ ...S.card, padding: '22px 24px' }}>
+                {paymentNotConfirmed && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.30)', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
+                    <AlertTriangle size={16} color="#FBBF24" style={{ flexShrink: 0, marginTop: 1 }} />
+                    <p style={{ fontSize: 13, color: '#FBBF24', margin: 0, lineHeight: 1.5 }}>
+                      Payment not confirmed — please try again. Choose a payment method below to retry. Your money is only taken once payment completes.
+                    </p>
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: 'rgba(59,130,246,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <CreditCard size={18} color="#2F81F4" />

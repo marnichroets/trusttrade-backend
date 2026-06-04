@@ -728,7 +728,18 @@ function TransactionDetail() {
   const navigate = useNavigate();
   const { transactionId } = useParams();
 
-  useEffect(() => { fetchData(); }, [transactionId]);
+  useEffect(() => {
+    // Smart Deal records (SD-*) live in the Smart Deals view, not the regular
+    // escrow transaction page — redirect instead of calling /transactions/SD-*
+    // (which is not a normal transaction). Strip any -M{n} milestone-child suffix.
+    if (transactionId && transactionId.startsWith('SD-')) {
+      const parentDealId = transactionId.replace(/-M\d+$/, '');
+      navigate(`/smart-deals/${parentDealId}`, { replace: true });
+      return;
+    }
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactionId]);
 
   useEffect(() => {
     if (!transaction || !user) return;

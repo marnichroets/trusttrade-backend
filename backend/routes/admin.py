@@ -216,19 +216,74 @@ async def admin_update_verification(request: Request, user_id: str, status_data:
 
 # ============ TRANSACTION MANAGEMENT ============
 
+def _derive_smart_deal_statuses(txn: dict) -> tuple:
+    """Derive (payment_status, release_status) for a Smart Deal record from its
+    overall deal status and milestone progress.
+
+    Smart Deal parent records (SD-*) don't carry the per-transaction
+    payment_status / release_status fields a regular escrow does, so the admin list
+    rendered them as "Unknown". Map the deal lifecycle to friendly statuses:
+      all milestones released / deal complete → Completed / Released
+      any milestone funded or in flight       → In Progress / In Progress
+      disputed                                → In Progress / Disputed
+      not yet paid                            → Awaiting Payment / Not Released
+    Works for milestone parents (milestones[]), milestone children and single deals
+    (which only carry a top-level status).
+    """
+    status = (txn.get("status") or "").upper()
+    ms_statuses = [(m.get("status") or "").upper() for m in (txn.get("milestones") or [])]
+
+    completed = (
+        status in ("COMPLETE", "COMPLETED", "APPROVED", "RELEASED")
+        or (bool(ms_statuses) and all(s == "RELEASED" for s in ms_statuses))
+    )
+    disputed = status == "DISPUTED" or any(s == "DISPUTED" for s in ms_statuses)
+    # "In progress" = money is in escrow somewhere (a milestone funded/delivered, or
+    # the single deal funded). PAYMENT_PENDING means a payment link exists but funds
+    # haven't cleared yet, so it stays "Awaiting Payment".
+    in_progress = (
+        status in ("IN_PROGRESS", "FUNDED", "DELIVERED")
+        or any(s in ("FUNDED", "DELIVERED", "RELEASED") for s in ms_statuses)
+    )
+
+    if completed:
+        return "Completed", "Released"
+    if disputed:
+        return "In Progress", "Disputed"
+    if in_progress:
+        return "In Progress", "In Progress"
+    return "Awaiting Payment", "Not Released"
+
+
 @router.get("/transactions")
 async def list_all_transactions_admin(request: Request):
     """List all transactions"""
     db = get_database()
     await require_admin(request, db)
-    
+
     projection = {
         "_id": 0, "transaction_id": 1, "share_code": 1, "buyer_name": 1, "buyer_email": 1,
         "seller_name": 1, "seller_email": 1, "item_description": 1, "item_price": 1,
         "payment_status": 1, "release_status": 1, "transaction_state": 1, "tradesafe_state": 1,
-        "created_at": 1, "has_dispute": 1, "delivery_method": 1, "tradesafe_id": 1
+        "created_at": 1, "has_dispute": 1, "delivery_method": 1, "tradesafe_id": 1,
+        # Smart Deal fields needed to derive a meaningful status for SD-* records
+        "deal_type": 1, "deal_id": 1, "status": 1, "milestones.status": 1,
     }
     transactions = await db.transactions.find({}, projection).sort("created_at", -1).to_list(1000)
+
+    # Smart Deal records (deal_type DIGITAL_WORK* or an SD-* id) don't carry the
+    # regular escrow payment/release fields, so fill them in from deal progress.
+    for txn in transactions:
+        deal_type = txn.get("deal_type") or ""
+        ident = txn.get("transaction_id") or txn.get("deal_id") or ""
+        is_smart_deal = deal_type.startswith("DIGITAL_WORK") or str(ident).startswith("SD-")
+        if is_smart_deal:
+            payment_status, release_status = _derive_smart_deal_statuses(txn)
+            txn["payment_status"] = payment_status
+            txn["release_status"] = release_status
+        # strip the heavy milestones payload from the list response
+        txn.pop("milestones", None)
+
     return transactions
 
 

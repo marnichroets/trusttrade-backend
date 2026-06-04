@@ -826,10 +826,25 @@ async def get_transaction(request: Request, transaction_id: str):
         {"transaction_id": transaction_id},
         {"_id": 0}
     )
-    
+
     if not transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    
+
+    # Smart Deal records (SD-*) are not regular escrow transactions and don't carry
+    # the fields the Transaction model requires (e.g. item_price), so building
+    # Transaction(**transaction) raised a ValidationError → 500. Hand the client off
+    # to the Smart Deal view instead of trying to render it as a normal transaction.
+    deal_type = transaction.get("deal_type") or ""
+    if deal_type.startswith("DIGITAL_WORK") or str(transaction_id).startswith("SD-"):
+        deal_id = transaction.get("deal_id") or transaction_id
+        return {
+            "is_smart_deal": True,
+            "deal_type": deal_type or "DIGITAL_WORK",
+            "deal_id": deal_id,
+            "transaction_id": transaction_id,
+            "redirect": f"/smart-deals/{deal_id}",
+        }
+
     # Get user's verified phone for access check
     user_phone = getattr(user, 'phone', None)
     user_phone_verified = getattr(user, 'phone_verified', False)

@@ -70,7 +70,17 @@ function AdminTransactionDetail() {
   const [confirmModal, setConfirmModal] = useState({ open: false, action: '', title: '', message: '' });
 
   useEffect(() => {
+    // Smart Deal records (SD-*) are not regular escrow transactions — they live in
+    // the Smart Deals collection/view. Redirect to the Smart Deal detail page
+    // (stripping any -M{n} milestone-child suffix to the parent deal) instead of
+    // calling the transaction endpoint, which would 404 with "Transaction not found".
+    if (transactionId && transactionId.startsWith('SD-')) {
+      const parentDealId = transactionId.replace(/-M\d+$/, '');
+      navigate(`/smart-deals/${parentDealId}`, { replace: true });
+      return;
+    }
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transactionId]);
 
   const fetchData = async () => {

@@ -1472,6 +1472,88 @@ async def send_courier_booked_email(
         return False
 
 
+# Per-milestone copy for Courier Guy tracking updates. delivered text is role-aware
+# so the buyer is prompted to confirm receipt and the seller knows what's next.
+def _courier_milestone_content(milestone: str, share_code: str, waybill: str, tracking_url: str, role: str):
+    track_suffix = f" Track: {tracking_url}" if tracking_url else ""
+    if milestone == "collected":
+        return (
+            f"Parcel collected — {share_code}",
+            f"Your parcel has been collected by Courier Guy — waybill {waybill}.{track_suffix}",
+            "Collected", "#3b82f6",
+        )
+    if milestone == "in_transit":
+        return (
+            f"Your parcel is on its way — {share_code}",
+            "Your parcel is on its way!",
+            "In Transit", "#3b82f6",
+        )
+    if milestone == "out_for_delivery":
+        return (
+            f"Out for delivery today — {share_code}",
+            "Your parcel is out for delivery today!",
+            "Out for Delivery", "#f59e0b",
+        )
+    if milestone == "delivered":
+        if role == "buyer":
+            body = "Your parcel has been delivered! Please confirm receipt on TrustTrade to release payment to the seller."
+        else:
+            body = "Your parcel has been delivered to the buyer. They'll confirm receipt on TrustTrade to release your payment."
+        return (
+            f"Your parcel has been delivered — {share_code}",
+            body,
+            "Delivered", "#10b981",
+        )
+    return None
+
+
+async def send_courier_tracking_email(
+    to_email: str,
+    to_name: str,
+    share_code: str,
+    milestone: str,
+    waybill: str,
+    tracking_url: str,
+    role: str = "buyer",
+) -> bool:
+    """Send a Courier Guy tracking-milestone email (collected / in_transit /
+    out_for_delivery / delivered) to a buyer or seller."""
+    if not to_email:
+        return False
+    content = _courier_milestone_content(milestone, share_code, waybill, tracking_url, role)
+    if not content:
+        return False
+    subject, intro_text, badge, color = content
+
+    # On delivery, send the buyer to TrustTrade to confirm receipt; otherwise to tracking.
+    frontend_url = os.environ.get("FRONTEND_URL", "https://www.trusttradesa.co.za").rstrip("/")
+    if milestone == "delivered" and role == "buyer":
+        cta_text = "Confirm Receipt on TrustTrade"
+        cta_link = f"{frontend_url}/t/{share_code}"
+    else:
+        cta_text = "Track Your Shipment"
+        cta_link = tracking_url or f"{frontend_url}/t/{share_code}"
+
+    try:
+        html = get_base_email_template(
+            heading="Courier Update",
+            greeting_name=to_name or "there",
+            intro_text=intro_text,
+            details={"Reference": share_code, "Waybill": waybill or "—", "Status": badge},
+            cta_text=cta_text,
+            cta_link=cta_link,
+            show_how_it_works=False,
+            status_badge=badge,
+            status_color=color,
+        )
+        result = await send_email(to_email, to_name, subject, html)
+        logger.info(f"[TX_EMAIL] courier tracking email ({milestone}) to={to_email} role={role}: {'OK' if result else 'FAILED'}")
+        return result
+    except Exception as e:
+        logger.error(f"[TX_EMAIL] courier tracking email EXCEPTION ({milestone}) to={to_email}: {e}")
+        return False
+
+
 async def send_delivery_confirmed_email(
     to_email: str,
     to_name: str,

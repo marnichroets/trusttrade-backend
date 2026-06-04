@@ -677,6 +677,76 @@ async def webhook_test():
     return {"status": "ok"}
 
 
+@router.post("/shiplogic-webhook")
+@router.post("/courier-webhook")
+async def shiplogic_webhook(request: Request):
+    """Receive Courier Guy (ShipLogic) tracking webhooks and surface them in TrustTrade.
+
+    Handles all tracking event types — collected, in-transit, out-for-delivery and
+    delivered — by mapping them to a canonical milestone, updating the transaction
+    timeline, auto-dispatching the escrow on collection, and emailing both parties.
+    Always returns 200 so ShipLogic doesn't retry on our parse/state issues.
+    """
+    raw_body = await request.body()
+    logger.info("=" * 60)
+    logger.info("[SHIPLOGIC] ===== INCOMING POST /api/shiplogic-webhook =====")
+    logger.info(f"[SHIPLOGIC] Body: {raw_body.decode('utf-8', errors='replace')[:1500]}")
+
+    if not raw_body:
+        return {"ok": True}
+    try:
+        payload = json.loads(raw_body)
+    except Exception as exc:
+        logger.error(f"[SHIPLOGIC] JSON parse failed: {exc}")
+        return {"ok": True}
+
+    # ShipLogic payloads vary by account/event — pull identifiers and status defensively
+    # from the top level and any nested shipment/data object.
+    data = payload.get("data") or payload.get("shipment") or payload
+    waybill_candidates = [
+        payload.get("short_tracking_reference"), payload.get("tracking_reference"),
+        payload.get("waybill"), payload.get("id"), payload.get("shipment_id"),
+        data.get("short_tracking_reference"), data.get("tracking_reference"),
+        data.get("waybill"), data.get("id"), data.get("shipment_id"),
+    ]
+    waybill_candidates = [str(w) for w in waybill_candidates if w not in (None, "")]
+
+    status_values = [
+        payload.get("status"), payload.get("event"), payload.get("type"), payload.get("description"),
+        data.get("status"), data.get("event"), data.get("description"),
+        (data.get("tracking_event") or {}).get("status") if isinstance(data.get("tracking_event"), dict) else None,
+    ]
+
+    from services.courier_tracking import milestone_from_status, handle_tracking_event
+    milestone = milestone_from_status(*status_values)
+    logger.info(f"[SHIPLOGIC] waybill_candidates={waybill_candidates} status={status_values} → milestone={milestone}")
+
+    if not waybill_candidates:
+        logger.warning("[SHIPLOGIC] No waybill/tracking reference in payload — ignoring")
+        return {"ok": True, "action": "no_identifier"}
+    if not milestone:
+        logger.info("[SHIPLOGIC] Status not a tracked milestone — ignoring")
+        return {"ok": True, "action": "ignored", "reason": "not a tracked milestone"}
+
+    db = get_database()
+    # Match the transaction by any stored courier identifier.
+    transaction = await db.transactions.find_one({
+        "$or": [
+            {"courier_waybill": {"$in": waybill_candidates}},
+            {"courier_shipment_id": {"$in": waybill_candidates}},
+            {"courier_tracking_reference": {"$in": waybill_candidates}},
+        ]
+    }, {"_id": 0})
+
+    if not transaction:
+        logger.warning(f"[SHIPLOGIC] No matching transaction for {waybill_candidates} — ignoring")
+        return {"ok": True, "action": "no_match"}
+
+    result = await handle_tracking_event(db, transaction, milestone)
+    logger.info(f"[SHIPLOGIC] handled: {result}")
+    return {"ok": True, **result}
+
+
 @router.post("/tradesafe-webhook")
 async def tradesafe_webhook(request: Request):
     raw_body = await request.body()

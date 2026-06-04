@@ -7,48 +7,6 @@ export const TRUSTTRADE_LOGO_MARK_SRC = '/assets/trusttrade-logo-mark.png';
 export const TRUSTTRADE_LOGO_DARK_SRC = '/assets/trusttrade-logo-dark.png';
 export const TRUSTTRADE_LOGO_MARK_DARK_SRC = '/assets/trusttrade-logo-mark-dark.png';
 
-const SHIELD_BLUE = '#2F81F4';
-
-// The shield mark is rendered as an inline SVG (not a PNG) so the checkmark and lock
-// are guaranteed white (#FFFFFF) on EVERY background — the baked PNGs had dark icons
-// on some surfaces. Blue shield, white check, white padlock.
-function ShieldMark({ size }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 40 44"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ display: 'block', flexShrink: 0 }}
-      aria-hidden="true"
-    >
-      {/* Shield */}
-      <path
-        d="M20 2.5 L35 8 V20.5 C35 30 28.6 37 20 40.5 C11.4 37 5 30 5 20.5 V8 Z"
-        fill={SHIELD_BLUE}
-      />
-      {/* White checkmark (upper) */}
-      <path
-        d="M13.2 19.2 L18 24 L27.2 13.4"
-        stroke="#FFFFFF"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-      {/* Small white padlock (lower) */}
-      <path
-        d="M17.4 29.2 V27.4 a2.6 2.6 0 0 1 5.2 0 V29.2"
-        stroke="#FFFFFF"
-        strokeWidth="1.7"
-        fill="none"
-      />
-      <rect x="15.8" y="29" width="8.4" height="6.4" rx="1.4" fill="#FFFFFF" />
-    </svg>
-  );
-}
-
 // Brand colours for the wordmark text. "Trust" is always blue; "Trade" is white on
 // dark surfaces (sidebar / landing / emails — where black text was invisible) and
 // dark navy on light surfaces (login / admin / share) so it's always legible.
@@ -99,6 +57,9 @@ export function TrustTradeLogo({
 }) {
   const normalizedSize = SIZES[size] ? size : LEGACY_SIZE_MAP[size] || 'medium';
   const dim = SIZES[normalizedSize];
+  // Original PNG shield mark, untouched — light variant on light surfaces, dark
+  // variant on dark surfaces (exactly as before the logo changes).
+  const markSrc = dark ? TRUSTTRADE_LOGO_MARK_DARK_SRC : TRUSTTRADE_LOGO_MARK_SRC;
   const tradeC = tradeColor || (dark ? TRADE_WHITE : TRADE_NAVY);
 
   const logo = (
@@ -113,8 +74,17 @@ export function TrustTradeLogo({
         lineHeight: 0,
       }}
     >
-      {/* Inline SVG shield — white check + lock guaranteed on any background */}
-      <ShieldMark size={dim.mark.width} />
+      <img
+        src={markSrc}
+        alt="TrustTrade"
+        style={{
+          width: dim.mark.width,
+          height: dim.mark.height,
+          objectFit: 'contain',
+          display: 'block',
+          flexShrink: 0,
+        }}
+      />
       {showText && (
         <span
           style={{

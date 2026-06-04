@@ -93,8 +93,13 @@ const TRUST_BADGES = [
 
 export default function AboutPage() {
   return (
-    <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
+    <div className="about-page" style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
       <style>{`
+        /* The global stylesheet sets all h1–h6 to a dark colour, which is unreadable
+           on this dark page. Force every heading inside the About page to light text;
+           the muted section labels keep their own inline colour (inline beats this). */
+        .about-page h1, .about-page h2, .about-page h3,
+        .about-page h4, .about-page h5, .about-page h6 { color: ${C.text}; }
         .about-wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
         .about-mission-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
         .about-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }

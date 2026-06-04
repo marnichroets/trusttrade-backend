@@ -14,21 +14,24 @@ const TRUST_BLUE = '#2F81F4';
 const TRADE_WHITE = '#FFFFFF';
 const TRADE_NAVY = '#0F1E35';
 
+// Clean, neutral sans for the wordmark — renders consistently everywhere (and before
+// any web font loads), matching the original logo's weight/proportions.
+const WORDMARK_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+
+// Sizes tuned to match the ORIGINAL logo footprint: a compact shield mark + bold (700)
+// wordmark, sized so the lockup fits the navbar/sidebar/landing without looking oversized.
 const SIZES = {
   small: {
-    wordmark: { width: 118, height: 44 },
-    mark: { width: 32, height: 32 },
-    font: 22, gap: 8,
+    mark: { width: 26, height: 26 },
+    font: 17, gap: 7,
   },
   medium: {
-    wordmark: { width: 154, height: 58 },
-    mark: { width: 44, height: 44 },
-    font: 28, gap: 9,
+    mark: { width: 32, height: 32 },
+    font: 21, gap: 8,
   },
   large: {
-    wordmark: { width: 202, height: 76 },
-    mark: { width: 58, height: 58 },
-    font: 36, gap: 11,
+    mark: { width: 42, height: 42 },
+    font: 27, gap: 9,
   },
 };
 
@@ -54,9 +57,9 @@ export function TrustTradeLogo({
 }) {
   const normalizedSize = SIZES[size] ? size : LEGACY_SIZE_MAP[size] || 'medium';
   const dim = SIZES[normalizedSize];
-  // Shield mark stays an image (blue shield); the wordmark is rendered as text so the
-  // "Trust" (blue) / "Trade" (white|navy) colours are exact on every background.
-  const markSrc = dark ? TRUSTTRADE_LOGO_MARK_DARK_SRC : TRUSTTRADE_LOGO_MARK_SRC;
+  // Always use the mark whose checkmark + lock are WHITE on the blue shield, so the
+  // shield reads correctly on every background (dark and light).
+  const markSrc = TRUSTTRADE_LOGO_MARK_DARK_SRC;
   const tradeC = tradeColor || (dark ? TRADE_WHITE : TRADE_NAVY);
 
   const logo = (
@@ -85,10 +88,10 @@ export function TrustTradeLogo({
       {showText && (
         <span
           style={{
-            fontFamily: "'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-            fontWeight: 800,
+            fontFamily: WORDMARK_FONT,
+            fontWeight: 700,
             fontSize: dim.font,
-            letterSpacing: '-0.02em',
+            letterSpacing: '-0.01em',
             lineHeight: 1,
             whiteSpace: 'nowrap',
           }}

@@ -2076,8 +2076,8 @@ function TransactionDetail() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                   {[
                     { id: 'eft', emoji: '🏦', label: 'EFT Bank Transfer', desc: 'Direct bank transfer', badge: 'Recommended', badgeColor: '#3FB950', feeNote: 'No extra bank fee' },
-                    { id: 'card', emoji: '💳', label: 'Credit / Debit Card', desc: 'Pay instantly with Visa or Mastercard', feeNote: '+2.5% bank processing fee' },
-                    { id: 'ozow', emoji: '⚡', label: 'Ozow Instant EFT', desc: 'Fast instant payment from your bank app', feeNote: '+1.7% bank processing fee' },
+                    { id: 'card', emoji: '💳', label: 'Credit / Debit Card', desc: 'Pay instantly with Visa or Mastercard', feeNote: '~3.85% bank processing fee' },
+                    { id: 'ozow', emoji: '⚡', label: 'Ozow Instant EFT', desc: 'Fast instant payment from your bank app', feeNote: '~1.7% bank processing fee' },
                   ].map(pm => {
                     return (
                     <div key={pm.id} onClick={() => setSelectedPaymentMethod(pm.id)} data-testid={`payment-method-${pm.id}`} className={`pm-opt${selectedPaymentMethod === pm.id ? ' selected' : ''}`} style={{ border: `1.5px solid ${selectedPaymentMethod === pm.id ? '#2F81F4' : '#30363D'}`, borderRadius: 12, padding: '14px 16px', cursor: 'pointer', transition: 'all 0.15s', background: selectedPaymentMethod === pm.id ? 'rgba(59,130,246,0.14)' : '#0D1117' }}>
@@ -2104,11 +2104,18 @@ function TransactionDetail() {
                     selected method with the ESTIMATED bank fee; the exact amount is confirmed
                     from TradeSafe in the modal right before paying. */}
                 {(() => {
-                  // Estimated bank processing fee per method (exact is confirmed at pay).
-                  const PM_FEE_PCT = { eft: 0, card: 2.5, ozow: 1.7 };
+                  // TradeSafe deducts the processing fee from the GROSS amount the buyer
+                  // pays (net into escrow = gross × (1 − rate) must equal our base), so the
+                  // total is grossed up — total = base / (1 − rate) — NOT base × (1 + rate).
+                  // These rates are the buyer-side processing rates per method; the EXACT
+                  // figure is always pulled from TradeSafe and confirmed in the pay modal.
+                  const PM_FEE_PCT = { eft: 0, card: 3.85, ozow: 1.7 };
                   const feePct = selectedPaymentMethod ? (PM_FEE_PCT[selectedPaymentMethod] ?? 0) : 0;
-                  const estFee = Math.round(totalSecurePayment * (feePct / 100) * 100) / 100;
-                  const estTotal = Math.round((totalSecurePayment + estFee) * 100) / 100;
+                  const r = feePct / 100;
+                  const estTotal = r > 0
+                    ? Math.round((totalSecurePayment / (1 - r)) * 100) / 100
+                    : totalSecurePayment;
+                  const estFee = Math.round((estTotal - totalSecurePayment) * 100) / 100;
                   return (
                     <div style={{ background: '#0D1117', border: '1px solid #30363D', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
                       <p style={{ ...S.label, marginBottom: 12 }}>Payment Breakdown</p>

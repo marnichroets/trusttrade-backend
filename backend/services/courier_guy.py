@@ -223,62 +223,65 @@ async def book_shipment(
     """
     is_dropoff = (collection_preference or "").lower() == "dropoff"
 
-    # ShipLogic books against the service_level id (an int like 212572), not the code.
-    # New transactions persist courier_service_level_id; for older ones we resolve it.
-    #
-    # IMPORTANT: try the known code→id map BEFORE re-quoting. Re-quoting the original
-    # route can 500 ("cannot get rates") when the originally selected service is no
-    # longer available — and we must not let that crash the booking. Checking the map
-    # first means a known code (LSF/LOF/ECO/LSE/LSX) never even needs the re-quote.
-    if service_level_id is None and quote_id:
-        mapped = SERVICE_LEVEL_CODE_TO_ID.get(str(quote_id).strip().upper())
-        if mapped is not None:
-            service_level_id = mapped
-            logger.info(
-                f"[COURIER] Resolved service_level_id={service_level_id} "
-                f"from known map for code={quote_id!r}"
-            )
+    # ShipLogic books against the numeric service_level id, but those ids DIFFER
+    # between the sandbox and live accounts. A service_level_id captured at quote
+    # time (often during sandbox testing, e.g. 221252) is therefore invalid on the
+    # live account and the booking fails with "cannot get rates: no service level
+    # specified". The service-level CODE (ECO, LOF, LSF, ...) IS stable across
+    # accounts, so we ALWAYS resolve a FRESH live id here by re-quoting the
+    # transaction's own addresses + parcel and matching the stored code — we never
+    # trust the stored id. The stored id and the known code→id map are only used as
+    # last-resort fallbacks if the live re-quote itself can't resolve an id.
+    stored_service_level_id = service_level_id
+    code = str(quote_id).strip() if quote_id else ""
+    resolved_id = None
 
-    # Only codes NOT in the known map require a live re-quote to discover their id.
-    if service_level_id is None and quote_id:
+    if code:
         rates = []
         try:
             rates = await get_quote(pickup["address"], delivery["address"], parcel)
         except Exception as exc:
-            # Re-quote failed (e.g. ShipLogic 500) — swallow and fall through; the
-            # raise below gives a clear, actionable error if nothing else resolves.
-            logger.error(f"[COURIER] re-quote for service_level_id failed (code={quote_id!r}): {exc}")
+            # Re-quote failed (e.g. ShipLogic 500) — fall through to the fallbacks.
+            logger.error(f"[COURIER] live re-quote for service_level id failed (code={code!r}): {exc}")
 
         available = [
             ((r.get("service_level") or {}).get("code"), (r.get("service_level") or {}).get("id"))
             for r in rates
         ]
-        logger.warning(
-            f"[COURIER] re-quote fallback — stored code={quote_id!r} "
-            f"available_service_levels={available}"
-        )
+        if available:
+            logger.info(f"[COURIER] live rates for booking code={code!r}: available_service_levels={available}")
 
-        want = str(quote_id).strip().lower()
-        for code, sid in available:
-            if sid is not None and str(code).strip().lower() == want:
-                service_level_id = sid
+        want = code.lower()
+        for c, sid in available:
+            if sid is not None and str(c).strip().lower() == want:
+                resolved_id = sid
+                logger.info(f"[COURIER] Using FRESH live service_level_id={resolved_id} for code={code!r}")
                 break
 
-        # If unresolved but only one live option exists, use it rather than failing.
-        if service_level_id is None and len(available) == 1 and available[0][1] is not None:
-            service_level_id = available[0][1]
-            logger.warning(
-                f"[COURIER] stored code {quote_id!r} not in current rates; "
-                f"using sole available rate id={service_level_id}"
-            )
+        # Exact code not offered on this route but exactly one live option exists — use it.
+        if resolved_id is None and len(available) == 1 and available[0][1] is not None:
+            resolved_id = available[0][1]
+            logger.warning(f"[COURIER] code {code!r} not in live rates; using sole available id={resolved_id}")
 
-        if service_level_id is None:
-            raise RuntimeError(
-                f"Could not resolve a ShipLogic service_level id for stored code "
-                f"{quote_id!r}. Available now: {available or 'none (re-quote returned no rates)'}. "
-                f"Re-select a delivery option or set courier_service_level_id on the transaction."
-            )
-        logger.info(f"[COURIER] Resolved service_level_id={service_level_id!r} from code={quote_id!r}")
+    # Fallbacks — only when the live re-quote couldn't resolve a fresh id.
+    if resolved_id is None and code:
+        mapped = SERVICE_LEVEL_CODE_TO_ID.get(code.upper())
+        if mapped is not None:
+            resolved_id = mapped
+            logger.warning(f"[COURIER] live re-quote unresolved — falling back to known code→id map: {code!r} -> {resolved_id}")
+
+    if resolved_id is None and stored_service_level_id is not None:
+        resolved_id = stored_service_level_id
+        logger.warning(f"[COURIER] live re-quote + map unresolved — falling back to stored service_level_id={resolved_id} (may be stale)")
+
+    service_level_id = resolved_id
+
+    if service_level_id is None:
+        raise RuntimeError(
+            f"Could not resolve a live ShipLogic service_level id for code {quote_id!r}. "
+            f"The live account returned no matching rates for this route. "
+            f"Re-select a delivery option or check the live ShipLogic services."
+        )
 
     parcel_payload = {
         "submitted_length_cm": parcel.get("submitted_length_cm", 10),

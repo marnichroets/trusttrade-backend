@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, User, Mail, Phone, CreditCard, Calendar, Clock,
   Shield, CheckCircle, XCircle, FileText, Download, DollarSign,
-  AlertTriangle, Loader2, Image as ImageIcon, Ban, Truck
+  AlertTriangle, Loader2, Image as ImageIcon, Ban, Truck, RefreshCw
 } from 'lucide-react';
 
 const BACKEND_URL = API_URL.replace('/api', '');
@@ -150,6 +150,26 @@ function AdminTransactionDetail() {
       await fetchData();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Verification failed', { duration: 8000 });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Release a stuck courier-booking claim so booking can be retried. Used when a
+  // previous attempt failed (no waybill) and the transaction is being skipped with
+  // "booking already claimed/done".
+  const resetCourierBooking = async () => {
+    setActionLoading(true);
+    try {
+      const res = await api.post(`/admin/transactions/${transactionId}/reset-courier-booking`, {});
+      if (res.data?.reset) {
+        toast.success('Courier booking claim reset — you can book again now', { duration: 7000 });
+      } else {
+        toast(res.data?.reason === 'already booked' ? 'Already booked — nothing to reset' : 'Nothing to reset', { duration: 6000 });
+      }
+      await fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Reset failed', { duration: 7000 });
     } finally {
       setActionLoading(false);
     }
@@ -965,6 +985,22 @@ function AdminTransactionDetail() {
                         <Truck className="w-4 h-4 mr-2" />
                         Book Courier
                       </Button>
+
+                      {/* Only shown when a previous booking attempt failed/stuck (no
+                          waybill yet): releases the atomic claim so booking can retry. */}
+                      {(transaction.courier_booking_error || transaction.courier_booking_in_progress) && (
+                        <Button
+                          onClick={resetCourierBooking}
+                          disabled={actionLoading}
+                          variant="outline"
+                          className="w-full justify-center mt-2"
+                          style={{ borderColor: COLORS.warning, color: COLORS.warning }}
+                          data-testid="reset-courier-booking-btn"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Reset Courier Booking
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>

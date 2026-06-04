@@ -2044,6 +2044,50 @@ async def get_transaction_tradesafe_details(request: Request, transaction_id: st
     return result
 
 
+@router.get("/courier/diagnostics")
+async def admin_courier_diagnostics(request: Request, transaction_id: str = None):
+    """
+    ADMIN ONLY: ShipLogic diagnostics to find the live provider_id / inspect rates.
+
+    Returns the loaded courier config (key masked), probes likely provider/account
+    discovery endpoints with the live API key, and — when a transaction_id with stored
+    courier_details is given — returns the FULL raw /rates response for that exact route
+    so the live account's fields (incl. any provider/account id) can be inspected.
+    """
+    from services import courier_guy
+
+    db = get_database()
+    admin = await require_admin(request, db)
+
+    key = settings.SHIPLOGIC_API_KEY or ""
+    result = {
+        "config": {
+            "COURIER_ENABLED": settings.COURIER_ENABLED,
+            "SHIPLOGIC_API_URL": settings.SHIPLOGIC_API_URL,
+            "SHIPLOGIC_PROVIDER_ID": settings.SHIPLOGIC_PROVIDER_ID or None,
+            "api_key_present": bool(key),
+            "api_key_len": len(key),
+        },
+        "provider_probe": await courier_guy.probe_provider_endpoints(),
+    }
+
+    if transaction_id:
+        txn = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+        details = (txn or {}).get("courier_details") or {}
+        if details.get("pickup_address") and details.get("delivery_address") and details.get("parcel"):
+            try:
+                result["raw_rates"] = await courier_guy.get_raw_rates(
+                    details["pickup_address"], details["delivery_address"], details["parcel"]
+                )
+            except Exception as exc:
+                result["raw_rates_error"] = str(exc)
+        else:
+            result["raw_rates_error"] = "transaction has no stored courier_details (pickup/delivery/parcel)"
+
+    logger.info(f"[ADMIN] courier diagnostics run by {admin.email} (txn={transaction_id})")
+    return result
+
+
 @router.post("/transactions/{transaction_id}/verify-payment")
 async def admin_verify_payment(request: Request, transaction_id: str):
     """

@@ -185,6 +185,13 @@ async def get_quote(
         resp.raise_for_status()
         data = _shiplogic_json(resp, "quote", quote_context)
 
+    # Log the FULL raw /rates response once so we can inspect it for any provider /
+    # account identifiers (e.g. provider_id, account_id) needed for live bookings.
+    try:
+        logger.info(f"[COURIER] FULL raw /rates response: {json.dumps(data, default=str)[:4000]}")
+    except Exception:
+        logger.info(f"[COURIER] raw /rates response (non-serialisable): {data!r}")
+
     raw = data.get("rates", data if isinstance(data, list) else [])
     # Normalise: expose top-level `rate` (VAT-inclusive) as `price` so callers
     # have a single unambiguous field regardless of ShipLogic response shape.
@@ -194,6 +201,56 @@ async def get_quote(
     ]
     logger.info(f"[COURIER] Quote returned {len(rates)} rate(s)")
     return rates
+
+
+async def get_raw_rates(
+    pickup_address: Dict[str, Any],
+    delivery_address: Dict[str, Any],
+    parcel: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Diagnostics: return the FULL raw ShipLogic /rates response (status + body) for a
+    route, unnormalised, so an admin can inspect every field (incl. any provider /
+    account identifiers) the live account returns."""
+    payload = {
+        "collection_address": pickup_address,
+        "delivery_address": delivery_address,
+        "parcels": [{
+            "submitted_length_cm": parcel.get("submitted_length_cm", 10),
+            "submitted_width_cm": parcel.get("submitted_width_cm", 10),
+            "submitted_height_cm": parcel.get("submitted_height_cm", 10),
+            "submitted_weight_kg": parcel.get("submitted_weight_kg", 1.0),
+        }],
+        "declared_value": parcel.get("declared_value") or 0,
+    }
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(f"{settings.SHIPLOGIC_API_URL}/rates", json=payload, headers=_headers())
+        body = None
+        try:
+            body = resp.json()
+        except ValueError:
+            body = (resp.text or "")[:4000]
+    return {"status": resp.status_code, "body": body}
+
+
+async def probe_provider_endpoints() -> Dict[str, Any]:
+    """Diagnostics: probe likely ShipLogic discovery endpoints with the live API key to
+    find a provider/account id for SHIPLOGIC_PROVIDER_ID. Returns {endpoint: {status,
+    body}} for manual inspection — ShipLogic's exact discovery path varies by account."""
+    out: Dict[str, Any] = {}
+    candidates = ["providers", "provider", "account", "accounts", "settings/providers", "service-levels"]
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        for ep in candidates:
+            url = f"{settings.SHIPLOGIC_API_URL}/{ep}"
+            try:
+                resp = await client.get(url, headers=_headers())
+                try:
+                    body = resp.json()
+                except ValueError:
+                    body = (resp.text or "")[:1500]
+                out[ep] = {"status": resp.status_code, "body": body}
+            except Exception as exc:
+                out[ep] = {"error": str(exc)}
+    return out
 
 
 async def book_shipment(
@@ -332,6 +389,12 @@ async def book_shipment(
         "collection_contact": pickup.get("contact", {}),
         "delivery_contact": delivery.get("contact", {}),
         "parcels": [parcel_payload],
+        # Select the service explicitly by CODE. Some ShipLogic accounts (notably the
+        # live multi-provider one) reject a booking that only carries opt_in_rates ids
+        # with "cannot get rates: no service level specified" — service_level_code is
+        # the unambiguous selector. We still send opt_in_rates for accounts that key
+        # off the id (e.g. the sandbox), so both selectors are present.
+        "service_level_code": code or None,
         "opt_in_rates": opt_in_rates,
         "opt_in_time_based_rates": [],
         # Tell Courier Guy whether the sender wants a collection or is dropping the parcel

@@ -3,6 +3,7 @@ TrustTrade - Courier Guy (ShipLogic) Integration
 Handles delivery quotes, bookings, and tracking via the ShipLogic REST API.
 """
 
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -235,6 +236,8 @@ async def book_shipment(
     stored_service_level_id = service_level_id
     code = str(quote_id).strip() if quote_id else ""
     resolved_id = None
+    matched_rate = None          # the full live rate object we booked against
+    rate_provider_id = None      # provider_id carried by that live rate, if any
 
     if code:
         rates = []
@@ -252,16 +255,34 @@ async def book_shipment(
             logger.info(f"[COURIER] live rates for booking code={code!r}: available_service_levels={available}")
 
         want = code.lower()
-        for c, sid in available:
-            if sid is not None and str(c).strip().lower() == want:
-                resolved_id = sid
+        for r in rates:
+            sl = r.get("service_level") or {}
+            if sl.get("id") is not None and str(sl.get("code")).strip().lower() == want:
+                resolved_id = sl.get("id")
+                matched_rate = r
                 logger.info(f"[COURIER] Using FRESH live service_level_id={resolved_id} for code={code!r}")
                 break
 
         # Exact code not offered on this route but exactly one live option exists — use it.
-        if resolved_id is None and len(available) == 1 and available[0][1] is not None:
-            resolved_id = available[0][1]
+        if resolved_id is None and len(rates) == 1 and (rates[0].get("service_level") or {}).get("id") is not None:
+            matched_rate = rates[0]
+            resolved_id = (rates[0].get("service_level") or {}).get("id")
             logger.warning(f"[COURIER] code {code!r} not in live rates; using sole available id={resolved_id}")
+
+        # Pull the provider_id straight off the matched LIVE rate. The live account
+        # is multi-provider, and ShipLogic re-rates during /shipments scoped by
+        # provider — without provider_id it returns "cannot get rates: no service
+        # level specified" even though the service_level id is valid. The rate object
+        # carries the correct provider, so reuse it instead of relying on env config.
+        if matched_rate is not None:
+            logger.info(f"[COURIER] matched live rate for code={code!r}: {json.dumps(matched_rate, default=str)}")
+            rate_provider_id = (
+                matched_rate.get("provider_id")
+                or (matched_rate.get("service_level") or {}).get("provider_id")
+                or (matched_rate.get("provider") or {}).get("id")
+            )
+            if rate_provider_id is not None:
+                logger.info(f"[COURIER] provider_id={rate_provider_id!r} extracted from matched live rate")
 
     # Fallbacks — only when the live re-quote couldn't resolve a fresh id.
     if resolved_id is None and code:
@@ -322,18 +343,34 @@ async def book_shipment(
         ),
     }
 
-    # ShipLogic selects the carrier from provider_id. The /rates call already sends it;
-    # the /shipments call must send the SAME provider_id or accounts with more than one
-    # provider reject the booking with a 400. Omitted only when unconfigured.
+    # ShipLogic selects the carrier from provider_id. The /shipments call must send a
+    # provider_id or a multi-provider (live) account rejects the booking with
+    # "cannot get rates: no service level specified". Prefer the explicitly configured
+    # SHIPLOGIC_PROVIDER_ID; otherwise reuse the provider carried by the matched live
+    # rate (which is guaranteed to match the service_level we resolved above).
     provider_id = _provider_id()
+    if provider_id is None and rate_provider_id is not None:
+        try:
+            provider_id = int(rate_provider_id) if str(rate_provider_id).isdigit() else rate_provider_id
+        except (TypeError, ValueError):
+            provider_id = rate_provider_id
+        logger.info(f"[COURIER] Using provider_id={provider_id!r} from matched live rate (SHIPLOGIC_PROVIDER_ID not set)")
     if provider_id is not None:
         payload["provider_id"] = provider_id
+    else:
+        logger.warning(
+            "[COURIER] No provider_id available (SHIPLOGIC_PROVIDER_ID unset and the live "
+            "rate carried none) — a live multi-provider account may reject this booking with "
+            "'cannot get rates: no service level specified'. Set SHIPLOGIC_PROVIDER_ID."
+        )
 
     logger.info(
         f"[COURIER] Booking — collection_preference={'dropoff' if is_dropoff else 'collection'} "
         f"service_level_id={service_level_id!r} service_level_code={quote_id!r} "
-        f"provider_id_set={provider_id is not None}"
+        f"opt_in_rates={opt_in_rates!r} provider_id={provider_id!r} provider_id_set={provider_id is not None}"
     )
+    # Full request body so we can see EXACTLY what ShipLogic receives when a booking fails.
+    logger.info(f"[COURIER] FULL /shipments request payload: {json.dumps(payload, default=str)}")
 
     booking_context = {
         "base_url": settings.SHIPLOGIC_API_URL,

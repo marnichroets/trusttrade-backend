@@ -1,5 +1,8 @@
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Lock, Truck, Scale, ShieldCheck, BadgeCheck, MapPin } from 'lucide-react';
+import {
+  ArrowLeft, ArrowRight, Lock, Truck, Scale, ShieldCheck, BadgeCheck, MapPin,
+  Handshake, Wallet, CheckCircle2, Building2, Package,
+} from 'lucide-react';
 import TrustTradeLogo from '../components/TrustTradeLogo';
 
 // Dark theme palette (matches the app)
@@ -42,6 +45,52 @@ const STATS = [
   { icon: MapPin, title: 'Proudly South African', sub: 'Built and operated locally' },
 ];
 
+const STEPS = [
+  {
+    icon: Handshake,
+    emoji: '🤝',
+    title: 'Agree on terms',
+    body: 'Both parties confirm the transaction details and price.',
+  },
+  {
+    icon: Wallet,
+    emoji: '💰',
+    title: 'Buyer pays securely',
+    body: 'Money is held in escrow by TradeSafe, overseen by Standard Bank.',
+  },
+  {
+    icon: CheckCircle2,
+    emoji: '✅',
+    title: 'Seller delivers, buyer confirms',
+    body: 'Funds release only when the buyer confirms receipt.',
+  },
+];
+
+const FAQS = [
+  {
+    q: 'Is my money safe?',
+    a: 'Yes. Funds are held by TradeSafe, regulated and overseen by Standard Bank. We never touch your money.',
+  },
+  {
+    q: 'What does it cost?',
+    a: '2% per transaction. No monthly fees, no hidden charges.',
+  },
+  {
+    q: 'What if something goes wrong?',
+    a: 'Raise a dispute. Our AI reviews the evidence and a human admin makes the final decision.',
+  },
+  {
+    q: 'How long does payout take?',
+    a: 'Same day or next business day after the buyer confirms receipt.',
+  },
+];
+
+const TRUST_BADGES = [
+  { icon: ShieldCheck, label: 'TradeSafe', sub: 'Escrow partner' },
+  { icon: Building2, label: 'Standard Bank', sub: 'Oversight' },
+  { icon: Package, label: 'Courier Guy', sub: 'Delivery partner' },
+];
+
 export default function AboutPage() {
   return (
     <div style={{ minHeight: '100vh', background: C.bg, color: C.text, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" }}>
@@ -49,12 +98,16 @@ export default function AboutPage() {
         .about-wrap { max-width: 980px; margin: 0 auto; padding: 0 20px; }
         .about-mission-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
         .about-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .about-steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+        .about-badge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
         .about-founder { display: grid; grid-template-columns: 120px 1fr; gap: 28px; align-items: start; }
         .about-card { transition: border-color .15s ease, background .15s ease, transform .15s ease; }
         .about-card:hover { border-color: #3d4757; background: ${C.cardHover}; transform: translateY(-2px); }
         @media (max-width: 760px) {
           .about-mission-grid { grid-template-columns: 1fr; }
           .about-stats-grid { grid-template-columns: 1fr; }
+          .about-steps-grid { grid-template-columns: 1fr; }
+          .about-badge-grid { grid-template-columns: 1fr; }
           .about-founder { grid-template-columns: 1fr; gap: 18px; justify-items: center; text-align: center; }
           .about-hero-h1 { font-size: 34px !important; }
         }
@@ -140,6 +193,39 @@ export default function AboutPage() {
         </div>
       </section>
 
+      {/* How it works */}
+      <section className="about-wrap" style={{ paddingBottom: 48 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, textAlign: 'center', margin: '0 0 24px' }}>
+          How it works
+        </h2>
+        <div className="about-steps-grid">
+          {STEPS.map(({ icon: Icon, emoji, title, body }, i) => (
+            <div key={title} className="about-card" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '26px 22px', position: 'relative' }}>
+              <span style={{ position: 'absolute', top: 18, right: 20, fontSize: 13, fontWeight: 800, color: C.dim }}>0{i + 1}</span>
+              <div style={{ width: 46, height: 46, borderRadius: 12, background: 'rgba(47,129,244,0.12)', border: '1px solid rgba(47,129,244,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Icon size={22} color={C.accent} />
+              </div>
+              <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 8px' }}>
+                <span style={{ marginRight: 7 }}>{emoji}</span>{title}
+              </h3>
+              <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6, margin: 0 }}>{body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Social proof banner */}
+      <section className="about-wrap" style={{ paddingBottom: 56 }}>
+        <div style={{
+          background: 'rgba(47,129,244,0.08)', border: `1px solid rgba(47,129,244,0.22)`,
+          borderRadius: 16, padding: '24px 28px', textAlign: 'center',
+        }}>
+          <p style={{ fontSize: 16.5, fontWeight: 600, color: C.text, lineHeight: 1.55, margin: 0 }}>
+            Trusted by South Africans buying and selling everything from electronics to vehicles to freelance services.
+          </p>
+        </div>
+      </section>
+
       {/* Stats / trust */}
       <section className="about-wrap" style={{ paddingBottom: 56 }}>
         <div className="about-stats-grid">
@@ -152,6 +238,39 @@ export default function AboutPage() {
                 <p style={{ fontSize: 15, fontWeight: 700, margin: '0 0 2px' }}>{title}</p>
                 <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>{sub}</p>
               </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Trust badges */}
+      <section className="about-wrap" style={{ paddingBottom: 56 }}>
+        <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.dim, textAlign: 'center', margin: '0 0 18px' }}>
+          Backed by trusted partners
+        </p>
+        <div className="about-badge-grid">
+          {TRUST_BADGES.map(({ icon: Icon, label, sub }) => (
+            <div key={label} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 11, background: 'rgba(230,237,243,0.06)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon size={22} color={C.text} />
+              </div>
+              <p style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{label}</p>
+              <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>{sub}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="about-wrap" style={{ paddingBottom: 56 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, textAlign: 'center', margin: '0 0 24px' }}>
+          Frequently asked questions
+        </h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {FAQS.map(({ q, a }) => (
+            <div key={q} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 22px' }}>
+              <p style={{ fontSize: 15.5, fontWeight: 700, margin: '0 0 7px', color: C.text }}>{q}</p>
+              <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.65, margin: 0 }}>{a}</p>
             </div>
           ))}
         </div>

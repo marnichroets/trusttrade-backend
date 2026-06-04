@@ -2088,6 +2088,53 @@ async def admin_courier_diagnostics(request: Request, transaction_id: str = None
     return result
 
 
+@router.post("/transactions/{transaction_id}/reset-courier-booking")
+async def admin_reset_courier_booking(request: Request, transaction_id: str):
+    """
+    ADMIN ONLY: Release a stuck courier-booking claim so the next attempt can retry.
+
+    Clears courier_booking_in_progress / courier_booking_claimed_at / courier_booking_error
+    when no waybill exists yet, so a transaction whose previous booking attempt left the
+    atomic claim set (and was being skipped with "booking already claimed/done") can be
+    booked again on the next verify-payment / fallback / webhook cycle. No-op if a
+    waybill already exists (won't disturb a completed booking).
+    """
+    db = get_database()
+    admin = await require_admin(request, db)
+
+    txn = await db.transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+
+    if txn.get("courier_waybill"):
+        return {
+            "transaction_id": transaction_id,
+            "reset": False,
+            "reason": "already booked",
+            "courier_waybill": txn.get("courier_waybill"),
+        }
+
+    await db.transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "courier_booking_in_progress": False,
+            "courier_booking_claimed_at": None,
+            "courier_booking_error": None,
+        }},
+    )
+    logger.info(f"[ADMIN] courier booking claim reset for {transaction_id} by {admin.email}")
+    return {
+        "transaction_id": transaction_id,
+        "reset": True,
+        "before": {
+            "courier_booking_in_progress": txn.get("courier_booking_in_progress"),
+            "courier_booking_claimed_at": txn.get("courier_booking_claimed_at"),
+            "courier_booking_error": txn.get("courier_booking_error"),
+        },
+        "message": "Claim released — run Verify Payment or wait for the next cycle to retry booking.",
+    }
+
+
 @router.post("/transactions/{transaction_id}/verify-payment")
 async def admin_verify_payment(request: Request, transaction_id: str):
     """

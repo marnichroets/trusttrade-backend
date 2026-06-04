@@ -94,11 +94,18 @@ async def book_courier_for_transaction(
                     {"courier_booking_claimed_at": {"$in": [None, ""]}},
                     # in-progress but the claim has expired → a previous attempt died
                     {"courier_booking_claimed_at": {"$lt": stale_before}},
+                    # a PREVIOUS attempt failed (error recorded, still no waybill) →
+                    # the claim must NOT keep blocking retries. Reclaim immediately so
+                    # the next cycle / verify-payment can try again. We clear the error
+                    # in the same $set below so a concurrent caller can't also match
+                    # this branch (it sees in_progress=True + error=None instead).
+                    {"courier_booking_error": {"$nin": [None, ""]}},
                 ],
             },
             {"$set": {
                 "courier_booking_in_progress": True,
                 "courier_booking_claimed_at": claim_now.isoformat(),
+                "courier_booking_error": None,
             }},
         )
         if claim.matched_count == 0:

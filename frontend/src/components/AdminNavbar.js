@@ -1,12 +1,30 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, LogOut, Activity, Landmark } from 'lucide-react';
 import TrustTradeLogo from './TrustTradeLogo';
+import { useAuth } from '../context/AuthContext';
 
-export function AdminNavbar({ user, onLogout }) {
+export function AdminNavbar({ user }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
-  
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  // Single source of truth for logging out of the admin panel. Uses the AuthContext
+  // logout (clears the session token, user_data AND the in-memory auth state) then
+  // redirects straight to /login with replace — so there's no flash of the dashboard
+  // or admin panel and no redirect loop from stale isAuthenticated state. The old
+  // per-page handlers only removed session_token and navigated to '/', which left
+  // isAuthenticated true and bounced back into the dashboard.
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (e) {
+      // logout() already clears local state even if the API call fails
+    }
+    navigate('/login', { replace: true });
+  };
+
   const navLinks = [
     { href: '/admin', label: 'Dashboard', exact: true },
     { href: '/admin/monitoring', label: 'Monitoring', icon: Activity },
@@ -61,15 +79,13 @@ export function AdminNavbar({ user, onLogout }) {
               </div>
             )}
             
-            {onLogout && (
-              <button
-                onClick={onLogout}
-                className="hidden md:flex items-center gap-1 text-slate-500 hover:text-red-600 text-sm transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </button>
-            )}
+            <button
+              onClick={handleLogout}
+              className="hidden md:flex items-center gap-1 text-slate-500 hover:text-red-600 text-sm transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
             
             {/* Mobile menu button */}
             <button
@@ -104,15 +120,13 @@ export function AdminNavbar({ user, onLogout }) {
             {user && (
               <div className="pt-3 mt-3 border-t border-slate-200">
                 <p className="px-3 py-1 text-slate-500 text-sm">{user.name}</p>
-                {onLogout && (
-                  <button
-                    onClick={onLogout}
-                    className="flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-red-600 text-sm w-full"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Logout
-                  </button>
-                )}
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-red-600 text-sm w-full"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
               </div>
             )}
           </div>

@@ -1793,6 +1793,33 @@ async def send_refund_email(
     return await send_email(to_email, to_name, subject, html)
 
 
+async def send_transaction_cancelled_email(
+    to_email: str,
+    to_name: str,
+    share_code: str,
+) -> bool:
+    """Notify a party (buyer or seller) that their transaction was cancelled by admin."""
+    if not to_email:
+        return False
+    subject = f"Transaction {share_code} has been cancelled"
+    html = get_base_email_template(
+        heading="Transaction Cancelled",
+        greeting_name=to_name or "there",
+        intro_text=(
+            "Your transaction has been cancelled by TrustTrade. If funds were held in "
+            "escrow, a refund will be processed to the buyer within 2–3 business days."
+        ),
+        details={
+            "Reference": share_code,
+            "Status": "Cancelled",
+        },
+        show_how_it_works=False,
+        status_badge="Cancelled",
+        status_color="#dc2626",
+    )
+    return await send_email(to_email, to_name, subject, html)
+
+
 async def send_verification_status_email(
     to_email: str,
     to_name: str,

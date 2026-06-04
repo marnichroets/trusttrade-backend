@@ -690,6 +690,22 @@ async def admin_cancel_transaction(request: Request, transaction_id: str, cancel
         }}
     )
 
+    # Notify both parties that the transaction was cancelled (best-effort — a mail
+    # failure must never block the cancellation itself).
+    share_code = transaction.get("share_code") or transaction_id
+    try:
+        import email_service
+        for to_email, to_name in (
+            (transaction.get("buyer_email"), transaction.get("buyer_name", "there")),
+            (transaction.get("seller_email"), transaction.get("seller_name", "there")),
+        ):
+            if to_email:
+                asyncio.create_task(_bg(
+                    email_service.send_transaction_cancelled_email(to_email, to_name, share_code)
+                ))
+    except Exception as exc:
+        logger.error(f"[ADMIN_CANCEL] cancellation email dispatch failed for {transaction_id}: {exc}")
+
     logger.info(f"[ADMIN_CANCEL] txn={transaction_id} cancelled by {user.email}: {reason}")
     return {"message": "Transaction cancelled and archived", "transaction_id": transaction_id}
 

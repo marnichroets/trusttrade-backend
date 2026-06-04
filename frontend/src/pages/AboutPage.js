@@ -73,7 +73,7 @@ const FAQS = [
   },
   {
     q: 'What does it cost?',
-    a: '2% per transaction. No monthly fees, no hidden charges.',
+    a: 'TrustTrade charges 2% per transaction. A bank processing fee is added by the payment provider depending on your payment method — EFT has no extra fee, Ozow adds ~1.7%, and card adds ~3.85%. You always see the exact total before you pay — no surprises.',
   },
   {
     q: 'What if something goes wrong?',

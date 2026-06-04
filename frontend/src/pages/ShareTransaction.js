@@ -270,7 +270,7 @@ function ShareTransaction() {
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle className="w-4 h-4 text-green-500" />
-              2% Fee Only
+              Low 2% Fee
             </div>
           </div>
         </div>

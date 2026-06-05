@@ -1238,52 +1238,79 @@ async def get_platform_stats(request: Request):
     
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     today_iso = today_start.isoformat()
-    
+
+    # ── "Real platform performance" window ───────────────────────────────────
+    # Pre-launch development produced many junk transactions (force-cancelled by
+    # admin, tiny sub-R500 test amounts, or created before launch) that dragged
+    # the headline success rate down to ~34%. Transaction stats below count only
+    # REAL activity:
+    #   • created on/after 1 June 2026 (STATS_SINCE_ISO)
+    #   • item value at/above the R500 minimum
+    #   • not force-/admin-cancelled (admin cancel + force cancel both set
+    #     `cancelled_by`; nothing else does)
+    # The displayed launch marker (PLATFORM_LAUNCH_DATE) is 4 June 2026.
+    STATS_SINCE_ISO = "2026-06-01T00:00:00+00:00"
+    MIN_REAL_TXN_AMOUNT = 500
+    PLATFORM_LAUNCH_DATE = "2026-06-04"
+
+    real_txn_filter = {
+        "created_at": {"$gte": STATS_SINCE_ISO},
+        "item_price": {"$gte": MIN_REAL_TXN_AMOUNT},
+        "cancelled_by": {"$exists": False},
+    }
+
     total_users = await db.users.count_documents({})
-    total_transactions = await db.transactions.count_documents({})
-    completed_transactions = await db.transactions.count_documents({"release_status": "Released"})
-    
-    success_rate = round((completed_transactions / total_transactions * 100) if total_transactions > 0 else 0, 1)
-    
-    completed_today = await db.transactions.count_documents({
+    total_transactions = await db.transactions.count_documents(real_txn_filter)
+    completed_transactions = await db.transactions.count_documents({
+        **real_txn_filter,
         "release_status": "Released",
-        "created_at": {"$gte": today_iso}
     })
-    
-    # Total secured value
+
+    success_rate = round((completed_transactions / total_transactions * 100) if total_transactions > 0 else 0, 1)
+
+    completed_today = await db.transactions.count_documents({
+        **real_txn_filter,
+        "release_status": "Released",
+        "created_at": {"$gte": today_iso},  # overrides the launch-window bound
+    })
+
+    # Total secured value (real released transactions only)
     pipeline = [
-        {"$match": {"release_status": "Released"}},
+        {"$match": {**real_txn_filter, "release_status": "Released"}},
         {"$group": {"_id": None, "total": {"$sum": "$total"}}}
     ]
     secured_result = await db.transactions.aggregate(pipeline).to_list(1)
     total_secured = secured_result[0]["total"] if secured_result else 0
-    
-    # Total escrow value
+
+    # Total escrow value (real transactions since launch)
     all_pipeline = [
+        {"$match": real_txn_filter},
         {"$group": {"_id": None, "total": {"$sum": "$total"}}}
     ]
     all_result = await db.transactions.aggregate(all_pipeline).to_list(1)
     total_escrow_value = all_result[0]["total"] if all_result else 0
-    
+
     active_transactions = await db.transactions.count_documents({
-        "release_status": {"$ne": "Released"}
+        **real_txn_filter,
+        "release_status": {"$ne": "Released"},
     })
-    
+
     pending_confirmations = await db.transactions.count_documents({
+        **real_txn_filter,
         "$or": [
             {"seller_confirmed": False},
             {"payment_status": "Ready for Payment"}
         ]
     })
-    
+
     pending_disputes = await db.disputes.count_documents({"status": "Pending"})
     verified_users = await db.users.count_documents({"verified": True})
-    
+
     fraud_cases_today = await db.disputes.count_documents({
         "is_valid_dispute": True,
         "created_at": {"$gte": today_iso}
     })
-    
+
     return {
         "total_users": total_users,
         "total_transactions": total_transactions,
@@ -1296,5 +1323,8 @@ async def get_platform_stats(request: Request):
         "pending_confirmations": pending_confirmations,
         "pending_disputes": pending_disputes,
         "verified_users": verified_users,
-        "fraud_cases_today": fraud_cases_today
+        "fraud_cases_today": fraud_cases_today,
+        # Surfaces the window the stats reflect, so the UI can show a launch marker.
+        "stats_since": STATS_SINCE_ISO,
+        "platform_launch_date": PLATFORM_LAUNCH_DATE,
     }

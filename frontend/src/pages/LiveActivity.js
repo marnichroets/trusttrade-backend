@@ -4,7 +4,15 @@ import DashboardLayout from '../components/DashboardLayout';
 import { Card } from '../components/ui/card';
 import api from '../utils/api';
 import { toast } from 'sonner';
-import { Activity, TrendingUp, ShieldCheck, Package, Users, DollarSign, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Activity, TrendingUp, ShieldCheck, Package, Users, DollarSign, CheckCircle, AlertTriangle, Rocket } from 'lucide-react';
+
+// Format an ISO date (YYYY-MM-DD) as e.g. "4 June 2026".
+function formatLaunchDate(value) {
+  if (!value) return '';
+  const d = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' });
+}
 
 function LiveActivity() {
   const [user, setUser] = useState(null);
@@ -49,13 +57,28 @@ function LiveActivity() {
   return (
     <DashboardLayout user={user}>
       <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <Activity className="w-8 h-8 text-primary" />
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">Live Activity</h1>
-            <p className="text-slate-600">Real-time platform statistics</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Activity className="w-8 h-8 text-primary" />
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Live Activity</h1>
+              <p className="text-slate-600">Real-time platform statistics</p>
+            </div>
           </div>
+          {stats?.platform_launch_date && (
+            <div
+              className="inline-flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-700"
+              data-testid="launch-marker"
+            >
+              <Rocket className="w-4 h-4" />
+              Platform launched: {formatLaunchDate(stats.platform_launch_date)}
+            </div>
+          )}
         </div>
+
+        <p className="text-xs text-slate-400">
+          Stats reflect real platform activity since launch — pre-launch test transactions are excluded.
+        </p>
 
         {/* Hero Stats */}
         <Card className="p-8 bg-gradient-to-r from-primary to-blue-600 text-white">
@@ -160,7 +183,7 @@ function LiveActivity() {
               <span className="font-medium">{stats?.verified_users || 0}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-600">Total Escrow Value (All Time)</span>
+              <span className="text-sm text-slate-600">Total Escrow Value (Since Launch)</span>
               <span className="font-medium text-primary">
                 {(() => {
                   const amount = stats?.total_escrow_value || 0;

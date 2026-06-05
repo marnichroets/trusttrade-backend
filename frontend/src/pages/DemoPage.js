@@ -139,7 +139,7 @@ export default function DemoPage() {
         .demo-fade { animation: demoFade 0.35s ease both; }
         .demo-input:focus { border-color: ${V.accent} !important; box-shadow: 0 0 0 2px rgba(47,129,244,0.18); }
         .demo-opt:hover { border-color: ${V.accent}88 !important; }
-        @media (max-width: 560px) { .demo-step-label { display: none !important; } }
+        @media (max-width: 560px) { .demo-step-label { display: none !important; } .demo-hide-sm { display: none !important; } }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-thumb { background: ${V.border}; border-radius: 4px; }
       `}</style>
@@ -152,8 +152,13 @@ export default function DemoPage() {
 
       {/* ── Top bar (mirrors the app chrome) ── */}
       <header style={{ borderBottom: `1px solid ${V.border}`, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: V.bg }}>
-        <div role="button" tabIndex={0} onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
-          <TrustTradeLogo size="medium" showText dark />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <button onClick={() => navigate('/')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: V.sub, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+            <ArrowLeft size={16} /> Back to Home
+          </button>
+          <div role="button" tabIndex={0} onClick={() => navigate('/')} style={{ cursor: 'pointer' }} className="demo-hide-sm">
+            <TrustTradeLogo size="medium" showText dark />
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ ...S.pill('rgba(47,129,244,0.14)', '#60A5FA'), fontFamily: V.mono, letterSpacing: '0.04em' }}>{viewpoint}'s view</span>

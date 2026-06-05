@@ -1240,14 +1240,14 @@ async def get_platform_stats(request: Request):
     today_iso = today_start.isoformat()
 
     # ── "Real platform performance" window ───────────────────────────────────
-    # Pre-launch development produced many junk transactions (force-cancelled by
-    # admin, tiny sub-R500 test amounts, or created before launch) that dragged
-    # the headline success rate down to ~34%. Transaction stats below count only
-    # REAL activity:
+    # Pre-launch development produced many junk transactions that dragged the
+    # headline success rate down. Transaction stats below count only REAL
+    # activity:
     #   • created on/after 1 June 2026 (STATS_SINCE_ISO)
     #   • item value at/above the R500 minimum
-    #   • not force-/admin-cancelled (admin cancel + force cancel both set
-    #     `cancelled_by`; nothing else does)
+    #   • NOT cancelled. Test transactions were cancelled through several paths,
+    #     not all of which set `cancelled_by` — so exclude by every cancellation
+    #     signal (cancelled_by, payment_status, transaction_state).
     # The displayed launch marker (PLATFORM_LAUNCH_DATE) is 4 June 2026.
     STATS_SINCE_ISO = "2026-06-01T00:00:00+00:00"
     MIN_REAL_TXN_AMOUNT = 500
@@ -1257,26 +1257,41 @@ async def get_platform_stats(request: Request):
         "created_at": {"$gte": STATS_SINCE_ISO},
         "item_price": {"$gte": MIN_REAL_TXN_AMOUNT},
         "cancelled_by": {"$exists": False},
+        "payment_status": {"$nin": ["Cancelled"]},
+        "transaction_state": {"$ne": "CANCELLED"},
     }
 
-    total_users = await db.users.count_documents({})
+    # A trade counts as "completed" once the buyer has confirmed receipt — even if
+    # the bank payout is still settling (release_status only flips to "Released"
+    # after TradeSafe fires FUNDS_RELEASED). Keying off only "Released" undercounts
+    # trades the buyer has already accepted (e.g. TT-119494).
+    completed_match = {"$or": [
+        {"release_status": "Released"},
+        {"delivery_confirmed": True},
+        {"payment_status": {"$in": ["Completed", "Delivery Confirmed"]}},
+    ]}
+
     total_transactions = await db.transactions.count_documents(real_txn_filter)
-    completed_transactions = await db.transactions.count_documents({
-        **real_txn_filter,
-        "release_status": "Released",
-    })
+    completed_transactions = await db.transactions.count_documents({**real_txn_filter, **completed_match})
 
     success_rate = round((completed_transactions / total_transactions * 100) if total_transactions > 0 else 0, 1)
 
+    # "Completed today" must key off WHEN the trade completed (receipt confirmed /
+    # funds released), not when it was created — a trade created days ago and
+    # confirmed today still counts for today.
     completed_today = await db.transactions.count_documents({
         **real_txn_filter,
-        "release_status": "Released",
-        "created_at": {"$gte": today_iso},  # overrides the launch-window bound
+        "$or": [
+            {"released_at": {"$gte": today_iso}},
+            {"funds_released_at": {"$gte": today_iso}},
+            {"delivery_confirmed_at": {"$gte": today_iso}},
+            {"buyer_confirmed_receipt_at": {"$gte": today_iso}},
+        ],
     })
 
-    # Total secured value (real released transactions only)
+    # Total secured value (real completed transactions only)
     pipeline = [
-        {"$match": {**real_txn_filter, "release_status": "Released"}},
+        {"$match": {**real_txn_filter, **completed_match}},
         {"$group": {"_id": None, "total": {"$sum": "$total"}}}
     ]
     secured_result = await db.transactions.aggregate(pipeline).to_list(1)
@@ -1290,9 +1305,11 @@ async def get_platform_stats(request: Request):
     all_result = await db.transactions.aggregate(all_pipeline).to_list(1)
     total_escrow_value = all_result[0]["total"] if all_result else 0
 
+    # In-progress = real, not yet completed and not refunded.
     active_transactions = await db.transactions.count_documents({
         **real_txn_filter,
-        "release_status": {"$ne": "Released"},
+        "release_status": {"$nin": ["Released", "Refunded"]},
+        "delivery_confirmed": {"$ne": True},
     })
 
     pending_confirmations = await db.transactions.count_documents({
@@ -1303,13 +1320,51 @@ async def get_platform_stats(request: Request):
         ]
     })
 
-    pending_disputes = await db.disputes.count_documents({"status": "Pending"})
-    verified_users = await db.users.count_documents({"verified": True})
+    # ── Open disputes ────────────────────────────────────────────────────────
+    # A dispute is only "open" if it's genuinely unresolved. It must be excluded
+    # when resolved by ANY signal: a resolved/closed status, a resolved_at stamp,
+    # OR its transaction has already been refunded/released (money moved) — the
+    # last case covers disputes settled via a refund without the dispute doc being
+    # restatused (e.g. disp_39bae52e9ab3, refunded → its transaction is "Refunded").
+    settled_txn_ids = await db.transactions.distinct("transaction_id", {
+        "$or": [
+            {"release_status": {"$in": ["Refunded", "Released"]}},
+            {"payment_status": {"$in": ["Refunded", "Completed"]}},
+            {"refund_status": "succeeded"},
+        ]
+    })
+    pending_disputes = await db.disputes.count_documents({
+        "status": {"$nin": ["Resolved", "Reviewed", "Dismissed", "Closed"]},
+        "resolved_at": {"$exists": False},
+        "transaction_id": {"$nin": settled_txn_ids},
+    })
 
     fraud_cases_today = await db.disputes.count_documents({
         "is_valid_dispute": True,
         "created_at": {"$gte": today_iso}
     })
+
+    # ── Real users ───────────────────────────────────────────────────────────
+    # Total user count of 21 included test/dev accounts. Count only registered
+    # users who actually participated (as buyer or seller) in a real transaction
+    # since launch. Resolve participants by user_id and lowercased email.
+    party_emails = await db.transactions.distinct("buyer_email", real_txn_filter)
+    party_emails += await db.transactions.distinct("seller_email", real_txn_filter)
+    party_ids = await db.transactions.distinct("buyer_user_id", real_txn_filter)
+    party_ids += await db.transactions.distinct("seller_user_id", real_txn_filter)
+    real_emails = sorted({e.lower() for e in party_emails if e})
+    real_user_ids = sorted({u for u in party_ids if u})
+
+    if real_emails or real_user_ids:
+        real_user_query = {"$or": [
+            {"email": {"$in": real_emails}},
+            {"user_id": {"$in": real_user_ids}},
+        ]}
+        total_users = await db.users.count_documents(real_user_query)
+        verified_users = await db.users.count_documents({**real_user_query, "verified": True})
+    else:
+        total_users = 0
+        verified_users = 0
 
     return {
         "total_users": total_users,

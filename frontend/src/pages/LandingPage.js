@@ -40,6 +40,13 @@ const GREEN = '#22c55e';
 const GOLD = '#facc15';
 const LINE = '#183454';
 
+const heroFlowSteps = [
+  'Buyer pays',
+  'TrustTrade holds funds',
+  'Seller delivers',
+  'Seller gets paid',
+];
+
 const flowStages = [
   {
     label: 'Buyer pays',
@@ -324,14 +331,18 @@ function LandingPage() {
                 >
                   <Sparkles className="h-3.5 w-3.5 text-emerald-200" />
                 </motion.span>
-                SOUTH AFRICA'S PAYMENT PROTECTION
+                FACEBOOK MARKETPLACE PAYMENT PROTECTION
               </div>
 
               <h1 className="mt-7 max-w-4xl text-5xl font-bold leading-[0.98] text-white sm:text-6xl lg:text-[4.15rem] xl:text-[4.65rem]" data-testid="hero-headline">
-                Money moves only when trust is earned.
+                Buying from Facebook Marketplace?
+                <span className="mt-2 block text-sky-100">Don&apos;t send money to strangers.</span>
               </h1>
               <p style={{ color: MUTED }} className="mt-7 max-w-2xl text-lg leading-8 sm:text-xl">
-                TrustTrade turns everyday online deals into protected payment transactions, with payment locked, delivery tracked, and bank settlement handled after funds are released.
+                TrustTrade holds the buyer&apos;s payment securely until delivery is confirmed. The seller only gets paid once the buyer confirms they received the item.
+              </p>
+              <p className="mt-5 max-w-2xl border-l-2 border-emerald-300/55 pl-4 text-base leading-7 text-sky-50/90">
+                I built TrustTrade after losing R3,000 in an online scam. I know how frustrating it feels when the money is gone and there&apos;s nothing you can do.
               </p>
 
               <div className="tt-hero-actions mt-8 flex flex-col gap-3 sm:flex-row">
@@ -340,15 +351,8 @@ function LandingPage() {
                   className="group inline-flex min-h-[3.35rem] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-300 via-cyan-300 to-emerald-300 px-7 text-base font-bold text-slate-950 shadow-[0_22px_70px_rgba(16,185,129,0.24)] transition hover:-translate-y-0.5 hover:shadow-[0_28px_92px_rgba(56,189,248,0.36)] focus:outline-none focus:ring-2 focus:ring-emerald-300/70"
                   data-testid="hero-cta-btn"
                 >
-                  Start Secure Transaction
+                  Start a Safe Transaction
                   <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-                </button>
-                <button
-                  onClick={() => navigate('/demo')}
-                  className="inline-flex min-h-[3.35rem] items-center justify-center gap-2 rounded-lg border border-white/14 bg-white/[0.055] px-7 text-base font-bold text-white backdrop-blur-2xl transition hover:-translate-y-0.5 hover:border-sky-300/50 hover:bg-sky-300/10 focus:outline-none focus:ring-2 focus:ring-sky-300/70"
-                  data-testid="hero-try-demo-btn"
-                >
-                  Try the demo
                 </button>
                 <button
                   onClick={scrollToHowItWorks}
@@ -357,6 +361,20 @@ function LandingPage() {
                 >
                   See How It Works
                 </button>
+              </div>
+
+              <div className="mt-7 grid gap-2 rounded-lg border border-white/10 bg-white/[0.045] p-3 shadow-[0_22px_80px_rgba(2,6,23,0.35)] backdrop-blur-2xl sm:grid-cols-4">
+                {heroFlowSteps.map((step, index) => (
+                  <div key={step} className="flex items-center gap-2 rounded-md border border-white/8 bg-slate-950/35 px-3 py-3 text-left text-sm font-bold text-white">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-300/15 text-xs text-emerald-200">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0">{step}</span>
+                    {index < heroFlowSteps.length - 1 && (
+                      <ArrowRight className="ml-auto hidden h-4 w-4 shrink-0 text-sky-200/70 sm:block" />
+                    )}
+                  </div>
+                ))}
               </div>
 
               <LiveTrustStrip reduceMotion={reduceMotion} />

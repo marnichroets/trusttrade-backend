@@ -179,6 +179,24 @@ export default function AboutPage() {
         </div>
       </section>
 
+      {/* Vision */}
+      <section className="about-wrap" style={{ paddingBottom: 56 }}>
+        <div className="about-card" style={{ background: 'linear-gradient(135deg, rgba(47,129,244,0.12) 0%, rgba(63,185,80,0.07) 100%)', border: `1px solid ${C.border}`, borderRadius: 18, padding: '34px 32px' }}>
+          <p style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: C.accent, margin: '0 0 14px' }}>
+            Our Vision
+          </p>
+          <p style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.35, color: C.text, margin: '0 0 18px', maxWidth: 780 }}>
+            Our vision is to become South Africa&rsquo;s trusted payment layer for online deals between buyers and sellers.
+          </p>
+          <p style={{ fontSize: 15.5, lineHeight: 1.75, color: '#C9D4E0', margin: '0 0 16px', maxWidth: 820 }}>
+            TrustTrade is not here to replace marketplaces. Whether a deal starts on Facebook Marketplace, WhatsApp, Gumtree, Instagram or anywhere else, our goal is to make the payment safer by holding funds securely until delivery is confirmed.
+          </p>
+          <p style={{ fontSize: 17, fontWeight: 800, color: C.text, margin: 0 }}>
+            Not another marketplace &mdash; a safer way to complete the deal.
+          </p>
+        </div>
+      </section>
+
       {/* Mission */}
       <section className="about-wrap" style={{ paddingBottom: 56 }}>
         <h2 style={{ fontSize: 14, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.muted, textAlign: 'center', margin: '0 0 24px' }}>

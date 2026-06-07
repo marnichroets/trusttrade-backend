@@ -7,6 +7,7 @@ import {
   Plus, Trash2, Layers, X,
 } from "lucide-react";
 import PaymentConfirmModal from "../components/PaymentConfirmModal";
+import { trackStartTransaction } from "../utils/analytics";
 
 const API = process.env.REACT_APP_API_URL || "https://trusttrade-backend-production-3efa.up.railway.app";
 
@@ -1847,7 +1848,7 @@ export function CreateMilestoneDeal() {
           <p style={{ fontSize: 11, color: D.text, margin: 0, lineHeight: 1.5 }}>
             Each stage is processed as a separate payment, so a 2-stage deal has 2 bank processing fees.
             {" "}<strong>Tip: want to pay less fees?</strong> Use a{" "}
-            <Link to="/transactions/new" style={{ color: D.blue, fontWeight: 600 }}>single payment transaction</Link>
+            <Link to="/transactions/new" onClick={() => trackStartTransaction({ source: "smart_deal_fee_tip" })} style={{ color: D.blue, fontWeight: 600 }}>single payment transaction</Link>
             {" "}instead — same protection, one fee.
           </p>
         </div>

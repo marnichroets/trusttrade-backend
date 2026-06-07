@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import TrustTradeLogo from './TrustTradeLogo';
 import api from '../utils/api';
 import { buildUserActivityFeed, getUnreadActivityCount, markActivitySeen } from '../utils/transactionActivity';
+import { trackStartTransaction } from '../utils/analytics';
 import SupportChat from './SupportChat';
 import FeedbackButton from './FeedbackButton';
 
@@ -83,6 +84,12 @@ function DashboardLayout({ children, user: userProp, loading = false, darkMain =
       navigate('/login');
     } catch {
       toast.error('Failed to sign out');
+    }
+  };
+
+  const handleNavItemClick = (item) => {
+    if (item.path === '/transactions/new') {
+      trackStartTransaction({ source: 'dashboard_nav' });
     }
   };
 
@@ -253,6 +260,7 @@ function DashboardLayout({ children, user: userProp, loading = false, darkMain =
                   to={item.path}
                   end={item.end}
                   data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                  onClick={() => handleNavItemClick(item)}
                   style={({ isActive }) => ({
                     display: 'flex', alignItems: 'center', gap: 9,
                     padding: '7px 10px', marginBottom: 1,
@@ -454,6 +462,7 @@ function DashboardLayout({ children, user: userProp, loading = false, darkMain =
             key={item.path}
             to={item.path}
             end={item.end}
+            onClick={() => handleNavItemClick(item)}
             className="vault-mobile-link"
             data-testid={`mobile-nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
             style={({ isActive }) => ({

@@ -6,6 +6,7 @@ import TransactionActivityFeed from '../components/TransactionActivityFeed';
 import { fieldText, getFlowCopy, getTransactionFlowType, resolveEscrowUiState } from '../components/transactionState';
 import { buildUserActivityFeed } from '../utils/transactionActivity';
 import { getPayoutScheduleMessage } from '../utils/payoutSchedule';
+import { trackStartTransaction } from '../utils/analytics';
 import { usePlatformConfig } from '../context/PlatformConfigContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
@@ -611,7 +612,10 @@ function EscrowEngine({ activeTransactions, pendingConfirmations, pendingDispute
             </h2>
           </div>
           <button
-            onClick={() => navigate('/transactions/new')}
+            onClick={() => {
+              trackStartTransaction({ source: 'dashboard_escrow_engine' });
+              navigate('/transactions/new');
+            }}
             className="tt-action"
             style={{ display: 'flex', alignItems: 'center', gap: 9, border: '1px solid rgba(0,209,255,0.16)', background: 'linear-gradient(135deg, rgba(0,209,255,0.06), rgba(0,255,163,0.03))', color: V.text, borderRadius: 6, padding: '12px 16px', cursor: 'pointer', fontWeight: 800 }}
           >
@@ -802,7 +806,12 @@ function ActionDock({ navigate }) {
         <button
           key={action.label}
           data-testid={action.testId}
-          onClick={() => navigate(action.path)}
+          onClick={() => {
+            if (action.path === '/transactions/new') {
+              trackStartTransaction({ source: 'dashboard_action_dock' });
+            }
+            navigate(action.path);
+          }}
           className="tt-action"
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 74, border: `1px solid ${V.border}`, background: 'rgba(255,255,255,0.025)', color: V.text, borderRadius: 6, padding: '14px 16px', cursor: 'pointer', fontWeight: 800 }}
         >
@@ -1057,7 +1066,7 @@ function EmptyState({ navigate }) {
       <div>
         <ShieldCheck size={36} color={V.dim} style={{ margin: '0 auto 12px' }} />
         <p style={{ margin: '0 0 14px', color: V.sub }}>No live escrow rails yet.</p>
-        <button data-testid="empty-state-create-transaction" onClick={() => navigate('/transactions/new')} className="tt-action" style={{ border: `1px solid ${V.accent}`, background: 'rgba(0,209,255,0.1)', color: V.accent, padding: '10px 14px', borderRadius: 5, cursor: 'pointer', fontWeight: 800 }}>
+        <button data-testid="empty-state-create-transaction" onClick={() => { trackStartTransaction({ source: 'dashboard_empty_state' }); navigate('/transactions/new'); }} className="tt-action" style={{ border: `1px solid ${V.accent}`, background: 'rgba(0,209,255,0.1)', color: V.accent, padding: '10px 14px', borderRadius: 5, cursor: 'pointer', fontWeight: 800 }}>
           Create First Transaction
         </button>
       </div>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import DashboardLayout, { V } from '../components/DashboardLayout';
 import { getPendingPaymentExpiry, resolveEscrowUiState } from '../components/transactionState';
 import api from '../utils/api';
+import { trackStartTransaction } from '../utils/analytics';
 import { Plus, FileText, Search } from 'lucide-react';
 
 function fmt(value) {
@@ -105,7 +106,10 @@ function TransactionsList() {
             </p>
           </div>
           <button
-            onClick={() => navigate('/transactions/new')}
+            onClick={() => {
+              trackStartTransaction({ source: 'transactions_list_header' });
+              navigate('/transactions/new');
+            }}
             data-testid="new-transaction-btn"
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
@@ -156,7 +160,10 @@ function TransactionsList() {
               </p>
               {!searchTerm && (
                 <button
-                  onClick={() => navigate('/transactions/new')}
+                  onClick={() => {
+                    trackStartTransaction({ source: 'transactions_list_empty_state' });
+                    navigate('/transactions/new');
+                  }}
                   data-testid="empty-state-create-transaction"
                   style={{
                     padding: '9px 18px', borderRadius: 4, border: `1px solid ${V.accent}`,

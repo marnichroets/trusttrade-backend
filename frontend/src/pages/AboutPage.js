@@ -4,6 +4,7 @@ import {
   Handshake, Wallet, CheckCircle2, Building2, Package,
 } from 'lucide-react';
 import TrustTradeLogo from '../components/TrustTradeLogo';
+import { trackSignUpClick } from '../utils/analytics';
 
 // Dark theme palette (matches the app)
 const C = {
@@ -294,6 +295,7 @@ export default function AboutPage() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
             <Link
               to="/login"
+              onClick={() => trackSignUpClick({ source: 'about_cta' })}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 9,
                 background: C.accent, color: '#fff', textDecoration: 'none',

@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import TrustTradeLogo from '../components/TrustTradeLogo';
+import { trackSignUpClick, trackStartTransaction } from '../utils/analytics';
 
 const DARK_BG = '#020611';
 const INK = '#E6EDF3';
@@ -165,7 +166,15 @@ function LandingPage() {
     if (isAuthenticated) navigate('/dashboard', { replace: true });
   }, [isAuthenticated, loading, navigate]);
 
-  const handleGetStarted = () => navigate('/login');
+  const handleLoginClick = () => navigate('/login');
+  const handleSignUpClick = (source) => {
+    trackSignUpClick({ source });
+    navigate('/login');
+  };
+  const handleStartTransactionClick = (source) => {
+    trackStartTransaction({ source });
+    navigate('/login');
+  };
   const scrollToHowItWorks = () => {
     document.getElementById('how-it-works')?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
   };
@@ -296,7 +305,7 @@ function LandingPage() {
               About
             </a>
             <button
-              onClick={handleGetStarted}
+              onClick={handleLoginClick}
               style={{ color: MUTED }}
               className="rounded-lg px-4 py-2 text-sm font-semibold transition hover:text-white focus:outline-none focus:ring-2 focus:ring-sky-300/70"
               data-testid="nav-login-btn"
@@ -304,7 +313,7 @@ function LandingPage() {
               Log In
             </button>
             <button
-              onClick={handleGetStarted}
+              onClick={() => handleSignUpClick('landing_nav_signup')}
               className="rounded-lg bg-gradient-to-r from-sky-300 to-emerald-300 px-4 py-2 text-sm font-bold text-slate-950 shadow-[0_0_34px_rgba(56,189,248,0.25)] transition hover:-translate-y-0.5 hover:shadow-[0_0_48px_rgba(16,185,129,0.32)] focus:outline-none focus:ring-2 focus:ring-emerald-300/70"
               data-testid="nav-signup-btn"
             >
@@ -347,7 +356,7 @@ function LandingPage() {
 
               <div className="tt-hero-actions mt-8 flex flex-col gap-3 sm:flex-row">
                 <button
-                  onClick={handleGetStarted}
+                  onClick={() => handleStartTransactionClick('landing_hero_cta')}
                   className="group inline-flex min-h-[3.35rem] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-300 via-cyan-300 to-emerald-300 px-7 text-base font-bold text-slate-950 shadow-[0_22px_70px_rgba(16,185,129,0.24)] transition hover:-translate-y-0.5 hover:shadow-[0_28px_92px_rgba(56,189,248,0.36)] focus:outline-none focus:ring-2 focus:ring-emerald-300/70"
                   data-testid="hero-cta-btn"
                 >
@@ -396,7 +405,7 @@ function LandingPage() {
         <EscrowPipeline reduceMotion={reduceMotion} />
         <EditorialTrustSection reduceMotion={reduceMotion} />
         <ProtectionConsole reduceMotion={reduceMotion} />
-        <FinalCta handleGetStarted={handleGetStarted} />
+        <FinalCta handleStartTransaction={handleStartTransactionClick} />
       </main>
 
       <Footer scrollToHowItWorks={scrollToHowItWorks} />
@@ -972,7 +981,7 @@ function ProtectionConsole({ reduceMotion }) {
   );
 }
 
-function FinalCta({ handleGetStarted }) {
+function FinalCta({ handleStartTransaction }) {
   return (
     <section className="relative px-4 pb-20 pt-8">
       <div className="mx-auto max-w-7xl overflow-hidden border border-white/10 bg-gradient-to-br from-sky-400/16 via-[#07111f] to-emerald-400/16 p-7 shadow-[0_35px_120px_rgba(2,6,23,0.62)] sm:p-10">
@@ -988,7 +997,7 @@ function FinalCta({ handleGetStarted }) {
             </p>
           </div>
           <button
-            onClick={handleGetStarted}
+            onClick={() => handleStartTransaction('landing_final_cta')}
             className="inline-flex min-h-[3.35rem] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-sky-300 to-emerald-300 px-8 text-base font-bold text-slate-950 shadow-[0_24px_70px_rgba(16,185,129,0.25)] transition hover:-translate-y-0.5 hover:shadow-[0_30px_95px_rgba(56,189,248,0.36)] focus:outline-none focus:ring-2 focus:ring-emerald-300/70"
             data-testid="cta-start-btn"
           >

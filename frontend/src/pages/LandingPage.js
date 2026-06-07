@@ -340,18 +340,17 @@ function LandingPage() {
                 >
                   <Sparkles className="h-3.5 w-3.5 text-emerald-200" />
                 </motion.span>
-                FACEBOOK MARKETPLACE PAYMENT PROTECTION
+                SECURE ONLINE PAYMENT PROTECTION
               </div>
 
               <h1 className="mt-7 max-w-4xl text-5xl font-bold leading-[0.98] text-white sm:text-6xl lg:text-[4.15rem] xl:text-[4.65rem]" data-testid="hero-headline">
-                Buying from Facebook Marketplace?
-                <span className="mt-2 block text-sky-100">Don&apos;t send money to strangers.</span>
+                Buy or sell online without risking your money.
               </h1>
-              <p style={{ color: MUTED }} className="mt-7 max-w-2xl text-lg leading-8 sm:text-xl">
-                TrustTrade holds the buyer&apos;s payment securely until delivery is confirmed. The seller only gets paid once the buyer confirms they received the item.
+              <p style={{ color: MUTED }} className="mt-7 max-w-2xl text-xl leading-8 sm:text-2xl">
+                TrustTrade protects online transactions by holding payment securely until delivery is confirmed.
               </p>
-              <p className="mt-5 max-w-2xl border-l-2 border-emerald-300/55 pl-4 text-base leading-7 text-sky-50/90">
-                I built TrustTrade after losing R3,000 in an online scam. I know how frustrating it feels when the money is gone and there&apos;s nothing you can do.
+              <p className="mt-5 max-w-2xl border-l-2 border-emerald-300/55 pl-4 text-base leading-7 text-sky-50/80">
+                Too many people have lost money in online deals. TrustTrade was created to make buying and selling safer, simpler, and more trustworthy.
               </p>
 
               <div className="tt-hero-actions mt-8 flex flex-col gap-3 sm:flex-row">

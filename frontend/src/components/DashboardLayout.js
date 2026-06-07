@@ -315,19 +315,6 @@ function DashboardLayout({ children, user: userProp, loading = false, darkMain =
                           {unreadActivityCount > 99 ? '99+' : unreadActivityCount}
                         </span>
                       )}
-                      {item.highlight && !isActive && (
-                        <span style={{
-                          fontSize: 8, fontWeight: 700,
-                          color: V.accent,
-                          border: `1px solid rgba(0,209,255,0.3)`,
-                          background: 'rgba(0,209,255,0.08)',
-                          padding: '1px 5px', borderRadius: 2,
-                          letterSpacing: '0.1em', textTransform: 'uppercase',
-                          fontFamily: V.mono,
-                        }}>
-                          NEW
-                        </span>
-                      )}
                     </>
                   )}
                 </NavLink>

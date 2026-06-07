@@ -9,6 +9,7 @@ import { Eye, EyeOff, Loader2, Shield, AlertCircle, Lock, CheckCircle } from 'lu
 import { toast } from 'sonner';
 import api from '../utils/api';
 import TrustTradeLogo from '../components/TrustTradeLogo';
+import { trackCompleteRegistration, trackLead, trackSignUpClick } from '../utils/analytics';
 
 function getGoogleAuthUrl() {
   if (process.env.REACT_APP_GOOGLE_AUTH_URL) return process.env.REACT_APP_GOOGLE_AUTH_URL;
@@ -105,6 +106,7 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = () => {
+    if (!isLoginMode) trackSignUpClick({ source: 'google_auth_button' });
     setGoogleLoading(true);
     setAuthError(null);
     const destination = getSafeRedirect(location.search);
@@ -117,6 +119,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isLoginMode) trackSignUpClick({ source: 'email_signup_form_submit' });
     setLoading(true);
     
     try {
@@ -126,6 +129,17 @@ export default function LoginPage() {
         : { email: form.email, password: form.password, name: form.name };
       
       const response = await api.post(endpoint, payload);
+
+      if (!isLoginMode) {
+        trackLead({
+          method: 'email',
+          requires_verification: Boolean(response.data.needs_verification),
+        });
+        trackCompleteRegistration({
+          method: 'email',
+          requires_verification: Boolean(response.data.needs_verification),
+        });
+      }
 
       if (response.data.needs_verification) {
         setRegistrationDone(true);
@@ -390,7 +404,10 @@ export default function LoginPage() {
             <div className="mt-5 text-center">
               <button
                 type="button"
-                onClick={() => setIsLoginMode(!isLoginMode)}
+                onClick={() => {
+                  if (isLoginMode) trackSignUpClick({ source: 'login_mode_toggle' });
+                  setIsLoginMode(!isLoginMode);
+                }}
                 className="text-sm text-blue-600 hover:text-blue-700 font-medium"
               >
                 {isLoginMode ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}

@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import { Component, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import DashboardLayout from './components/DashboardLayout';
 import { Toaster } from './components/ui/sonner';
@@ -46,6 +46,7 @@ import AboutPage from './pages/AboutPage';
 import DemoPage from './pages/DemoPage';
 import ResetPassword from './pages/ResetPassword';
 import ProtectedRoute from './components/ProtectedRoute';
+import { initMetaPixel, trackPageView } from './utils/analytics';
 import './App.css';
 
 class ErrorBoundary extends Component {
@@ -84,6 +85,11 @@ class ErrorBoundary extends Component {
 
 function AppRouter() {
   const location = useLocation();
+
+  useEffect(() => {
+    initMetaPixel();
+    trackPageView(`${location.pathname}${location.search}`);
+  }, [location.pathname, location.search]);
   
   // CRITICAL: Check URL fragment for session_id synchronously (NOT in useEffect)
   // This prevents race conditions by processing OAuth callback FIRST

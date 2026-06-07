@@ -8,6 +8,7 @@ import { ArrowLeft, ArrowRight, User, Camera, Shield, CheckCircle, Truck, Bankno
 import EmailVerificationPrompt from '../components/EmailVerificationPrompt';
 import { usePlatformConfig } from '../context/PlatformConfigContext';
 import { getDefaultMinimumTransactionAmount, getPayoutScheduleMessage } from '../utils/payoutSchedule';
+import { trackTransactionCreated } from '../utils/analytics';
 
 function parseErrorMessage(error) {
   const detail = error.response?.data?.detail;
@@ -420,6 +421,14 @@ function NewTransaction() {
       });
 
       const transactionId = transactionResponse.data.transaction_id;
+      trackTransactionCreated({
+        transaction_id: transactionId,
+        value: itemPrice,
+        currency: 'ZAR',
+        creator_role: role,
+        delivery_method: formData.delivery_method,
+        fee_allocation: formData.fee_allocation,
+      });
       // Photos are seller-only and optional — only attach them when some were added.
       const photoFilenames = photos.map(p => p.filename);
       if (photoFilenames.length > 0) {

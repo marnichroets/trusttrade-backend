@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import TrustTradeLogo from '../components/TrustTradeLogo';
 import PaymentConfirmModal from '../components/PaymentConfirmModal';
+import { trackSignUpClick } from '../utils/analytics';
 
 /*
  * /demo — a fully interactive, click-through simulation of the real TrustTrade
@@ -124,6 +125,10 @@ export default function DemoPage() {
   const reset = () => { setStep(1); setPm(null); setShowPayModal(false); };
 
   const advance = (to) => { setBusy(true); setTimeout(() => { setBusy(false); setStep(to); }, 650); };
+  const handleSignup = (source) => {
+    trackSignUpClick({ source });
+    navigate('/login');
+  };
 
   const viewpoint = step === 1 ? 'Seller' : step === 4 ? 'Seller' : step === 6 ? 'Seller' : 'Buyer';
 
@@ -204,7 +209,7 @@ export default function DemoPage() {
           )}
           {step === 4 && <StepFundsSecured form={form} buyerBase={buyerBase} estTotal={estTotal} isCourier={isCourier} waybill={waybill} arrival={arrival} onNext={() => advance(5)} busy={busy} />}
           {step === 5 && <StepConfirmReceipt form={form} sellerPayout={sellerPayout} onNext={() => advance(6)} busy={busy} />}
-          {step === 6 && <StepPaid form={form} sellerPayout={sellerPayout} arrival={arrival} onRestart={reset} onSignup={() => navigate('/login')} />}
+          {step === 6 && <StepPaid form={form} sellerPayout={sellerPayout} arrival={arrival} onRestart={reset} onSignup={() => handleSignup('demo_final_cta')} />}
         </div>
 
         {/* Restart link (always available except final celebration which has its own) */}

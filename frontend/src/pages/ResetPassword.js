@@ -25,8 +25,8 @@ export default function ResetPassword() {
     e.preventDefault();
     setError('');
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
     if (password !== confirm) {
@@ -104,7 +104,7 @@ export default function ResetPassword() {
                         value={password}
                         onChange={e => setPassword(e.target.value)}
                         required
-                        minLength={6}
+                        minLength={8}
                         className="h-10 pr-10"
                       />
                       <button

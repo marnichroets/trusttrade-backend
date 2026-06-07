@@ -74,6 +74,7 @@ async def create_indexes(db: AsyncIOMotorDatabase):
         await db.users.create_index("user_id", unique=True)
         await db.users.create_index("email", unique=True)
         await db.users.create_index("phone")
+        await db.users.create_index("email_verification_token_hash", sparse=True)
         
         # Transactions collection indexes
         await db.transactions.create_index("transaction_id", unique=True)
@@ -89,8 +90,15 @@ async def create_indexes(db: AsyncIOMotorDatabase):
         
         # User sessions
         await db.user_sessions.create_index("session_token", unique=True)
+        await db.user_sessions.create_index("session_token_hash", unique=True, sparse=True)
         await db.user_sessions.create_index("user_id")
         await db.user_sessions.create_index("expires_at")
+
+        # Authentication security helpers
+        await db.auth_rate_limits.create_index("key", unique=True)
+        await db.auth_rate_limits.create_index("expires_at", expireAfterSeconds=0)
+        await db.password_resets.create_index("token_hash", sparse=True)
+        await db.password_resets.create_index("expires_at", expireAfterSeconds=0)
         
         # Disputes collection
         await db.disputes.create_index("dispute_id", unique=True)

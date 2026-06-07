@@ -11,10 +11,11 @@ from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, HTTPException, Request, Response
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
+from pymongo import ReturnDocument
 
 from core.config import settings
 from core.database import get_database
-from core.security import get_user_from_token, normalize_email
+from core.security import get_user_from_token, hash_token, normalize_email, parse_datetime, session_token_filter
 from models.user import User
 from sms_service import (
     normalize_phone_number, generate_otp, send_otp_sms,
@@ -36,6 +37,16 @@ GOOGLE_ALLOWED_REDIRECT_URIS = {
     "https://www.trusttradesa.co.za/api/auth/google/callback",
 }
 
+PASSWORD_MIN_LENGTH = 8
+SESSION_TTL = timedelta(days=7)
+SESSION_COOKIE_MAX_AGE = int(SESSION_TTL.total_seconds())
+EMAIL_VERIFICATION_TTL = timedelta(hours=24)
+PASSWORD_RESET_TTL = timedelta(hours=1)
+LOGIN_RATE_LIMIT = (5, 15 * 60)
+FORGOT_PASSWORD_RATE_LIMIT = (3, 15 * 60)
+RESEND_VERIFICATION_RATE_LIMIT = (3, 15 * 60)
+AUTH_RATE_LIMIT_MESSAGE = "Too many attempts. Please wait a few minutes and try again."
+
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -55,6 +66,19 @@ class PhoneSubmitRequest(BaseModel):
 class OTPVerifyRequest(BaseModel):
     phone: str
     otp_code: str
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def validate_password_strength(password: str):
+    """Enforce a sensible minimum without adding brittle composition rules."""
+    if len(password or "") < PASSWORD_MIN_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {PASSWORD_MIN_LENGTH} characters",
+        )
 
 
 def hash_password(password: str) -> str:
@@ -82,6 +106,102 @@ def verify_password(password: str, stored_hash: str) -> bool:
 def generate_session_token() -> str:
     """Generate a secure session token"""
     return secrets.token_urlsafe(32)
+
+
+def _client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limit_key(scope: str, identifier: str, request: Request) -> str:
+    material = f"{scope}:{_client_ip(request)}:{normalize_email(identifier or '')}"
+    return f"{scope}:{hashlib.sha256(material.encode('utf-8')).hexdigest()}"
+
+
+async def _ensure_not_rate_limited(db, key: str, limit: int, window_seconds: int):
+    now = _now()
+    cutoff = now - timedelta(seconds=window_seconds)
+    record = await db.auth_rate_limits.find_one({"key": key})
+    if not record:
+        return
+    window_start = parse_datetime(record.get("window_start"))
+    if window_start < cutoff:
+        return
+    if int(record.get("count", 0)) >= limit:
+        logger.warning("[AUTH_RATE_LIMIT] key=%s blocked", key[:20])
+        raise HTTPException(status_code=429, detail=AUTH_RATE_LIMIT_MESSAGE)
+
+
+async def _record_rate_limit_hit(db, key: str, window_seconds: int):
+    now = _now()
+    cutoff = now - timedelta(seconds=window_seconds)
+    record = await db.auth_rate_limits.find_one({"key": key})
+    expires_at = now + timedelta(seconds=window_seconds)
+    if not record or parse_datetime(record.get("window_start")) < cutoff:
+        await db.auth_rate_limits.update_one(
+            {"key": key},
+            {"$set": {"window_start": now, "count": 1, "expires_at": expires_at}},
+            upsert=True,
+        )
+        return
+    await db.auth_rate_limits.update_one(
+        {"key": key},
+        {"$inc": {"count": 1}, "$set": {"expires_at": expires_at}},
+    )
+
+
+async def _clear_rate_limit(db, key: str):
+    await db.auth_rate_limits.delete_one({"key": key})
+
+
+async def _consume_rate_limit(db, scope: str, identifier: str, request: Request, limit: int, window_seconds: int):
+    key = _rate_limit_key(scope, identifier, request)
+    await _ensure_not_rate_limited(db, key, limit, window_seconds)
+    await _record_rate_limit_hit(db, key, window_seconds)
+    return key
+
+
+async def _create_session(db, user_id: str, auth_method: str = "password") -> tuple[str, datetime]:
+    session_token = generate_session_token()
+    token_hash = hash_token(session_token)
+    expires_at = _now() + SESSION_TTL
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token_hash": token_hash,
+        # Keeps the legacy unique index populated without storing a usable bearer token.
+        "session_token": f"sha256:{token_hash}",
+        "expires_at": expires_at.isoformat(),
+        "created_at": _now().isoformat(),
+        "auth_method": auth_method,
+    })
+    return session_token, expires_at
+
+
+def _set_session_cookie(response: Response, session_token: str):
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=SESSION_COOKIE_MAX_AGE,
+    )
+
+
+def _delete_session_cookie(response: Response):
+    response.delete_cookie(key="session_token", path="/", secure=True, samesite="none")
+
+
+def _token_match_filter(plain_field: str, hash_field: str, token: str) -> dict:
+    return {
+        "$or": [
+            {hash_field: hash_token(token)},
+            {plain_field: token},
+        ]
+    }
 
 
 def get_google_redirect_uri(request: Request) -> str:
@@ -121,13 +241,12 @@ async def register(data: RegisterRequest, response: Response):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Validate password
-    if len(data.password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    validate_password_strength(data.password)
     
     # Create user
     user_id = f"user_{uuid.uuid4().hex[:12]}"
-    is_admin = email == settings.ADMIN_EMAIL
+    is_admin = bool(settings.ADMIN_EMAIL and email == normalize_email(settings.ADMIN_EMAIL))
+    now = _now()
     
     user_data = {
         "user_id": user_id,
@@ -136,14 +255,15 @@ async def register(data: RegisterRequest, response: Response):
         "password_hash": hash_password(data.password),
         "role": "admin" if is_admin else "buyer",
         "is_admin": is_admin,
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": now.isoformat()
     }
     
     # Generate email verification token
     verification_token = secrets.token_urlsafe(32)
     user_data["email_verified"] = False
-    user_data["email_verification_token"] = verification_token
-    user_data["verification_token_expires"] = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+    user_data["email_verification_token_hash"] = hash_token(verification_token)
+    user_data["verification_token_expires"] = (now + EMAIL_VERIFICATION_TTL).isoformat()
+    user_data["verification_token_last_sent_at"] = now.isoformat()
 
     await db.users.insert_one(user_data)
 
@@ -172,29 +292,34 @@ async def register(data: RegisterRequest, response: Response):
 
 
 @router.post("/login")
-async def login(data: LoginRequest, response: Response):
+async def login(data: LoginRequest, request: Request, response: Response):
     """Login with email/password"""
     db = get_database()
     
     email = normalize_email(data.email)
+    login_rate_key = _rate_limit_key("login", email, request)
+    limit, window = LOGIN_RATE_LIMIT
+    await _ensure_not_rate_limited(db, login_rate_key, limit, window)
     
-    # Log ADMIN_EMAIL for debugging
-    logger.info(f"[LOGIN] Attempting login for: {email}")
-    logger.info(f"[LOGIN] ADMIN_EMAIL from settings: '{settings.ADMIN_EMAIL}'")
+    logger.info("[LOGIN] Attempting login for: %s", email)
     
     # Find user
     user_doc = await db.users.find_one({"email": email})
     
     if not user_doc:
-        logger.warning(f"[LOGIN] User not found: {email}")
+        await _record_rate_limit_hit(db, login_rate_key, window)
+        logger.warning("[LOGIN] Failed login for unknown email hash=%s", login_rate_key[:20])
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
     # Verify password
     if not user_doc.get("password_hash"):
-        raise HTTPException(status_code=401, detail="Please use the registration form to create an account")
+        await _record_rate_limit_hit(db, login_rate_key, window)
+        logger.warning("[LOGIN] Password login attempted for account without password_hash: %s", email)
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     
     if not verify_password(data.password, user_doc["password_hash"]):
-        logger.warning(f"[LOGIN] Invalid password for: {email}")
+        await _record_rate_limit_hit(db, login_rate_key, window)
+        logger.warning("[LOGIN] Invalid password for: %s", email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Require a verified email before sign-in (matches the message shown at sign-up).
@@ -202,6 +327,7 @@ async def login(data: LoginRequest, response: Response):
     # verified; Google sign-ups are already verified. Only blocks new email/password
     # accounts that haven't clicked their verification link.
     if user_doc.get("email_verified", True) is False:
+        await _clear_rate_limit(db, login_rate_key)
         logger.info(f"[LOGIN] blocked — email not verified: {email}")
         raise HTTPException(
             status_code=403,
@@ -227,7 +353,7 @@ async def login(data: LoginRequest, response: Response):
     should_be_admin = (email.lower() == settings.ADMIN_EMAIL.lower()) if settings.ADMIN_EMAIL else False
     current_is_admin = user_doc.get("is_admin", False)
     
-    logger.info(f"[LOGIN] Admin check - email: {email}, ADMIN_EMAIL: {settings.ADMIN_EMAIL}, should_be_admin: {should_be_admin}, current_is_admin: {current_is_admin}")
+    logger.info("[LOGIN] Admin check - email=%s should_be_admin=%s current_is_admin=%s", email, should_be_admin, current_is_admin)
     
     if settings.ADMIN_EMAIL and should_be_admin != current_is_admin:
         # Only update when ADMIN_EMAIL is configured — avoid clearing manually-set admin flags
@@ -240,27 +366,9 @@ async def login(data: LoginRequest, response: Response):
         user_doc["is_admin"] = should_be_admin
         user_doc["role"] = new_role
     
-    # Create session
-    session_token = generate_session_token()
-    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-    
-    await db.user_sessions.insert_one({
-        "user_id": user_doc["user_id"],
-        "session_token": session_token,
-        "expires_at": expires_at.isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
-    })
-    
-    # Set cookie
-    response.set_cookie(
-        key="session_token",
-        value=session_token,
-        httponly=True,
-        secure=True,
-        samesite="none",
-        path="/",
-        max_age=7*24*60*60
-    )
+    session_token, _ = await _create_session(db, user_doc["user_id"], auth_method="password")
+    _set_session_cookie(response, session_token)
+    await _clear_rate_limit(db, login_rate_key)
     
     logger.info(f"[LOGIN] User logged in successfully: {email}, is_admin: {user_doc.get('is_admin', False)}")
     
@@ -295,7 +403,7 @@ async def get_current_user(request: Request):
         admin_email = settings.ADMIN_EMAIL.lower() if settings.ADMIN_EMAIL else ""
         should_be_admin = (email == admin_email) if admin_email else False
 
-        logger.info(f"[AUTH_ME] User: {email}, ADMIN_EMAIL: {settings.ADMIN_EMAIL}, should_be_admin: {should_be_admin}, current_is_admin: {user.is_admin}")
+        logger.info("[AUTH_ME] User=%s should_be_admin=%s current_is_admin=%s", email, should_be_admin, user.is_admin)
 
         if settings.ADMIN_EMAIL and should_be_admin != user.is_admin:
             # Only update when ADMIN_EMAIL is configured — avoid clearing manually-set admin flags
@@ -339,16 +447,8 @@ async def get_current_user(request: Request):
 
 @router.get("/token")
 async def get_session_token(request: Request):
-    """Return the current session token (for admin API use)."""
-    db = get_database()
-    user = await get_user_from_token(request, db)
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    token = (
-        request.cookies.get("session_token")
-        or (request.headers.get("Authorization", "").removeprefix("Bearer ").strip() or None)
-    )
-    return {"token": token, "user_id": user.user_id, "email": user.email}
+    """Session token export is disabled; clients already have their own token."""
+    raise HTTPException(status_code=404, detail="Not found")
 
 
 @router.post("/logout")
@@ -364,9 +464,9 @@ async def logout(request: Request, response: Response):
         session_token = request.cookies.get("session_token")
     
     if session_token:
-        await db.user_sessions.delete_one({"session_token": session_token})
+        await db.user_sessions.delete_many(session_token_filter(session_token))
     
-    response.delete_cookie(key="session_token", path="/")
+    _delete_session_cookie(response)
     return {"message": "Logged out successfully"}
 
 
@@ -385,36 +485,41 @@ async def verify_email(data: VerifyEmailRequest, response: Response):
     db = get_database()
     now = datetime.now(timezone.utc)
 
-    user_doc = await db.users.find_one({"email_verification_token": data.token})
+    token_filter = _token_match_filter(
+        "email_verification_token",
+        "email_verification_token_hash",
+        data.token,
+    )
+    user_doc = await db.users.find_one(token_filter)
     if not user_doc:
         raise HTTPException(status_code=400, detail="Invalid or expired verification link.")
 
     expires_str = user_doc.get("verification_token_expires", "")
     if expires_str:
         try:
-            expires_dt = datetime.fromisoformat(expires_str.replace("Z", "+00:00"))
-            if expires_dt.tzinfo is None:
-                expires_dt = expires_dt.replace(tzinfo=timezone.utc)
+            expires_dt = parse_datetime(expires_str)
             if now > expires_dt:
                 raise HTTPException(status_code=400, detail="Verification link has expired. Please request a new one.")
         except ValueError:
             pass
 
-    await db.users.update_one(
-        {"_id": user_doc["_id"]},
-        {"$set": {"email_verified": True}, "$unset": {"email_verification_token": "", "verification_token_expires": ""}}
+    result = await db.users.update_one(
+        {"_id": user_doc["_id"], **token_filter},
+        {
+            "$set": {"email_verified": True, "email_verified_at": now.isoformat()},
+            "$unset": {
+                "email_verification_token": "",
+                "email_verification_token_hash": "",
+                "verification_token_expires": "",
+                "verification_token_last_sent_at": "",
+            },
+        }
     )
+    if result.modified_count != 1:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link.")
 
-    # Create session
-    session_token = generate_session_token()
-    expires_at = now + timedelta(days=7)
-    await db.user_sessions.insert_one({
-        "user_id": user_doc["user_id"],
-        "session_token": session_token,
-        "expires_at": expires_at.isoformat(),
-        "created_at": now.isoformat()
-    })
-    response.set_cookie(key="session_token", value=session_token, httponly=True, secure=True, samesite="none", path="/", max_age=7*24*60*60)
+    session_token, _ = await _create_session(db, user_doc["user_id"], auth_method="email_verification")
+    _set_session_cookie(response, session_token)
 
     logger.info(f"Email verified for: {user_doc['email']}")
     return {
@@ -427,36 +532,34 @@ async def verify_email(data: VerifyEmailRequest, response: Response):
 
 
 @router.post("/resend-verification")
-async def resend_verification(data: ResendVerificationRequest):
+async def resend_verification(data: ResendVerificationRequest, request: Request):
     """Resend email verification link."""
     db = get_database()
     email = normalize_email(data.email)
+    generic = {"message": "If that email needs verification, a verification link has been sent."}
+    limit, window = RESEND_VERIFICATION_RATE_LIMIT
+    await _consume_rate_limit(db, "resend_verification", email, request, limit, window)
 
     user_doc = await db.users.find_one({"email": email})
     if not user_doc:
-        return {"message": "If that email is registered, a verification link has been sent."}
+        return generic
 
     if user_doc.get("email_verified", True):
-        return {"message": "This email is already verified. Please log in."}
-
-    # Rate limit: 1 resend per 2 minutes
-    last_expires = user_doc.get("verification_token_expires", "")
-    if last_expires:
-        try:
-            expires_dt = datetime.fromisoformat(last_expires.replace("Z", "+00:00"))
-            if expires_dt.tzinfo is None:
-                expires_dt = expires_dt.replace(tzinfo=timezone.utc)
-            issued_at = expires_dt - timedelta(hours=24)
-            if (datetime.now(timezone.utc) - issued_at).total_seconds() < 120:
-                raise HTTPException(status_code=429, detail="Please wait 2 minutes before requesting another email.")
-        except (ValueError, TypeError):
-            pass
+        return generic
 
     new_token = secrets.token_urlsafe(32)
-    expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+    now = _now()
+    expires = (now + EMAIL_VERIFICATION_TTL).isoformat()
     await db.users.update_one(
         {"email": email},
-        {"$set": {"email_verification_token": new_token, "verification_token_expires": expires}}
+        {
+            "$set": {
+                "email_verification_token_hash": hash_token(new_token),
+                "verification_token_expires": expires,
+                "verification_token_last_sent_at": now.isoformat(),
+            },
+            "$unset": {"email_verification_token": ""},
+        }
     )
 
     import asyncio, email_service
@@ -464,7 +567,7 @@ async def resend_verification(data: ResendVerificationRequest):
     verify_url = f"{settings.FRONTEND_URL}/verify-email?token={new_token}"
     asyncio.create_task(email_service.send_verification_email(email, user_doc.get("name", ""), verify_url))
 
-    return {"message": "If that email is registered, a verification link has been sent."}
+    return generic
 
 
 # ============ PHONE VERIFICATION ENDPOINTS ============
@@ -788,20 +891,9 @@ async def google_callback(
                 signup_at=signup_at,
             ))
 
-        session_token = secrets.token_urlsafe(32)
-        expires_at = datetime.now(timezone.utc) + timedelta(days=7)
-        await db.user_sessions.update_one(
-            {"user_id": user_id},
-            {"$set": {
-                "session_token": session_token,
-                "expires_at": expires_at.isoformat(),
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "auth_method": "google",
-            }},
-            upsert=True,
-        )
+        session_token, _ = await _create_session(db, user_id, auth_method="google")
 
-        logger.info(f"[GOOGLE_AUTH] Session created for {email} (user_id={user_id}), token={session_token[:20]}...")
+        logger.info("[GOOGLE_AUTH] Session created for %s (user_id=%s)", email, user_id)
 
         # Redirect to frontend with token in URL fragment.
         # Also set a session cookie so /auth/me works even if the browser sends a
@@ -811,15 +903,7 @@ async def google_callback(
             status_code=302,
         )
         redirect.delete_cookie("oauth_state", path="/")
-        redirect.set_cookie(
-            key="session_token",
-            value=session_token,
-            httponly=True,
-            secure=True,
-            samesite="none",
-            path="/",
-            max_age=7 * 24 * 60 * 60,
-        )
+        _set_session_cookie(redirect, session_token)
         logger.info(f"[GOOGLE_AUTH] Redirecting to {frontend_url}/auth/callback with session cookie set")
         return redirect
 
@@ -835,23 +919,26 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 @router.post("/forgot-password")
-async def forgot_password(data: ForgotPasswordRequest):
+async def forgot_password(data: ForgotPasswordRequest, request: Request):
     """Request a password reset link. Always returns success to avoid email enumeration."""
     import email_service
     from core.config import settings
 
     email = normalize_email(data.email)
     db = get_database()
+    limit, window = FORGOT_PASSWORD_RATE_LIMIT
+    await _consume_rate_limit(db, "forgot_password", email, request, limit, window)
     user_doc = await db.users.find_one({"email": email})
 
     if user_doc:
         token = secrets.token_urlsafe(32)
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        expires_at = _now() + PASSWORD_RESET_TTL
         await db.password_resets.insert_one({
-            "token": token,
+            "token_hash": hash_token(token),
             "user_id": user_doc["user_id"],
             "email": email,
             "expires_at": expires_at,
+            "created_at": _now(),
             "used": False,
         })
         reset_url = f"{settings.FRONTEND_URL}/reset-password?token={token}"
@@ -884,23 +971,31 @@ async def forgot_password(data: ForgotPasswordRequest):
 async def reset_password(data: ResetPasswordRequest):
     """Reset password using a valid token."""
     db = get_database()
-    record = await db.password_resets.find_one({"token": data.token, "used": False})
+    token_filter = _token_match_filter("token", "token_hash", data.token)
+    record = await db.password_resets.find_one({"used": False, **token_filter})
 
     if not record:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
-    if record["expires_at"] < datetime.now(timezone.utc):
+    if parse_datetime(record["expires_at"]) < _now():
         raise HTTPException(status_code=400, detail="Reset token has expired")
 
-    if len(data.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    validate_password_strength(data.new_password)
+
+    consumed = await db.password_resets.find_one_and_update(
+        {"_id": record["_id"], "used": False, **token_filter},
+        {"$set": {"used": True, "used_at": _now()}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not consumed:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
     new_hash = hash_password(data.new_password)
     await db.users.update_one(
         {"user_id": record["user_id"]},
         {"$set": {"password_hash": new_hash}}
     )
-    await db.password_resets.update_one({"token": data.token}, {"$set": {"used": True}})
+    await db.user_sessions.delete_many({"user_id": record["user_id"]})
     logger.info(f"[PASSWORD_RESET] Password reset for user {record['user_id']}")
     return {"message": "Password updated successfully. You can now sign in."}
 
@@ -926,5 +1021,6 @@ async def reset_admin_password(data: AdminPasswordResetRequest):
         raise HTTPException(status_code=404, detail="Admin user not found")
     new_hash = hash_password(data.new_password)
     await db.users.update_one({"email": email}, {"$set": {"password_hash": new_hash}})
+    await db.user_sessions.delete_many({"user_id": user_doc["user_id"]})
     logger.warning(f"[ADMIN_RESET] Admin password reset via reset_secret for {email}")
     return {"success": True, "message": "Admin password updated. Please log in with your new password."}

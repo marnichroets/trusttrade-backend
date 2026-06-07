@@ -338,7 +338,7 @@ export default function LoginPage() {
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
                     required
-                    minLength={6}
+                    minLength={8}
                     className="h-10 pr-10"
                     data-testid="login-password"
                   />

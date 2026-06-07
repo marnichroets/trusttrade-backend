@@ -95,7 +95,6 @@ class Settings:
     ADMIN_ALERT_PHONE: str = os.environ.get('ADMIN_ALERT_PHONE', '')  # SMS for urgent dispute alerts
     ADMIN_EMAIL: str = os.environ.get('ADMIN_EMAIL', '')  # Primary admin email
     ADMIN_RESET_SECRET: str = os.environ.get('ADMIN_RESET_SECRET', '')
-    ADMIN_RESET_SECRET: str = os.environ.get('ADMIN_RESET_SECRET', '')
     
     # Backend public URL — used to register the TradeSafe webhook callbackUrl
     BACKEND_URL: str = os.environ.get('BACKEND_URL', 'https://trusttrade-backend-production-3efa.up.railway.app')

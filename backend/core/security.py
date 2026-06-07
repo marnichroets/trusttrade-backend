@@ -3,6 +3,7 @@ TrustTrade Security Module
 Authentication, session management, and security utilities
 """
 
+import hashlib
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -12,6 +13,38 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from models.user import User
 
 logger = logging.getLogger(__name__)
+
+
+def hash_token(token: str) -> str:
+    """Hash bearer-style tokens before database storage or lookup."""
+    return hashlib.sha256((token or "").encode("utf-8")).hexdigest()
+
+
+def parse_datetime(value) -> datetime:
+    """Parse stored datetimes from Mongo or legacy ISO strings as aware UTC."""
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        value = value.replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            parsed = datetime.strptime(value[:19], "%Y-%m-%dT%H:%M:%S")
+    else:
+        raise ValueError("Unsupported datetime value")
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def session_token_filter(session_token: str) -> dict:
+    """Lookup filter for new hashed sessions and legacy plaintext sessions."""
+    token_hash = hash_token(session_token)
+    clauses = [{"session_token_hash": token_hash}]
+    if not (session_token or "").startswith("sha256:"):
+        clauses.append({"session_token": session_token})
+    return {"$or": clauses}
 
 
 async def get_user_from_token(request: Request, db: AsyncIOMotorDatabase) -> Optional[User]:
@@ -37,36 +70,38 @@ async def get_user_from_token(request: Request, db: AsyncIOMotorDatabase) -> Opt
         return None
 
     for source, session_token in candidates:
-        logger.debug(f"[{source}] Looking up session token: {session_token[:20]}...")
+        logger.debug("[%s] Looking up session token", source)
 
         session_doc = await db.user_sessions.find_one(
-            {"session_token": session_token},
-            {"_id": 0}
+            session_token_filter(session_token)
         )
 
         if not session_doc:
-            logger.info(f"[{source}] Session not found for token: {session_token[:30]}...")
+            logger.info("[%s] Session not found", source)
             continue
 
-        logger.info(f"[{source}] Session found for user_id: {session_doc.get('user_id')}")
+        logger.debug("[%s] Session found for user_id=%s", source, session_doc.get("user_id"))
 
         # Check expiry
-        expires_at = session_doc["expires_at"]
-        if isinstance(expires_at, str):
-            expires_str = expires_at.replace('Z', '+00:00')
-            try:
-                expires_at = datetime.fromisoformat(expires_str)
-            except ValueError:
-                expires_at = datetime.strptime(expires_at[:19], '%Y-%m-%dT%H:%M:%S')
-                expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-
+        expires_at = parse_datetime(session_doc["expires_at"])
         if expires_at < datetime.now(timezone.utc):
-            logger.info(f"[{source}] Session expired: {expires_at}")
+            logger.info("[%s] Session expired for user_id=%s", source, session_doc.get("user_id"))
+            await db.user_sessions.delete_one({"_id": session_doc["_id"]})
             continue
 
-        logger.info(f"[{source}] Session valid, fetching user: {session_doc['user_id']}")
+        if not session_doc.get("session_token_hash"):
+            token_hash = hash_token(session_token)
+            await db.user_sessions.update_one(
+                {"_id": session_doc["_id"]},
+                {
+                    "$set": {
+                        "session_token_hash": token_hash,
+                        "session_token": f"sha256:{token_hash}",
+                    }
+                },
+            )
+
+        logger.debug("[%s] Session valid, fetching user_id=%s", source, session_doc["user_id"])
 
         user_doc = await db.users.find_one(
             {"user_id": session_doc["user_id"]},
@@ -74,10 +109,14 @@ async def get_user_from_token(request: Request, db: AsyncIOMotorDatabase) -> Opt
         )
 
         if not user_doc:
-            logger.info(f"[{source}] User not found for user_id: {session_doc['user_id']}")
+            logger.info("[%s] User not found for user_id=%s", source, session_doc["user_id"])
             continue
 
-        logger.info(f"[{source}] User found: {user_doc.get('email')}")
+        if user_doc.get("email_verified", True) is False:
+            logger.warning("[%s] Blocked unverified account session for user_id=%s", source, session_doc["user_id"])
+            return None
+
+        logger.debug("[%s] User found for user_id=%s", source, session_doc["user_id"])
         return User(**user_doc)
 
     return None

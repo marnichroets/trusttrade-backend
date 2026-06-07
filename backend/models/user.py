@@ -37,6 +37,7 @@ class User(BaseModel):
     trust_score: int = 50
     badges: List[str] = []
     verified: bool = False
+    email_verified: bool = True
     # Phone verification
     phone: Optional[str] = None  # Stored in +27 format
     phone_verified: bool = False

@@ -51,10 +51,7 @@ function AuthCallback() {
 
     const processSession = async () => {
       try {
-        console.log('[AuthCallback] ========== START ==========');
-        console.log('[AuthCallback] Full URL:', window.location.href);
-        console.log('[AuthCallback] Hash:', location.hash);
-        console.log('[AuthCallback] Search:', location.search);
+        console.log('[AuthCallback] Starting auth callback processing');
         setStatus('Extracting session...');
 
         const hash = location.hash;
@@ -72,7 +69,6 @@ function AuthCallback() {
 
         // ── Direct Google OAuth flow: session_token in hash ──────────────────
         const directToken = hashParams.get('session_token');
-        console.log('[AuthCallback] session_token extracted from hash:', directToken ? directToken.substring(0, 20) + '...' : 'NULL — hash was: ' + hash);
         if (directToken) {
           console.log('[AuthCallback] Direct Google OAuth token found');
           setStatus('Authenticating...');
@@ -117,7 +113,7 @@ function AuthCallback() {
           return;
         }
 
-        console.log('[AuthCallback] Session ID:', sessionId.substring(0, 15) + '...');
+        console.log('[AuthCallback] Legacy session ID found');
         setStatus('Authenticating...');
 
         console.log('[GOOGLE_AUTH] Exchanging session_id with backend...');
@@ -130,8 +126,6 @@ function AuthCallback() {
         const data = response.data;
         const token = data.session_token;
         
-        console.log('[TOKEN_PRESENT]', token ? 'YES' : 'NO');
-
         if (!token) {
           console.error('[AuthCallback] No token in response!');
           toast.error('Sign-in failed. Please try again.');
@@ -163,8 +157,6 @@ function AuthCallback() {
           return;
         }
 
-        console.log('[AuthCallback] localStorage verified:', storedToken ? 'YES' : 'NO');
-
         // Call login() to keep context in sync
         login(userData, token);
 
@@ -178,7 +170,7 @@ function AuthCallback() {
         const destination = consumeAuthRedirect();
 
         console.log('[NAVIGATE_CALLED] destination:', destination);
-        console.log('[AuthCallback] ========== END ==========');
+        console.log('[AuthCallback] Completed auth callback processing');
         
         // Navigate using replace to prevent back-button issues
         window.location.replace(destination);

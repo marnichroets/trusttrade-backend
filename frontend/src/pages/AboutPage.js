@@ -134,7 +134,7 @@ export default function AboutPage() {
           Our Story
         </span>
         <h1 className="about-hero-h1" style={{ fontSize: 48, fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.02em', margin: '0 auto 18px', maxWidth: 760 }}>
-          Built to protect South African buyers and sellers
+          Making online buying and selling safer in South Africa
         </h1>
         <p style={{ fontSize: 19, color: C.muted, lineHeight: 1.6, margin: '0 auto', maxWidth: 560 }}>
           A personal mission to end marketplace scams.
@@ -161,17 +161,17 @@ export default function AboutPage() {
 
             <div style={{ fontSize: 15.5, lineHeight: 1.75, color: '#C9D4E0' }}>
               <p style={{ margin: '0 0 16px' }}>
-                In 2024, I paid R3000 for a phone on Facebook Marketplace. The seller disappeared.
-                The money was gone. I was angry — not just because of the money, but because there
-                was nothing I could do about it.
+                In 2025, I lost R10,000 in an online marketplace scam.
               </p>
               <p style={{ margin: '0 0 16px' }}>
-                I searched for a solution. Something simple that South Africans could use to protect
-                themselves when buying and selling online. I couldn't find anything affordable and
-                easy enough for everyday people.
+                Instead of accepting it as part of buying and selling online, I decided to build a solution.
+              </p>
+              <p style={{ margin: '0 0 16px' }}>
+                TrustTrade was created to help South Africans buy and sell with confidence by holding
+                payments securely in escrow until delivery is confirmed.
               </p>
               <p style={{ margin: 0, fontSize: 17, fontWeight: 700, color: C.text }}>
-                So I built TrustTrade.
+                Simple, secure and built for South Africa.
               </p>
             </div>
           </div>

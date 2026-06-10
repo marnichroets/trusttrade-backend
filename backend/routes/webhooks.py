@@ -1366,20 +1366,26 @@ async def get_platform_stats(request: Request):
         total_users = 0
         verified_users = 0
 
-    return {
+    stats = {
         "total_users": total_users,
         "total_transactions": total_transactions,
         "completed_transactions": completed_transactions,
-        "success_rate": success_rate,
         "completed_today": completed_today,
         "total_secured": total_secured,
         "total_escrow_value": total_escrow_value,
         "active_transactions": active_transactions,
         "pending_confirmations": pending_confirmations,
-        "pending_disputes": pending_disputes,
         "verified_users": verified_users,
         "fraud_cases_today": fraud_cases_today,
         # Surfaces the window the stats reflect, so the UI can show a launch marker.
         "stats_since": STATS_SINCE_ISO,
         "platform_launch_date": PLATFORM_LAUNCH_DATE,
     }
+
+    # Success rate and open disputes are not meaningful at low transaction volume
+    # and could erode trust if shown publicly — expose them to admins only.
+    if user.is_admin:
+        stats["success_rate"] = success_rate
+        stats["pending_disputes"] = pending_disputes
+
+    return stats

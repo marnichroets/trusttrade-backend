@@ -145,25 +145,32 @@ function LiveActivity() {
             </p>
           </Card>
 
-          <Card className="p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <TrendingUp className="w-5 h-5 text-green-500" />
-              <span className="text-sm text-slate-600">Success Rate</span>
-            </div>
-            <p className="text-2xl font-bold text-green-600" data-testid="success-rate">
-              {stats?.success_rate || 0}%
-            </p>
-          </Card>
+          {/* Admin-only: not meaningful at low volume and could erode trust if shown publicly */}
+          {user?.is_admin && (
+            <Card className="p-4">
+              <div className="flex items-center gap-3 mb-2">
+                <TrendingUp className="w-5 h-5 text-green-500" />
+                <span className="text-sm text-slate-600">Success Rate</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Admin</span>
+              </div>
+              <p className="text-2xl font-bold text-green-600" data-testid="success-rate">
+                {stats?.success_rate || 0}%
+              </p>
+            </Card>
+          )}
 
-          <Card className="p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <AlertTriangle className="w-5 h-5 text-orange-500" />
-              <span className="text-sm text-slate-600">Open Disputes</span>
-            </div>
-            <p className="text-2xl font-bold text-slate-900" data-testid="open-disputes">
-              {stats?.pending_disputes || 0}
-            </p>
-          </Card>
+          {user?.is_admin && (
+            <Card className="p-4">
+              <div className="flex items-center gap-3 mb-2">
+                <AlertTriangle className="w-5 h-5 text-orange-500" />
+                <span className="text-sm text-slate-600">Open Disputes</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Admin</span>
+              </div>
+              <p className="text-2xl font-bold text-slate-900" data-testid="open-disputes">
+                {stats?.pending_disputes || 0}
+              </p>
+            </Card>
+          )}
         </div>
 
         {/* Recent Activity */}

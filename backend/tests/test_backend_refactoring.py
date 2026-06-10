@@ -71,7 +71,10 @@ class TestPublicStats:
         data = response.json()
         assert "total_transactions" in data
         assert "completed_transactions" in data
-        assert "success_rate" in data
+        # success_rate and pending_disputes are gated to authenticated users only
+        # (not meaningful at low volume; could erode trust if shown publicly).
+        assert "success_rate" not in data
+        assert "pending_disputes" not in data
         assert data["platform"] == "TrustTrade South Africa"
         assert isinstance(data["total_transactions"], int)
         print(f"✅ Public stats: {data}")

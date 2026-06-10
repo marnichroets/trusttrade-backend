@@ -123,8 +123,8 @@ function LiveActivity() {
           </div>
         </Card>
 
-        {/* Detailed Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Detailed Stats — admins see 4 cards; non-admins see 2, centered. */}
+        <div className={`grid gap-4 ${user?.is_admin ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 md:max-w-xl md:mx-auto'}`}>
           <Card className="p-4">
             <div className="flex items-center gap-3 mb-2">
               <Users className="w-5 h-5 text-primary" />

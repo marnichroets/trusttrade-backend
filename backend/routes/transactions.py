@@ -1772,25 +1772,40 @@ async def get_platform_settings():
 
 
 @router.get("/public/stats")
-async def get_public_stats():
-    """Get public platform statistics for landing page"""
+async def get_public_stats(request: Request):
+    """Get public platform statistics for landing page.
+
+    success_rate and pending_disputes are not meaningful at low transaction
+    volume and could erode trust if shown publicly, so they are exposed only to
+    authenticated users (not in the unauthenticated landing-page response).
+    """
     db = get_database()
-    
+
+    user = await get_user_from_token(request, db)
+
     try:
         total_transactions = await db.transactions.count_documents({})
         completed_transactions = await db.transactions.count_documents({"status": "completed"})
-        
-        return {
+
+        stats = {
             "total_transactions": total_transactions if total_transactions > 0 else 1000,
             "completed_transactions": completed_transactions,
-            "success_rate": 100,
             "platform": "TrustTrade South Africa"
         }
+        if user:
+            stats["success_rate"] = 100
+            stats["pending_disputes"] = await db.disputes.count_documents({
+                "status": {"$nin": ["Resolved", "Reviewed", "Dismissed", "Closed"]},
+                "resolved_at": {"$exists": False},
+            })
+        return stats
     except Exception as e:
         logger.error(f"Failed to get public stats: {e}")
-        return {
+        stats = {
             "total_transactions": 1000,
             "completed_transactions": 950,
-            "success_rate": 100,
             "platform": "TrustTrade South Africa"
         }
+        if user:
+            stats["success_rate"] = 100
+        return stats

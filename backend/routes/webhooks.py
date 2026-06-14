@@ -672,6 +672,48 @@ async def notify_seller_funds_released(db, txn: dict) -> None:
     logger.info(f"[WITHDRAWAL] buyer+seller notified funds-released txn={txn_id}")
 
 
+async def notify_payment_secured_sms(db, txn: dict) -> None:
+    """Send the 'payment secured' SMS to buyer and/or seller (deduped, best-effort).
+
+    Critical for phone-only invites: a party invited by phone with no email would
+    otherwise get NO payment-secured notification. Deduped on the same emails_sent
+    tracking set so the primary webhook and the fallback job send exactly one SMS each.
+    """
+    import sms_service
+    from webhook_handler import (
+        has_email_been_sent,
+        mark_email_sent,
+        send_sms_with_tracking,
+    )
+
+    txn_id = txn.get("transaction_id")
+    if not txn_id:
+        return
+    reference = txn.get("share_code") or txn_id
+    amount = float(txn.get("item_price") or 0)
+    item_description = txn.get("item_description", "")
+    buyer_phone = txn.get("buyer_phone")
+    seller_phone = txn.get("seller_phone")
+
+    if buyer_phone and not await has_email_been_sent(db, txn_id, "payment_secured_buyer_sms"):
+        sent = await send_sms_with_tracking(
+            db, txn_id, "payment_secured_buyer_sms", buyer_phone,
+            sms_service.send_payment_secured_buyer_sms,
+            to_phone=buyer_phone, amount=amount, reference=reference,
+        )
+        if sent:
+            await mark_email_sent(db, txn_id, "payment_secured_buyer_sms")
+
+    if seller_phone and not await has_email_been_sent(db, txn_id, "payment_secured_seller_sms"):
+        sent = await send_sms_with_tracking(
+            db, txn_id, "payment_secured_seller_sms", seller_phone,
+            sms_service.send_funds_received_sms,
+            to_phone=seller_phone, item_description=item_description, amount=amount,
+        )
+        if sent:
+            await mark_email_sent(db, txn_id, "payment_secured_seller_sms")
+
+
 async def notify_seller_buyer_confirmed(db, txn: dict) -> None:
     """Email the seller that the buyer confirmed receipt and the payout is processing.
 
@@ -1065,6 +1107,11 @@ async def tradesafe_webhook(request: Request):
                     role="seller",
                     delivery_method=delivery_method,
                 )))
+
+                # Payment-secured SMS for phone-only (or phone+email) parties.
+                # Deduped, so the fallback job never re-sends. Without this a party
+                # invited by phone with no email gets no payment-secured notice.
+                asyncio.create_task(_bg(notify_payment_secured_sms(db, txn)))
 
             # Auto-book the Courier Guy shipment for courier deliveries on EITHER
             # funded state. Card payments arrive as FUNDS_RECEIVED (money is already

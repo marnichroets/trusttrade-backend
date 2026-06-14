@@ -380,8 +380,10 @@ async def expire_inactive_pre_escrow_transactions(db: AsyncIOMotorDatabase) -> D
 async def send_fallback_payment_notifications(db: AsyncIOMotorDatabase, txn: Dict) -> None:
     """Send payment secured notifications via fallback (with deduplication)"""
     from webhook_handler import (
-        send_email_with_tracking, 
+        send_email_with_tracking,
         send_sms_with_tracking,
+        has_email_been_sent,
+        mark_email_sent,
         EmailEvent
     )
     import email_service
@@ -418,24 +420,32 @@ async def send_fallback_payment_notifications(db: AsyncIOMotorDatabase, txn: Dic
             role="seller"
         )
         
-        # SMS notifications
-        if txn.get("buyer_phone"):
-            await send_sms_with_tracking(
+        # SMS notifications (deduped so the primary webhook + this fallback send once).
+        amount = float(txn.get("item_price") or 0)
+        item_description = txn.get("item_description", "")
+        if txn.get("buyer_phone") and not await has_email_been_sent(db, transaction_id, "payment_secured_buyer_sms"):
+            sent = await send_sms_with_tracking(
                 db, transaction_id, "payment_secured_buyer_sms",
                 txn["buyer_phone"],
-                sms_service.send_funds_received_sms,
+                sms_service.send_payment_secured_buyer_sms,
                 to_phone=txn["buyer_phone"],
-                message=f"TrustTrade: Your payment is secured in escrow. Ref: {share_code}"
+                amount=amount,
+                reference=share_code,
             )
-        
-        if txn.get("seller_phone"):
-            await send_sms_with_tracking(
+            if sent:
+                await mark_email_sent(db, transaction_id, "payment_secured_buyer_sms")
+
+        if txn.get("seller_phone") and not await has_email_been_sent(db, transaction_id, "payment_secured_seller_sms"):
+            sent = await send_sms_with_tracking(
                 db, transaction_id, "payment_secured_seller_sms",
                 txn["seller_phone"],
                 sms_service.send_funds_received_sms,
                 to_phone=txn["seller_phone"],
-                message=f"TrustTrade: Payment received! Please deliver the item. Ref: {share_code}"
+                item_description=item_description,
+                amount=amount,
             )
+            if sent:
+                await mark_email_sent(db, transaction_id, "payment_secured_seller_sms")
             
         logger.info(f"Fallback notifications sent for {transaction_id}")
         

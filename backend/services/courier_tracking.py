@@ -83,7 +83,10 @@ async def _dispatch_on_collection(db, transaction: Dict[str, Any]) -> None:
 
     # Compute the auto-release window from the collection time.
     from core.config import settings
-    from services.auto_release import compute_auto_release, new_confirm_token
+    from services.auto_release import (
+        compute_auto_release, new_confirm_token,
+        human_window, format_release_date, confirm_link,
+    )
 
     seller_email = (transaction.get("seller_email") or "").lower()
     seller_track_doc = await db.users.find_one(
@@ -119,6 +122,43 @@ async def _dispatch_on_collection(db, transaction: Dict[str, Any]) -> None:
         }},
     )
     logger.info(f"[COURIER_TRACK] {transaction_id} auto-dispatched on collection (auto_release_at={release['auto_release_at_iso']})")
+
+    # Notify the buyer their order is on its way — mirrors the manual "Mark as
+    # Dispatched" path (tradesafe.py). Without this, a buyer on a courier deal
+    # (especially a phone-only invite) gets no dispatch notification at all.
+    share_code = transaction.get("share_code") or transaction_id
+    buyer_email = transaction.get("buyer_email")
+    buyer_phone = transaction.get("buyer_phone")
+    window_text = human_window(release["window_hours"])
+    release_date = format_release_date(release["auto_release_at"])
+    link = confirm_link(settings.FRONTEND_URL, token)
+
+    if buyer_email:
+        try:
+            import email_service
+            await email_service.send_delivery_started_email(
+                to_email=buyer_email,
+                to_name=transaction.get("buyer_name", "Buyer"),
+                share_code=share_code,
+                item_description=transaction.get("item_description", ""),
+                seller_name=transaction.get("seller_name", "Seller"),
+            )
+        except Exception as exc:
+            logger.error(f"[COURIER_TRACK] {transaction_id} dispatch email failed (non-fatal): {exc}")
+
+    if buyer_phone:
+        try:
+            from sms_service import send_order_dispatched_sms
+            await send_order_dispatched_sms(
+                to_phone=buyer_phone,
+                buyer_name=transaction.get("buyer_name", "there"),
+                seller_name=transaction.get("seller_name", "the seller"),
+                window_text=window_text,
+                release_date=release_date,
+                confirm_link=link,
+            )
+        except Exception as exc:
+            logger.error(f"[COURIER_TRACK] {transaction_id} dispatch SMS failed (non-fatal): {exc}")
 
 
 async def handle_tracking_event(db, transaction: Dict[str, Any], milestone: str) -> Dict[str, Any]:

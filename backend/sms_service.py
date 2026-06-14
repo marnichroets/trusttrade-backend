@@ -254,8 +254,22 @@ async def send_funds_received_sms(
     item_description: str,
     amount: float
 ) -> Dict[str, Any]:
-    """Send SMS when funds are received in escrow."""
+    """Send SMS when funds are received in escrow (seller-facing — prompts dispatch)."""
     message = f"TrustTrade: Payment of R{amount:.2f} received for '{item_description[:30]}'. Funds secured — please deliver the item."
+    return await send_sms(to_phone, message)
+
+
+async def send_payment_secured_buyer_sms(
+    to_phone: str,
+    amount: float,
+    reference: str = "",
+) -> Dict[str, Any]:
+    """Buyer-facing SMS the moment their payment is secured in escrow."""
+    ref_phrase = f" Ref: {reference}" if reference else ""
+    message = (
+        f"TrustTrade: Your payment of R{amount:.2f} is now secured in escrow."
+        f"{ref_phrase} You're protected until you confirm delivery."
+    )
     return await send_sms(to_phone, message)
 
 

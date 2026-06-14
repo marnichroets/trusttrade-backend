@@ -366,26 +366,33 @@ async def process_webhook(
             if email_sent:
                 notifications_sent.append("seller_email")
 
-            # SMS notifications
-            if transaction.get("buyer_phone"):
-                await send_sms_with_tracking(
+            # SMS notifications (deduped so other paths don't re-send).
+            _amount = float(transaction.get("item_price") or 0)
+            if transaction.get("buyer_phone") and not await has_email_been_sent(db, transaction_id, "payment_secured_buyer_sms"):
+                sent = await send_sms_with_tracking(
                     db, transaction_id, "payment_secured_buyer_sms",
                     transaction["buyer_phone"],
-                    sms_service.send_funds_received_sms,
+                    sms_service.send_payment_secured_buyer_sms,
                     to_phone=transaction["buyer_phone"],
-                    message=f"TrustTrade: Your payment of R{transaction['item_price']:.2f} is now secured in escrow. Ref: {share_code}"
+                    amount=_amount,
+                    reference=share_code,
                 )
-                notifications_sent.append("buyer_sms")
+                if sent:
+                    await mark_email_sent(db, transaction_id, "payment_secured_buyer_sms")
+                    notifications_sent.append("buyer_sms")
 
-            if transaction.get("seller_phone"):
-                await send_sms_with_tracking(
+            if transaction.get("seller_phone") and not await has_email_been_sent(db, transaction_id, "payment_secured_seller_sms"):
+                sent = await send_sms_with_tracking(
                     db, transaction_id, "payment_secured_seller_sms",
                     transaction["seller_phone"],
                     sms_service.send_funds_received_sms,
                     to_phone=transaction["seller_phone"],
-                    message=f"TrustTrade: Payment of R{transaction['item_price']:.2f} received! Please deliver the item. Ref: {share_code}"
+                    item_description=transaction["item_description"],
+                    amount=_amount,
                 )
-                notifications_sent.append("seller_sms")
+                if sent:
+                    await mark_email_sent(db, transaction_id, "payment_secured_seller_sms")
+                    notifications_sent.append("seller_sms")
     
     elif mapped_state == TransactionState.DELIVERY_IN_PROGRESS.value:
         update_data["delivery_started_at"] = now

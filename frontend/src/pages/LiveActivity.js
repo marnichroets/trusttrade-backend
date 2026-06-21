@@ -124,14 +124,24 @@ function LiveActivity() {
         </Card>
 
         {/* Detailed Stats — admins see 4 cards; non-admins see 2, centered. */}
-        <div className={`grid gap-4 ${user?.is_admin ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2 md:max-w-xl md:mx-auto'}`}>
+        <div className={`grid gap-4 ${user?.is_admin ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-3 md:max-w-3xl md:mx-auto'}`}>
           <Card className="p-4">
             <div className="flex items-center gap-3 mb-2">
               <Users className="w-5 h-5 text-primary" />
-              <span className="text-sm text-slate-600">Total Users</span>
+              <span className="text-sm text-slate-600">Active Traders</span>
             </div>
             <p className="text-2xl font-bold text-slate-900" data-testid="total-users">
               {stats?.total_users || 0}
+            </p>
+          </Card>
+
+          <Card className="p-4">
+            <div className="flex items-center gap-3 mb-2">
+              <Users className="w-5 h-5 text-primary" />
+              <span className="text-sm text-slate-600">Total Signups</span>
+            </div>
+            <p className="text-2xl font-bold text-slate-900" data-testid="total-signups">
+              {stats?.total_signups || 0}
             </p>
           </Card>
 

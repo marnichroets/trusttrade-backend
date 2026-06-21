@@ -1413,8 +1413,29 @@ async def get_platform_stats(request: Request):
         total_users = 0
         verified_users = 0
 
+    # ── Total signups ──────────────────────────────────────────────────────────
+    # All genuinely registered users (regardless of whether they've transacted),
+    # excluding automated test accounts and internal dev accounts. Test accounts
+    # are created with mailinator/testrunner/testlaunch addresses; INTERNAL_EMAILS
+    # are the developer's own accounts (the marnich* dev family + roetsm).
+    TEST_EMAIL_PATTERNS = ["mailinator", "testrunner", "testlaunch"]
+    INTERNAL_EMAILS = [
+        "marnichr@gmail.com",
+        "marnichroets@gmail.com",
+        "marnichroets1@gmail.com",
+        "marnichroets2@gmail.com",
+        "marnichroets3@gmail.com",
+        "roetsm@gmail.com",
+    ]
+    signup_filter = {"$and": [
+        {"email": {"$nin": INTERNAL_EMAILS}},
+        *[{"email": {"$not": {"$regex": p, "$options": "i"}}} for p in TEST_EMAIL_PATTERNS],
+    ]}
+    total_signups = await db.users.count_documents(signup_filter)
+
     stats = {
         "total_users": total_users,
+        "total_signups": total_signups,
         "total_transactions": total_transactions,
         "completed_transactions": completed_transactions,
         "completed_today": completed_today,
